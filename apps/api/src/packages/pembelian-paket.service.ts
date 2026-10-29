@@ -95,8 +95,8 @@ export class CustomerOrderService {
           }
         : null,
       promotionalPriceRp: order.subtotalRp - (order.promotionDiscountRp ?? 0),
-      priceAfterDiscountRp: order.totalAmountRp,
-      paymentUniqueCode: 0,
+      priceAfterDiscountRp: Math.max(0, order.subtotalRp - order.discountRp),
+      paymentUniqueCode: order.uniqueCode ?? 0,
       payableAmountRp: order.totalAmountRp,
       totalAmountRp: order.totalAmountRp,
       sessionCount: pkg?.sessionCount ?? 1,
@@ -245,7 +245,7 @@ export class CustomerOrderService {
         if (!branch || !branch.active)
           throw new ApiProblem('RESOURCE_NOT_FOUND', HttpStatus.NOT_FOUND);
 
-        const { voucher, discountRp, subtotalRp, totalAmountRp, promotion } = await this.priceOrder(
+        const { voucher, discountRp, subtotalRp, totalAmountRp: baseAmountRp, promotion } = await this.priceOrder(
           tx,
           pkg,
           input.voucherCode,
@@ -266,6 +266,39 @@ export class CustomerOrderService {
         const invoiceNumber = newInvoiceNumber();
         const paymentExpiresAt = new Date(Date.now() + 24 * 3_600_000);
 
+        let uniqueCode: number | null = null;
+        let totalAmountRp = baseAmountRp;
+
+        if (baseAmountRp > 0) {
+          const existingPending = tx.pembelian?.findMany
+            ? await tx.pembelian.findMany({
+                where: {
+                  branchId: input.branchId,
+                  status: { in: ['PENDING', 'WAITING_VERIFICATION'] },
+                  paymentExpiresAt: { gt: new Date() },
+                  uniqueCode: { not: null },
+                },
+                select: { uniqueCode: true },
+              })
+            : [];
+          const usedCodes = new Set(
+            existingPending
+              .map((p) => p.uniqueCode)
+              .filter((c): c is number => typeof c === 'number'),
+          );
+
+          let candidate = Math.floor(Math.random() * 900) + 100;
+          for (let i = 0; i < 900; i++) {
+            const code = ((candidate - 100 + i) % 900) + 100;
+            if (!usedCodes.has(code)) {
+              candidate = code;
+              break;
+            }
+          }
+          uniqueCode = candidate;
+          totalAmountRp = baseAmountRp + uniqueCode;
+        }
+
         const order = await tx.pembelian.create({
           data: {
             id: randomUUID(),
@@ -276,6 +309,7 @@ export class CustomerOrderService {
             voucherId: voucher?.id ?? null,
             subtotalRp,
             discountRp,
+            uniqueCode,
             totalAmountRp,
             status: 'PENDING',
             paymentExpiresAt,

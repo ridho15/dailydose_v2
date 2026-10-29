@@ -418,6 +418,7 @@ model Pembelian {
   voucherId        String?        @db.Char(36)
   subtotalRp       Int
   discountRp       Int            @default(0)
+  uniqueCode       Int?
   totalAmountRp    Int
   status           PurchaseStatus @default(PENDING)
   paymentMethod    PaymentMethod  @default(BANK_TRANSFER)
