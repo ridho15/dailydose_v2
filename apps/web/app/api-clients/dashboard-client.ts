@@ -48,6 +48,8 @@ export interface ProfitBreakdownDetails {
   discountRp: number;
   netRevenueRp: number;
   instructorCostRp: number;
+  /** Sesi terjual x modal per sesi; dasar laba. */
+  modalSesiRp?: number;
   grossProfitRp: number;
   grossMarginPercent: number;
   otherCostRp: number;
@@ -62,6 +64,7 @@ export interface DashboardFinancialSummary {
   voucherDiscountRp?: number;
   revenueRp: number;
   instructorRealtimeRp: number;
+  modalSesiRp?: number;
   otherCostRp: number;
   grossProfitRp?: number;
   grossMarginPercent?: number;
@@ -92,6 +95,7 @@ export interface DashboardBranchPerformance {
   grossSalesRp: number;
   revenueRp: number;
   instructorRealtimeRp: number;
+  modalSesiRp?: number;
   otherCostRp: number;
   grossProfitRp?: number;
   grossMarginPercent?: number;

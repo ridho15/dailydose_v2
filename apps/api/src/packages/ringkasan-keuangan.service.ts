@@ -6,13 +6,16 @@ import { ApiProblem } from '../identity/security';
 import { financeRange, otherCostDay, otherCostInRange } from './finance-range';
 import { summarizeInstructorFees } from './instructor-fee-calculator';
 import { koreksiHonorDalamRentang } from './koreksi-jam.service';
+import { hitungModalSesi } from './modal-sesi.service';
 
 /**
  * Angka keuangan satu bulan untuk Owner, dan jurnal kas sederhana untuk cabang.
  *
- * Rumusnya sama persis dengan laporan keuangan (`FinanceService`): omzet adalah pembelian PAID
- * menurut `paidAt`; payroll adalah honor kelas yang selesai ditambah koreksi jam; pengeluaran
- * adalah biaya lain menurut tanggal pengeluarannya; laba = omzet − payroll − pengeluaran.
+ * Omzet adalah pembelian PAID menurut `paidAt`; modal sesi adalah sesi paket yang dibeli dikali
+ * modal per sesi tipe kelasnya di cabang itu (`ModalSesi`); pengeluaran adalah biaya lain menurut
+ * tanggal pengeluarannya; laba = omzet − modal sesi − pengeluaran. Payroll (honor kelas yang
+ * di-scan QR ditambah koreksi jam) adalah yang dibayar ke instruktur dan ditampilkan terpisah;
+ * payroll tidak mengurangi laba karena biaya mengajar sudah diwakili modal sesi.
  * Satu-satunya perbedaan: di sini semua cabang dihitung sekaligus, bukan satu per satu, dan tarif
  * honor tiap cabang tetap dicari dari tarif cabang itu saja seperti laporan per cabang.
  */
@@ -26,6 +29,12 @@ export interface AngkaCabang {
   /** Bagian payroll dari koreksi jam; bisa negatif. */
   koreksiPayrollRp: number;
   pengeluaranRp: number;
+  /** Sesi paket yang dibeli x modal per sesi; dasar laba. */
+  modalSesiRp: number;
+  /** Sesi paket yang terjual dalam bulan ini. */
+  sesiTerjual: number;
+  /** Sesi tanpa tarif modal yang cocok (dihitung Rp0 sampai diatur). */
+  sesiTanpaModal: number;
   profitRp: number;
   /** Null berarti target bulanan belum dipasang, bukan nol. */
   targetRp: number | null;
@@ -114,7 +123,12 @@ export class RingkasanKeuanganService {
           status: 'PAID',
           paidAt: { gte: range.fromDate, lt: range.untilExclusive },
         },
-        select: { branchId: true, totalAmountRp: true },
+        select: {
+          branchId: true,
+          totalAmountRp: true,
+          paidAt: true,
+          package: { select: { sessionCount: true, classTypeId: true } },
+        },
       }),
       this.db.otherCost.findMany({
         where: { ...lingkup, ...otherCostInRange(range) },
@@ -142,6 +156,14 @@ export class RingkasanKeuanganService {
         untilExclusive: range.untilExclusive,
       }),
     ]);
+
+    const modal = await hitungModalSesi(
+      this.db,
+      pembelian as Parameters<typeof hitungModalSesi>[1],
+    );
+    const sesiPerCabang = new Map<string, number>();
+    for (const p of pembelian as { branchId: string; package?: { sessionCount: number } | null }[])
+      sesiPerCabang.set(p.branchId, (sesiPerCabang.get(p.branchId) ?? 0) + (p.package?.sessionCount ?? 0));
 
     let tarifBelumDipasang = 0;
     const cabang: AngkaCabang[] = cabangList.map((c) => {
@@ -174,7 +196,10 @@ export class RingkasanKeuanganService {
         payrollRp,
         koreksiPayrollRp,
         pengeluaranRp,
-        profitRp: omsetRp - payrollRp - pengeluaranRp,
+        modalSesiRp: modal.perCabang.get(c.id) ?? 0,
+        sesiTerjual: sesiPerCabang.get(c.id) ?? 0,
+        sesiTanpaModal: modal.sesiTanpaModalPerCabang.get(c.id) ?? 0,
+        profitRp: omsetRp - (modal.perCabang.get(c.id) ?? 0) - pengeluaranRp,
         targetRp: c.monthlyTargetRp,
         transaksi: beli.length,
         kelasSelesai: kelasCabang.length,
@@ -200,6 +225,9 @@ export class RingkasanKeuanganService {
         payrollRp: jumlah((c) => c.payrollRp),
         koreksiPayrollRp: jumlah((c) => c.koreksiPayrollRp),
         pengeluaranRp: jumlah((c) => c.pengeluaranRp),
+        modalSesiRp: jumlah((c) => c.modalSesiRp),
+        sesiTerjual: jumlah((c) => c.sesiTerjual),
+        sesiTanpaModal: jumlah((c) => c.sesiTanpaModal),
         profitRp: jumlah((c) => c.profitRp),
         targetRp: adaTarget ? jumlah((c) => c.targetRp ?? 0) : null,
         transaksi: jumlah((c) => c.transaksi),

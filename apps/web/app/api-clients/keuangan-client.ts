@@ -7,6 +7,11 @@ export interface AngkaCabang {
   payrollRp: number;
   koreksiPayrollRp: number;
   pengeluaranRp: number;
+  /** Sesi paket yang dibeli x modal per sesi; dasar laba. */
+  modalSesiRp: number;
+  sesiTerjual: number;
+  /** Sesi tanpa modal per sesi yang cocok (dihitung Rp0). */
+  sesiTanpaModal: number;
   profitRp: number;
   targetRp: number | null;
   transaksi: number;
@@ -133,7 +138,26 @@ export interface BerkasTransfer {
   totalRp: number;
 }
 
+export interface TarifModalSesi {
+  id: string;
+  branchId: string;
+  /** Kosong = semua tipe kelas di cabang itu. */
+  classTypeId: string | null;
+  modalPerSesiRp: number;
+  effectiveDate: string;
+  createdAt: string;
+}
+
 export interface KeuanganClient {
+  /** Modal per sesi per cabang dan tipe kelas (dasar laba). */
+  daftarModalSesi?(): Promise<TarifModalSesi[]>;
+  simpanModalSesi?(input: {
+    branchId: string;
+    classTypeId: string | null;
+    modalPerSesiRp: number;
+    effectiveDate: string;
+  }): Promise<TarifModalSesi>;
+  hapusModalSesi?(id: string): Promise<unknown>;
   /** Honor instruktur tanggal 1 s/d hari ini (tanggal 1: bulan lalu) untuk transfer KlikBCA. */
   transferHonor?(): Promise<RingkasanTransfer>;
   unduhTransferHonor?(): Promise<BerkasTransfer>;
@@ -171,6 +195,26 @@ export interface KeuanganClient {
 }
 
 export const browserKeuanganClient: KeuanganClient = {
+  async daftarModalSesi() {
+    const hasil = await apiFetch<TarifModalSesi[]>('/session-costs', {
+      label: 'Memuat modal per sesi…',
+    });
+    if (!Array.isArray(hasil)) throw new Error('MODAL_TIDAK_DIKENAL');
+    return hasil;
+  },
+  simpanModalSesi(input) {
+    return apiFetch<TarifModalSesi>('/session-costs', {
+      method: 'POST',
+      body: JSON.stringify(input),
+      label: 'Menyimpan modal per sesi…',
+    });
+  },
+  hapusModalSesi(id) {
+    return apiFetch(`/session-costs/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+      label: 'Menghapus modal per sesi…',
+    });
+  },
   async transferHonor() {
     const hasil = await apiFetch<RingkasanTransfer>('/instructor-transfers', {
       label: 'Menghitung honor instruktur…',

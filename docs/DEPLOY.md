@@ -131,6 +131,23 @@ CREATE TABLE `rekening_instruktur` (
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 ```
 
+`modal_sesi` (modal per sesi per cabang dan tipe kelas, dasar laba bulanan, Oktober 2026):
+
+```sql
+CREATE TABLE `modal_sesi` (
+    `id` CHAR(36) NOT NULL,
+    `branchId` CHAR(36) NOT NULL,
+    `classTypeId` CHAR(36) NULL,
+    `modalPerSesiRp` INTEGER NOT NULL,
+    `effectiveDate` DATE NOT NULL,
+    `createdById` CHAR(36) NULL,
+    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+
+    INDEX `modal_sesi_branchId_classTypeId_effectiveDate_idx`(`branchId`, `classTypeId`, `effectiveDate`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+```
+
 ## Kembali ke versi sebelumnya
 
 ```bash

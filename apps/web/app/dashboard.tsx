@@ -721,8 +721,8 @@ export function Dashboard({
                   <span className="font-bold text-dd-forest">{formatRupiah(overview.financial.profitBreakdown.netRevenueRp)}</span>
                 </div>
                 <div className="flex items-center justify-between py-1.5 text-dd-brass-dark">
-                  <span>(-) Modal / Biaya Langsung Instruktur (Sesi Selesai)</span>
-                  <span className="font-medium">- {formatRupiah(overview.financial.profitBreakdown.instructorCostRp)}</span>
+                  <span>(-) Modal sesi (sesi terjual x modal per sesi)</span>
+                  <span className="font-medium">- {formatRupiah(overview.financial.profitBreakdown.modalSesiRp ?? 0)}</span>
                 </div>
                 <div className="flex items-center justify-between rounded-dd-md bg-dd-forest/5 px-3 py-2 border border-dd-forest/20">
                   <div className="flex items-center gap-2">
@@ -836,8 +836,8 @@ export function Dashboard({
                 { id: 'revenue', header: 'Omzet', cell: (branch) => formatRupiah(branch.revenueRp) },
                 {
                   id: 'instructor',
-                  header: 'Instruktur (Modal)',
-                  cell: (branch) => formatRupiah(branch.instructorRealtimeRp),
+                  header: 'Modal sesi',
+                  cell: (branch) => formatRupiah(branch.modalSesiRp ?? 0),
                 },
                 {
                   id: 'grossProfit',
@@ -845,7 +845,7 @@ export function Dashboard({
                   cell: (branch) => (
                     <div>
                       <span className="font-semibold text-dd-forest">
-                        {formatRupiah(branch.grossProfitRp ?? (branch.revenueRp - branch.instructorRealtimeRp))}
+                        {formatRupiah(branch.grossProfitRp)}
                       </span>
                       {branch.grossMarginPercent !== undefined && (
                         <span className="block text-xs font-medium text-dd-muted">{branch.grossMarginPercent}% margin</span>
@@ -903,7 +903,7 @@ export function Dashboard({
                     <dd className="text-right font-medium">{formatRupiah(branch.revenueRp)}</dd>
                     <dt className="text-dd-muted">Laba Kotor</dt>
                     <dd className="text-right font-semibold text-dd-forest">
-                      {formatRupiah(branch.grossProfitRp ?? (branch.revenueRp - branch.instructorRealtimeRp))}
+                      {formatRupiah(branch.grossProfitRp)}
                     </dd>
                     <dt className="text-dd-muted">Profit Bersih</dt>
                     <dd className="text-right font-bold text-dd-forest">

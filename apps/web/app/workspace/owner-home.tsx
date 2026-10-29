@@ -89,7 +89,7 @@ function BarisCabang({ c, tebal = false }: { c: Omit<AngkaCabang, 'branchId'>; t
         )}
       </th>
       <td className="py-3 pr-4 text-right tabular-nums">{rp(c.omsetRp)}</td>
-      <td className="py-3 pr-4 text-right tabular-nums">{rp(c.payrollRp)}</td>
+      <td className="py-3 pr-4 text-right tabular-nums">{rp(c.modalSesiRp ?? 0)}</td>
       <td className="py-3 pr-4 text-right tabular-nums">{rp(c.pengeluaranRp)}</td>
       <td
         className={`py-3 text-right font-semibold tabular-nums ${c.profitRp < 0 ? 'text-dd-danger' : 'text-dd-forest'}`}
@@ -102,7 +102,8 @@ function BarisCabang({ c, tebal = false }: { c: Omit<AngkaCabang, 'branchId'>; t
 
 /**
  * Beranda Owner dan Super Owner: yang perlu diputuskan lebih dulu, lalu angka satu bulan.
- * Omzet, payroll, pengeluaran, dan laba memakai rumus laporan keuangan, total dan per cabang.
+ * Laba = omzet − modal sesi (sesi paket yang dibeli x modal per sesi) − pengeluaran, total dan per
+ * cabang. Payroll instruktur (yang dibayar per kelas ter-scan QR) ditampilkan terpisah.
  */
 export function OwnerHome({
   client = browserKeuanganClient,
@@ -264,6 +265,13 @@ export function OwnerHome({
 
         {ringkasan && (
           <>
+            {(ringkasan.total.sesiTanpaModal ?? 0) > 0 && (
+              <Feedback kind="warning">
+                {ringkasan.total.sesiTanpaModal} sesi terjual belum punya modal per sesi dan
+                dihitung Rp0, jadi laba terlihat lebih besar. Atur di Master Data, tab Modal per
+                Sesi.
+              </Feedback>
+            )}
             {ringkasan.tarifBelumDipasang > 0 && (
               <Feedback kind="warning">
                 {ringkasan.tarifBelumDipasang} kelas selesai belum punya tarif honor instruktur dan
@@ -283,7 +291,7 @@ export function OwnerHome({
                   </p>
                 </div>
                 <p className="m-0 mt-6 text-[15px] text-white/85">
-                  Omzet dikurangi payroll instruktur dan pengeluaran cabang dalam bulan ini.
+                  Omzet dikurangi modal sesi paket yang terjual dan pengeluaran cabang bulan ini.
                 </p>
               </div>
               <div className="grid gap-3">
@@ -300,9 +308,14 @@ export function OwnerHome({
                   })()}
                 />
                 <KartuAngka
-                  label="Payroll instruktur"
+                  label="Modal sesi"
+                  nilai={ringkasan.total.modalSesiRp ?? 0}
+                  catatan={`${ringkasan.total.sesiTerjual ?? 0} sesi terjual x modal per sesi`}
+                />
+                <KartuAngka
+                  label="Payroll instruktur (dibayar)"
                   nilai={ringkasan.total.payrollRp}
-                  catatan={`${ringkasan.total.kelasSelesai} kelas selesai${
+                  catatan={`Tidak mengurangi laba · ${ringkasan.total.kelasSelesai} kelas selesai${
                     ringkasan.total.koreksiPayrollRp
                       ? ` · termasuk koreksi jam ${rp(ringkasan.total.koreksiPayrollRp)}`
                       : ''
@@ -327,7 +340,7 @@ export function OwnerHome({
                         Omzet
                       </th>
                       <th scope="col" className="py-3 pr-4 text-right font-medium">
-                        Payroll
+                        Modal sesi
                       </th>
                       <th scope="col" className="py-3 pr-4 text-right font-medium">
                         Pengeluaran

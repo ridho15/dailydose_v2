@@ -210,6 +210,10 @@ export interface ProfitData {
   branchId: string;
   omsetRp: number;
   costRealtimeRp: number;
+  /** Sesi paket yang dibeli x modal per sesi; dasar laba. */
+  modalSesiRp?: number;
+  sesiTerjual?: number;
+  sesiTanpaModal?: number;
   grossProfitRp: number;
   grossMarginPercent: number;
   otherCostRp: number;

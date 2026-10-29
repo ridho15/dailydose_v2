@@ -42,6 +42,10 @@ interface PerformanceData {
   unverifiedClassCount: number;
   unconfiguredClassCount?: number;
   instructorFeeMissing?: boolean;
+  /** Sesi terjual x modal per sesi; dasar profit. */
+  modalSesiRp?: number;
+  sesiTerjual?: number;
+  sesiTanpaModal?: number;
   estimatedProfitRp: number;
   instructorCount: number;
   totalClassHours: number;
@@ -203,14 +207,24 @@ export function OwnerBranchPerformanceView() {
       )}
 
       {/* Ringkasan Finansial */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <StatCard
           label="Omset Cabang"
           value={formatRupiah(data?.omsetRp ?? 0)}
           tone="success"
         />
         <StatCard
-          label="Biaya Instruktur (Aktual)"
+          label="Modal Sesi Terjual"
+          value={formatRupiah(data?.modalSesiRp ?? 0)}
+          helper={
+            data && (data.sesiTanpaModal ?? 0) > 0
+              ? `${data.sesiTanpaModal} sesi belum punya modal per sesi (dihitung Rp0)`
+              : `${data?.sesiTerjual ?? 0} sesi x modal per sesi`
+          }
+          tone={data && (data.sesiTanpaModal ?? 0) > 0 ? 'warning' : 'neutral'}
+        />
+        <StatCard
+          label="Honor Instruktur (dibayar)"
           value={formatRupiah(data?.totalInstructorFeeRp ?? 0)}
           helper={
             data?.instructorFeeMissing
@@ -229,8 +243,8 @@ export function OwnerBranchPerformanceView() {
         <StatCard
           label="Estimasi Profit"
           value={formatRupiah(data?.estimatedProfitRp ?? 0)}
-          helper={data?.instructorFeeMissing ? 'Estimasi belum final (beban tarif belum lengkap)' : undefined}
-          tone={data?.instructorFeeMissing ? 'neutral' : (data?.estimatedProfitRp ?? 0) >= 0 ? 'success' : 'danger'}
+          helper="Omset − modal sesi − biaya operasional"
+          tone={(data?.estimatedProfitRp ?? 0) >= 0 ? 'success' : 'danger'}
         />
       </div>
 

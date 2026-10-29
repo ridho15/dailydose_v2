@@ -100,7 +100,8 @@ describe('OwnerBranchPerformanceView - Poin 11: Peringatan Tarif Honor Instruktu
     ).toBeInTheDocument();
 
     expect(screen.getByText(/Tarif belum diset \(2 kelas butuh konfigurasi\)/i)).toBeInTheDocument();
-    expect(screen.getByText(/Estimasi belum final \(beban tarif belum lengkap\)/i)).toBeInTheDocument();
+    // Profit memakai modal sesi, jadi tidak lagi bergantung pada tarif honor instruktur.
+    expect(screen.getByText('Omset − modal sesi − biaya operasional')).toBeInTheDocument();
     expect(screen.getByText(/2 kelas tarif belum diset/i)).toBeInTheDocument();
   });
 
