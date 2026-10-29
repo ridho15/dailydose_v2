@@ -7,6 +7,11 @@ export interface AngkaCabang {
   payrollRp: number;
   koreksiPayrollRp: number;
   pengeluaranRp: number;
+  /** Sesi paket yang dibeli x modal per sesi; dasar laba. */
+  modalSesiRp: number;
+  sesiTerjual: number;
+  /** Sesi tanpa modal per sesi yang cocok (dihitung Rp0). */
+  sesiTanpaModal: number;
   profitRp: number;
   targetRp: number | null;
   transaksi: number;
@@ -54,8 +59,9 @@ export interface KoreksiJam {
   className: string | null;
   classStartAt: string;
   hours: number;
-  feePerJamRp: number;
-  amountRp: number;
+  /** Null bila peran tidak berhak melihat nominal honor (mis. Manager). */
+  feePerJamRp: number | null;
+  amountRp: number | null;
   reason: string;
   decidedByName: string | null;
   createdAt: string;
@@ -96,7 +102,70 @@ export interface SettlementOwner {
   labaBelumDibagiRp: number;
 }
 
+export interface RekeningInstruktur {
+  bankName: string;
+  swiftCode: string;
+  accountNumber: string;
+  accountName: string;
+  email: string | null;
+}
+
+export interface BarisTransfer {
+  instructorId: string;
+  nama: string;
+  totalRp: number;
+  terverifikasiRp: number;
+  koreksiRp: number;
+  kelasTerverifikasi: number;
+  belumTerverifikasiRp: number;
+  kelasBelumTerverifikasi: number;
+  rekening: RekeningInstruktur | null;
+}
+
+export interface RingkasanTransfer {
+  from: string;
+  until: string;
+  baris: BarisTransfer[];
+  siapRp: number;
+  jumlahSiap: number;
+  tanpaRekening: number;
+  kelasBelumTerverifikasi: number;
+}
+
+export interface BerkasTransfer {
+  fileName: string;
+  base64: string;
+  jumlahBaris: number;
+  totalRp: number;
+}
+
+export interface TarifModalSesi {
+  id: string;
+  branchId: string;
+  /** Kosong = semua tipe kelas di cabang itu. */
+  classTypeId: string | null;
+  modalPerSesiRp: number;
+  effectiveDate: string;
+  createdAt: string;
+}
+
 export interface KeuanganClient {
+  /** Modal per sesi per cabang dan tipe kelas (dasar laba). */
+  daftarModalSesi?(): Promise<TarifModalSesi[]>;
+  simpanModalSesi?(input: {
+    branchId: string;
+    classTypeId: string | null;
+    modalPerSesiRp: number;
+    effectiveDate: string;
+  }): Promise<TarifModalSesi>;
+  hapusModalSesi?(id: string): Promise<unknown>;
+  /** Honor instruktur tanggal 1 s/d hari ini (tanggal 1: bulan lalu) untuk transfer KlikBCA. */
+  transferHonor?(): Promise<RingkasanTransfer>;
+  unduhTransferHonor?(): Promise<BerkasTransfer>;
+  simpanRekeningInstruktur?(
+    instructorId: string,
+    rekening: Omit<RekeningInstruktur, 'email'> & { email?: string },
+  ): Promise<RekeningInstruktur>;
   /** Super Owner aktif, untuk pilihan "Dibayar oleh". */
   daftarOwner?(): Promise<OwnerSingkat[]>;
   porsiOwner?(): Promise<PorsiCabang[]>;
@@ -127,6 +196,46 @@ export interface KeuanganClient {
 }
 
 export const browserKeuanganClient: KeuanganClient = {
+  async daftarModalSesi() {
+    const hasil = await apiFetch<TarifModalSesi[]>('/session-costs', {
+      label: 'Memuat modal per sesi…',
+    });
+    if (!Array.isArray(hasil)) throw new Error('MODAL_TIDAK_DIKENAL');
+    return hasil;
+  },
+  simpanModalSesi(input) {
+    return apiFetch<TarifModalSesi>('/session-costs', {
+      method: 'POST',
+      body: JSON.stringify(input),
+      label: 'Menyimpan modal per sesi…',
+    });
+  },
+  hapusModalSesi(id) {
+    return apiFetch(`/session-costs/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+      label: 'Menghapus modal per sesi…',
+    });
+  },
+  async transferHonor() {
+    const hasil = await apiFetch<RingkasanTransfer>('/instructor-transfers', {
+      label: 'Menghitung honor instruktur…',
+    });
+    if (!Array.isArray(hasil?.baris)) throw new Error('TRANSFER_TIDAK_DIKENAL');
+    return hasil;
+  },
+  unduhTransferHonor() {
+    return apiFetch<BerkasTransfer>('/instructor-transfers/export', {
+      method: 'POST',
+      body: JSON.stringify({}),
+      label: 'Menyiapkan berkas KlikBCA…',
+    });
+  },
+  simpanRekeningInstruktur(instructorId, rekening) {
+    return apiFetch<RekeningInstruktur>(
+      `/instructor-transfers/accounts/${encodeURIComponent(instructorId)}`,
+      { method: 'PUT', body: JSON.stringify(rekening), label: 'Menyimpan rekening…' },
+    );
+  },
   daftarOwner() {
     return apiFetch<OwnerSingkat[]>('/owner-settlement/owners', { label: 'Memuat Super Owner…' });
   },
@@ -208,6 +317,15 @@ export function keuanganFailure(error: unknown, fallback: string): string {
   if (issue?.field === 'amountRp' || code === 'INVALID_AMOUNT')
     return 'Nominal harus angka bulat lebih dari 0.';
   if (issue?.field === 'incurredOn') return 'Tanggal pengeluaran tidak valid.';
+  if (issue?.field === 'accountNumber' && issue.issue === 'BCA_10_DIGIT')
+    return 'Nomor rekening BCA harus 10 digit.';
+  if (issue?.field === 'accountNumber') return 'Nomor rekening hanya angka, 5 sampai 34 digit.';
+  if (issue?.field === 'swiftCode') return 'Kode SWIFT harus 8 atau 11 huruf/angka.';
+  if (issue?.field === 'accountName') return 'Isi nama pemilik rekening (paling banyak 70 huruf).';
+  if (issue?.field === 'bankName') return 'Pilih bank tujuan.';
+  if (issue?.field === 'email') return 'Alamat email tidak valid.';
+  if (code === 'NOTHING_TO_TRANSFER')
+    return 'Belum ada honor yang bisa ditransfer: isi rekening instruktur dulu.';
   if (code === 'FORBIDDEN') return 'Akun Anda tidak berwenang untuk cabang ini.';
   return fallback;
 }

@@ -55,11 +55,47 @@ function setup() {
               },
             ]
           : [
-              { branchId: 'gg', totalAmountRp: 1_850_000 },
-              { branchId: 'gg', totalAmountRp: 1_000_000 },
-              { branchId: 'mk', totalAmountRp: 500_000 },
+              {
+                branchId: 'gg',
+                totalAmountRp: 1_850_000,
+                paidAt: new Date('2026-10-21T02:00:00Z'),
+                package: { sessionCount: 10, classTypeId: 'grp' },
+              },
+              {
+                branchId: 'gg',
+                totalAmountRp: 1_000_000,
+                paidAt: new Date('2026-10-22T02:00:00Z'),
+                package: { sessionCount: 5, classTypeId: 'pvt' },
+              },
+              {
+                branchId: 'mk',
+                totalAmountRp: 500_000,
+                paidAt: new Date('2026-10-22T02:00:00Z'),
+                package: { sessionCount: 4, classTypeId: 'grp' },
+              },
             ],
       ),
+    },
+    // Modal per sesi: Group GG Rp50.000; tipe lain di GG Rp80.000; Muara Karang belum diatur.
+    modalSesi: {
+      findMany: jest.fn(async () => [
+        {
+          id: 'm1',
+          branchId: 'gg',
+          classTypeId: 'grp',
+          modalPerSesiRp: 50_000,
+          effectiveDate: new Date('2026-01-01'),
+          createdAt: new Date('2026-01-01'),
+        },
+        {
+          id: 'm2',
+          branchId: 'gg',
+          classTypeId: null,
+          modalPerSesiRp: 80_000,
+          effectiveDate: new Date('2026-01-01'),
+          createdAt: new Date('2026-01-01'),
+        },
+      ]),
     },
     otherCost: {
       findMany: jest.fn(async (args: { select?: { description?: boolean } }) =>
@@ -113,7 +149,7 @@ function setup() {
 }
 
 describe('RingkasanKeuanganService.ringkasanBulanan', () => {
-  it('menghitung omzet, payroll (dengan koreksi), pengeluaran, dan laba per cabang dan total', async () => {
+  it('laba = omzet − modal sesi − pengeluaran; payroll ditampilkan terpisah', async () => {
     const { service } = setup();
     const hasil = await service.ringkasanBulanan(superOwner, { period: '2026-10' }, NOW);
 
@@ -123,7 +159,11 @@ describe('RingkasanKeuanganService.ringkasanBulanan', () => {
       payrollRp: 500_000, // 2 kelas × 1 jam × 200.000 + koreksi 100.000
       koreksiPayrollRp: 100_000,
       pengeluaranRp: 5_450_000,
-      profitRp: 2_850_000 - 500_000 - 5_450_000,
+      // 10 sesi Group x 50.000 + 5 sesi Private x 80.000 (tarif semua tipe kelas GG).
+      modalSesiRp: 500_000 + 400_000,
+      sesiTerjual: 15,
+      sesiTanpaModal: 0,
+      profitRp: 2_850_000 - 900_000 - 5_450_000,
       targetRp: 100_000_000,
     });
     expect(gg.pengeluaranPerKategori[0]).toEqual({ category: 'RENT', amountRp: 5_000_000 });
@@ -131,6 +171,8 @@ describe('RingkasanKeuanganService.ringkasanBulanan', () => {
     // Muara Karang belum punya tarif: memakai tarif bawaan dan dilaporkan.
     const mk = hasil.cabang.find((c) => c.branchId === 'mk')!;
     expect(mk.targetRp).toBeNull();
+    // Muara Karang belum punya modal sesi: dihitung Rp0 dan dilaporkan.
+    expect(mk).toMatchObject({ modalSesiRp: 0, sesiTanpaModal: 4, profitRp: 500_000 - mk.pengeluaranRp });
     expect(hasil.tarifBelumDipasang).toBe(1);
 
     expect(hasil.total.omsetRp).toBe(3_350_000);

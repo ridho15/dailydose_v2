@@ -4,6 +4,7 @@ import type { SessionPrincipal } from '../identity/identity.service';
 import { ApiProblem } from '../identity/security';
 import { PrismaService } from '../database/prisma.service';
 import { dateInTimeZone, startOfLocalDateUtc } from '../identity/assignment-boundary';
+import { hitungModalSesi } from '../packages/modal-sesi.service';
 import { calculateSlotFee, summarizeInstructorFees } from '../packages/instructor-fee-calculator';
 import { verificationStatusWhere } from '../identity/manajemen-pelanggan.service';
 
@@ -40,6 +41,8 @@ export interface ProfitBreakdownDetails {
   discountRp: number;
   netRevenueRp: number;
   instructorCostRp: number;
+  /** Sesi paket yang dibeli x modal per sesi; dasar laba. */
+  modalSesiRp: number;
   grossProfitRp: number;
   grossMarginPercent: number;
   otherCostRp: number;
@@ -53,6 +56,7 @@ interface FinancialResult {
     discountRp: number;
     revenueRp: number;
     instructorRealtimeRp: number;
+    modalSesiRp: number;
     otherCostRp: number;
     grossProfitRp: number;
     grossMarginPercent: number;
@@ -70,6 +74,7 @@ interface FinancialResult {
     grossSalesRp: number;
     revenueRp: number;
     instructorRealtimeRp: number;
+    modalSesiRp: number;
     otherCostRp: number;
     grossProfitRp: number;
     grossMarginPercent: number;
@@ -294,10 +299,12 @@ export class DashboardService {
     // Tarif honor belum diisi sama sekali padahal ada kelas selesai: biaya instruktur tampil Rp 0 dan laba = omzet.
     const instructorFeeMissing = completedSlots.length > 0 && fees.length === 0;
 
+    // Laba memakai modal sesi (sesi paket yang dibeli x modal per sesi), bukan honor instruktur.
+    const modal = await hitungModalSesi(this.db, purchases);
     let totalGross = 0;
     let totalRevenue = 0;
     const branchMap = new Map<string, { gross: number; revenue: number }>();
-    const trendMap = new Map<string, { revenue: number; instructorFee: number }>();
+    const trendMap = new Map<string, { revenue: number; instructorFee: number; modal: number }>();
 
     for (const bId of params.branchIds) {
       branchMap.set(bId, { gross: 0, revenue: 0 });
@@ -305,7 +312,7 @@ export class DashboardService {
 
     let curDate = params.from;
     while (curDate <= params.until) {
-      trendMap.set(curDate, { revenue: 0, instructorFee: 0 });
+      trendMap.set(curDate, { revenue: 0, instructorFee: 0, modal: 0 });
       curDate = dateShift(curDate, 1);
     }
 
@@ -314,7 +321,7 @@ export class DashboardService {
     const payMethodMap = new Map<string, { method: string; count: number; totalRp: number }>();
     const classTypeMap = new Map<string, { classTypeId: string; classTypeName: string; count: number; totalRp: number }>();
 
-    for (const p of purchases) {
+    for (const [i, p] of purchases.entries()) {
       totalGross += p.subtotalRp;
       totalRevenue += p.totalAmountRp;
 
@@ -328,6 +335,7 @@ export class DashboardService {
       const tEntry = trendMap.get(dKey);
       if (tEntry) {
         tEntry.revenue += p.totalAmountRp;
+        tEntry.modal += modal.perPembelian[i] ?? 0;
       }
 
       // Breakdown by package
@@ -356,7 +364,8 @@ export class DashboardService {
 
     // Hitung biaya instruktur per kelas completed dan update trend harian
     for (const s of completedSlots) {
-      if (!s.instructorId) continue;
+      // Hanya kelas yang presensi instrukturnya tercatat menjadi beban honor.
+      if (!s.instructorId || !s.instructorAttendance) continue;
       const slotFee = calculateSlotFee(fees, {
         startAt: s.startAt,
         endAt: s.endAt,
@@ -392,7 +401,8 @@ export class DashboardService {
       totalInstructorFee += branchInstructorFee;
       totalOtherCost += branchOtherCost;
 
-      const branchGrossProfit = bData.revenue - branchInstructorFee;
+      const branchModal = modal.perCabang.get(branchId) ?? 0;
+      const branchGrossProfit = bData.revenue - branchModal;
       const branchGrossMargin =
         bData.revenue > 0 ? Math.round((branchGrossProfit / bData.revenue) * 1000) / 10 : 0;
       const profit = branchGrossProfit - branchOtherCost;
@@ -404,6 +414,7 @@ export class DashboardService {
         grossSalesRp: bData.gross,
         revenueRp: bData.revenue,
         instructorRealtimeRp: branchInstructorFee,
+        modalSesiRp: branchModal,
         otherCostRp: branchOtherCost,
         grossProfitRp: branchGrossProfit,
         grossMarginPercent: branchGrossMargin,
@@ -413,7 +424,7 @@ export class DashboardService {
     });
 
     const totalDiscount = Math.max(0, totalGross - totalRevenue);
-    const grossProfit = totalRevenue - totalInstructorFee;
+    const grossProfit = totalRevenue - modal.totalRp;
     const grossMarginPercent =
       totalRevenue > 0 ? Math.round((grossProfit / totalRevenue) * 1000) / 10 : 0;
     const totalProfit = grossProfit - totalOtherCost;
@@ -423,7 +434,7 @@ export class DashboardService {
     const trend = [...trendMap.entries()].map(([date, data]) => ({
       date,
       revenueRp: data.revenue,
-      profitRp: data.revenue - data.instructorFee,
+      profitRp: data.revenue - data.modal,
     }));
 
     const byPackage = [...pkgMap.values()]
@@ -461,6 +472,7 @@ export class DashboardService {
       discountRp: totalDiscount,
       netRevenueRp: totalRevenue,
       instructorCostRp: totalInstructorFee,
+      modalSesiRp: modal.totalRp,
       grossProfitRp: grossProfit,
       grossMarginPercent,
       otherCostRp: totalOtherCost,
@@ -474,6 +486,7 @@ export class DashboardService {
         discountRp: totalDiscount,
         revenueRp: totalRevenue,
         instructorRealtimeRp: totalInstructorFee,
+        modalSesiRp: modal.totalRp,
         otherCostRp: totalOtherCost,
         grossProfitRp: grossProfit,
         grossMarginPercent,
@@ -885,16 +898,25 @@ export class DashboardService {
         previousFrom: previousFromDate,
         previousUntil: previousUntilDate,
       },
-      financial: {
-        ...financial.totals,
-        completeness: financial.completeness,
-        instructorFeeMissing: financial.instructorFeeMissing,
-        anomalyCount: financial.anomalyCount,
-        sourceCutoffAt: financial.sourceCutoffAt,
-        controlHash: financial.controlHash,
-        omsetBreakdown: financial.omsetBreakdown,
-        profitBreakdown: financial.profitBreakdown,
-      },
+      // Admin dan Manager hanya menerima omzet cabangnya sendiri (cabang sudah dibatasi di atas);
+      // honor instruktur, modal sesi, pengeluaran, dan laba hanya untuk peran keuangan.
+      financial: showFinance
+        ? {
+            ...financial.totals,
+            completeness: financial.completeness,
+            instructorFeeMissing: financial.instructorFeeMissing,
+            anomalyCount: financial.anomalyCount,
+            sourceCutoffAt: financial.sourceCutoffAt,
+            controlHash: financial.controlHash,
+            omsetBreakdown: financial.omsetBreakdown,
+            profitBreakdown: financial.profitBreakdown,
+          }
+        : {
+            grossSalesRp: financial.totals.grossSalesRp,
+            discountRp: financial.totals.discountRp,
+            revenueRp: financial.totals.revenueRp,
+            sourceCutoffAt: financial.sourceCutoffAt,
+          },
       views: { finance: showFinance, operations: showOperations },
       sections: allowedSections,
       metrics: [

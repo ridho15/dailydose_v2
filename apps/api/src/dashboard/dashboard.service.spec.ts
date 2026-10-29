@@ -184,6 +184,18 @@ describe('DashboardService', () => {
     expect(result.sections.risk).toBe(views.operations);
   });
 
+  it('admin hanya menerima omzet cabangnya: tanpa honor instruktur, modal, pengeluaran, atau laba', async () => {
+    const db = database();
+    const result = await new DashboardService(db as never).overview(principal(), {});
+    expect(Object.keys(result.financial).sort()).toEqual(
+      ['discountRp', 'grossSalesRp', 'revenueRp', 'sourceCutoffAt'].sort(),
+    );
+    expect(result.branches).toEqual([]);
+    expect(result.trend.every((t) => t.profit === 0)).toBe(true);
+    // Pembelian yang dijumlah hanya dari cabang penugasan admin.
+    expect(db.pembelian.findMany.mock.calls[0]![0].where.branchId).toEqual({ in: ['branch-1'] });
+  });
+
   it('menghitung booking dari kelas yang sudah dihadiri, bukan hanya yang masih BOOKED', async () => {
     const db = database();
     db.pemesananKelas.count = jest.fn().mockResolvedValue(0);

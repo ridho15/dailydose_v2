@@ -210,7 +210,6 @@ export function ClassSlotView({
       date: localDateKey(next, slot.timezone),
       startTime: clock(slot.startAt),
       endTime: clock(slot.endAt),
-      instructorFeeRp: slot.isManualFee ? slot.instructorFeeRp : undefined,
     };
   };
   /** Menjalankan aksi kelas; hasilnya `true` bila tersimpan, supaya panel hanya ditutup saat berhasil. */

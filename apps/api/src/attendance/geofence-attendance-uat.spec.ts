@@ -327,7 +327,7 @@ describe('UAT & Non-Happy Path: Geofencing, Absensi Instruktur & Modal Manual', 
       feePerJamRp: 150_000,
     };
 
-    it('[UAT] Memprioritaskan nominal modal flat per sesi jika isManualFee aktif', () => {
+    it('[UAT] Nominal modal manual di jadwal diabaikan; honor selalu dari Data Master', () => {
       const manualSlot: FeeableSlot & { instructorId: string } = {
         instructorId: coach.id,
         branchId,
@@ -341,8 +341,9 @@ describe('UAT & Non-Happy Path: Geofencing, Absensi Instruktur & Modal Manual', 
       };
 
       const result = calculateSlotFee([standardFee], manualSlot);
-      expect(result.feeRp).toBe(350_000);
-      expect(result.isManual).toBe(true);
+      // 1,5 jam dibulatkan 2 jam x 150.000.
+      expect(result.feeRp).toBe(300_000);
+      expect(result.isManual).toBe(false);
       expect(result.configured).toBe(true);
     });
 

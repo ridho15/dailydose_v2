@@ -1184,3 +1184,38 @@ model PembayarPengeluaran {
   @@index([dibayarOlehId])
   @@map("pembayar_pengeluaran")
 }
+
+/// Rekening tujuan transfer honor instruktur, untuk berkas KlikBCA Bisnis Multi Payroll.
+/// Satu rekening per instruktur. Tanpa relasi Prisma; tabel lama tidak berubah.
+model RekeningInstruktur {
+  instructorId  String   @id @db.Char(36)
+  bankName      String   @db.VarChar(64)
+  /// SWIFT bank tujuan; CENAIDJA berarti sesama BCA, selain itu transfer LLG.
+  swiftCode     String   @db.VarChar(11)
+  accountNumber String   @db.VarChar(34)
+  accountName   String   @db.VarChar(70)
+  /// Notifikasi transfer berhasil dari BCA (opsional).
+  email         String?  @db.VarChar(191)
+  updatedById   String?  @db.Char(36)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("rekening_instruktur")
+}
+
+/// Modal per sesi untuk menghitung profit: sesi paket yang dibeli member x modal per sesi tipe
+/// kelasnya di cabang itu. Terpisah dari fee instruktur (yang dibayar per kelas ter-scan QR).
+/// classTypeId kosong = berlaku untuk semua tipe kelas di cabang itu (dipakai paket umum).
+/// Tanpa relasi Prisma; tabel lama tidak berubah.
+model ModalSesi {
+  id             String   @id @default(uuid()) @db.Char(36)
+  branchId       String   @db.Char(36)
+  classTypeId    String?  @db.Char(36)
+  modalPerSesiRp Int
+  effectiveDate  DateTime @db.Date
+  createdById    String?  @db.Char(36)
+  createdAt      DateTime @default(now())
+
+  @@index([branchId, classTypeId, effectiveDate])
+  @@map("modal_sesi")
+}

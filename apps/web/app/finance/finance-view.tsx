@@ -451,14 +451,15 @@ export function FinanceView({
                   tone="success"
                 />
                 <StatCard
-                  label="Beban Instruktur Aktual"
-                  value={formatRupiah(profitData.costRealtimeRp)}
+                  label="Modal Sesi Terjual"
+                  value={formatRupiah(profitData.modalSesiRp ?? 0)}
+                  helper={`${profitData.sesiTerjual ?? 0} sesi x modal per sesi`}
                   tone="neutral"
                 />
                 <StatCard
                   label="Laba Kotor (Gross Profit)"
-                  value={formatRupiah(profitData.grossProfitRp ?? (profitData.omsetRp - profitData.costRealtimeRp))}
-                  helper={`Margin ${profitData.grossMarginPercent ?? (profitData.omsetRp > 0 ? Math.round(((profitData.omsetRp - profitData.costRealtimeRp) / profitData.omsetRp) * 1000) / 10 : 0)}%`}
+                  value={formatRupiah(profitData.grossProfitRp)}
+                  helper={`Margin ${profitData.grossMarginPercent ?? 0}%`}
                   tone="success"
                 />
                 <StatCard
@@ -483,15 +484,15 @@ export function FinanceView({
                       <span className="font-semibold">{formatRupiah(profitData.omsetRp)}</span>
                     </div>
                     <div className="flex justify-between pt-2 text-dd-warning">
-                      <span>(-) Modal / Beban Instruktur Aktual (Sesi Selesai):</span>
+                      <span>(-) Modal Sesi ({profitData.sesiTerjual ?? 0} sesi terjual x modal per sesi):</span>
                       <span className="font-semibold">
-                        - {formatRupiah(profitData.costRealtimeRp)}
+                        - {formatRupiah(profitData.modalSesiRp ?? 0)}
                       </span>
                     </div>
                     <div className="flex justify-between pt-2 font-medium bg-dd-forest/5 px-2 py-1.5 rounded-dd-sm">
                       <span className="text-dd-forest">(=) Laba Kotor (Gross Profit):</span>
                       <span className="font-bold text-dd-forest">
-                        {formatRupiah(profitData.grossProfitRp ?? (profitData.omsetRp - profitData.costRealtimeRp))}
+                        {formatRupiah(profitData.grossProfitRp)}
                         <span className="ml-1.5 text-xs text-dd-forest/80">({profitData.grossMarginPercent ?? 0}%)</span>
                       </span>
                     </div>
@@ -508,6 +509,12 @@ export function FinanceView({
                         <span className="ml-1.5 text-xs text-dd-muted">({profitData.netMarginPercent ?? 0}%)</span>
                       </span>
                     </div>
+                    <p className="m-0 pt-3 text-dd-muted">
+                      Honor instruktur yang dibayar periode ini {formatRupiah(profitData.costRealtimeRp)}{' '}
+                      (kelas ter-scan QR, tab 3) tidak mengurangi laba di atas.
+                      {(profitData.sesiTanpaModal ?? 0) > 0 &&
+                        ` ${profitData.sesiTanpaModal} sesi belum punya modal per sesi dan dihitung Rp0; atur di Master Data.`}
+                    </p>
                   </div>
                 </Panel>
               </div>

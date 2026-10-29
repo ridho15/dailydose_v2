@@ -27,7 +27,8 @@ const slot = (over: Record<string, unknown> = {}) => ({
   minQuota: 3,
   status: 'PUBLISHED',
   version: 4,
-  instructorFeeRp: 300_000,
+  instructorId: id(50),
+  classTypeId: id(60),
   classType: { name: 'Group Reformer' },
   studio: { name: 'Studio 2' },
   instructor: { displayName: 'Anna Wijaya' },
@@ -48,6 +49,18 @@ function setup(opts: { slots?: unknown[]; satu?: unknown; keputusan?: unknown[] 
     auditLog: { findMany: jest.fn().mockResolvedValue(opts.keputusan ?? []) },
     user: { findMany: jest.fn().mockResolvedValue([{ id: id(100), displayName: 'Rina' }]) },
     kehadiranPelanggan: { findMany: jest.fn().mockResolvedValue([]) },
+    // Honor dari Data Master: 300.000 per jam untuk instruktur, cabang, dan tipe kelas ini.
+    instructorFee: {
+      findMany: jest.fn().mockResolvedValue([
+        {
+          instructorId: id(50),
+          branchId: cabangA,
+          classTypeId: id(60),
+          effectiveDate: new Date('2026-01-01'),
+          feePerJamRp: 300_000,
+        },
+      ]),
+    },
   };
   const audit = { catat: jest.fn().mockResolvedValue(undefined) };
   return {
@@ -140,7 +153,7 @@ describe('CheckInDeskService.meja', () => {
 });
 
 describe('CheckInDeskService.tetapJalan', () => {
-  it('mencatat keputusan beserta selisih beban per kursi kosong', async () => {
+  it('mencatat selisih beban per kursi kosong di audit, tanpa nominal ke meja check-in', async () => {
     const { service, audit } = setup();
 
     const hasil = await service.tetapJalan(
@@ -150,8 +163,9 @@ describe('CheckInDeskService.tetapJalan', () => {
       NOW,
     );
 
-    // Honor 300.000 dibagi minimum 3, kurang 2 kursi.
-    expect(hasil.selisihBebanRp).toBe(200_000);
+    // Admin tidak menerima nominal honor.
+    expect(hasil).not.toHaveProperty('selisihBebanRp');
+    // Honor 300.000 (Data Master) dibagi minimum 3, kurang 2 kursi.
     expect(audit.catat).toHaveBeenCalledWith(
       null,
       expect.objectContaining({
@@ -207,7 +221,7 @@ describe('CheckInDeskService.tetapJalan', () => {
   });
 
   it('menyebut honor yang belum diketahui alih-alih menulis beban nol seolah pasti', async () => {
-    const { service, audit } = setup({ satu: slot({ instructorFeeRp: null }) });
+    const { service, audit } = setup({ satu: slot({ classTypeId: id(61) }) });
 
     await service.tetapJalan(admin, id(10), { reason: 'Dua peserta sudah di studio' }, NOW);
 

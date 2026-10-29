@@ -13,6 +13,7 @@ import { Drawer, useAppFeedback } from '../../components/app-feedback';
 import { TextInput } from '../../components/forms';
 import { Badge } from '../../components/admin/admin-ui';
 import { useSessionContext } from '../../session-context';
+import { FeeInstruktur } from './fee-instruktur';
 
 export function InstructorDetailView({ id }: { id: string }) {
   const sessionContext = useSessionContext();
@@ -339,6 +340,18 @@ export function InstructorDetailView({ id }: { id: string }) {
           }
         />
       </div>
+
+      {session?.capabilities?.includes('master:read') && (
+        <FeeInstruktur
+          instructorId={data.id}
+          canEdit={Boolean(session.capabilities.includes('master:manage'))}
+          branches={
+            data.assignments.length
+              ? data.assignments.map((a) => ({ id: a.branch.id, name: a.branch.name }))
+              : (session.branches ?? []).map((b) => ({ id: b.id, name: b.name }))
+          }
+        />
+      )}
 
       <div className="rounded-dd-lg border border-dd-line bg-white p-6">
         <div className="flex items-center justify-between">

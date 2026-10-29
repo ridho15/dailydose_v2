@@ -108,7 +108,6 @@ export function CopyWeekView({
           instructorUserId: item.source.instructorUserId ?? undefined,
           startAt: item.startAt,
           endAt: item.endAt,
-          instructorFeeRp: item.source.isManualFee ? item.source.instructorFeeRp : undefined,
         });
         created += 1;
         if (publish && item.source.instructorUserId && item.source.status !== 'DRAFT')

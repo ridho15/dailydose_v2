@@ -124,7 +124,7 @@ export function KoreksiJamView({
       });
       setPesan({
         kind: 'status',
-        text: `Koreksi ${jamTeks(hasil.hours)} untuk ${hasil.instructorName ?? 'instruktur'} tercatat: ${rp(hasil.amountRp)} pada payroll bulan kelasnya.`,
+        text: `Koreksi ${jamTeks(hasil.hours)} untuk ${hasil.instructorName ?? 'instruktur'} tercatat${hasil.amountRp === null ? '' : `: ${rp(hasil.amountRp)}`} pada payroll bulan kelasnya.`,
       });
       setAlasan('');
       setBukti(null);
@@ -341,11 +341,17 @@ export function KoreksiJamView({
                   <span className="block text-sm text-dd-ink">{k.reason}</span>
                 </span>
                 <span className="text-right">
-                  <span
-                    className={`block font-semibold tabular-nums ${k.amountRp < 0 ? 'text-dd-danger' : 'text-dd-forest'}`}
-                  >
-                    {rp(k.amountRp)}
-                  </span>
+                  {k.amountRp === null ? (
+                    <span className="block font-semibold tabular-nums text-dd-ink">
+                      {jamTeks(k.hours)}
+                    </span>
+                  ) : (
+                    <span
+                      className={`block font-semibold tabular-nums ${k.amountRp < 0 ? 'text-dd-danger' : 'text-dd-forest'}`}
+                    >
+                      {rp(k.amountRp)}
+                    </span>
+                  )}
                   <a
                     href={k.evidenceUrl}
                     target="_blank"

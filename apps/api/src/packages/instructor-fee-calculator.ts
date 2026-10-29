@@ -59,6 +59,9 @@ export function teachingHours(slot: Pick<FeeableSlot, 'startAt' | 'endAt'>): num
 /**
  * Fee/jam yang berlaku untuk satu kelas: konfigurasi cabang kelas itu lebih dulu, lalu konfigurasi
  * cabang lain, lalu fee bawaan. `fees` harus sudah urut effectiveDate terbaru lebih dulu.
+ *
+ * Fee hanya berasal dari Data Master (per instruktur, cabang, dan tipe kelas). Nominal yang dulu
+ * bisa diketik di form jadwal (`instructorFeeRp`/`isManualFee`) tidak dipakai lagi.
  */
 export function calculateSlotFee(
   sortedFees: readonly InstructorFeeRow[],
@@ -68,18 +71,6 @@ export function calculateSlotFee(
   > & { instructorId: string },
 ) {
   const hours = teachingHours(slot);
-
-  // Jika honor diatur secara manual per sesi
-  if (slot.isManualFee && slot.instructorFeeRp !== null && slot.instructorFeeRp !== undefined) {
-    const feeRp = Number(slot.instructorFeeRp);
-    return {
-      hours,
-      feePerJamRp: Math.round(feeRp / hours),
-      feeRp,
-      configured: true,
-      isManual: true,
-    };
-  }
 
   const applicable = (f: InstructorFeeRow) =>
     f.instructorId === slot.instructorId &&
@@ -99,8 +90,9 @@ export function calculateSlotFee(
 }
 
 /**
- * Honor per instruktur dari kelas yang sudah selesai. Honor tetap dihitung untuk semua kelas;
- * kelas tanpa presensi instruktur hanya ditandai "belum terverifikasi".
+ * Honor per instruktur dari kelas yang sudah selesai. Hanya kelas dengan presensi instruktur (QR
+ * dipindai atau diverifikasi) yang masuk total honor dan beban payroll; kelas selesai tanpa
+ * presensi dicatat terpisah sebagai "belum terverifikasi" supaya bisa diverifikasi dulu.
  */
 export function summarizeInstructorFees(
   slots: readonly FeeableSlot[],
@@ -134,15 +126,15 @@ export function summarizeInstructorFees(
     }
 
     const { hours, feeRp, configured } = calculateSlotFee(sortedFees, { ...slot, instructorId: id });
-    entry.totalHours += hours;
-    entry.totalFeeRp += feeRp;
-    if (!configured) entry.unconfiguredFeeClassCount += 1;
-    if (slot.instructorAttendance) {
-      entry.verifiedFeeRp += feeRp;
-    } else {
+    if (!slot.instructorAttendance) {
       entry.unverifiedFeeRp += feeRp;
       entry.unverifiedClassCount += 1;
+      continue;
     }
+    entry.totalHours += hours;
+    entry.totalFeeRp += feeRp;
+    entry.verifiedFeeRp += feeRp;
+    if (!configured) entry.unconfiguredFeeClassCount += 1;
 
     const typeName = (slot.classType?.name ?? '').toLowerCase();
     if (typeName.includes('semi')) {

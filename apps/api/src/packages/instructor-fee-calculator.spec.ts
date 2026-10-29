@@ -64,7 +64,7 @@ describe('calculateSlotFee', () => {
     expect(calculateSlotFee(fees, withId(slot())).configured).toBe(false);
   });
 
-  it('uses manual flat session fee when isManualFee is true regardless of hourly rate', () => {
+  it('ignores the old per-slot manual fee; the fee always comes from master data', () => {
     const fees = sortFeesNewestFirst([fee({ feePerJamRp: 500_000 })]);
     const manualSlot = withId(
       slot({
@@ -73,8 +73,8 @@ describe('calculateSlotFee', () => {
       }),
     );
     const result = calculateSlotFee(fees, manualSlot);
-    expect(result.feeRp).toBe(350_000);
-    expect(result.isManual).toBe(true);
+    expect(result.feeRp).toBe(500_000);
+    expect(result.isManual).toBe(false);
     expect(result.configured).toBe(true);
   });
 
@@ -87,14 +87,14 @@ describe('calculateSlotFee', () => {
 });
 
 describe('summarizeInstructorFees', () => {
-  it('counts every class in the total but splits verified from unverified', () => {
+  it('counts only classes with instructor attendance; unverified ones are reported apart', () => {
     const [row] = summarizeInstructorFees(
       [slot(), slot({ instructorAttendance: null })],
       [fee()],
     );
     expect(row).toMatchObject({
-      totalHours: 2,
-      totalFeeRp: 400_000,
+      totalHours: 1,
+      totalFeeRp: 200_000,
       verifiedFeeRp: 200_000,
       unverifiedFeeRp: 200_000,
       unverifiedClassCount: 1,

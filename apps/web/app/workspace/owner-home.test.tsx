@@ -32,17 +32,21 @@ const cabang = (
   id: string,
   name: string,
   omsetRp: number,
-  payrollRp: number,
+  modalSesiRp: number,
   pengeluaranRp: number,
   targetRp: number | null = null,
 ) => ({
   branchId: id,
   branchName: name,
   omsetRp,
-  payrollRp,
+  // Payroll hanya informasi (yang dibayar ke instruktur); laba memakai modal sesi.
+  payrollRp: 1_000_000,
   koreksiPayrollRp: 0,
   pengeluaranRp,
-  profitRp: omsetRp - payrollRp - pengeluaranRp,
+  modalSesiRp,
+  sesiTerjual: 40,
+  sesiTanpaModal: 0,
+  profitRp: omsetRp - modalSesiRp - pengeluaranRp,
   targetRp,
   transaksi: 3,
   kelasSelesai: 10,
@@ -58,9 +62,12 @@ const ringkasan = (): RingkasanBulanan => {
     cabang: [gg, mk],
     total: {
       omsetRp: 45_000_000,
-      payrollRp: 13_000_000,
+      payrollRp: 2_000_000,
       koreksiPayrollRp: 200_000,
       pengeluaranRp: 8_000_000,
+      modalSesiRp: 13_000_000,
+      sesiTerjual: 80,
+      sesiTanpaModal: 0,
       profitRp: 24_000_000,
       targetRp: 50_000_000,
       transaksi: 6,
@@ -104,8 +111,23 @@ describe('OwnerHome', () => {
     expect(within(omzet).getByText('Rp 45.000.000')).toBeVisible();
     expect(screen.getByText(/6 pembayaran lunas · 90% dari target/)).toBeVisible();
     expect(screen.getByText(/termasuk koreksi jam Rp 200.000/)).toBeVisible();
+    const modal = screen.getByText('Modal sesi', { selector: 'p' }).parentElement!;
+    expect(within(modal).getByText('Rp 13.000.000')).toBeVisible();
+    expect(within(modal).getByText('80 sesi terjual x modal per sesi')).toBeVisible();
+    expect(screen.getByText(/Tidak mengurangi laba/)).toBeVisible();
     expect(
       screen.getByRole('heading', { name: 'Keuangan, 1 sampai 31 Oktober 2026' }),
+    ).toBeVisible();
+  });
+
+  it('memperingatkan sesi terjual yang belum punya modal per sesi', async () => {
+    const r = ringkasan();
+    r.total.sesiTanpaModal = 12;
+    render(
+      <OwnerHome now={NOW} client={client(r)} queueClient={queue} ownerReportClient={ownerReport} />,
+    );
+    expect(
+      await screen.findByText(/12 sesi terjual belum punya modal per sesi dan dihitung Rp0/),
     ).toBeVisible();
   });
 

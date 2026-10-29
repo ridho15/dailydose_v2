@@ -29,6 +29,7 @@ import {
 import { Modal, useAppFeedback } from '../components/app-feedback';
 import { Archive, Globe, Pencil, Plus, Power, Store, Trash2 } from 'lucide-react';
 import { formatRupiah } from '../lib/formatters';
+import { ModalSesiSection } from './modal-sesi';
 
 type BranchPage = Awaited<ReturnType<MasterClient['listBranches']>>;
 type Branches = BranchPage['items'];
@@ -36,7 +37,8 @@ type ClassTypes = Awaited<ReturnType<MasterClient['listClassTypes']>>;
 export type MasterTab =
   | 'classTypes'
   | 'capacity'
-  | 'fees';
+  | 'fees'
+  | 'modal';
 
 const kindLabels: Record<MasterKind, string> = {
   QUOTA_CAPACITY: 'Kuota & kapasitas kelas',
@@ -60,6 +62,7 @@ const allTabItems: { id: MasterTab; label: string; kind?: MasterKind }[] = [
   { id: 'classTypes', label: 'Tipe Kelas' },
   { id: 'capacity', label: 'Kuota & Kapasitas', kind: 'QUOTA_CAPACITY' },
   { id: 'fees', label: 'Honor Instruktur', kind: 'INSTRUCTOR_FEE' },
+  { id: 'modal', label: 'Modal per Sesi' },
 ];
 
 const tabToKind = (tab: MasterTab): MasterKind => {
@@ -766,6 +769,14 @@ export function MasterView({
         </div>
       )}
 
+
+      {selectedTab === 'modal' && (
+        <ModalSesiSection
+          branches={branches.filter((b) => b.active).map((b) => ({ id: b.id, name: b.name }))}
+          classTypes={classTypes.filter((t) => t.active).map((t) => ({ id: t.id, name: t.name }))}
+          canEdit={Boolean(canManage)}
+        />
+      )}
 
       {/* Tab: Capacity & Fees (Operational Settings) */}
       {['capacity', 'fees'].includes(selectedTab) && (

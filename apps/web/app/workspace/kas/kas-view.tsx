@@ -13,6 +13,7 @@ import { useSessionContext } from '../../session-context';
 import { Feedback, Skeleton } from '../../ui';
 import { tigaBulan } from '../owner-home';
 import { SettlementOwnerSection } from './settlement-owner';
+import { TransferHonorSection } from './transfer-honor';
 
 const rp = (n: number) => `${n < 0 ? '−' : ''}Rp ${Math.abs(n).toLocaleString('id-ID')}`;
 
@@ -268,6 +269,12 @@ export function KasView({
     client.porsiOwner &&
     client.simpanPorsi,
   );
+  const bisaTransfer = Boolean(
+    context?.hasCapability?.('finance:export') &&
+    client.transferHonor &&
+    client.unduhTransferHonor &&
+    client.simpanRekeningInstruktur,
+  );
   const namaCabang = (id: string) =>
     context?.session?.branches?.find((b) => b.id === id)?.name ?? '';
 
@@ -417,6 +424,19 @@ export function KasView({
           }
           periode={periode}
           namaBulan={namaBulan(periode)}
+        />
+      )}
+
+      {bisaTransfer && (
+        <TransferHonorSection
+          client={
+            client as Required<
+              Pick<
+                KeuanganClient,
+                'transferHonor' | 'unduhTransferHonor' | 'simpanRekeningInstruktur'
+              >
+            >
+          }
         />
       )}
     </section>

@@ -221,6 +221,8 @@ describe('ClassSlotView', () => {
     await user.type(within(dialog).getByLabelText('Tanggal'), '2026-07-27');
     await user.type(within(dialog).getByLabelText('Mulai'), '09:00');
     await user.type(within(dialog).getByLabelText('Selesai eksklusif'), '10:00');
+    // Fee instruktur diatur di Data Master, bukan di jadwal; admin tidak melihat nominal apa pun.
+    expect(within(dialog).queryByLabelText(/Honor|Modal|Fee/i)).toBeNull();
     await user.click(within(dialog).getByRole('button', { name: 'Buat draft' }));
     await user.click(
       within(screen.getByRole('dialog', { name: 'Buat draft kelas?' })).getByRole('button', {
@@ -237,6 +239,7 @@ describe('ClassSlotView', () => {
         endAt: new Date('2026-07-27T03:00:00.000Z'),
       }),
     );
+    expect(vi.mocked(client.create).mock.calls[0]![0]).not.toHaveProperty('instructorFeeRp');
   });
 
   it('keeps the create form open with its input when saving fails (e.g. a schedule clash)', async () => {

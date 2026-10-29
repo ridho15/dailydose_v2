@@ -7,6 +7,7 @@ import type { SessionPrincipal } from '../identity/identity.service';
 import { PolicyService } from '../identity/policy.service';
 import { ApiProblem } from '../identity/security';
 import { calculateSlotFee, summarizeInstructorFees } from './instructor-fee-calculator';
+import { hitungModalSesi } from './modal-sesi.service';
 import { koreksiHonorDalamRentang } from './koreksi-jam.service';
 import {
   financeRange,
@@ -253,7 +254,8 @@ export class FinanceService {
       /** Bagian dari total yang berasal dari koreksi jam; bisa negatif. */
       adjustmentRp: koreksi.totalRp,
       adjustmentCount: koreksi.jumlah,
-      totalVerifiedFeeRp: totalInstructorCostRp - totalUnverifiedFeeRp,
+      // Beban instruktur hanya dari kelas terverifikasi; yang belum terverifikasi tidak termasuk.
+      totalVerifiedFeeRp: totalInstructorCostRp,
       totalUnverifiedFeeRp,
       unverifiedClassCount,
       unconfiguredClassCount,
@@ -335,7 +337,8 @@ export class FinanceService {
   }
 
   /**
-   * 4. Laporan Laba Bersih untuk rentang tanggal: omzet dikurangi honor instruktur aktual dan biaya lain.
+   * 4. Laporan Laba Bersih untuk rentang tanggal: omzet dikurangi modal sesi (sesi paket yang
+   * dibeli x modal per sesi) dan biaya lain. Honor instruktur ditampilkan sebagai informasi.
    */
   async profitReport(principal: SessionPrincipal, input: FinanceQuery) {
     this.policy.requireCapability(principal.capabilities, 'finance:read');
@@ -343,16 +346,39 @@ export class FinanceService {
     const range = financeRange(input);
     const scope = { branchId: input.branchId, from: range.from, until: range.until };
 
-    const [omsetRes, realtimeRes, otherCostRes] = await Promise.all([
+    const isGlobal =
+      principal.capabilities.includes('branch:all') ||
+      principal.roles.some((r) => ['SUPER_OWNER', 'FINANCE'].includes(r.role as string));
+    const branchFilter = input.branchId
+      ? { branchId: input.branchId }
+      : isGlobal
+        ? {}
+        : { branchId: { in: principal.branchIds } };
+
+    const [omsetRes, realtimeRes, otherCostRes, pembelianLunas] = await Promise.all([
       this.omsetReport(principal, scope),
       this.realtimeInstructorCostReport(principal, scope),
       this.otherCostReport(principal, scope),
+      this.db.pembelian.findMany({
+        where: {
+          ...branchFilter,
+          status: 'PAID',
+          paidAt: { gte: range.fromDate, lt: range.untilExclusive },
+        },
+        select: {
+          branchId: true,
+          paidAt: true,
+          package: { select: { sessionCount: true, classTypeId: true } },
+        },
+      }),
     ]);
+    const modal = await hitungModalSesi(this.db, pembelianLunas);
 
     const omsetRp = omsetRes.totalOmsetRp;
+    // Honor instruktur (yang dibayar) ditampilkan, tetapi laba memakai modal sesi.
     const costRealtimeRp = realtimeRes.totalInstructorCostRp;
     const otherCostRp = otherCostRes.totalOtherCostRp;
-    const grossProfitRp = omsetRp - costRealtimeRp;
+    const grossProfitRp = omsetRp - modal.totalRp;
     const netProfitRealtimeRp = grossProfitRp - otherCostRp;
     const margin = (value: number) => (omsetRp > 0 ? Math.round((value / omsetRp) * 1000) / 10 : 0);
 
@@ -363,6 +389,9 @@ export class FinanceService {
       branchId: input.branchId ?? 'ALL',
       omsetRp,
       costRealtimeRp,
+      modalSesiRp: modal.totalRp,
+      sesiTerjual: modal.sesi,
+      sesiTanpaModal: modal.sesiTanpaModal,
       grossProfitRp,
       grossMarginPercent: margin(grossProfitRp),
       otherCostRp,
@@ -942,8 +971,10 @@ export class FinanceService {
         status: 'PAID',
         paidAt: { gte: range.fromDate, lt: range.untilExclusive },
       },
+      include: { package: { select: { sessionCount: true, classTypeId: true } } },
     });
     const omsetRp = purchases.reduce((sum, p) => sum + p.totalAmountRp, 0);
+    const modal = await hitungModalSesi(this.db, purchases);
 
     const otherCosts = await this.db.otherCost.findMany({
       where: {
@@ -979,7 +1010,8 @@ export class FinanceService {
     });
     const totalInstructorFeeRp =
       instructorBreakdown.reduce((sum, item) => sum + item.totalFeeRp, 0) + koreksi.totalRp;
-    const estimatedProfitRp = omsetRp - totalInstructorFeeRp - otherCostRp;
+    // Laba memakai modal sesi; honor instruktur adalah yang dibayar dan hanya ditampilkan.
+    const estimatedProfitRp = omsetRp - modal.totalRp - otherCostRp;
     const totalUnverifiedFeeRp = instructorBreakdown.reduce(
       (sum, item) => sum + item.unverifiedFeeRp,
       0,
@@ -1010,6 +1042,9 @@ export class FinanceService {
       ),
       unconfiguredClassCount: totalUnconfiguredClassCount,
       instructorFeeMissing,
+      modalSesiRp: modal.totalRp,
+      sesiTerjual: modal.sesi,
+      sesiTanpaModal: modal.sesiTanpaModal,
       estimatedProfitRp,
       instructorCount: instructorBreakdown.length,
       totalClassHours: instructorBreakdown.reduce((sum, item) => sum + item.totalHours, 0),

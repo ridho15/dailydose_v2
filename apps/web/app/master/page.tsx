@@ -11,6 +11,7 @@ const VALID_MASTER_TABS: MasterTab[] = [
   'classTypes',
   'capacity',
   'fees',
+  'modal',
 ];
 
 export default function MasterPage() {
