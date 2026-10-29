@@ -21,6 +21,7 @@ import { KoreksiJamService } from './koreksi-jam.service';
 import { PayrollInstrukturService } from './payroll-instruktur.service';
 import { RingkasanKeuanganService } from './ringkasan-keuangan.service';
 import { SettlementOwnerService } from './settlement-owner.service';
+import { TransferHonorService } from './transfer-honor.service';
 
 @Controller()
 @UseGuards(AuthGuard)
@@ -30,6 +31,7 @@ export class RingkasanKeuanganController {
     private readonly koreksiJam: KoreksiJamService,
     private readonly payroll: PayrollInstrukturService,
     private readonly settlement: SettlementOwnerService,
+    private readonly transferHonor: TransferHonorService,
   ) {}
 
   /** Super Owner aktif untuk pilihan "Dibayar oleh" di form pengeluaran. */
@@ -57,6 +59,31 @@ export class RingkasanKeuanganController {
   @Get('owner-settlement')
   ownerSettlement(@Req() req: AuthenticatedRequest, @Query('period') period?: string) {
     return this.settlement.settlement(req.principal, { period });
+  }
+
+  /** Honor instruktur yang akan ditransfer: tanggal 1 sampai hari ini (tanggal 1: bulan lalu). */
+  @Get('instructor-transfers')
+  daftarTransferHonor(
+    @Req() req: AuthenticatedRequest,
+    @Query('from') from?: string,
+    @Query('until') until?: string,
+  ) {
+    return this.transferHonor.ringkasan(req.principal, { from, until });
+  }
+
+  /** Berkas Excel Multi Payroll KlikBCA Bisnis (base64). */
+  @Post('instructor-transfers/export')
+  unduhTransferHonor(@Req() req: AuthenticatedRequest, @Body() body: { from?: string; until?: string }) {
+    return this.transferHonor.unduh(req.principal, body ?? {});
+  }
+
+  @Put('instructor-transfers/accounts/:instructorId')
+  simpanRekeningInstruktur(
+    @Req() req: AuthenticatedRequest,
+    @Param('instructorId') instructorId: string,
+    @Body() body: Record<string, unknown>,
+  ) {
+    return this.transferHonor.simpanRekening(req.principal, instructorId, body ?? {});
   }
 
   /** Payroll instruktur yang sedang masuk: kelas terverifikasi dan koreksi jam satu bulan. */

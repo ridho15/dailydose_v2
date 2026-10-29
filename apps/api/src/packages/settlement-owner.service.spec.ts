@@ -46,7 +46,7 @@ function setup() {
       ]),
     },
     auditLog: { create: jest.fn() },
-    $transaction: jest.fn(async (fn: (t: unknown) => unknown) => fn(db)),
+    $transaction: jest.fn(async (fn: (t: unknown) => unknown): Promise<unknown> => fn(db)),
   };
   const ringkasan = {
     ringkasanBulanan: jest.fn(async () => ({

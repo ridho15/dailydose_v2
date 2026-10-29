@@ -66,7 +66,7 @@ interface DetailKoreksi {
   evidenceExt: string;
 }
 
-function detailKoreksi(detail: unknown): DetailKoreksi | null {
+export function detailKoreksi(detail: unknown): DetailKoreksi | null {
   const after = (detail as { after?: Partial<DetailKoreksi> } | null)?.after;
   if (!after || typeof after.amountRp !== 'number' || typeof after.classStartAt !== 'string')
     return null;

@@ -33,6 +33,7 @@ import { TargetService } from './target.service';
 import { RetentionService } from './retention.service';
 import { FinanceService } from './finance.service';
 import { SettlementOwnerService } from './settlement-owner.service';
+import { TransferHonorService } from './transfer-honor.service';
 
 import { PaymentExpirationWorkerService } from './payment-expiration-worker';
 
@@ -50,6 +51,7 @@ import { PaymentExpirationWorkerService } from './payment-expiration-worker';
   ],
   providers: [
     SettlementOwnerService,
+    TransferHonorService,
     PenyesuaianBuktiService,
     KoreksiJamService,
     PayrollInstrukturService,

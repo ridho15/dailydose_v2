@@ -218,3 +218,112 @@ describe('KasView: Dibayar oleh dan settlement Super Owner', () => {
     ]);
   });
 });
+
+describe('KasView: transfer honor instruktur', () => {
+  const ringkasan = () => ({
+    from: '2026-10-01',
+    until: '2026-10-28',
+    siapRp: 600_000,
+    jumlahSiap: 1,
+    tanpaRekening: 1,
+    kelasBelumTerverifikasi: 1,
+    baris: [
+      {
+        instructorId: 'anna',
+        nama: 'Anna',
+        totalRp: 600_000,
+        terverifikasiRp: 400_000,
+        koreksiRp: 200_000,
+        kelasTerverifikasi: 2,
+        belumTerverifikasiRp: 200_000,
+        kelasBelumTerverifikasi: 1,
+        rekening: {
+          bankName: 'BCA',
+          swiftCode: 'CENAIDJA',
+          accountNumber: '0123456789',
+          accountName: 'Anna Wijaya',
+          email: null,
+        },
+      },
+      {
+        instructorId: 'citra',
+        nama: 'Citra',
+        totalRp: 175_000,
+        terverifikasiRp: 175_000,
+        koreksiRp: 0,
+        kelasTerverifikasi: 1,
+        belumTerverifikasiRp: 0,
+        kelasBelumTerverifikasi: 0,
+        rekening: null,
+      },
+    ],
+  });
+  const clientTransfer = () =>
+    ({
+      ...client(),
+      transferHonor: vi.fn().mockResolvedValue(ringkasan()),
+      unduhTransferHonor: vi.fn().mockResolvedValue({
+        fileName: 'honor-instruktur-2026-10-01-sd-2026-10-28.xlsx',
+        base64: btoa('PK'),
+        jumlahBaris: 1,
+        totalRp: 600_000,
+      }),
+      simpanRekeningInstruktur: vi.fn().mockResolvedValue({}),
+    }) as unknown as KeuanganClient;
+
+  beforeEach(() => {
+    ctx.caps = ['finance:read', 'finance:export'];
+    ctx.branchId = '';
+  });
+
+  it('tidak tampil tanpa izin ekspor keuangan', async () => {
+    ctx.caps = ['expense:create'];
+    render(<KasView now={NOW} client={clientTransfer()} />);
+    await screen.findByText('Rp 1.400.000');
+    expect(screen.queryByRole('heading', { name: 'Transfer honor instruktur' })).toBeNull();
+  });
+
+  it('menampilkan honor per instruktur, peringatan, dan mengunduh berkas KlikBCA', async () => {
+    const user = userEvent.setup();
+    const c = clientTransfer();
+    URL.createObjectURL = vi.fn(() => 'blob:x');
+    URL.revokeObjectURL = vi.fn();
+    render(<KasView now={NOW} client={c} />);
+
+    const bagian = (
+      await screen.findByRole('heading', { name: 'Transfer honor instruktur' })
+    ).closest('section')!;
+    expect(
+      await within(bagian).findByText('1 Oktober 2026 sampai 28 Oktober 2026.', { exact: false }),
+    ).toBeVisible();
+    expect(within(bagian).getByText(/1 instruktur berhonor belum punya rekening/)).toBeVisible();
+    expect(within(bagian).getByText(/1 kelas selesai belum ada presensi/)).toBeVisible();
+    expect(within(bagian).getByText('BCA 0123456789')).toBeVisible();
+    expect(within(bagian).getByText('Belum ada')).toBeVisible();
+
+    await user.click(within(bagian).getByRole('button', { name: 'Unduh Excel KlikBCA' }));
+    expect(c.unduhTransferHonor).toHaveBeenCalled();
+    expect(await within(bagian).findByText(/1 instruktur, Rp 600\.000/)).toBeVisible();
+  });
+
+  it('mengisi rekening instruktur bank lain dengan kode SWIFT', async () => {
+    const user = userEvent.setup();
+    const c = clientTransfer();
+    render(<KasView now={NOW} client={c} />);
+
+    await user.click(await screen.findByRole('button', { name: 'Isi rekening' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Rekening Citra' });
+    await user.selectOptions(within(dialog).getByLabelText('Bank'), 'Mandiri');
+    await user.type(within(dialog).getByLabelText(/Nomor rekening/), '1230004567890');
+    await user.click(within(dialog).getByRole('button', { name: 'Simpan rekening' }));
+
+    expect(c.simpanRekeningInstruktur).toHaveBeenCalledWith('citra', {
+      bankName: 'Mandiri',
+      swiftCode: 'BMRIIDJA',
+      accountNumber: '1230004567890',
+      accountName: 'Citra',
+      email: undefined,
+    });
+    expect(c.transferHonor).toHaveBeenCalledTimes(2);
+  });
+});

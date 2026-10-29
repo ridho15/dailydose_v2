@@ -1183,3 +1183,21 @@ model PembayarPengeluaran {
   @@index([dibayarOlehId])
   @@map("pembayar_pengeluaran")
 }
+
+/// Rekening tujuan transfer honor instruktur, untuk berkas KlikBCA Bisnis Multi Payroll.
+/// Satu rekening per instruktur. Tanpa relasi Prisma; tabel lama tidak berubah.
+model RekeningInstruktur {
+  instructorId  String   @id @db.Char(36)
+  bankName      String   @db.VarChar(64)
+  /// SWIFT bank tujuan; CENAIDJA berarti sesama BCA, selain itu transfer LLG.
+  swiftCode     String   @db.VarChar(11)
+  accountNumber String   @db.VarChar(34)
+  accountName   String   @db.VarChar(70)
+  /// Notifikasi transfer berhasil dari BCA (opsional).
+  email         String?  @db.VarChar(191)
+  updatedById   String?  @db.Char(36)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("rekening_instruktur")
+}

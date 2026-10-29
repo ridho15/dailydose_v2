@@ -96,7 +96,51 @@ export interface SettlementOwner {
   labaBelumDibagiRp: number;
 }
 
+export interface RekeningInstruktur {
+  bankName: string;
+  swiftCode: string;
+  accountNumber: string;
+  accountName: string;
+  email: string | null;
+}
+
+export interface BarisTransfer {
+  instructorId: string;
+  nama: string;
+  totalRp: number;
+  terverifikasiRp: number;
+  koreksiRp: number;
+  kelasTerverifikasi: number;
+  belumTerverifikasiRp: number;
+  kelasBelumTerverifikasi: number;
+  rekening: RekeningInstruktur | null;
+}
+
+export interface RingkasanTransfer {
+  from: string;
+  until: string;
+  baris: BarisTransfer[];
+  siapRp: number;
+  jumlahSiap: number;
+  tanpaRekening: number;
+  kelasBelumTerverifikasi: number;
+}
+
+export interface BerkasTransfer {
+  fileName: string;
+  base64: string;
+  jumlahBaris: number;
+  totalRp: number;
+}
+
 export interface KeuanganClient {
+  /** Honor instruktur tanggal 1 s/d hari ini (tanggal 1: bulan lalu) untuk transfer KlikBCA. */
+  transferHonor?(): Promise<RingkasanTransfer>;
+  unduhTransferHonor?(): Promise<BerkasTransfer>;
+  simpanRekeningInstruktur?(
+    instructorId: string,
+    rekening: Omit<RekeningInstruktur, 'email'> & { email?: string },
+  ): Promise<RekeningInstruktur>;
   /** Super Owner aktif, untuk pilihan "Dibayar oleh". */
   daftarOwner?(): Promise<OwnerSingkat[]>;
   porsiOwner?(): Promise<PorsiCabang[]>;
@@ -127,6 +171,26 @@ export interface KeuanganClient {
 }
 
 export const browserKeuanganClient: KeuanganClient = {
+  async transferHonor() {
+    const hasil = await apiFetch<RingkasanTransfer>('/instructor-transfers', {
+      label: 'Menghitung honor instruktur…',
+    });
+    if (!Array.isArray(hasil?.baris)) throw new Error('TRANSFER_TIDAK_DIKENAL');
+    return hasil;
+  },
+  unduhTransferHonor() {
+    return apiFetch<BerkasTransfer>('/instructor-transfers/export', {
+      method: 'POST',
+      body: JSON.stringify({}),
+      label: 'Menyiapkan berkas KlikBCA…',
+    });
+  },
+  simpanRekeningInstruktur(instructorId, rekening) {
+    return apiFetch<RekeningInstruktur>(
+      `/instructor-transfers/accounts/${encodeURIComponent(instructorId)}`,
+      { method: 'PUT', body: JSON.stringify(rekening), label: 'Menyimpan rekening…' },
+    );
+  },
   daftarOwner() {
     return apiFetch<OwnerSingkat[]>('/owner-settlement/owners', { label: 'Memuat Super Owner…' });
   },
@@ -208,6 +272,15 @@ export function keuanganFailure(error: unknown, fallback: string): string {
   if (issue?.field === 'amountRp' || code === 'INVALID_AMOUNT')
     return 'Nominal harus angka bulat lebih dari 0.';
   if (issue?.field === 'incurredOn') return 'Tanggal pengeluaran tidak valid.';
+  if (issue?.field === 'accountNumber' && issue.issue === 'BCA_10_DIGIT')
+    return 'Nomor rekening BCA harus 10 digit.';
+  if (issue?.field === 'accountNumber') return 'Nomor rekening hanya angka, 5 sampai 34 digit.';
+  if (issue?.field === 'swiftCode') return 'Kode SWIFT harus 8 atau 11 huruf/angka.';
+  if (issue?.field === 'accountName') return 'Isi nama pemilik rekening (paling banyak 70 huruf).';
+  if (issue?.field === 'bankName') return 'Pilih bank tujuan.';
+  if (issue?.field === 'email') return 'Alamat email tidak valid.';
+  if (code === 'NOTHING_TO_TRANSFER')
+    return 'Belum ada honor yang bisa ditransfer: isi rekening instruktur dulu.';
   if (code === 'FORBIDDEN') return 'Akun Anda tidak berwenang untuk cabang ini.';
   return fallback;
 }
