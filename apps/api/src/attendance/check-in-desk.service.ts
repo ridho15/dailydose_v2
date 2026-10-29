@@ -8,6 +8,7 @@ import { PRIVATE_FILE_STORAGE, type PrivateFileStorage } from '../identity/priva
 import { ApiProblem } from '../identity/security';
 import { dateInTimeZone, startOfLocalDateUtc } from '../identity/assignment-boundary';
 import { catatanKeputusan, evaluasiKuota, type EvaluasiKuota } from '../classes/kuota-minimum';
+import { calculateSlotFee, sortFeesNewestFirst } from '../packages/instructor-fee-calculator';
 
 /**
  * Layar check-in meja depan: kelas hari ini di satu cabang, siapa yang sudah tercatat, dan kelas
@@ -294,7 +295,9 @@ export class CheckInDeskService {
         startAt: true,
         minQuota: true,
         status: true,
-        instructorFeeRp: true,
+        endAt: true,
+        classTypeId: true,
+        instructorId: true,
         bookings: {
           where: { status: { in: ['BOOKED', 'ATTENDED'] } },
           select: { attendance: { select: { id: true } } },
@@ -312,13 +315,23 @@ export class CheckInDeskService {
       ]);
     }
 
+    // Honor dari Data Master; nominalnya hanya masuk catatan audit untuk laporan Owner.
+    const honor = slot.instructorId
+      ? calculateSlotFee(
+          sortFeesNewestFirst(
+            await this.db.instructorFee.findMany({ where: { instructorId: slot.instructorId } }),
+          ),
+          { ...slot, instructorId: slot.instructorId },
+        )
+      : null;
+    const honorInstrukturRp = honor?.configured ? honor.feeRp : 0;
     const catatan = catatanKeputusan({
       keputusan: 'TETAP_JALAN',
       classSlotId: slot.id,
       decidedById: principal.userId,
       hadir,
       minimum: kuota.minimum ?? 0,
-      honorInstrukturRp: slot.instructorFeeRp ?? 0,
+      honorInstrukturRp,
       reason: alasan,
     });
 
@@ -333,11 +346,13 @@ export class CheckInDeskService {
         hadir: catatan.hadir,
         minimum: catatan.minimum,
         selisihBebanRp: catatan.selisihBebanRp,
-        honorDiketahui: slot.instructorFeeRp !== null,
+        honorDiketahui: Boolean(honor?.configured),
       },
     });
 
-    return { ...catatan, tercatatPada: now.toISOString() };
+    // Meja check-in tidak menerima nominal honor; selisih beban hanya untuk laporan Owner.
+    const { selisihBebanRp: _beban, ...untukMeja } = catatan;
+    return { ...untukMeja, tercatatPada: now.toISOString() };
   }
 
   /**

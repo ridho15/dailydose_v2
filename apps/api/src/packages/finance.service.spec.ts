@@ -176,18 +176,18 @@ describe('FinanceService.realtimeInstructorCostReport instructor attendance', ()
     };
   }
 
-  it('keeps unverified classes in the total but reports them separately', async () => {
+  it('counts only classes with instructor attendance as cost and reports the rest separately', async () => {
     const { service } = build([slot(1, true), slot(2, false)]);
     const report = await service.realtimeInstructorCostReport(finance, {
       branchId: branchA,
       period: '2026-09',
     });
-    expect(report.totalInstructorCostRp).toBe(400_000);
+    expect(report.totalInstructorCostRp).toBe(200_000);
     expect(report.totalVerifiedFeeRp).toBe(200_000);
     expect(report.totalUnverifiedFeeRp).toBe(200_000);
     expect(report.unverifiedClassCount).toBe(1);
     expect(report.instructors[0]).toMatchObject({
-      totalFeeRp: 400_000,
+      totalFeeRp: 200_000,
       verifiedFeeRp: 200_000,
       unverifiedFeeRp: 200_000,
       unverifiedClassCount: 1,
@@ -229,7 +229,7 @@ describe('instructor honor is computed identically by every finance report', () 
     branch: { id: branchA },
     instructorAttendance: attended ? { id: id(500 + n) } : null,
   });
-  const slots = [mk(1, true), mk(2, false), mk(3, false, id(401))];
+  const slots = [mk(1, true), mk(2, false), mk(3, true, id(401))];
   const fees = [
     {
       instructorId: coach.id,
@@ -264,7 +264,9 @@ describe('instructor honor is computed identically by every finance report', () 
     expect(owner.totalInstructorFeeRp).toBe(realtime.totalInstructorCostRp);
     expect(owner.totalUnverifiedFeeRp).toBe(realtime.totalUnverifiedFeeRp);
     // 2 jam x 175.000 (fee cocok) x 2 kelas + 2 jam x 150.000 (fee bawaan)
-    expect(realtime.totalInstructorCostRp).toBe(2 * 350_000 + 300_000);
+    // Kelas tanpa presensi (mk 2) tidak menjadi beban; mk 3 memakai fee bawaan.
+    expect(realtime.totalInstructorCostRp).toBe(350_000 + 300_000);
+    expect(realtime.totalUnverifiedFeeRp).toBe(350_000);
     expect(realtime.instructors[0]?.unconfiguredFeeClassCount).toBe(1);
     expect(realtime.unconfiguredClassCount).toBe(1);
     expect(realtime.instructorFeeMissing).toBe(true);

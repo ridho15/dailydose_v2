@@ -52,7 +52,7 @@ function setup() {
           isManualFee: false,
           instructorAttendance: null,
         },
-        // Budi: rekening Mandiri, honor manual.
+        // Budi: rekening Mandiri; nominal manual lama di jadwal diabaikan, tarif dari Data Master.
         {
           instructorId: 'budi',
           branchId: 'mk',
@@ -89,6 +89,13 @@ function setup() {
           classTypeId: 'grp',
           effectiveDate: new Date('2026-01-01'),
           feePerJamRp: 175_000,
+        },
+        {
+          instructorId: 'budi',
+          branchId: 'mk',
+          classTypeId: 'pvt',
+          effectiveDate: new Date('2026-01-01'),
+          feePerJamRp: 300_000,
         },
       ]),
     },

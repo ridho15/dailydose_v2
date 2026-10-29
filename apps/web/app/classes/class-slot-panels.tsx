@@ -14,7 +14,6 @@ import type {
   StudioOption,
 } from '@/api-clients/class-slot-client';
 import { formatBranchTime, zonedLocalDateTime } from '@/lib/class-time';
-import { formatRupiah } from '../lib/formatters';
 import { Feedback, StatusBadge } from '../ui';
 import { Button, ButtonLink } from '../components/actions';
 import { SearchSelect, SelectInput, DateInput, Textarea, TextInput } from '../components/forms';
@@ -42,7 +41,6 @@ export type CreateTemplate = {
   date: string;
   startTime: string;
   endTime: string;
-  instructorFeeRp?: number | null;
 };
 
 export function CreatePanel({
@@ -78,7 +76,6 @@ export function CreatePanel({
     instructorUserId?: string;
     startAt: Date;
     endAt: Date;
-    instructorFeeRp?: number | null;
   }): Promise<void>;
 }) {
   const [selectedBranchId, setSelectedBranchId] = useState(
@@ -126,8 +123,6 @@ export function CreatePanel({
             String(data.get('endTime')),
             activeBranchTimezone,
           );
-          const feeStr = String(data.get('instructorFeeRp') ?? '').trim();
-          const instructorFeeRp = feeStr !== '' ? Number(feeStr) : undefined;
           void onCreate({
             branchId: selectedBranchId,
             classTypeId: String(data.get('classTypeId')),
@@ -136,7 +131,6 @@ export function CreatePanel({
             instructorUserId: String(data.get('instructorUserId')) || undefined,
             startAt,
             endAt,
-            instructorFeeRp,
           });
         } catch {
           setSummary('Waktu selesai harus setelah waktu mulai dan valid pada timezone cabang.');
@@ -225,15 +219,6 @@ export function CreatePanel({
           required
         />
       </div>
-      <TextInput
-        label="Modal / Honor Instruktur per Sesi (Rp) - Opsional"
-        name="instructorFeeRp"
-        defaultValue={template?.instructorFeeRp ?? undefined}
-        type="number"
-        min={0}
-        step={1000}
-        placeholder="Kosongkan untuk mengikuti tarif master otomatis"
-      />
       <Feedback kind="info">
         Timezone: {activeBranchTimezone}. {summary}
       </Feedback>
@@ -307,7 +292,6 @@ export function DetailPanel({
     startAt: Date;
     endAt: Date;
     reason?: string;
-    instructorFeeRp?: number | null;
   }): Promise<void>;
   onPublish(): Promise<void>;
   onCancel(reason: CancellationReason, note?: string): Promise<void>;
@@ -371,15 +355,6 @@ export function DetailPanel({
           </InfoItem>
           <InfoItem label="Instruktur">{instructorName}</InfoItem>
           <InfoItem label="Studio &amp; ruangan">{location || 'Belum diatur'}</InfoItem>
-          {Boolean((slot as any).isManualFee) &&
-            (slot as any).instructorFeeRp !== null &&
-            (slot as any).instructorFeeRp !== undefined && (
-              <InfoItem label="Modal Sesi Manual">
-                <span className="font-semibold text-dd-forest">
-                  {formatRupiah((slot as any).instructorFeeRp)} / sesi
-                </span>
-              </InfoItem>
-            )}
           <InfoItem label="Kapasitas" className="col-span-full">
             <CapacityMeter
               booked={slot.bookedCount}
@@ -770,7 +745,6 @@ function DraftEditForm({
     startAt: Date;
     endAt: Date;
     reason?: string;
-    instructorFeeRp?: number | null;
   }): Promise<void>;
 }) {
   const parts = (value: Date) => {
@@ -828,8 +802,6 @@ function DraftEditForm({
           }
           if (endAt <= startAt) throw new Error('INVALID_RANGE');
           setFailure('');
-          const feeStr = String(data.get('instructorFeeRp') ?? '').trim();
-          const instructorFeeRp = feeStr !== '' ? Number(feeStr) : null;
           void onSubmit({
             classTypeId: String(data.get('classTypeId')),
             studioId: selectedStudioId || undefined,
@@ -838,7 +810,6 @@ function DraftEditForm({
             startAt,
             endAt,
             reason: String(data.get('reason') ?? '').trim() || undefined,
-            instructorFeeRp,
           });
         } catch {
           setFailure('Waktu selesai harus setelah waktu mulai.');
@@ -900,15 +871,6 @@ function DraftEditForm({
         <TextInput label="Mulai" name="startTime" type="time" defaultValue={start.time} required />
         <TextInput label="Selesai" name="endTime" type="time" defaultValue={end.time} required />
       </div>
-      <TextInput
-        label="Modal / Honor Instruktur per Sesi (Rp) - Opsional"
-        name="instructorFeeRp"
-        type="number"
-        min={0}
-        step={1000}
-        defaultValue={(slot as any).instructorFeeRp ?? ''}
-        placeholder="Kosongkan untuk mengikuti tarif master otomatis"
-      />
       <TextInput
         label="Alasan perubahan (opsional)"
         name="reason"

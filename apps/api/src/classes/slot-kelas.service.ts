@@ -167,8 +167,6 @@ export class ClassSlotService {
       cancellationReason: slot.cancellationReason ?? null,
       notes: slot.notes ?? null,
       version: slot.version ?? 1,
-      instructorFeeRp: slot.instructorFeeRp ?? null,
-      isManualFee: Boolean(slot.isManualFee),
       branch: slot.branch,
       studio: slot.studio,
       room: slot.room,
@@ -339,7 +337,6 @@ export class ClassSlotService {
       instructorUserId?: string;
       startAt: string;
       endAt: string;
-      instructorFeeRp?: number | null;
     },
     key: string,
     _correlationId: string,
@@ -437,12 +434,6 @@ export class ClassSlotService {
             capacity: effectiveCapacity,
             bookedCount: 0,
             status: ClassSlotStatus.DRAFT,
-            instructorFeeRp:
-              input.instructorFeeRp !== undefined && input.instructorFeeRp !== null
-                ? Math.round(Number(input.instructorFeeRp))
-                : null,
-            isManualFee:
-              input.instructorFeeRp !== undefined && input.instructorFeeRp !== null,
           },
           include: {
             branch: true,
@@ -537,7 +528,6 @@ export class ClassSlotService {
       endAt: string;
       expectedVersion?: number;
       reason?: string;
-      instructorFeeRp?: number | null;
     },
     key: string,
     _correlationId: string,
@@ -633,13 +623,6 @@ export class ClassSlotService {
           startAt,
           endAt,
           notes: input.reason ?? slot.notes,
-          ...(input.instructorFeeRp !== undefined
-            ? {
-                instructorFeeRp:
-                  input.instructorFeeRp !== null ? Math.round(Number(input.instructorFeeRp)) : null,
-                isManualFee: input.instructorFeeRp !== null,
-              }
-            : {}),
         });
         await this.auditSlot(
           tx, principal, _correlationId, 'class_slot.updated', slot,
@@ -658,7 +641,6 @@ export class ClassSlotService {
             roomId: targetRoomId,
             startAt: startAt.toISOString(),
             endAt: endAt.toISOString(),
-            ...(input.instructorFeeRp !== undefined ? { instructorFeeRp: input.instructorFeeRp } : {}),
           },
           input.reason,
         );

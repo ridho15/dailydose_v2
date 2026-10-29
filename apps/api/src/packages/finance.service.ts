@@ -253,7 +253,8 @@ export class FinanceService {
       /** Bagian dari total yang berasal dari koreksi jam; bisa negatif. */
       adjustmentRp: koreksi.totalRp,
       adjustmentCount: koreksi.jumlah,
-      totalVerifiedFeeRp: totalInstructorCostRp - totalUnverifiedFeeRp,
+      // Beban instruktur hanya dari kelas terverifikasi; yang belum terverifikasi tidak termasuk.
+      totalVerifiedFeeRp: totalInstructorCostRp,
       totalUnverifiedFeeRp,
       unverifiedClassCount,
       unconfiguredClassCount,

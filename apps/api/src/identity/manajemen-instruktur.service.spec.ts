@@ -156,13 +156,14 @@ describe('InstructorManagementService honor', () => {
   it('shows a fee-permitted viewer this month\'s honor with the unverified part split out', async () => {
     const { service } = build({ month });
     const [item] = (await service.list(superOwner, {})).items;
+    // Hanya kelas dengan presensi instruktur yang dihitung honor; sisanya dilaporkan terpisah.
     expect(item).toMatchObject({
-      compensationRp: 400_000,
+      compensationRp: 200_000,
       unverifiedCompensationRp: 200_000,
       compensationPeriod: new Date().toISOString().slice(0, 7),
     });
     const detail = await service.detail(superOwner, coach.id);
-    expect(detail.compensationRp).toBe(400_000);
+    expect(detail.compensationRp).toBe(200_000);
     expect(detail.unverifiedCompensationRp).toBe(200_000);
   });
 
@@ -176,7 +177,10 @@ describe('InstructorManagementService honor', () => {
   });
 
   it('flags classes billed at the default fee because no fee is configured', async () => {
-    const { service } = build({ month: [monthSlot(null, { classTypeId: 'private' })], fees: [fee] });
+    const { service } = build({
+      month: [monthSlot({ id: 'att' }, { classTypeId: 'private' })],
+      fees: [fee],
+    });
     const detail = await service.detail(superOwner, coach.id);
     expect(detail.blockers.completedWithoutFee).toBe(1);
   });

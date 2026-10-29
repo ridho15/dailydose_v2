@@ -356,7 +356,8 @@ export class DashboardService {
 
     // Hitung biaya instruktur per kelas completed dan update trend harian
     for (const s of completedSlots) {
-      if (!s.instructorId) continue;
+      // Hanya kelas yang presensi instrukturnya tercatat menjadi beban honor.
+      if (!s.instructorId || !s.instructorAttendance) continue;
       const slotFee = calculateSlotFee(fees, {
         startAt: s.startAt,
         endAt: s.endAt,

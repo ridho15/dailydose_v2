@@ -185,7 +185,8 @@ describe('PRIORITAS 8: Instructor Lifecycle & Operational Non-Happy Path Specs',
       expect(summaries.length).toBe(1);
       const summary = summaries[0]!;
 
-      expect(summary.totalFeeRp).toBe(250_000);
+      // Tanpa scan QR, honor tidak masuk total/beban; hanya dilaporkan sebagai belum terverifikasi.
+      expect(summary.totalFeeRp).toBe(0);
       expect(summary.verifiedFeeRp).toBe(0);
       expect(summary.unverifiedFeeRp).toBe(250_000);
       expect(summary.unverifiedClassCount).toBe(1);
