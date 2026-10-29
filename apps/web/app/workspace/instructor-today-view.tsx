@@ -49,8 +49,12 @@ export function InstructorTodayView({
 }: InstructorTodayViewProps) {
   const sessionContext = useSessionContext();
   const session = sessionContext?.session;
-  const branch = sessionContext?.activeBranch ?? session?.branches?.[0] ?? null;
-  const timezone = branch?.timezone ?? 'Asia/Jakarta';
+  // Instruktur bisa mengajar di beberapa cabang (mis. GG dan MK); semua cabangnya dimuat, dan nama
+  // cabang diambil dari tiap kelas, bukan dari cabang aktif.
+  const cabangSaya = session?.branches ?? [];
+  const namaCabang = (id: string) => cabangSaya.find((b) => b.id === id)?.name ?? null;
+  const timezone =
+    sessionContext?.activeBranch?.timezone ?? cabangSaya[0]?.timezone ?? 'Asia/Jakarta';
 
   const [workspace, setWorkspace] = useState<ClassWorkspace | null>(null);
   const [loading, setLoading] = useState(true);
@@ -89,7 +93,6 @@ export function InstructorTodayView({
       const from = zonedLocalDateTime(todayKey, '00:00', timezone);
       const until = zonedLocalDateTime(todayKey, '23:59', timezone);
       const result = await client.discover({
-        branchId: branch?.id,
         branches: session?.branches?.map((b) => ({ id: b.id, timezone: b.timezone })),
         timezone,
         from,
@@ -103,26 +106,36 @@ export function InstructorTodayView({
     } finally {
       setLoading(false);
     }
-  }, [branch?.id, client, session?.branches, timezone, todayKey]);
+  }, [client, session?.branches, timezone, todayKey]);
 
   // Load availability
+  const idCabang = cabangSaya.map((b) => b.id).join(',');
   const loadAvailability = useCallback(async () => {
-    if (!branch?.id) return;
+    const ids = idCabang ? idCabang.split(',') : [];
+    if (!ids.length) return;
     setAvailabilityLoading(true);
     try {
       const now = new Date();
-      const page = await availabilityClient.list({
-        branchId: branch.id,
-        from: now.toISOString(),
-        until: new Date(now.getTime() + 14 * 86_400_000).toISOString(),
-      });
-      setAvailabilities(page.items.filter((item) => item.status === 'ACTIVE'));
+      const halaman = await Promise.all(
+        ids.map((branchId) =>
+          availabilityClient
+            .list({
+              branchId,
+              from: now.toISOString(),
+              until: new Date(now.getTime() + 14 * 86_400_000).toISOString(),
+            })
+            .catch(() => ({ items: [] as AvailabilityWindow[] })),
+        ),
+      );
+      setAvailabilities(
+        halaman.flatMap((page) => page.items).filter((item) => item.status === 'ACTIVE'),
+      );
     } catch {
       setAvailabilities([]);
     } finally {
       setAvailabilityLoading(false);
     }
-  }, [availabilityClient, branch?.id]);
+  }, [availabilityClient, idCabang]);
 
   useEffect(() => {
     void loadClasses();
@@ -182,21 +195,26 @@ export function InstructorTodayView({
 
   // Name resolution helpers
   const getClassName = useCallback(
-    (classTypeId: string) => {
-      return workspace?.classTypes?.find((c) => c.id === classTypeId)?.name ?? 'Kelas Pilates';
+    (classTypeId: string, slot?: ClassSlot) => {
+      return (
+        (slot as { classType?: { name?: string } } | undefined)?.classType?.name ??
+        workspace?.classTypes?.find((c) => c.id === classTypeId)?.name ??
+        'Kelas Pilates'
+      );
     },
     [workspace?.classTypes],
   );
 
   const getStudioName = useCallback(
-    (studioId: string) => {
-      return (
-        workspace?.studios?.find((s) => s.id === studioId)?.name ??
-        branch?.name ??
-        'Studio Daily Dose'
-      );
+    (studioId: string, slot?: ClassSlot) => {
+      const studio =
+        (slot as { studio?: { name?: string } } | undefined)?.studio?.name ??
+        workspace?.studios?.find((s) => s.id === studioId)?.name;
+      const cabang = slot ? namaCabang(slot.branchId) : null;
+      return [studio, cabang].filter(Boolean).join(' · ') || 'Studio Daily Dose';
     },
-    [branch?.name, workspace?.studios],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [workspace?.studios, cabangSaya],
   );
 
   // Formatted date string for header: "Senin, 26 Oktober 2026"
@@ -215,6 +233,10 @@ export function InstructorTodayView({
   }, [referenceDate, timezone]);
 
   const firstName = session?.displayName?.trim()?.split(/\s+/)[0] ?? 'Instruktur';
+  // Cabang tempat mengajar hari ini, dari kelasnya; tanpa kelas, header hanya menampilkan tanggal.
+  const cabangHariIni = [
+    ...new Set(todaySlots.map((slot) => namaCabang(slot.branchId)).filter(Boolean)),
+  ] as string[];
 
   // Availability summary text
   const availabilitySummaryText = useMemo(() => {
@@ -237,7 +259,7 @@ export function InstructorTodayView({
         </h1>
         <p className="text-sm font-medium text-dd-muted">
           {formattedToday}
-          {branch?.name ? ` · ${branch.name}` : ''}
+          {cabangHariIni.length ? ` · ${cabangHariIni.join(', ')}` : ''}
         </p>
       </header>
 
@@ -317,8 +339,8 @@ export function InstructorTodayView({
                 Math.round((slot.endAt.getTime() - slot.startAt.getTime()) / 60000),
               );
               const isCheckedIn = Boolean(slot.instructorAttendance?.checkedInAt);
-              const className = getClassName(slot.classTypeId);
-              const studioName = getStudioName(slot.studioId);
+              const className = getClassName(slot.classTypeId, slot);
+              const studioName = getStudioName(slot.studioId, slot);
 
               return (
                 <div
@@ -379,11 +401,12 @@ export function InstructorTodayView({
         title="Peserta Sesi"
         description={
           selectedSlot
-            ? `${getClassName(selectedSlot.classTypeId)} · ${formatBranchTime(
+            ? `${getClassName(selectedSlot.classTypeId, selectedSlot)} · ${formatBranchTime(
                 selectedSlot.startAt,
                 timezone,
               )}–${formatBranchTime(selectedSlot.endAt, timezone)} · ${getStudioName(
                 selectedSlot.studioId,
+                selectedSlot,
               )}`
             : undefined
         }

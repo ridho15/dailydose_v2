@@ -320,6 +320,8 @@ export class UserAdministrationService {
       branchId?: string;
       cursor?: string;
       limit?: number;
+      /** Ikutkan member tanpa paket aktif (roster menampilkan alasannya, bukan "tidak ditemukan"). */
+      includeWithoutPackage?: boolean;
     },
   ) {
     this.policy.requireCapability(principal.capabilities, 'booking:create:assisted');
@@ -341,14 +343,21 @@ export class UserAdministrationService {
           }
         : {}),
       ...(filters.cursor ? { id: { gt: filters.cursor } } : {}),
-      customerPackages: {
-        some: {
-          status: 'ACTIVE',
-          remainingSessions: { gt: 0 },
-          validUntil: { gt: new Date() },
-        },
-      },
+      ...(filters.includeWithoutPackage
+        ? {}
+        : {
+            customerPackages: {
+              some: {
+                status: 'ACTIVE',
+                remainingSessions: { gt: 0 },
+                validUntil: { gt: new Date() },
+              },
+            },
+          }),
     };
+    // Pencarian nama: ambil lebih banyak lalu urutkan dari yang paling mirip, supaya nama yang dicari
+    // tidak tersisih oleh nama lain yang kebetulan id-nya lebih kecil.
+    const relevan = Boolean(q) && !filters.cursor;
 
     const users = await this.db.user.findMany({
       where,
@@ -362,10 +371,25 @@ export class UserAdministrationService {
         },
       },
       orderBy: { id: 'asc' },
-      take: limit + 1,
+      take: relevan ? 200 : limit + 1,
     });
+    if (relevan) {
+      const kata = q!.toLowerCase();
+      const skor = (nama: string) => {
+        const n = nama.toLowerCase();
+        if (n === kata) return 0;
+        if (n.startsWith(kata)) return 1;
+        if (n.split(/\s+/u).some((bagian) => bagian.startsWith(kata))) return 2;
+        if (n.includes(kata)) return 3;
+        return 4;
+      };
+      users.sort(
+        (a, b) =>
+          skor(a.displayName) - skor(b.displayName) || a.displayName.localeCompare(b.displayName),
+      );
+    }
 
-    const hasMore = users.length > limit;
+    const hasMore = relevan ? false : users.length > limit;
     const page = users.slice(0, limit);
 
     return {

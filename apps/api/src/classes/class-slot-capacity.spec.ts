@@ -20,8 +20,8 @@ describe('ClassSlotService - Room Capacity Bed Constraint (Poin 2)', () => {
     const tx = {
       cabang: { findUnique: jest.fn(async () => ({ id: branchId, active: true })) },
       jenisKelas: { findUnique: jest.fn(async () => ({ id: classTypeId, active: true, defaultCapacity: 8 })) },
-      studio: { findUnique: jest.fn(async () => ({ id: studioId, active: true })) },
-      ruangan: { findUnique: jest.fn(async () => ({ id: roomId, active: true, capacityBed: roomCapacityBed })) },
+      studio: { findUnique: jest.fn(async () => ({ id: studioId, branchId, active: true })) },
+      ruangan: { findUnique: jest.fn(async () => ({ id: roomId, studioId, active: true, capacityBed: roomCapacityBed })) },
       slotKelas: {
         findFirst: jest.fn(async () => null),
         create: jest.fn(async ({ data }: any) => ({
@@ -76,6 +76,31 @@ describe('ClassSlotService - Room Capacity Bed Constraint (Poin 2)', () => {
       code: 'CAPACITY_EXCEEDS_ROOM_LIMIT',
       status: HttpStatus.BAD_REQUEST,
     });
+  });
+
+  it('menolak studio milik cabang lain agar kelas tidak tersimpan di timetable cabang lain', async () => {
+    const { service, tx } = createService(4);
+    tx.studio.findUnique.mockResolvedValueOnce({
+      id: studioId,
+      branchId: '00000000-0000-4000-8000-0000000000ff',
+      active: true,
+    } as never);
+    await expect(
+      service.create(
+        principal,
+        {
+          branchId,
+          classTypeId,
+          studioId,
+          roomId,
+          startAt: '2026-10-15T09:00:00Z',
+          endAt: '2026-10-15T09:50:00Z',
+        } as any,
+        key,
+        'test-corr',
+      ),
+    ).rejects.toMatchObject({ code: 'STUDIO_BRANCH_MISMATCH' });
+    expect(tx.slotKelas.create).not.toHaveBeenCalled();
   });
 
   it('otomatis membatasi kapasitas ke kapasitas ranjang ruangan bila kapasitas tidak ditentukan', async () => {

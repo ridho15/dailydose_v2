@@ -555,12 +555,14 @@ export class IdentityController {
     @Query('branchId') branchId?: string,
     @Query('cursor') cursor?: string,
     @Query('limit') limit?: string,
+    @Query('includeWithoutPackage') includeWithoutPackage?: string,
   ) {
     return this.users.lookupCustomers(request.principal, {
       q,
       branchId,
       cursor,
       limit: limit ? Number(limit) : undefined,
+      includeWithoutPackage: includeWithoutPackage === 'true',
     });
   }
 

@@ -416,6 +416,15 @@ async function main() {
   let insertedBookingCount = 0;
   let insertedAttendanceCount = 0;
 
+  // V1 menandai booking yang lewat batas H-24 sebagai "hadir" walau kelasnya belum berjalan. Di V2
+  // "Hadir" berarti sudah datang, jadi hanya kelas yang sudah selesai yang boleh berstatus hadir;
+  // kelas yang belum berjalan tetap booking aktif dan masih bisa dibatalkan.
+  const akhirKelas = new Map(
+    (await prisma.slotKelas.findMany({ select: { id: true, endAt: true } })).map((s) => [s.id, s.endAt]),
+  );
+  const kelasSudahSelesai = (slotId: string) =>
+    (akhirKelas.get(slotId)?.getTime() ?? 0) <= Date.now();
+
   for (const bk of deltaBookingsRaw) {
     const bkgId = Number(bk.id);
     const bUuid = bookingUuid(bkgId);
@@ -454,7 +463,7 @@ async function main() {
       packagesByUser.set(uUuid, [{ id: compPkgId, userId: uUuid, validFrom: createdAt, validUntil: createdAt }]);
     }
 
-    const isAttended = bk.status_kehadiran === 1;
+    const isAttended = bk.status_kehadiran === 1 && kelasSudahSelesai(sUuid);
     const isCancelled = Boolean(bk.deleted_at);
 
     let status: BookingStatus = BookingStatus.BOOKED;

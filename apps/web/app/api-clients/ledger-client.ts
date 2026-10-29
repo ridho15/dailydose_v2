@@ -23,9 +23,21 @@ export type LedgerBalance = {
   classTypeName?: string;
   classTypeId?: string | null;
   packageBranchId?: string | null;
+  /** Cabang tempat paket boleh dipakai (cabang paket dan cabang pembelian), atau 'SEMUA'. */
+  allowedBranchIds?: string[] | 'SEMUA';
   isMultiBranch?: boolean;
   customer?: { id: string; displayName: string; phoneMasked: string | null };
 };
+
+/** Apakah paket member boleh dipakai di cabang ini. Server tetap memeriksa ulang saat booking. */
+export function paketBerlakuDiCabang(
+  pkg: Pick<LedgerBalance, 'isMultiBranch' | 'packageBranchId' | 'allowedBranchIds'>,
+  branchId: string,
+): boolean {
+  if (pkg.isMultiBranch === true || pkg.allowedBranchIds === 'SEMUA') return true;
+  if (Array.isArray(pkg.allowedBranchIds)) return pkg.allowedBranchIds.includes(branchId);
+  return !pkg.packageBranchId || pkg.packageBranchId === 'global' || pkg.packageBranchId === branchId;
+}
 export type LedgerHistory = {
   balance: LedgerBalance;
   reservations: {

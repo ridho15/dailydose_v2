@@ -87,6 +87,8 @@ const SUPER_OWNER_CAPABILITIES: readonly string[] = [
     'expense:create',
     // Ulasan member untuk instruktur (internal, tidak tampil publik).
     'instructor-review:read',
+    // Menyetujui pembatalan booking setelah batas H-24 (diajukan admin dari timetable).
+    'booking:late-cancel:decide',
   ]),
 ];
 
@@ -175,6 +177,7 @@ export const ROLE_CAPABILITIES: Record<ApplicationRole, readonly string[]> = {
     'expense:create',
     'instructor:hours:adjust',
     'instructor-review:read',
+    'booking:late-cancel:decide',
   ],
   OWNER: [
     'automation:read',
@@ -194,6 +197,7 @@ export const ROLE_CAPABILITIES: Record<ApplicationRole, readonly string[]> = {
     'reschedule:read',
     'attendance:read',
     'instructor-review:read',
+    'booking:late-cancel:decide',
   ],
   SUPER_OWNER: SUPER_OWNER_CAPABILITIES,
   FINANCE: [

@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Search, X } from 'lucide-react';
+import { Search } from 'lucide-react';
 import {
   bookingFailure,
   type BookingClient,
@@ -13,14 +13,10 @@ import type { ClassSlot } from '@/api-clients/class-slot-client';
 import { formatBranchTime } from '@/lib/class-time';
 import { Button } from '../components/actions';
 import { Feedback } from '../ui';
+import { BatalkanPeserta, type BatalClient } from './batalkan-peserta';
 
 type RosterClient = Pick<BookingClient, 'list'> &
-  Partial<Pick<BookingClient, 'searchRosterCandidates' | 'create' | 'cancelAsStaff'>>;
-
-/** Peserta yang baru dikeluarkan, disimpan supaya tombol Urungkan bisa memasukkannya lagi. */
-interface Dikeluarkan {
-  booking: CustomerBookingRecord;
-}
+  Partial<Pick<BookingClient, 'searchRosterCandidates' | 'create'> & BatalClient>;
 
 /** Calon peserta hasil pencarian beserta paket yang akan dipakai, bila ada. */
 export interface Calon {
@@ -45,14 +41,22 @@ const JEDA_CARI_MS = 300;
 export function pilihCalon(
   customer: BookingCustomer,
   packages: readonly CustomerPackageBalance[],
-  slot: Pick<ClassSlot, 'classTypeId' | 'startAt'>,
+  slot: Pick<ClassSlot, 'classTypeId' | 'startAt'> & { branchId?: string },
   timeZone: string,
 ): Calon {
   const milik = packages.filter(
     (item) => (item.customerUserId ?? item.customer?.id) === customer.id,
   );
-  const cocokTipe = milik.filter(
+  const cocokTipeSemua = milik.filter(
     (item) => !item.classTypeId || item.classTypeId === slot.classTypeId,
+  );
+  // Paket harus berlaku di cabang kelas ini (cabang paket atau cabang tempat dibeli).
+  const cocokTipe = cocokTipeSemua.filter(
+    (item) =>
+      !slot.branchId ||
+      !item.allowedBranchIds ||
+      item.allowedBranchIds === 'SEMUA' ||
+      item.allowedBranchIds.includes(slot.branchId),
   );
   const layak = cocokTipe
     .filter(
@@ -78,6 +82,8 @@ export function pilihCalon(
   if (terakhir && terakhir.available <= 0) {
     return { customer, paket: null, kendala: 'Sesi paket sudah habis' };
   }
+  if (cocokTipeSemua.length > cocokTipe.length)
+    return { customer, paket: null, kendala: 'Paketnya berlaku di cabang lain' };
   return { customer, paket: null, kendala: 'Belum punya paket untuk kelas ini' };
 }
 
@@ -109,7 +115,6 @@ export function TimetableRosterPanel({
   dalamLaci?: boolean;
 }) {
   const [peserta, setPeserta] = useState<CustomerBookingRecord[]>([]);
-  const [dikeluarkan, setDikeluarkan] = useState<Dikeluarkan[]>([]);
   const [query, setQuery] = useState('');
   const [hasilCari, setHasilCari] = useState<Calon[]>([]);
   const [mencari, setMencari] = useState(false);
@@ -136,7 +141,6 @@ export function TimetableRosterPanel({
     let batal = false;
     setLoading(true);
     setFailure('');
-    setDikeluarkan([]);
     setQuery('');
     client
       .list({ classSlotId: slot.id, status: 'BOOKED', limit: 50 })
@@ -212,51 +216,6 @@ export function TimetableRosterPanel({
       );
       intentKeys.current.delete(`tambah:${calon.customer.id}`);
       setQuery('');
-      await muatPeserta();
-      onChanged();
-    } catch (error) {
-      setFailure(await bookingFailure(error));
-    } finally {
-      setBusyId(null);
-    }
-  };
-
-  const keluarkan = async (booking: CustomerBookingRecord) => {
-    if (!client.cancelAsStaff) return;
-    setBusyId(booking.id);
-    setFailure('');
-    try {
-      await client.cancelAsStaff(
-        booking.id,
-        'Dikeluarkan staf dari timetable kelas',
-        kunciNiat(`keluar:${booking.id}`),
-      );
-      setDikeluarkan((kini) => [...kini, { booking }]);
-      setPeserta((kini) => kini.filter((item) => item.id !== booking.id));
-      onChanged();
-    } catch (error) {
-      setFailure(await bookingFailure(error));
-    } finally {
-      setBusyId(null);
-    }
-  };
-
-  /** Memasukkan lagi dengan paket yang sama; sesinya kembali tercadang seperti semula. */
-  const urungkan = async ({ booking }: Dikeluarkan) => {
-    if (!client.create) return;
-    setBusyId(booking.id);
-    setFailure('');
-    try {
-      await client.create(
-        {
-          classSlotId: slot.id,
-          customerPackageId: booking.customerPackageId,
-          customerUserId: booking.customerUserId,
-          source: 'ADMIN_ASSISTED',
-        },
-        kunciNiat(`urung:${booking.id}`),
-      );
-      setDikeluarkan((kini) => kini.filter((item) => item.booking.id !== booking.id));
       await muatPeserta();
       onChanged();
     } catch (error) {
@@ -377,8 +336,8 @@ export function TimetableRosterPanel({
             {mencari && <p className="m-0 mt-2 text-sm text-dd-muted">Mencari…</p>}
             {query.trim().length >= MIN_HURUF && hasil.length === 0 && !loading && !mencari && (
               <p className="m-0 mt-2 text-sm text-dd-muted">
-                Tidak ada member bernama &ldquo;{query.trim()}&rdquo; di cabang ini yang belum
-                terdaftar di kelas.
+                Tidak ada member aktif bernama &ldquo;{query.trim()}&rdquo; yang belum terdaftar di
+                kelas ini. Coba nomor WhatsApp atau email-nya.
               </p>
             )}
             <p className="m-0 mt-2 text-sm text-dd-muted">
@@ -394,7 +353,7 @@ export function TimetableRosterPanel({
           </h3>
           {loading ? (
             <p className="m-0 text-[15px] text-dd-muted">Memuat peserta…</p>
-          ) : peserta.length === 0 && dikeluarkan.length === 0 ? (
+          ) : peserta.length === 0 ? (
             <p className="m-0 text-[15px] text-dd-muted">
               Belum ada peserta. Kelas ini masih bisa diseret ke jam lain.
             </p>
@@ -416,48 +375,24 @@ export function TimetableRosterPanel({
                     )}
                   </span>
                   {canRemove && (
-                    <button
-                      type="button"
-                      aria-label={`Keluarkan ${booking.customer?.displayName ?? 'member'} dari kelas`}
-                      disabled={busyId !== null}
-                      onClick={() => void keluarkan(booking)}
-                      className="flex size-11 shrink-0 items-center justify-center rounded-dd-sm border border-dd-border-interactive bg-white text-dd-danger transition hover:border-dd-danger disabled:opacity-60"
-                    >
-                      <X className="size-[18px]" aria-hidden="true" />
-                    </button>
+                    <BatalkanPeserta
+                      booking={booking}
+                      kelasMulai={slot.startAt}
+                      client={client}
+                      onBerubah={() => {
+                        void muatPeserta();
+                        onChanged();
+                      }}
+                    />
                   )}
-                </li>
-              ))}
-              {dikeluarkan.map((item) => (
-                <li
-                  key={item.booking.id}
-                  className="flex items-center justify-between gap-2.5 rounded-dd-sm border border-dd-danger bg-dd-danger-soft p-2.5"
-                >
-                  <span className="min-w-0">
-                    <span className="block text-base text-dd-muted line-through">
-                      {item.booking.customer?.displayName ?? 'Member'}
-                    </span>
-                    <span className="block text-sm font-bold text-dd-danger">
-                      Dikeluarkan, sesi dikembalikan
-                    </span>
-                  </span>
-                  <button
-                    type="button"
-                    disabled={busyId !== null}
-                    onClick={() => void urungkan(item)}
-                    className="min-h-11 shrink-0 rounded-dd-sm border border-dd-danger bg-white px-3.5 text-[15px] font-bold text-dd-danger disabled:opacity-60"
-                  >
-                    {busyId === item.booking.id ? 'Mengembalikan…' : 'Urungkan'}
-                  </button>
                 </li>
               ))}
             </ul>
           )}
           {canRemove && (
             <p className="m-0 mt-3 text-sm text-dd-muted">
-              Mengeluarkan peserta langsung berlaku dan sesinya kembali utuh. Tidak ada kotak
-              konfirmasi; tombol Urungkan tersedia sampai {dalamLaci ? 'panel' : 'halaman'} ini
-              ditutup.
+              Tombol X membatalkan booking setelah konfirmasi. Lebih dari 24 jam sebelum kelas
+              langsung batal dan sesinya utuh; kurang dari itu perlu persetujuan Manager atau Owner.
             </p>
           )}
         </div>

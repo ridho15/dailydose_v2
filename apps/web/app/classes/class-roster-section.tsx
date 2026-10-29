@@ -16,6 +16,8 @@ import { pageOffset } from '../lib/pagination';
 import { useSessionContext } from '../session-context';
 import { isInstructorOnlySession } from '@/lib/session-audience';
 import { DetailSection, MetricTile } from './class-slot-detail-parts';
+import { BatalkanPeserta, type BatalClient } from './batalkan-peserta';
+import type { PengajuanPembatalan } from '@/api-clients/booking-client';
 
 const bookingStatusLabels: Record<string, string> = {
   BOOKED: 'Aktif',
@@ -44,7 +46,8 @@ export function ClassRosterSection({
   slot: ClassSlot;
   showAvailable?: boolean;
   canReadBookings: boolean;
-  bookingClient: Pick<BookingClient, 'list'>;
+  bookingClient: Pick<BookingClient, 'list'> &
+    Partial<BatalClient & Pick<BookingClient, 'pembatalanTertunda'>>;
 }) {
   const sessionContext = useSessionContext();
   const isInstructor = isInstructorOnlySession(sessionContext?.session);
@@ -58,10 +61,29 @@ export function ClassRosterSection({
   const [rosterNextCursor, setRosterNextCursor] = useState<string | null>();
   const [rosterLoading, setRosterLoading] = useState(false);
   const [rosterFailure, setRosterFailure] = useState('');
+  /** Pengajuan pembatalan H-24 yang menunggu Manager/Owner, per booking. */
+  const [pengajuan, setPengajuan] = useState<Record<string, PengajuanPembatalan>>({});
+  const bolehBatal =
+    !isInstructor &&
+    Boolean(sessionContext?.session?.capabilities.includes('booking:cancel:assisted')) &&
+    Boolean(bookingClient.cancelAsStaff);
+  const bolehPutus =
+    !isInstructor &&
+    Boolean(
+      sessionContext?.session?.capabilities.some(
+        (cap) => cap === 'booking:late-cancel:decide' || cap === 'ledger:adjust:decide',
+      ),
+    );
   const loadRoster = useCallback(async () => {
     if (!canReadBookings) return;
     setRosterLoading(true);
     setRosterFailure('');
+    if (bookingClient.pembatalanTertunda && !isInstructor) {
+      bookingClient
+        .pembatalanTertunda(slot.id)
+        .then((daftar) => setPengajuan(Object.fromEntries(daftar.map((p) => [p.bookingId, p]))))
+        .catch(() => setPengajuan({}));
+    }
     try {
       const page = await bookingClient.list({
         classSlotId: slot.id,
@@ -79,7 +101,7 @@ export function ClassRosterSection({
     } finally {
       setRosterLoading(false);
     }
-  }, [bookingClient, canReadBookings, rosterCursor, rosterQuery, rosterStatus, slot.id]);
+  }, [bookingClient, canReadBookings, isInstructor, rosterCursor, rosterQuery, rosterStatus, slot.id]);
   useEffect(() => {
     const timer = window.setTimeout(() => void loadRoster(), rosterQuery ? 250 : 0);
     return () => window.clearTimeout(timer);
@@ -193,9 +215,20 @@ export function ClassRosterSection({
                       id: 'action',
                       header: 'Tindakan',
                       cell: (item: CustomerBookingRecord) => (
-                        <ButtonLink size="sm" variant="secondary" href={bookingHref(item.id)}>
-                          Lihat booking
-                        </ButtonLink>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <ButtonLink size="sm" variant="secondary" href={bookingHref(item.id)}>
+                            Lihat booking
+                          </ButtonLink>
+                          {(bolehBatal || (bolehPutus && pengajuan[item.id])) && (
+                            <BatalkanPeserta
+                              booking={item}
+                              kelasMulai={slot.startAt}
+                              client={bookingClient}
+                              pengajuan={pengajuan[item.id]}
+                              onBerubah={() => void loadRoster()}
+                            />
+                          )}
+                        </div>
                       ),
                     },
                   ]
@@ -222,9 +255,20 @@ export function ClassRosterSection({
                       {item.package?.name ?? 'Paket pelanggan'} · {item.sessionBalance?.available ?? 0}{' '}
                       sesi tersedia
                     </p>
-                    <ButtonLink size="sm" variant="secondary" href={bookingHref(item.id)}>
-                      Lihat booking
-                    </ButtonLink>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <ButtonLink size="sm" variant="secondary" href={bookingHref(item.id)}>
+                        Lihat booking
+                      </ButtonLink>
+                      {(bolehBatal || (bolehPutus && pengajuan[item.id])) && (
+                        <BatalkanPeserta
+                          booking={item}
+                          kelasMulai={slot.startAt}
+                          client={bookingClient}
+                          pengajuan={pengajuan[item.id]}
+                          onBerubah={() => void loadRoster()}
+                        />
+                      )}
+                    </div>
                   </>
                 )}
               </div>

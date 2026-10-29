@@ -6,11 +6,16 @@ import { ReschedulesController } from './reschedules.controller';
 import { ReschedulesService } from './ubah-jadwal.service';
 import { UlasanInstrukturController } from './ulasan-instruktur.controller';
 import { UlasanInstrukturService } from './ulasan-instruktur.service';
+import { PembatalanTerlambatService } from './pembatalan-terlambat.service';
 
 @Module({
   imports: [IdentityModule],
   controllers: [BookingsController, ReschedulesController, UlasanInstrukturController],
-  providers: [BookingsService, ReschedulesService, UlasanInstrukturService],
+  providers: [
+    BookingsService,
+    ReschedulesService,
+    UlasanInstrukturService,
+    PembatalanTerlambatService,
+  ],
 })
 export class BookingsModule {}
-

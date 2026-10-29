@@ -239,6 +239,44 @@ describe('ClassSlotView', () => {
     );
   });
 
+  it('keeps the create form open with its input when saving fails (e.g. a schedule clash)', async () => {
+    const client = fake({
+      discover: vi.fn().mockResolvedValue({ ...workspace, slots: [] }),
+      create: vi.fn().mockRejectedValue({
+        status: 409,
+        data: {
+          error: {
+            code: 'INSTRUCTOR_SCHEDULE_COLLISION',
+            details: [{ issue: 'Private Group, Jum 30 Okt 09.00 sampai 09.50, Daily Dose Muara Karang' }],
+          },
+        },
+      }),
+    });
+    render(
+      <ClassSlotView client={client} branchOverride={branch} capabilitiesOverride={manageCapabilities} />,
+    );
+    const user = userEvent.setup();
+    await screen.findByText('Belum ada kelas pada minggu ini');
+    await user.click(screen.getByRole('button', { name: 'Buat kelas' }));
+    const dialog = screen.getByRole('dialog', { name: 'Buat draft kelas' });
+    await user.click(within(dialog).getByRole('combobox', { name: /Tipe kelas/ }));
+    await user.click(within(dialog).getByRole('option', { name: /Reformer/ }));
+    await user.click(within(dialog).getByRole('combobox', { name: /Area Studio/ }));
+    await user.click(within(dialog).getByRole('option', { name: /Area Studio Utama/ }));
+    await user.type(within(dialog).getByLabelText('Tanggal'), '2026-07-27');
+    await user.type(within(dialog).getByLabelText('Mulai'), '09:00');
+    await user.type(within(dialog).getByLabelText('Selesai eksklusif'), '10:00');
+    await user.click(within(dialog).getByRole('button', { name: 'Buat draft' }));
+    await user.click(
+      within(screen.getByRole('dialog', { name: 'Buat draft kelas?' })).getByRole('button', {
+        name: 'Buat draft',
+      }),
+    );
+    const formulir = await screen.findByRole('dialog', { name: 'Buat draft kelas' });
+    expect(within(formulir).getByText(/Kelas belum tersimpan\. Instruktur ini sudah mengajar/)).toBeVisible();
+    expect(within(formulir).getByLabelText('Tanggal')).toHaveValue('2026-07-27');
+  });
+
   it('edits only a draft, guarded by status, with an optional reason', async () => {
     const client = fake();
     render(

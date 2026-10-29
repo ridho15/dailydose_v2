@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { browserClassSlotClient } from './class-slot-client';
+import { browserClassSlotClient, classSlotFailure } from './class-slot-client';
 
 const jsonResponse = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
@@ -152,5 +152,25 @@ describe('browserClassSlotClient.discover', () => {
         until: new Date('2026-10-11T23:59:59.000Z'),
       }),
     ).rejects.toThrow();
+  });
+});
+
+describe('classSlotFailure untuk jadwal bentrok', () => {
+  const galat = (code: string) => ({
+    status: 409,
+    data: { error: { code, details: [{ issue: 'Reformer Group, Jum 30 Okt 17.00 sampai 18.00, Daily Dose Green Garden' }] } },
+  });
+
+  it('menyebut instruktur dan kelas yang menghalangi, bukan ruangan', () => {
+    const pesan = classSlotFailure(galat('INSTRUCTOR_SCHEDULE_COLLISION'));
+    expect(pesan).toMatch(/^Instruktur ini sudah mengajar kelas lain/);
+    expect(pesan).toContain('Daily Dose Green Garden');
+    expect(pesan).not.toMatch(/Ruangan/);
+  });
+
+  it('menyebut ruangan dan kelas yang memakainya', () => {
+    expect(classSlotFailure(galat('SLOT_SCHEDULE_COLLISION'))).toMatch(
+      /^Ruangan ini sudah dipakai kelas lain pada jam yang sama: Reformer Group/,
+    );
   });
 });

@@ -5,7 +5,8 @@ describe('PolicyService role catalog', () => {
     const catalog = new PolicyService().roleCatalog();
     expect(catalog.find(({ role }) => role === 'SUPER_OWNER')?.readOnly).toBe(false);
     expect(catalog.find(({ role }) => role === 'ADMIN')?.readOnly).toBe(false);
-    expect(catalog.find(({ role }) => role === 'OWNER')?.readOnly).toBe(true);
+    // Owner hanya punya satu izin ubah: menyetujui pembatalan booking setelah batas H-24.
+    expect(catalog.find(({ role }) => role === 'OWNER')?.readOnly).toBe(false);
     expect(catalog.find(({ role }) => role === 'CUSTOMER')?.readOnly).toBe(false);
   });
 

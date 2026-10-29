@@ -238,28 +238,43 @@ describe('timetable: peserta kelas', () => {
     expect(within(panel).queryByRole('button', { name: /Ayudia Ramadhani/ })).toBeNull();
   });
 
-  it('mengeluarkan peserta tanpa kotak konfirmasi lalu bisa diurungkan dengan paket yang sama', async () => {
+  it('tombol X membatalkan peserta setelah konfirmasi dengan alasan', async () => {
     const bookings = bookingClient();
-    const { user, panel } = await bukaPanel(bookings);
+    // Kelas dua jam lagi: tombol X hanya untuk kelas yang belum dimulai.
+    const mulai = new Date(Date.now() + 2 * 3_600_000);
+    render(
+      <ClassSlotView
+        client={classClient([
+          kelas({
+            id: 'slot-isi',
+            bookedCount: 1,
+            startAt: mulai,
+            endAt: new Date(mulai.getTime() + 55 * 60_000),
+          }),
+        ])}
+        bookingClient={bookings}
+        branchOverride={branch}
+        capabilitiesOverride={kapabilitas}
+      />,
+    );
+    const user = userEvent.setup();
+    await user.click(
+      await within(kalender()).findByRole('button', { name: /Private Group, Asrida/ }),
+    );
+    const panel = await screen.findByRole('dialog', { name: 'Private Group' });
+    await within(panel).findByText('Sari Dewi');
 
-    await user.click(within(panel).getByRole('button', { name: 'Keluarkan Sari Dewi dari kelas' }));
+    await user.click(within(panel).getByRole('button', { name: 'Batalkan booking Sari Dewi' }));
+    const konfirmasi = await screen.findByRole('dialog', { name: 'Batalkan booking Sari Dewi?' });
+    expect(bookings.cancelAsStaff).not.toHaveBeenCalled();
+    const tombol = within(konfirmasi).getByRole('button', { name: 'Batalkan booking' });
+    expect(tombol).toBeDisabled();
+    await user.type(within(konfirmasi).getByLabelText(/Alasan/), 'Member sakit, kabar lewat WA');
+    await user.click(tombol);
 
     expect(bookings.cancelAsStaff).toHaveBeenCalledWith(
       'booking-1',
-      expect.any(String),
-      expect.any(String),
-    );
-    expect(await within(panel).findByText('Dikeluarkan, sesi dikembalikan')).toBeVisible();
-
-    await user.click(within(panel).getByRole('button', { name: 'Urungkan' }));
-
-    expect(bookings.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        classSlotId: 'slot-isi',
-        customerPackageId: 'paket-sari',
-        customerUserId: 'member-1',
-        source: 'ADMIN_ASSISTED',
-      }),
+      'Member sakit, kabar lewat WA',
       expect.any(String),
     );
   });

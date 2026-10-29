@@ -381,7 +381,9 @@ export function AppNavigation({
                 </span>
                 <span className="block truncate text-[13px] text-dd-muted">
                   {roleLabel(session.roles[0])} ·{' '}
-                  {context?.activeBranch?.name ?? 'semua cabang'}
+                  {instructorOnly && session.branches.length > 1
+                    ? `${session.branches.length} cabang`
+                    : (context?.activeBranch?.name ?? 'semua cabang')}
                 </span>
               </span>
             )}

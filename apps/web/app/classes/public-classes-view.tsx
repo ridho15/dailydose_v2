@@ -21,6 +21,7 @@ import {
 } from '@/api-clients/public-class-catalog-client';
 import {
   browserLedgerClient,
+  paketBerlakuDiCabang,
   type LedgerBalance,
   type LedgerClient,
 } from '@/api-clients/ledger-client';
@@ -173,11 +174,7 @@ export function PublicClassesView({
   const findMatchingPackage = (slot: PublicClassSlot) => {
     if (!customerPackages.length) return null;
     return customerPackages.find((pkg) => {
-      const branchMatches =
-        pkg.isMultiBranch === true ||
-        !pkg.packageBranchId ||
-        pkg.packageBranchId === 'global' ||
-        pkg.packageBranchId === slot.branchId;
+      const branchMatches = paketBerlakuDiCabang(pkg, slot.branchId);
       const classTypeMatches = !pkg.classTypeId || pkg.classTypeId === slot.classType.id;
       const hasAvailable = pkg.available > 0;
       const notExpired = new Date(pkg.expiryAt) > new Date();
@@ -234,11 +231,8 @@ export function PublicClassesView({
       const query = new URLSearchParams(window.location.search);
       if (query.get('branch') || query.get('studio')) return;
       const pkgBranchId = customerPackages[0]?.packageBranchId || customerPackages[0]?.branchId;
-      const hasActivePkgInCurrentBranch = customerPackages.some(
-        (pkg) =>
-          !pkg.packageBranchId ||
-          pkg.packageBranchId === 'global' ||
-          pkg.packageBranchId === branchId,
+      const hasActivePkgInCurrentBranch = customerPackages.some((pkg) =>
+        paketBerlakuDiCabang(pkg, branchId),
       );
       if (!hasActivePkgInCurrentBranch && pkgBranchId) {
         const matchingBranch = branches.find((b) => b.id === pkgBranchId);
@@ -1029,11 +1023,7 @@ export function PublicClassesView({
         availablePackages={
           bookingSlot
             ? customerPackages.filter((pkg) => {
-                const branchMatches =
-                  pkg.isMultiBranch === true ||
-                  !pkg.packageBranchId ||
-                  pkg.packageBranchId === 'global' ||
-                  pkg.packageBranchId === bookingSlot.branchId;
+                const branchMatches = paketBerlakuDiCabang(pkg, bookingSlot.branchId);
                 const classTypeMatches =
                   !pkg.classTypeId || pkg.classTypeId === bookingSlot.classType.id;
                 return branchMatches && classTypeMatches && pkg.available > 0;

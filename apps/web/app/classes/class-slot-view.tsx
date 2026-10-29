@@ -74,12 +74,19 @@ export function ClassSlotView({
         | 'searchRosterCandidates'
         | 'create'
         | 'cancelAsStaff'
+        | 'cancellationOptions'
+        | 'ajukanPembatalanTerlambat'
+        | 'pembatalanTertunda'
+        | 'putuskanPembatalan'
       >
     >;
 }) {
   const sessionContext = useSessionContext();
   const feedback = useAppFeedback();
-  const branch = branchOverride ?? sessionContext?.activeBranch ?? null;
+  // Instruktur bisa mengajar di beberapa cabang (mis. GG dan MK) dan tidak punya pemilih cabang:
+  // jadwalnya diambil dari semua cabangnya, bukan hanya cabang pertama.
+  const instrukturSaja = isInstructorOnlySession(sessionContext?.session);
+  const branch = instrukturSaja ? null : (branchOverride ?? sessionContext?.activeBranch ?? null);
   const sessionBranches = sessionContext?.session?.branches;
   const branches = useMemo(
     () => branchesOverride ?? sessionBranches ?? (branch ? [branch] : []),
@@ -94,7 +101,7 @@ export function ClassSlotView({
   const canCompleteClass = canManage || capabilities.includes('attendance:self');
   const canReadBookings = capabilities.includes('booking:read');
   const canViewAllBranches = !isInstructor && capabilities.includes('branch:all');
-  const globalMode = !branch && canViewAllBranches;
+  const globalMode = !branch && (canViewAllBranches || isInstructor);
   const canOperate = Boolean(branch && canManage);
   const canOperateAttendance = Boolean(branch && canManageAttendance);
   const canCreateSlot = Boolean((branch || (globalMode && branches.length > 0)) && canManage);
@@ -134,7 +141,12 @@ export function ClassSlotView({
         from: week.start,
         until: week.end,
       });
-      setSlots(workspace.slots);
+      // Instruktur hanya melihat kelas yang ia ajar.
+      setSlots(
+        isInstructor
+          ? workspace.slots.filter((slot) => slot.instructorUserId === sessionContext?.session?.id)
+          : workspace.slots,
+      );
       setClassTypes(workspace.classTypes);
       setInstructors(workspace.instructors);
       setStudios(workspace.studios);
@@ -173,6 +185,7 @@ export function ClassSlotView({
 
   const openPanel = (next: NonNullable<Panel>) => {
     setPanelDirty(false);
+    if (next.kind === 'create') setFailure(undefined);
     setPanel(next);
   };
   const closePanel = () => {
@@ -200,7 +213,8 @@ export function ClassSlotView({
       instructorFeeRp: slot.isManualFee ? slot.instructorFeeRp : undefined,
     };
   };
-  const run = async (action: () => Promise<ClassSlot>, success: string) => {
+  /** Menjalankan aksi kelas; hasilnya `true` bila tersimpan, supaya panel hanya ditutup saat berhasil. */
+  const run = async (action: () => Promise<ClassSlot>, success: string): Promise<boolean> => {
     setBusy(true);
     setFailure(undefined);
     try {
@@ -213,8 +227,10 @@ export function ClassSlotView({
       });
       if (panel?.kind === 'detail') setPanel({ kind: 'detail', slot: updated });
       setMessage(success);
+      return true;
     } catch (error) {
       setFailure(classSlotFailure(error));
+      return false;
     } finally {
       setBusy(false);
     }
@@ -501,7 +517,7 @@ export function ClassSlotView({
           </h1>
           <p className="m-0 mt-1 max-w-4xl text-base text-dd-muted">
             {isInstructor
-              ? 'Lihat jadwal sesi kelas yang ditugaskan kepada Anda pada waktu lokal studio.'
+              ? 'Kelas yang Anda ajar di semua cabang Anda, pada waktu lokal studio. Nama cabang tertera di tiap kelas.'
               : `Pukul ${jamTeks(gridHours[0] ?? 9)} sampai ${jamTeks(
                   gridHours.at(-1) ?? 22,
                 )}, satu minggu penuh. Tekan satu kelas untuk mengatur pesertanya.${
@@ -548,7 +564,11 @@ export function ClassSlotView({
       {!busy && slots.length === 0 ? (
         <EmptyState
           title="Belum ada kelas pada minggu ini"
-          description="Ubah minggu atau buat draft kelas baru."
+          description={
+            isInstructor
+              ? 'Belum ada kelas yang ditugaskan kepada Anda minggu ini. Coba minggu lain.'
+              : 'Ubah minggu atau buat draft kelas baru.'
+          }
         />
       ) : !busy && visible.length === 0 ? (
         <EmptyState
@@ -824,37 +844,40 @@ export function ClassSlotView({
         onClose={closePanel}
         footer={
           panel?.kind === 'create' ? (
-            <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
-              <Button
-                type="button"
-                variant="secondary"
-                disabled={busy}
-                className="w-full sm:w-auto"
-                onClick={() =>
-                  void (async () => {
-                    if (
-                      !panelDirty ||
-                      (await feedback.confirm({
-                        tone: 'warning',
-                        title: 'Batalkan pembuatan kelas?',
-                        message: 'Jadwal yang belum disimpan akan hilang.',
-                        confirmLabel: 'Buang input',
-                      }))
-                    )
-                      closePanel();
-                  })()
-                }
-              >
-                Batal
-              </Button>
-              <Button
-                type="submit"
-                form="class-slot-create-form"
-                loading={busy}
-                className="w-full sm:w-auto"
-              >
-                Buat draft
-              </Button>
+            <div className="grid gap-3">
+              {failure && <Feedback kind="error">Kelas belum tersimpan. {failure}</Feedback>}
+              <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={busy}
+                  className="w-full sm:w-auto"
+                  onClick={() =>
+                    void (async () => {
+                      if (
+                        !panelDirty ||
+                        (await feedback.confirm({
+                          tone: 'warning',
+                          title: 'Batalkan pembuatan kelas?',
+                          message: 'Jadwal yang belum disimpan akan hilang.',
+                          confirmLabel: 'Buang input',
+                        }))
+                      )
+                        closePanel();
+                    })()
+                  }
+                >
+                  Batal
+                </Button>
+                <Button
+                  type="submit"
+                  form="class-slot-create-form"
+                  loading={busy}
+                  className="w-full sm:w-auto"
+                >
+                  Buat draft
+                </Button>
+              </div>
             </div>
           ) : undefined
         }
@@ -891,8 +914,9 @@ export function ClassSlotView({
                 confirmLabel: 'Buat draft',
               });
               if (!accepted) return;
-              await run(() => client.create(input), 'Draft kelas berhasil dibuat.');
-              closePanel();
+              // Gagal (mis. jadwal bentrok): form tetap terbuka dengan isiannya dan pesan di bawahnya.
+              if (await run(() => client.create(input), 'Draft kelas berhasil dibuat.'))
+                closePanel();
             }}
           />
         ) : panel?.kind === 'detail' ? (

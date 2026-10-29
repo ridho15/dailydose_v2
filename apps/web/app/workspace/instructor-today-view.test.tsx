@@ -139,8 +139,44 @@ describe('InstructorTodayView (Tiket T-10 / Spesifikasi 5.4)', () => {
       />,
     );
 
-    expect(await screen.findByRole('heading', { level: 1, name: /Halo, Sarah/i })).toBeInTheDocument();
-    expect(screen.getByText(/Studio Daily Dose Tebet/i)).toBeInTheDocument();
+    const judul = await screen.findByRole('heading', { level: 1, name: /Halo, Sarah/i });
+    // Cabang di header diambil dari kelas hari ini.
+    expect(await within(judul.parentElement!).findByText(/Studio Daily Dose Tebet/i)).toBeVisible();
+  });
+
+  it('memuat kelas dari semua cabang instruktur dan menyebut cabang tiap kelas (instruktur GG dan MK)', async () => {
+    const asli = mockSession.branches;
+    mockSession.branches = [
+      { id: 'gg', code: 'GG', name: 'Daily Dose Green Garden', timezone: 'Asia/Jakarta' },
+      { id: 'mk', code: 'MK', name: 'Daily Dose Muara Karang', timezone: 'Asia/Jakarta' },
+    ];
+    const client = {
+      ...mockSlotClient,
+      discover: vi.fn().mockResolvedValue({
+        ...mockWorkspace,
+        slots: [{ ...mockWorkspace.slots[0]!, branchId: 'mk' }],
+        classTypes: [],
+        studios: [],
+      }),
+    } as unknown as typeof mockSlotClient;
+    try {
+      render(
+        <InstructorTodayView
+          client={client}
+          bookingClient={mockBookingClient}
+          availabilityClient={mockAvailabilityClient}
+          initialDate={testDate}
+        />,
+      );
+      const judul = await screen.findByRole('heading', { level: 1, name: /Halo, Sarah/i });
+      expect(await within(judul.parentElement!).findByText(/Daily Dose Muara Karang/)).toBeVisible();
+      expect(within(judul.parentElement!).queryByText(/Green Garden/)).toBeNull();
+      const argumen = (client.discover as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+      expect(argumen.branchId).toBeUndefined();
+      expect(argumen.branches.map((b: { id: string }) => b.id)).toEqual(['gg', 'mk']);
+    } finally {
+      mockSession.branches = asli;
+    }
   });
 
   it('asks an instructor without a selfie to take one, and hides the prompt once saved', async () => {

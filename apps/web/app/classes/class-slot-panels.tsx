@@ -284,7 +284,18 @@ export function DetailPanel({
   canReadBookings: boolean;
   canVerifyInstructor?: boolean;
   bookingClient?: Pick<BookingClient, 'list'> &
-    Partial<Pick<BookingClient, 'issueBulkCheckIns' | 'issueInstructorCheckIn'>>;
+    Partial<
+      Pick<
+        BookingClient,
+        | 'issueBulkCheckIns'
+        | 'issueInstructorCheckIn'
+        | 'cancelAsStaff'
+        | 'cancellationOptions'
+        | 'ajukanPembatalanTerlambat'
+        | 'pembatalanTertunda'
+        | 'putuskanPembatalan'
+      >
+    >;
   busy: boolean;
   onVerifyInstructor?(notes: string): Promise<void>;
   onAssign(id: string): Promise<void>;

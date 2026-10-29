@@ -9,7 +9,9 @@ import {
   type BookingClient,
   type CheckInIssue,
   type CustomerBookingRecord,
+  type PengajuanPembatalan,
 } from '@/api-clients/booking-client';
+import { BatalkanPeserta } from '../../../classes/batalkan-peserta';
 import { AlertBanner } from '../../../components/app-feedback';
 import { useSearchParams } from 'next/navigation';
 import { Button } from '../../../components/actions';
@@ -66,6 +68,8 @@ export function StaffBookingDetailView({
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  /** Pengajuan pembatalan H-24 yang menunggu Manager/Owner untuk booking ini. */
+  const [pengajuan, setPengajuan] = useState<PengajuanPembatalan | undefined>();
   const returnTo = useMemo(() => safeReturnTo(params.get('returnTo')), [params]);
   const canManageAttendance = Boolean(
     context?.status === 'authenticated' &&
@@ -77,7 +81,15 @@ export function StaffBookingDetailView({
     setLoading(true);
     setError('');
     try {
-      setBooking(await client.detail(id));
+      const hasil = await client.detail(id);
+      setBooking(hasil);
+      const slotId = hasil.classSlot?.id ?? hasil.classSlotId;
+      if (client.pembatalanTertunda && slotId) {
+        client
+          .pembatalanTertunda(slotId)
+          .then((daftar) => setPengajuan(daftar.find((p) => p.bookingId === hasil.id)))
+          .catch(() => setPengajuan(undefined));
+      }
     } catch (cause) {
       setBooking(null);
       setError(await bookingFailure(cause));
@@ -163,6 +175,19 @@ export function StaffBookingDetailView({
             >
               Segarkan
             </Button>
+            {booking.classSlot &&
+              (context?.hasCapability('booking:cancel:assisted') ||
+                (pengajuan &&
+                  context?.hasCapability('booking:late-cancel:decide', 'ledger:adjust:decide'))) && (
+                <BatalkanPeserta
+                  booking={booking}
+                  kelasMulai={new Date(booking.classSlot.startAt)}
+                  client={client}
+                  pengajuan={pengajuan}
+                  tampilan="tombol"
+                  onBerubah={() => void load()}
+                />
+              )}
           </div>
         }
       />

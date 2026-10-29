@@ -88,6 +88,10 @@ export function ApplicationShell({ children }: { children: React.ReactNode }) {
   );
   const customerOnly = isCustomerOnlySession(session);
   const instructorOnly = Boolean(!customerOnly && isInstructorOnlySession(session));
+  // Instruktur hanya memilih cabang saat mengajukan ketersediaan (per cabang). Hari ini, Jadwal saya,
+  // dan Payroll sudah mencakup semua cabangnya, jadi pemilih di sana hanya menyesatkan.
+  const pemilihCabangInstruktur =
+    (session?.branches.length ?? 0) > 1 && pathname.startsWith('/workspace/availability');
   const canViewAllBranches = Boolean(
     !instructorOnly && session?.capabilities.includes('branch:all'),
   );
@@ -467,7 +471,7 @@ export function ApplicationShell({ children }: { children: React.ReactNode }) {
               </nav>
             </div>
             <div className="flex min-w-0 items-center justify-end gap-2.5">
-              {session && (!instructorOnly || session.branches.length > 1) && (
+              {session && (!instructorOnly || pemilihCabangInstruktur) && (
                 <div
                   className="!hidden md:!block"
                   title={branchLocked ? lockedBranchHint : undefined}
@@ -598,7 +602,7 @@ export function ApplicationShell({ children }: { children: React.ReactNode }) {
               </div>
             </div>
           </div>
-          {session && (!instructorOnly || session.branches.length > 1) && (
+          {session && (!instructorOnly || pemilihCabangInstruktur) && (
             <div
               className="border-t border-dd-line px-4 py-2 md:hidden"
               title={branchLocked ? lockedBranchHint : undefined}

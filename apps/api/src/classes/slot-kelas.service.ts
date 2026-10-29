@@ -373,6 +373,10 @@ export class ClassSlotService {
 
         if (!branch?.active || !classType?.active || !studio?.active)
           throw new ApiProblem('RESOURCE_NOT_FOUND', HttpStatus.NOT_FOUND);
+        // Studio dan ruangan harus milik cabang kelas; tanpa ini kelas bisa tersimpan di cabang lain
+        // dan muncul di timetable yang salah.
+        if (studio.branchId !== branch.id || (room && room.studioId !== studio.id))
+          throw new ApiProblem('STUDIO_BRANCH_MISMATCH', HttpStatus.UNPROCESSABLE_ENTITY);
 
         const collisionConditions: Prisma.SlotKelasWhereInput[] = [];
         if (room?.id) {
@@ -391,10 +395,12 @@ export class ClassSlotService {
             endAt: { gt: startAt },
             OR: collisionConditions,
           },
+          include: {
+            classType: { select: { name: true } },
+            branch: { select: { name: true, timezone: true } },
+          },
         });
-        if (collision) {
-          throw new ApiProblem('SLOT_SCHEDULE_COLLISION', HttpStatus.CONFLICT);
-        }
+        if (collision) throw bentrokJadwal(collision, input.instructorUserId ?? null);
 
         const inputCapacity = (input as any).capacity;
         let effectiveCapacity: number;
@@ -495,10 +501,12 @@ export class ClassSlotService {
             startAt: { lt: slot.endAt },
             endAt: { gt: slot.startAt },
           },
+          include: {
+            classType: { select: { name: true } },
+            branch: { select: { name: true, timezone: true } },
+          },
         });
-        if (instructorCollision) {
-          throw new ApiProblem('SLOT_SCHEDULE_COLLISION', HttpStatus.CONFLICT);
-        }
+        if (instructorCollision) throw bentrokJadwal(instructorCollision, input.instructorUserId);
 
         await this.claim(tx, id, expectedVersion, STATUS_ALLOWED.assign, {
           instructorId: input.instructorUserId,
@@ -560,6 +568,12 @@ export class ClassSlotService {
 
         const targetStudioId = input.studioId !== undefined ? input.studioId : slot.studioId;
         const targetRoomId = input.roomId !== undefined ? (input.roomId || null) : slot.roomId;
+        if (targetStudioId && targetStudioId !== slot.studioId && tx.studio?.findUnique) {
+          const studioBaru = await tx.studio.findUnique({ where: { id: targetStudioId } });
+          if (!studioBaru) throw new ApiProblem('RESOURCE_NOT_FOUND', HttpStatus.NOT_FOUND);
+          if (studioBaru.branchId !== slot.branchId)
+            throw new ApiProblem('STUDIO_BRANCH_MISMATCH', HttpStatus.UNPROCESSABLE_ENTITY);
+        }
 
         let room = null;
         if (targetRoomId && (tx as any).ruangan) {
@@ -599,10 +613,12 @@ export class ClassSlotService {
             endAt: { gt: startAt },
             OR: updateCollisionConditions,
           },
+          include: {
+            classType: { select: { name: true } },
+            branch: { select: { name: true, timezone: true } },
+          },
         });
-        if (updateCollision) {
-          throw new ApiProblem('SLOT_SCHEDULE_COLLISION', HttpStatus.CONFLICT);
-        }
+        if (updateCollision) throw bentrokJadwal(updateCollision, targetInstructorId ?? null);
 
         await this.claim(tx, id, expectedVersion, STATUS_ALLOWED.update, {
           classTypeId: input.classTypeId,
@@ -1000,4 +1016,49 @@ export class ClassSlotService {
       )
       .then((res) => ({ status: res.status, body: res.body as any, replay: res.replay }));
   }
+}
+
+/**
+ * Kelas lain yang bentrok. Bila instruktur yang sama sudah mengajar (bisa di cabang lain, yang tidak
+ * tampil di timetable cabang ini), kodenya INSTRUCTOR_SCHEDULE_COLLISION; selain itu ruangannya yang
+ * terpakai. Detailnya menyebut kelas yang menghalangi supaya staf tahu harus mengubah apa.
+ */
+export function bentrokJadwal(
+  lain: {
+    instructorId: string | null;
+    startAt: Date;
+    endAt: Date;
+    classType?: { name: string } | null;
+    branch?: { name: string; timezone: string } | null;
+  },
+  instructorId: string | null,
+): ApiProblem {
+  const olehInstruktur = Boolean(instructorId) && lain.instructorId === instructorId;
+  const tz = lain.branch?.timezone ?? 'Asia/Jakarta';
+  const jam = (d: Date) =>
+    new Intl.DateTimeFormat('id-ID', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hourCycle: 'h23',
+      timeZone: tz,
+    }).format(d);
+  const hari = new Intl.DateTimeFormat('id-ID', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    timeZone: tz,
+  }).format(lain.startAt);
+  const keterangan = [
+    lain.classType?.name ?? 'Kelas',
+    `${hari} ${jam(lain.startAt)} sampai ${jam(lain.endAt)}`,
+    lain.branch?.name,
+  ]
+    .filter(Boolean)
+    .join(', ');
+  return new ApiProblem(
+    olehInstruktur ? 'INSTRUCTOR_SCHEDULE_COLLISION' : 'SLOT_SCHEDULE_COLLISION',
+    HttpStatus.CONFLICT,
+    false,
+    [{ field: olehInstruktur ? 'instructorUserId' : 'roomId', issue: keterangan }],
+  );
 }

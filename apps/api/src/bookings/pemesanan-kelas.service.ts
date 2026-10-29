@@ -9,6 +9,7 @@ import { IdempotencyService } from '../foundation/idempotency.service';
 import type { SessionPrincipal } from '../identity/identity.service';
 import { PolicyService } from '../identity/policy.service';
 import { ApiProblem, ENTITY_ID_REGEX } from '../identity/security';
+import { paketBerlakuDi } from './cabang-paket';
 
 export type BookingCancellationReasonCode =
   | 'PERSONAL_UNAVAILABLE'
@@ -424,20 +425,8 @@ export class BookingsService {
         remainingSessions: { gt: 0 },
         validUntil: { gt: now },
         OR: [{ purchaseId: null }, { purchase: { status: 'PAID' } }],
-        package: {
-          AND: [
-            {
-              OR: [
-                { isMultiBranch: true },
-                { branchId: null },
-                { branchId: slot.branchId },
-              ],
-            },
-            {
-              OR: [{ classTypeId: null }, { classTypeId: slot.classTypeId }],
-            },
-          ],
-        },
+        // Cabang diperiksa di bawah (cabang paket atau cabang pembelian), tidak di query ini.
+        package: { OR: [{ classTypeId: null }, { classTypeId: slot.classTypeId }] },
       },
       include: {
         package: true,
@@ -446,12 +435,7 @@ export class BookingsService {
     });
 
     // Filter paket: jika paket bukan multi-branch, pastikan cabang paket/pembelian cocok dengan slot
-    const matchingPackages = packages.filter((pkg) => {
-      const isMulti = Boolean(pkg.package.isMultiBranch);
-      if (isMulti) return true;
-      const allowedBranchId = pkg.package.branchId ?? pkg.purchase?.branchId;
-      return !allowedBranchId || allowedBranchId === slot.branchId;
-    });
+    const matchingPackages = packages.filter((pkg) => paketBerlakuDi(pkg, slot.branchId));
 
     const items = await Promise.all(
       matchingPackages.map(async (pkg) => {
@@ -876,10 +860,7 @@ export class BookingsService {
           throw new ApiProblem('INSUFFICIENT_AVAILABLE_SESSIONS', HttpStatus.CONFLICT);
 
         // Validasi kecocokan cabang & jenis kelas paket (Integritas Aturan Bisnis)
-        const isMulti = Boolean(customerPackage.package?.isMultiBranch);
-        const allowedBranchId =
-          customerPackage.package?.branchId ?? customerPackage.purchase?.branchId ?? null;
-        if (!isMulti && allowedBranchId && allowedBranchId !== slot.branchId) {
+        if (!paketBerlakuDi(customerPackage, slot.branchId)) {
           throw new ApiProblem('PACKAGE_BRANCH_MISMATCH', HttpStatus.CONFLICT);
         }
         if (

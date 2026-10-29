@@ -72,6 +72,8 @@ export interface CustomerPackageBalance {
   branchName?: string | null;
   classTypeId?: string | null;
   classTypeName?: string | null;
+  /** Cabang tempat paket boleh dipakai (cabang paket dan cabang pembelian), atau 'SEMUA'. */
+  allowedBranchIds?: string[] | 'SEMUA';
   status: string;
   totalSessions?: number;
   remainingSessions?: number;
@@ -80,6 +82,19 @@ export interface CustomerPackageBalance {
   expiryAt: Date;
   packageName?: string;
   name?: string;
+}
+
+/** Pengajuan pembatalan booking setelah batas H-24, menunggu Manager/Owner. */
+export interface PengajuanPembatalan {
+  id: string;
+  version: number;
+  bookingId: string;
+  /** Sesi yang kembali ke paket bila disetujui; 0 bila sesinya belum terpotong. */
+  sessionCount: number;
+  reason: string;
+  requestedById: string;
+  requestedByName: string | null;
+  createdAt: string;
 }
 
 export interface Reschedule {
@@ -485,6 +500,14 @@ export interface BookingClient {
     supportAction: string | null;
     cutoffAt: string;
   }>;
+  /** Pengajuan pembatalan setelah batas H-24 (disetujui Manager/Owner). */
+  ajukanPembatalanTerlambat?(bookingId: string, reason: string): Promise<PengajuanPembatalan>;
+  pembatalanTertunda?(classSlotId: string): Promise<PengajuanPembatalan[]>;
+  putuskanPembatalan?(
+    requestId: string,
+    keputusan: 'approve' | 'reject',
+    expectedVersion: number,
+  ): Promise<{ status: string; sessionsReturned: number }>;
   /** Mengambil seluruh paket aktif milik pelanggan tertentu secara instan (real-time tanpa batas limit cabang). */
   getCustomerPackages?(
     customerId: string,
@@ -622,7 +645,8 @@ export const browserBookingClient: BookingClient = {
     };
   },
   async searchRosterCandidates(branchId, q) {
-    const params = new URLSearchParams({ branchId, q, limit: '6' });
+    // Member tanpa paket aktif ikut dicari, supaya layar menyebut alasannya alih-alih "tidak ada".
+    const params = new URLSearchParams({ branchId, q, limit: '8', includeWithoutPackage: 'true' });
     const lookup = await apiFetch<{
       items: Array<{ id: string; label?: string; description?: string }>;
     }>(`/lookups/customers?${params.toString()}`, { label: 'Mencari member…' });
@@ -834,6 +858,29 @@ export const browserBookingClient: BookingClient = {
       'Membatalkan booking…',
     );
     if (!response.ok) throw { response };
+  },
+  ajukanPembatalanTerlambat(bookingId, reason) {
+    return apiFetch<PengajuanPembatalan>(
+      `/bookings/${encodeURIComponent(bookingId)}/late-cancellation`,
+      { method: 'POST', body: JSON.stringify({ reason }), label: 'Mengirim pengajuan pembatalan…' },
+    );
+  },
+  async pembatalanTertunda(classSlotId) {
+    const hasil = await apiFetch<PengajuanPembatalan[]>(
+      `/bookings/late-cancellations?${new URLSearchParams({ classSlotId })}`,
+      { label: 'Memuat pengajuan pembatalan…' },
+    );
+    return Array.isArray(hasil) ? hasil : [];
+  },
+  putuskanPembatalan(requestId, keputusan, expectedVersion) {
+    return apiFetch(
+      `/bookings/late-cancellations/${encodeURIComponent(requestId)}/${keputusan}`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ expectedVersion }),
+        label: keputusan === 'approve' ? 'Menyetujui pembatalan…' : 'Menolak pembatalan…',
+      },
+    );
   },
   async cancellationOptions(bookingId) {
     const response = await foregroundFetch(

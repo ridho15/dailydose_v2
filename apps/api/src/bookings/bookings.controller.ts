@@ -19,6 +19,7 @@ import {
   type CancelBookingCommand,
 } from './pemesanan-kelas.service';
 import { ReschedulesService } from './ubah-jadwal.service';
+import { PembatalanTerlambatService } from './pembatalan-terlambat.service';
 
 @Controller('bookings')
 @UseGuards(AuthGuard)
@@ -26,7 +27,33 @@ export class BookingsController {
   constructor(
     private readonly bookings: BookingsService,
     private readonly reschedules: ReschedulesService,
+    private readonly pembatalan: PembatalanTerlambatService,
   ) {}
+
+  /** Pembatalan setelah batas H-24: admin mengajukan, Manager/Owner memutuskan. */
+  @Get('late-cancellations')
+  pembatalanTertunda(@Req() request: AuthenticatedRequest, @Query('classSlotId') classSlotId = '') {
+    return this.pembatalan.tertunda(request.principal, classSlotId);
+  }
+
+  @Post('late-cancellations/:requestId/:decision')
+  putuskanPembatalan(
+    @Req() request: AuthenticatedRequest,
+    @Param('requestId') requestId: string,
+    @Param('decision') decision: string,
+    @Body() body: { expectedVersion?: number; note?: string },
+  ) {
+    return this.pembatalan.putuskan(request.principal, requestId, decision, body ?? {});
+  }
+
+  @Post(':id/late-cancellation')
+  ajukanPembatalan(
+    @Req() request: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Body() body: { reason?: string },
+  ) {
+    return this.pembatalan.ajukan(request.principal, id, body ?? {});
+  }
 
   @SelfService()
   @Get('options/:classSlotId')

@@ -812,6 +812,15 @@ async function main() {
   const bookingsToInsert: any[] = [];
   const attendancesToInsert: any[] = [];
 
+  // V1 menandai booking yang lewat batas H-24 sebagai "hadir" walau kelasnya belum berjalan. Di V2
+  // "Hadir" berarti sudah datang, jadi hanya kelas yang sudah selesai yang boleh berstatus hadir;
+  // kelas yang belum berjalan tetap booking aktif dan masih bisa dibatalkan.
+  const akhirKelas = new Map(
+    (await prisma.slotKelas.findMany({ select: { id: true, endAt: true } })).map((s) => [s.id, s.endAt]),
+  );
+  const kelasSudahSelesai = (slotId: string) =>
+    (akhirKelas.get(slotId)?.getTime() ?? 0) <= Date.now();
+
   for (const bk of v1Bookings) {
     const bkId = Number(bk.id);
     const bUuid = bookingUuid(bkId);
@@ -833,9 +842,9 @@ async function main() {
     let status: BookingStatus = BookingStatus.BOOKED;
     if (bk.deleted_at) {
       status = BookingStatus.CANCELLED;
-    } else if (bk.status_kehadiran === 1) {
+    } else if (bk.status_kehadiran === 1 && kelasSudahSelesai(sUuid)) {
       status = BookingStatus.ATTENDED;
-    } else if (bk.status_kehadiran === 2) {
+    } else if (bk.status_kehadiran === 2 && kelasSudahSelesai(sUuid)) {
       status = BookingStatus.NO_SHOW;
     }
 
@@ -853,7 +862,7 @@ async function main() {
       updatedAt,
     });
 
-    if (bk.status_kehadiran === 1) {
+    if (status === BookingStatus.ATTENDED) {
       attendancesToInsert.push({
         id: randomUUID(),
         bookingId: bUuid,
