@@ -653,7 +653,7 @@ export function CustomersView() {
                 setSelectedForPassword(null);
                 setNewPassword('');
               } catch (cause: any) {
-                setPasswordError(cause?.message || 'Gagal mereset kata sandi.');
+                setPasswordError(customerClient.pesanResetSandi(cause));
               } finally {
                 setPasswordBusy(false);
               }

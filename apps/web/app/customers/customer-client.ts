@@ -132,10 +132,15 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
     headers: { 'content-type': 'application/json', ...init?.headers },
   });
   if (!response.ok) {
-    const body = (await response.json().catch(() => ({}))) as { code?: string };
-    throw Object.assign(new Error(body.code || 'REQUEST_FAILED'), {
+    const body = (await response.json().catch(() => ({}))) as {
+      code?: string;
+      error?: { code?: string };
+    };
+    // API membungkus kode galat di `error.code`; tanpa ini alasannya hilang di layar.
+    const code = body.error?.code ?? body.code;
+    throw Object.assign(new Error(code || 'REQUEST_FAILED'), {
       status: response.status,
-      code: body.code,
+      code,
     });
   }
   return response.json() as Promise<T>;
@@ -218,6 +223,19 @@ export const customerClient = {
         method: 'POST',
       },
     );
+  },
+  /** Pesan untuk staf bila reset kata sandi member gagal, menurut kode galat dari server. */
+  pesanResetSandi(cause: unknown) {
+    const code = (cause as { code?: string; status?: number } | null)?.code;
+    const status = (cause as { status?: number } | null)?.status;
+    if (code === 'CUSTOMER_NOT_ACTIVE')
+      return 'Akun member ini nonaktif atau berhenti. Aktifkan kembali akunnya dulu.';
+    if (code === 'VALIDATION_ERROR') return 'Kata sandi minimal 8 karakter.';
+    if (code === 'FORBIDDEN' || status === 403)
+      return 'Akun Anda tidak berwenang mengganti kata sandi member. Minta bantuan Manager atau Super Owner.';
+    if (code === 'NOT_FOUND' || status === 404)
+      return 'Akun ini tidak ditemukan atau bukan akun member.';
+    return 'Kata sandi belum tersimpan. Periksa koneksi lalu coba lagi.';
   },
   resetPassword(id: string, newPassword: string) {
     return request<{ id: string; status: string }>(

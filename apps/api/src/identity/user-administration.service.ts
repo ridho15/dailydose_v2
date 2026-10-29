@@ -579,13 +579,19 @@ export class UserAdministrationService {
     newPassword: string,
     _correlationId: string,
   ) {
-    this.policy.requireCapability(principal.capabilities, 'user:admin');
+    // Super Owner (`user:admin`) boleh mengganti kata sandi akun mana pun. Admin dan Manager hanya
+    // akun member (`customer:credential:initialize`), sesuai tombol "Reset kata sandi" di Daftar member.
+    const adminPenuh = principal.capabilities.includes('user:admin');
+    if (!adminPenuh)
+      this.policy.requireCapability(principal.capabilities, 'customer:credential:initialize');
     if (!newPassword || newPassword.trim().length < 8) {
       throw new ApiProblem('VALIDATION_ERROR', HttpStatus.UNPROCESSABLE_ENTITY);
     }
 
     const user = await this.db.user.findUnique({ where: { id: targetId } });
     if (!user) throw new ApiProblem('NOT_FOUND', HttpStatus.NOT_FOUND);
+    if (!adminPenuh && user.role !== 'CUSTOMER') throw new ApiProblem('NOT_FOUND', HttpStatus.NOT_FOUND);
+    if (user.status !== 'ACTIVE') throw new ApiProblem('CUSTOMER_NOT_ACTIVE', HttpStatus.CONFLICT);
 
     const passwordHash = await hashPassword(newPassword.trim());
 
