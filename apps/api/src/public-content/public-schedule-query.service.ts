@@ -1,3 +1,4 @@
+import { HITUNG_TERISI, terisi } from '../classes/terisi';
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import { RuntimeConfigService } from '../configuration/runtime-config.service';
@@ -70,6 +71,7 @@ export class PublicScheduleQueryService {
             status: true,
             capacity: true,
             bookedCount: true,
+            ...HITUNG_TERISI,
             classType: { select: { id: true, code: true, name: true } },
             instructor: { select: { displayName: true } },
           },
@@ -81,8 +83,8 @@ export class PublicScheduleQueryService {
     const now = new Date();
     return {
       branches,
-      items: slots.map(({ bookedCount, ...slot }) => {
-        const available = Math.max(0, slot.capacity - bookedCount);
+      items: slots.map(({ bookedCount, _count, ...slot }) => {
+        const available = Math.max(0, slot.capacity - terisi({ bookedCount, _count }));
         return {
           ...slot,
           timezone: branch?.timezone ?? 'Asia/Jakarta',
@@ -108,6 +110,7 @@ export class PublicScheduleQueryService {
         studio: { select: { id: true, name: true } },
         room: { select: { id: true, name: true } },
         branch: true,
+        ...HITUNG_TERISI,
       },
     });
 
@@ -132,8 +135,8 @@ export class PublicScheduleQueryService {
       heroImageKey: null,
     };
 
-    const { bookedCount, ...safeSlot } = slot;
-    const available = Math.max(0, slot.capacity - bookedCount);
+    const { bookedCount, _count, ...safeSlot } = slot;
+    const available = Math.max(0, slot.capacity - terisi({ bookedCount, _count }));
 
     return {
       ...safeSlot,

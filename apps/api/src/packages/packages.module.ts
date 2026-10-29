@@ -32,6 +32,7 @@ import { TargetController } from './target.controller';
 import { TargetService } from './target.service';
 import { RetentionService } from './retention.service';
 import { FinanceService } from './finance.service';
+import { SettlementOwnerService } from './settlement-owner.service';
 
 import { PaymentExpirationWorkerService } from './payment-expiration-worker';
 
@@ -48,6 +49,7 @@ import { PaymentExpirationWorkerService } from './payment-expiration-worker';
     TargetController,
   ],
   providers: [
+    SettlementOwnerService,
     PenyesuaianBuktiService,
     KoreksiJamService,
     PayrollInstrukturService,

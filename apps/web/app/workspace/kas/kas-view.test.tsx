@@ -120,3 +120,101 @@ describe('bacaNominal', () => {
     expect(bacaNominal('')).toBeNull();
   });
 });
+
+describe('KasView: Dibayar oleh dan settlement Super Owner', () => {
+  beforeEach(() => {
+    ctx.caps = ['expense:create'];
+    ctx.branchId = 'gg';
+  });
+
+  const owners = [
+    { id: 'so-1', nama: 'Rina' },
+    { id: 'so-2', nama: 'Budi' },
+  ];
+
+  it('pengeluaran yang dibayar uang pribadi Super Owner dikirim dengan pembayarnya', async () => {
+    const user = userEvent.setup();
+    const c = {
+      ...client(),
+      daftarOwner: vi.fn().mockResolvedValue(owners),
+    } as unknown as KeuanganClient;
+    render(<KasView now={NOW} client={c} />);
+    await screen.findByText('Rp 1.400.000');
+    await user.selectOptions(await screen.findByLabelText('Dibayar oleh'), 'so-2');
+    await user.type(screen.getByLabelText('Keterangan'), 'Matras baru');
+    await user.type(screen.getByLabelText('Nominal (Rp)'), '500000');
+    await user.click(screen.getByRole('button', { name: 'Simpan pengeluaran' }));
+    expect(c.catatPengeluaran).toHaveBeenCalledWith(
+      expect.objectContaining({ amountRp: 500_000, dibayarOlehId: 'so-2' }),
+    );
+    expect(await screen.findByText(/dibayar Budi \(diganti saat settlement\)/)).toBeVisible();
+  });
+
+  it('Super Owner melihat berapa yang dibayar ke tiap Super Owner dan bisa mengatur porsi', async () => {
+    ctx.caps = ['owner-settlement:manage', 'finance:read'];
+    ctx.branchId = '';
+    const user = userEvent.setup();
+    const c = {
+      ...client(),
+      daftarOwner: vi.fn().mockResolvedValue(owners),
+      settlementOwner: vi.fn().mockResolvedValue({
+        period: '2026-10',
+        owners: [
+          { id: 'so-1', nama: 'Rina', hakRp: 6_000_000, reimburseRp: 0, totalRp: 6_000_000 },
+          { id: 'so-2', nama: 'Budi', hakRp: 4_000_000, reimburseRp: 500_000, totalRp: 4_500_000 },
+        ],
+        cabang: [
+          {
+            branchId: 'gg',
+            branchName: 'Green Garden',
+            labaRp: 10_000_000,
+            porsiLengkap: true,
+            baris: [
+              {
+                ownerId: 'so-1',
+                nama: 'Rina',
+                persen: 60,
+                hakRp: 6_000_000,
+                reimburseRp: 0,
+                totalRp: 6_000_000,
+              },
+              {
+                ownerId: 'so-2',
+                nama: 'Budi',
+                persen: 40,
+                hakRp: 4_000_000,
+                reimburseRp: 500_000,
+                totalRp: 4_500_000,
+              },
+            ],
+          },
+        ],
+        labaBelumDibagiRp: 0,
+      }),
+      porsiOwner: vi
+        .fn()
+        .mockResolvedValue([
+          { branchId: 'gg', branchName: 'Green Garden', porsi: [], lengkap: false },
+        ]),
+      simpanPorsi: vi.fn().mockResolvedValue({}),
+    } as unknown as KeuanganClient;
+    render(<KasView now={NOW} client={c} />);
+
+    const bagian = await screen.findByRole('region', { name: /Settlement Super Owner/ });
+    expect(await within(bagian).findByText('Dibayar ke Budi')).toBeVisible();
+    expect(within(bagian).getAllByText('Rp 4.500.000').length).toBeGreaterThan(0);
+    expect(within(bagian).getByText(/40% laba Rp 4.000.000 \+ reimburse Rp 500.000/)).toBeVisible();
+
+    await user.click(within(bagian).getByRole('button', { name: 'Atur porsi' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Porsi Super Owner per cabang' });
+    const simpan = await within(dialog).findByRole('button', { name: 'Simpan Green Garden' });
+    await user.type(within(dialog).getByLabelText('Rina (%)'), '60');
+    expect(simpan).toBeDisabled();
+    await user.type(within(dialog).getByLabelText('Budi (%)'), '40');
+    await user.click(simpan);
+    expect(c.simpanPorsi).toHaveBeenCalledWith('gg', [
+      { ownerId: 'so-1', persen: 60 },
+      { ownerId: 'so-2', persen: 40 },
+    ]);
+  });
+});

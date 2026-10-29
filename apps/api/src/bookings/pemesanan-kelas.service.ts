@@ -1,3 +1,4 @@
+import { HITUNG_TERISI, STATUS_MENEMPATI_KURSI, terisi } from '../classes/terisi';
 import { HttpStatus, Injectable, Optional } from '@nestjs/common';
 import { AuditService } from '../foundation/audit.service';
 import { Prisma, type BookingStatus } from '@prisma/client';
@@ -179,8 +180,8 @@ export class BookingsService {
             timezone: slot.branch?.timezone ?? 'Asia/Jakarta',
             status: slot.status,
             capacity: slot.capacity,
-            bookedCount: slot.bookedCount,
-            available: Math.max(0, slot.capacity - slot.bookedCount),
+            bookedCount: terisi(slot),
+            available: Math.max(0, slot.capacity - terisi(slot)),
             classType: slot.classType,
             instructor: slot.instructor
               ? {
@@ -409,6 +410,7 @@ export class BookingsService {
         instructor: true,
         studio: true,
         room: true,
+        ...HITUNG_TERISI,
       },
     });
     if (!slot) throw new ApiProblem('RESOURCE_NOT_FOUND', HttpStatus.NOT_FOUND);
@@ -488,7 +490,7 @@ export class BookingsService {
       canBook = false;
       reasonCode = 'BOOKING_CUTOFF_PASSED';
       requiredAction = 'CONTACT_STUDIO';
-    } else if (slot.bookedCount >= slot.capacity) {
+    } else if (terisi(slot) >= slot.capacity) {
       canBook = false;
       reasonCode = 'SLOT_FULL';
       requiredAction = 'CONTACT_STUDIO';
@@ -532,8 +534,8 @@ export class BookingsService {
         timezone: slot.branch?.timezone ?? 'Asia/Jakarta',
         status: slot.status,
         capacity: slot.capacity,
-        bookedCount: slot.bookedCount,
-        available: Math.max(0, slot.capacity - slot.bookedCount),
+        bookedCount: terisi(slot),
+        available: Math.max(0, slot.capacity - terisi(slot)),
         branch: slot.branch,
         classType: slot.classType,
         instructor: slot.instructor ? { displayName: slot.instructor.displayName } : null,
@@ -925,11 +927,13 @@ export class BookingsService {
             ? await tx.pemesananKelas.count({
                 where: {
                   classSlotId: slot.id,
-                  status: { in: ['BOOKED', 'ATTENDED'] },
+                  status: { in: [...STATUS_MENEMPATI_KURSI] },
                 },
               })
-            : 0;
-        const effectiveBooked = Math.max(currentSlot?.bookedCount ?? 0, activeBookingsOnSlot);
+            : (currentSlot?.bookedCount ?? 0);
+        // Hanya booking yang benar-benar ada: penghitung lama bisa membengkak (sinkronisasi V1) dan
+        // membuat kelas tampak penuh. Menyimpan hitungan riil di bawah juga memulihkan penghitungnya.
+        const effectiveBooked = activeBookingsOnSlot;
         if (!currentSlot || effectiveBooked >= currentSlot.capacity)
           throw new ApiProblem('CLASS_CAPACITY_FULL', HttpStatus.CONFLICT);
 

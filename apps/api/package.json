@@ -18,6 +18,7 @@
     "prisma:validate": "prisma validate",
     "prisma:migrate": "prisma migrate deploy",
     "prisma:fresh": "node --import ./node_modules/tsx/dist/loader.mjs prisma/fresh.ts",
+    "prisma:cek-jadwal": "node --import ./node_modules/tsx/dist/loader.mjs prisma/cek-data-jadwal.ts",
     "prisma:fresh:seed": "node --import ./node_modules/tsx/dist/loader.mjs prisma/fresh.ts --seed",
     "prisma:seed": "node --import ./node_modules/tsx/dist/loader.mjs prisma/seed.ts",
     "prisma:seed:users": "SEED_PROFILE=users node --import ./node_modules/tsx/dist/loader.mjs prisma/seed.ts",

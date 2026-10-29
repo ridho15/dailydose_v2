@@ -241,6 +241,10 @@ export function CustomerDetailView({ id }: { id: string }) {
   const [customer, setCustomer] = useState<CustomerDetail>();
   // Pelanggan di luar cabang staf hanya bisa dilihat (kontak disamarkan); server menolak perubahan terhadapnya.
   const canWrite = canWriteRole && !customer?.contactMasked;
+  // Sama dengan izin server: Admin/Manager (inisialisasi kredensial member) atau Super Owner.
+  const canResetSandi = Boolean(
+    sessionContext?.hasCapability('customer:credential:initialize', 'user:admin'),
+  );
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [busy, setBusy] = useState(false);
@@ -290,8 +294,8 @@ export function CustomerDetailView({ id }: { id: string }) {
       setPasswordModalOpen(false);
       setNewPassword('');
       setShowPassword(false);
-    } catch {
-      setError('Gagal mereset kata sandi pelanggan. Pastikan akun aktif.');
+    } catch (cause) {
+      setError(customerClient.pesanResetSandi(cause));
     } finally {
       setPasswordBusy(false);
     }
@@ -500,7 +504,7 @@ export function CustomerDetailView({ id }: { id: string }) {
                 Edit profil
               </Button>
             )}
-            {canWrite && (
+            {canWrite && canResetSandi && (
               <Button
                 variant="secondary"
                 onClick={() => {

@@ -102,6 +102,7 @@ export class FinanceController {
       category: string;
       description: string;
       amountRp: number;
+      dibayarOlehId?: string | null;
     },
   ) {
     return this.finance.createOtherCost(req.principal, body);

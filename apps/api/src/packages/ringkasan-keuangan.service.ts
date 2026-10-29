@@ -53,6 +53,8 @@ export interface BarisJurnal {
   amountRp: number;
   dicatatOleh: string | null;
   branchId: string;
+  /** Pengeluaran yang dibayar uang pribadi Super Owner (diganti saat settlement). */
+  dibayarOleh?: string | null;
 }
 
 export interface JurnalKas {
@@ -298,6 +300,25 @@ export class RingkasanKeuanganService {
       createdBy: { displayName: string } | null;
     };
 
+    const pembayar = (biaya as { id: string }[]).length
+      ? await this.db.pembayarPengeluaran.findMany({
+          where: { otherCostId: { in: (biaya as { id: string }[]).map((b) => b.id) } },
+        })
+      : [];
+    const namaPembayar = pembayar.length
+      ? new Map(
+          (
+            await this.db.user.findMany({
+              where: { id: { in: [...new Set(pembayar.map((p) => p.dibayarOlehId))] } },
+              select: { id: true, displayName: true },
+            })
+          ).map((u) => [u.id, u.displayName]),
+        )
+      : new Map<string, string>();
+    const dibayarOleh = new Map(
+      pembayar.map((p) => [p.otherCostId, namaPembayar.get(p.dibayarOlehId) ?? 'Super Owner']),
+    );
+
     const rows: BarisJurnal[] = [
       ...(pembelian as Beli[]).map((p) => ({
         id: `in-${p.id}`,
@@ -318,6 +339,7 @@ export class RingkasanKeuanganService {
         amountRp: b.amountRp,
         dicatatOleh: b.createdBy?.displayName ?? null,
         branchId: b.branchId,
+        dibayarOleh: dibayarOleh.get(b.id) ?? null,
       })),
     ].sort((a, b) => (a.tanggal === b.tanggal ? 0 : a.tanggal < b.tanggal ? 1 : -1));
 

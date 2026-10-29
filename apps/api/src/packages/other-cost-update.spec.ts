@@ -25,6 +25,7 @@ function setup() {
     amountRp: 5_000_000,
   };
   const db = {
+    pembayarPengeluaran: { deleteMany: jest.fn(), create: jest.fn(), findMany: jest.fn(async () => []) },
     otherCost: {
       findUnique: jest.fn().mockResolvedValue(row),
       update: jest.fn().mockImplementation(async ({ data }) => ({ ...row, ...data })),

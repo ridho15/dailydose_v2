@@ -1,3 +1,4 @@
+import { HITUNG_TERISI, terisi } from '../classes/terisi';
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import { ApiProblem } from '../identity/security';
@@ -15,28 +16,24 @@ export class PublicClassQueryService {
 
     const aliasMap: Record<string, string> = {
       'reformer-pilates': 'GROUP_CLASS',
-      'reformer': 'GROUP_CLASS',
+      reformer: 'GROUP_CLASS',
       'group-class': 'GROUP_CLASS',
-      'group_class': 'GROUP_CLASS',
-      'group': 'GROUP_CLASS',
+      group_class: 'GROUP_CLASS',
+      group: 'GROUP_CLASS',
       'private-class': 'PRIVATE_CLASS',
-      'private_class': 'PRIVATE_CLASS',
-      'private': 'PRIVATE_CLASS',
+      private_class: 'PRIVATE_CLASS',
+      private: 'PRIVATE_CLASS',
       'semi-private': 'SEMI_PRIVATE',
-      'semi_private': 'SEMI_PRIVATE',
+      semi_private: 'SEMI_PRIVATE',
       'private-group': 'PRIVATE_GROUP',
-      'private_group': 'PRIVATE_GROUP',
+      private_group: 'PRIVATE_GROUP',
     };
     const lookupCode = aliasMap[raw.toLowerCase()] ?? raw.toUpperCase();
 
     const classType = await this.db.jenisKelas.findFirst({
       where: {
         active: true,
-        OR: [
-          { code: lookupCode },
-          { code: raw.toUpperCase() },
-          { id: raw },
-        ],
+        OR: [{ code: lookupCode }, { code: raw.toUpperCase() }, { id: raw }],
       },
     });
 
@@ -91,10 +88,7 @@ export class PublicClassQueryService {
     const packagesRaw = await this.db.paket.findMany({
       where: {
         status: 'ACTIVE',
-        OR: [
-          { classTypeId: classType.id },
-          { classTypeId: null },
-        ],
+        OR: [{ classTypeId: classType.id }, { classTypeId: null }],
       },
       orderBy: [{ priceRp: 'asc' }],
       take: 6,
@@ -107,7 +101,9 @@ export class PublicClassQueryService {
         name: pkg.name,
         sessionCount: pkg.sessionCount,
         durationDays: pkg.validityDays,
-        publicProfile: { summary: `${pkg.sessionCount} Sesi - Masa Aktif ${pkg.validityDays} Hari` },
+        publicProfile: {
+          summary: `${pkg.sessionCount} Sesi - Masa Aktif ${pkg.validityDays} Hari`,
+        },
         branchId: branch.id,
         branch,
         classTypes: [{ id: classType.id, code: classType.code, name: classType.name }],
@@ -136,36 +132,42 @@ export class PublicClassQueryService {
             supportWhatsappE164: true,
           },
         },
+        ...HITUNG_TERISI,
       },
       orderBy: [{ startAt: 'asc' }],
       take: 6,
     });
 
-    const schedules = classSlots.map(({ bookedCount, ...slot }) => ({
-      id: slot.id,
-      branchId: slot.branchId,
-      startAt: slot.startAt,
-      endAt: slot.endAt,
-      timezone: slot.branch.timezone,
-      status: slot.status,
-      capacity: slot.capacity,
-      bookedCount,
-      available: Math.max(0, slot.capacity - bookedCount),
-      classType: { id: classType.id, code: classType.code, name: classType.name },
-      instructor: slot.instructor?.displayName ? { displayName: slot.instructor.displayName } : null,
-      branch: {
-        id: slot.branch.id,
-        code: slot.branch.code,
-        name: slot.branch.name,
+    const schedules = classSlots.map(({ bookedCount: tersimpan, _count, ...slot }) => {
+      const bookedCount = terisi({ bookedCount: tersimpan, _count });
+      return {
+        id: slot.id,
+        branchId: slot.branchId,
+        startAt: slot.startAt,
+        endAt: slot.endAt,
         timezone: slot.branch.timezone,
-        supportWhatsappE164: slot.branch.supportWhatsappE164,
-        publicProfile: {
-          slug: slot.branch.code.toLowerCase(),
-          ...branchPublicLocation(slot.branch.code, slot.branch.name, slot.branch.address),
-          address: slot.branch.address ?? '',
+        status: slot.status,
+        capacity: slot.capacity,
+        bookedCount,
+        available: Math.max(0, slot.capacity - bookedCount),
+        classType: { id: classType.id, code: classType.code, name: classType.name },
+        instructor: slot.instructor?.displayName
+          ? { displayName: slot.instructor.displayName }
+          : null,
+        branch: {
+          id: slot.branch.id,
+          code: slot.branch.code,
+          name: slot.branch.name,
+          timezone: slot.branch.timezone,
+          supportWhatsappE164: slot.branch.supportWhatsappE164,
+          publicProfile: {
+            slug: slot.branch.code.toLowerCase(),
+            ...branchPublicLocation(slot.branch.code, slot.branch.name, slot.branch.address),
+            address: slot.branch.address ?? '',
+          },
         },
-      },
-    }));
+      };
+    });
 
     return {
       profile,

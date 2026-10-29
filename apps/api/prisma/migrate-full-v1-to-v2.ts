@@ -716,6 +716,12 @@ async function main() {
     ORDER BY ka.id ASC;
   `);
 
+  const kapasitasTipe = new Map(
+    (await prisma.jenisKelas.findMany({ select: { id: true, defaultCapacity: true } })).map((t) => [
+      t.id,
+      t.defaultCapacity,
+    ]),
+  );
   const slotsToInsert: any[] = [];
   const instructorAssignments = new Set<string>();
 
@@ -752,7 +758,8 @@ async function main() {
       instructorId,
       startAt,
       endAt,
-      capacity: roomInfo.capacity,
+      // Kapasitas tipe kelas, dibatasi daya tampung ruangan (Private Group tidak sama dengan ruangan).
+      capacity: Math.min(kapasitasTipe.get(classTypeId) ?? roomInfo.capacity, roomInfo.capacity),
       bookedCount: 0, // Akan dihitung ulang di step 9
       status,
       notes: ka.nama_latihan || null,
@@ -900,7 +907,7 @@ async function main() {
     JOIN (
       SELECT classSlotId, COUNT(*) as cnt
       FROM dailydose_v2.pemesanan_kelas
-      WHERE status IN ('BOOKED', 'ATTENDED')
+      WHERE status IN ('BOOKED', 'ATTENDED', 'NO_SHOW')
       GROUP BY classSlotId
     ) b ON b.classSlotId = sk.id
     SET sk.bookedCount = b.cnt;

@@ -1,3 +1,4 @@
+import { HITUNG_TERISI, terisi } from '../classes/terisi';
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import { ApiProblem } from '../identity/security';
@@ -43,6 +44,7 @@ export class PublicStudioQueryService {
           },
           include: {
             instructor: { select: { displayName: true } },
+            ...HITUNG_TERISI,
           },
           orderBy: { startAt: 'asc' },
           take: 10,
@@ -142,8 +144,8 @@ export class PublicStudioQueryService {
             timezone: branch.timezone,
             status: slot.status,
             capacity: slot.capacity,
-            bookedCount: slot.bookedCount,
-            available: Math.max(0, slot.capacity - slot.bookedCount),
+            bookedCount: terisi(slot),
+            available: Math.max(0, slot.capacity - terisi(slot)),
             classType: { code: ct.code, name: ct.name },
             instructor: slot.instructor?.displayName ? { displayName: slot.instructor.displayName } : null,
           })),

@@ -1,3 +1,4 @@
+import { HITUNG_TERISI, terisi } from './terisi';
 import { requireReason } from '../foundation/reason';
 import { HttpStatus, Injectable, Optional } from '@nestjs/common';
 import { ClassSlotStatus, Prisma, SessionMutationType } from '@prisma/client';
@@ -41,6 +42,7 @@ const VIEW_INCLUDE = {
   room: true,
   classType: true,
   instructor: { include: { profile: true } },
+  ...HITUNG_TERISI,
 } satisfies Prisma.SlotKelasInclude;
 
 function instant(value: string) {
@@ -158,7 +160,7 @@ export class ClassSlotService {
       endAt: slot.endAt,
       timezone: slot.branch?.timezone ?? 'Asia/Jakarta',
       capacity: slot.capacity,
-      bookedCount: slot.bookedCount,
+      bookedCount: terisi(slot),
       minimumQuota: slot.classType?.minimumQuota ?? 1,
       status: slot.status,
       cancellationReasonCode: slot.cancellationReason ?? null,
@@ -308,6 +310,7 @@ export class ClassSlotService {
         classType: true,
         instructor: { include: { profile: true } },
         instructorAttendance: { select: { checkedInAt: true, method: true } },
+        ...HITUNG_TERISI,
       },
       orderBy,
       take: limit + 1,
@@ -447,6 +450,7 @@ export class ClassSlotService {
             room: true,
             classType: true,
             instructor: { include: { profile: true } },
+            ...HITUNG_TERISI,
           },
         });
 
@@ -860,6 +864,7 @@ export class ClassSlotService {
               room: true,
               classType: true,
               instructor: { include: { profile: true } },
+              ...HITUNG_TERISI,
               instructorAttendance: { select: { checkedInAt: true, method: true } },
               bookings: true,
             },
@@ -956,6 +961,7 @@ export class ClassSlotService {
             room: true,
             classType: true,
             instructor: { include: { profile: true } },
+            ...HITUNG_TERISI,
             instructorAttendance: { select: { checkedInAt: true, method: true } },
           },
         });

@@ -1,3 +1,4 @@
+import { HITUNG_TERISI, terisi } from '../classes/terisi';
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import { ApiProblem } from '../identity/security';
@@ -209,6 +210,7 @@ export class PublicPackageQueryService {
         status: true,
         capacity: true,
         bookedCount: true,
+        ...HITUNG_TERISI,
       },
       orderBy: [{ startAt: 'asc' }, { id: 'asc' }],
       take: 4,
@@ -248,10 +250,10 @@ export class PublicPackageQueryService {
       classTypes,
       ...publicPricing(item.priceRp, priced),
       pricePerSessionRp: Math.round(priced.effectivePriceRp / item.sessionCount),
-      schedules: schedules.map(({ bookedCount, ...schedule }) => ({
+      schedules: schedules.map(({ bookedCount, _count, ...schedule }) => ({
         ...schedule,
         timezone: branch.timezone,
-        available: Math.max(0, schedule.capacity - bookedCount),
+        available: Math.max(0, schedule.capacity - terisi({ bookedCount, _count })),
       })),
     };
   }

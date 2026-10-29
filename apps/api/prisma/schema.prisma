@@ -1156,3 +1156,31 @@ model UlasanInstruktur {
   @@index([branchId, createdAt])
   @@map("ulasan_instruktur")
 }
+
+/// Porsi laba cabang untuk tiap Super Owner, dipakai settlement akhir bulan di Jurnal kas.
+/// Basis poin: 10000 = 100%. Porsi satu cabang berjumlah 100%. Tanpa relasi Prisma agar tabel lain
+/// tidak berubah.
+model PorsiOwnerCabang {
+  id          String   @id @default(uuid()) @db.Char(36)
+  branchId    String   @db.Char(36)
+  ownerId     String   @db.Char(36)
+  porsiBp     Int
+  updatedById String?  @db.Char(36)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([branchId, ownerId])
+  @@map("porsi_owner_cabang")
+}
+
+/// Pengeluaran cabang yang dibayar dengan uang pribadi Super Owner; diganti (reimburse) saat
+/// settlement. Pengeluaran tanpa baris di sini dibayar dari kas cabang.
+model PembayarPengeluaran {
+  id            String   @id @default(uuid()) @db.Char(36)
+  otherCostId   String   @unique @db.Char(36)
+  dibayarOlehId String   @db.Char(36)
+  createdAt     DateTime @default(now())
+
+  @@index([dibayarOlehId])
+  @@map("pembayar_pengeluaran")
+}

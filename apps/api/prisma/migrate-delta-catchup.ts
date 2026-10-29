@@ -24,6 +24,12 @@ const BRANCH_MAP: Record<number, string> = {
 };
 const DEFAULT_BRANCH_ID = 'a1000000-0000-4000-8000-000000000001';
 
+// Batas nomor data V1 yang sudah pernah disalin. Kelas dan booking yang dibuat di V1 setelah
+// sinkronisasi terakhir hanya ikut bila batas ini diturunkan, mis. DELTA_KELAS_DARI=75000.
+// Baris yang sudah ada di V2 dilewati (upsert), jadi menurunkan batas aman.
+const KELAS_DARI = Number(process.env.DELTA_KELAS_DARI ?? 75768);
+const BOOKING_DARI = Number(process.env.DELTA_BOOKING_DARI ?? 132488);
+
 // Map class type V1 ID (1..5) to V2 ClassType UUID
 const CLASS_TYPE_MAP: Record<number, string> = {
   1: 'c1000000-0000-4000-8000-000000000001', // GROUP_CLASS
@@ -324,11 +330,18 @@ async function main() {
   const studios = await prisma.studio.findMany({ select: { id: true, branchId: true } });
   const studioBranchMap = new Map(studios.map((s) => [s.id, s.branchId]));
   const defaultStudioId = studios[0]?.id;
+  // Kapasitas mengikuti tipe kelas (Data Master), bukan angka tetap: Private Group bukan 10 orang.
+  const kapasitasTipe = new Map(
+    (await prisma.jenisKelas.findMany({ select: { id: true, defaultCapacity: true } })).map((t) => [
+      t.id,
+      t.defaultCapacity,
+    ]),
+  );
 
   const deltaSlotsRaw: any[] = await prisma.$queryRawUnsafe(`
     SELECT ka.*
     FROM dailydose_v1.kelas_activities ka
-    WHERE ka.id > 75768
+    WHERE ka.id > ${KELAS_DARI}
     ORDER BY ka.id ASC;
   `);
   console.log(`   ✓ Ditemukan ${deltaSlotsRaw.length} jadwal sesi baru di V1.`);
@@ -377,7 +390,7 @@ async function main() {
         instructorId,
         startAt,
         endAt,
-        capacity: 10,
+        capacity: kapasitasTipe.get(classTypeId) ?? 8,
         bookedCount: 0,
         status,
         notes: ka.nama_latihan ? `Nama Latihan: ${String(ka.nama_latihan).trim()}` : null,
@@ -408,7 +421,7 @@ async function main() {
   const deltaBookingsRaw: any[] = await prisma.$queryRawUnsafe(`
     SELECT bk.*
     FROM dailydose_v1.booking_kelas bk
-    WHERE bk.id > 132488
+    WHERE bk.id > ${BOOKING_DARI}
     ORDER BY bk.id ASC;
   `);
   console.log(`   ✓ Ditemukan ${deltaBookingsRaw.length} booking baru di V1.`);
@@ -487,13 +500,8 @@ async function main() {
     });
     insertedBookingCount++;
 
-    // Increment bookedCount pada slot kelas jika tidak dibatalkan
-    if (!isCancelled) {
-      await prisma.slotKelas.update({
-        where: { id: sUuid },
-        data: { bookedCount: { increment: 1 } },
-      });
-    }
+    // bookedCount TIDAK ditambah di sini: skrip ini bisa dijalankan ulang, dan penambahan per baris
+    // membuat angka terisi membengkak. Semua dihitung ulang dari booking di akhir.
 
     // Rekam Presensi
     if (isAttended) {
@@ -515,6 +523,16 @@ async function main() {
   console.log(
     `   ✅ Berhasil menyinkronkan ${insertedBookingCount} pemesanan kelas dan ${insertedAttendanceCount} riwayat presensi.\n`,
   );
+
+  // Angka terisi dihitung ulang dari booking yang benar-benar ada (aman dijalankan berulang).
+  const diperbarui = await prisma.$executeRawUnsafe(`
+    UPDATE slot_kelas sk
+    SET sk.bookedCount = (
+      SELECT COUNT(*) FROM pemesanan_kelas b
+      WHERE b.classSlotId = sk.id AND b.status IN ('BOOKED', 'ATTENDED', 'NO_SHOW')
+    )
+  `);
+  console.log(`   ✅ Angka terisi ${diperbarui} slot kelas dihitung ulang dari booking.\n`);
 
   console.log('================================================================================');
   console.log('🎉 SELURUH TAHAPAN DELTA CATCH-UP MIGRATION SELESAI DENGAN SUKSES!');
