@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { IdentityClient } from '@/api-clients/identity-client';
 import { Feedback } from '../../ui';
+import { googleClientId } from '../../lib/google-client-id';
 
 declare global {
   interface Window {
@@ -40,7 +41,7 @@ export function GoogleIdentityButton({
 }: GoogleIdentityButtonProps) {
   const target = useRef<HTMLDivElement>(null);
   const [unavailable, setUnavailable] = useState(false);
-  const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
+  const clientId = googleClientId();
 
   useEffect(() => {
     if (!clientId || !target.current) return;

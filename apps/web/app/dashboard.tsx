@@ -688,7 +688,7 @@ export function Dashboard({
           </Panel>
         )}
 
-        {/* Rincian Profit & Sumber Omset (Hanya untuk Owner, Super Admin / Executive, & Finance) */}
+        {/* Rincian Profit & Sumber Omset (Hanya untuk Owner, Super Owner / Executive, & Finance) */}
         {(views.finance) && overview?.financial.profitBreakdown && (
           <div className="grid gap-6 lg:grid-cols-2">
             {/* Kartu 1: Dekomposisi Laba Rugi Berjenjang (Waterfall P&L) */}

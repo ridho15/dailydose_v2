@@ -69,21 +69,21 @@ const staffGuides: Record<
         title: '1. Scanner QR Code Kehadiran Member',
         badge: 'Check-In',
         description:
-          'Fitur pemindai kamera instan untuk memvalidasi kehadiran member yang datang ke studio.',
-        actionHref: '/check-in-scanner',
-        actionLabel: 'Buka Scanner QR',
+          'Pindai QR member dan instruktur dengan barcode scanner di halaman Check-in.',
+        actionHref: '/workspace/check-in',
+        actionLabel: 'Buka Check-in',
         steps: [
           {
             number: 1,
-            title: 'Buka Menu Scanner',
+            title: 'Buka Halaman Check-in',
             description:
-              'Masuk ke Workspace lalu pilih menu "Check-in Scanner" (/check-in-scanner).',
+              'Pilih menu "Check-in" dan pastikan cabang di bilah atas sudah benar. Kolom pindai langsung siap.',
           },
           {
             number: 2,
-            title: 'Arahkan Kamera ke QR Member',
+            title: 'Pindai QR Member atau Instruktur',
             description:
-              'Arahkan kamera tablet/smartphone ke layar QR Pass member. Sistem akan otomatis mendeteksi kode.',
+              'Arahkan barcode scanner ke QR di ponsel member atau instruktur (atau tekan "Pakai kamera"). Foto selfie member tampil untuk dicocokkan.',
           },
           {
             number: 3,

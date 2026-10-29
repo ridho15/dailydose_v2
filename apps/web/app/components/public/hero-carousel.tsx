@@ -13,14 +13,14 @@ const DEFAULT_SLIDES: HeroSlideItem[] = [
     title: 'Stronger Body.',
     highlightTitle: 'Calmer Mind.',
     description:
-      'Daily Dose Pilates adalah studio modern yang membantu Anda merasa lebih kuat, bergerak lebih baik, dan menjalani hari dengan lebih seimbang.',
+      'Daily Dose Pilates is a modern studio that helps you feel stronger, move better, and go through your day with more balance.',
     imageSrc: '/images/public/landing/hero-pilates.png',
     primaryCta: {
-      label: 'Lihat Jadwal',
+      label: 'See Schedule',
       href: '/classes#schedule',
     },
     secondaryCta: {
-      label: 'Lihat Paket',
+      label: 'See Packages',
       href: '/packages',
     },
     active: true,
@@ -28,18 +28,20 @@ const DEFAULT_SLIDES: HeroSlideItem[] = [
   },
   {
     id: 'default-2',
-    badge: 'Promo Member Baru · Hemat hingga 20%',
-    title: 'Mulai Langkah Pilates Anda',
-    highlightTitle: 'Dengan Paket Spesial',
+    badge: 'New member offer',
+    title: 'Start Your Pilates Journey',
+    highlightTitle: 'With a Special Package',
     description:
-      'Dapatkan sesi pengenalan privat dan pendampingan instruktur bersertifikasi internasional untuk hasil optimal.',
-    imageSrc: '/images/public/classes/reformer-pilates.png',
+      'Get a private introduction session and guidance from internationally certified instructors.',
+    imageSrc: '/images/public/landing/hero-studio-reformer.jpg',
+    // Foto potret: hero yang melebar menampilkan pita jendela dan deretan reformer.
+    imagePosition: '50% 64%',
     primaryCta: {
-      label: 'Pilih Paket Promo',
+      label: 'Choose a Package',
       href: '/packages',
     },
     secondaryCta: {
-      label: 'Jelajahi Studio',
+      label: 'Explore Studios',
       href: '/locations',
     },
     active: true,
@@ -48,17 +50,17 @@ const DEFAULT_SLIDES: HeroSlideItem[] = [
   {
     id: 'default-3',
     badge: 'Private & Semi-Private Group',
-    title: 'Suasana Tenang & Personal',
-    highlightTitle: 'Di Setiap Gerakan',
+    title: 'Calm & Personal',
+    highlightTitle: 'In Every Movement',
     description:
-      'Kapasitas kelas kecil maksimal 4 peserta memastikan postur dan teknik latihan Anda selalu terjaga dengan aman.',
+      'With at most 4 people per class, your posture and technique are always looked after.',
     imageSrc: '/images/public/classes/cadillac-pilates.png',
     primaryCta: {
-      label: 'Daftar Kelas Hari Ini',
+      label: 'Book a Class Today',
       href: '/classes',
     },
     secondaryCta: {
-      label: 'Konsultasi WhatsApp',
+      label: 'Ask on WhatsApp',
       href: '/contact',
     },
     active: true,
@@ -153,7 +155,7 @@ export function HeroCarousel({ config }: { config?: HeroCarouselPayload | null }
     <section
       className="ed-scope relative isolate flex min-h-[690px] items-end overflow-hidden bg-ed-deep text-white select-none sm:min-h-[760px] lg:min-h-[min(820px,calc(100svh-86px))]"
       aria-roledescription="carousel"
-      aria-label="Sorotan Kelas dan Penawaran Daily Dose"
+      aria-label="Daily Dose classes and offers"
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
       onFocus={() => setPaused(true)}
@@ -174,15 +176,16 @@ export function HeroCarousel({ config }: { config?: HeroCarouselPayload | null }
             aria-hidden={!isActive}
           >
             <div
-              className={`absolute -inset-[3%] ${
+              className={`absolute -inset-[3%] origin-[66%_38%] will-change-transform ${
                 isActive
-                  ? '[animation:ed-drift_17s_ease-in-out_infinite_alternate] motion-reduce:[animation:none]'
+                  ? '[animation:ed-drift_14s_ease-in-out_infinite_alternate] motion-reduce:[animation:none]'
                   : ''
               }`}
             >
               <Image
                 className="object-cover object-[65%_center] lg:object-[60%_center]"
                 src={slide.imageSrc || '/images/public/landing/hero-pilates.png'}
+                style={slide.imagePosition ? { objectPosition: slide.imagePosition } : undefined}
                 fill
                 priority={index === 0}
                 sizes="100vw"
@@ -231,12 +234,12 @@ export function HeroCarousel({ config }: { config?: HeroCarouselPayload | null }
                 <div className="flex flex-wrap items-center gap-x-8 gap-y-5">
                   {slide.primaryCta?.href && (
                     <Link className="ed-button-light" href={slide.primaryCta.href}>
-                      {slide.primaryCta.label || 'Lihat Jadwal'}
+                      {slide.primaryCta.label || 'See Schedule'}
                     </Link>
                   )}
                   {slide.secondaryCta?.href && (
                     <Link className="ed-link text-white" href={slide.secondaryCta.href}>
-                      <span>{slide.secondaryCta.label || 'Lihat Paket'}</span>
+                      <span>{slide.secondaryCta.label || 'See Packages'}</span>
                       <span aria-hidden="true">↗</span>
                     </Link>
                   )}
@@ -249,7 +252,7 @@ export function HeroCarousel({ config }: { config?: HeroCarouselPayload | null }
         {/* Baris bawah: catatan + kontrol */}
         <div className="mt-12 flex flex-wrap items-center justify-between gap-x-8 gap-y-5 border-t border-white/35 pt-5 sm:mt-[72px]">
           <span className="text-[13px] text-white/80">
-            Latihan personal dan kelompok kecil · Move with intention
+            Private and small-group training · Move with intention
           </span>
 
           {total > 1 && (
@@ -260,7 +263,7 @@ export function HeroCarousel({ config }: { config?: HeroCarouselPayload | null }
               >
                 {pad(currentIndex + 1)} / {pad(total)}
               </span>
-              <nav className="flex items-center" aria-label="Pilih slide">
+              <nav className="flex items-center" aria-label="Choose a slide">
                 {slides.map((_, index) => {
                   const isActive = index === currentIndex;
                   return (
@@ -268,7 +271,7 @@ export function HeroCarousel({ config }: { config?: HeroCarouselPayload | null }
                       key={index}
                       type="button"
                       onClick={() => goToSlide(index)}
-                      aria-label={`Buka slide ${index + 1} dari ${total}`}
+                      aria-label={`Show slide ${index + 1} of ${total}`}
                       aria-current={isActive}
                       className="group relative h-11 w-9 bg-transparent sm:h-12 sm:w-10"
                     >
@@ -284,7 +287,7 @@ export function HeroCarousel({ config }: { config?: HeroCarouselPayload | null }
               <button
                 type="button"
                 onClick={prevSlide}
-                aria-label="Slide sebelumnya"
+                aria-label="Previous slide"
                 className={controlButton}
               >
                 <ChevronLeft className="size-5" aria-hidden="true" />
@@ -292,7 +295,7 @@ export function HeroCarousel({ config }: { config?: HeroCarouselPayload | null }
               <button
                 type="button"
                 onClick={nextSlide}
-                aria-label="Slide berikutnya"
+                aria-label="Next slide"
                 className={controlButton}
               >
                 <ChevronRight className="size-5" aria-hidden="true" />

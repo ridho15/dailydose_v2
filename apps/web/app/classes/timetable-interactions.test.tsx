@@ -184,7 +184,7 @@ describe('timetable: peserta kelas', () => {
     await user.click(
       await within(kalender()).findByRole('button', { name: /Private Group, Asrida/ }),
     );
-    const panel = await screen.findByRole('complementary', { name: 'Private Group' });
+    const panel = await screen.findByRole('dialog', { name: 'Private Group' });
     await within(panel).findByText('Sari Dewi');
     return { user, panel };
   }
@@ -205,6 +205,28 @@ describe('timetable: peserta kelas', () => {
       },
       expect.any(String),
     );
+  });
+
+  it('membuka peserta di laci samping tanpa menggulir halaman, lalu kembali ke kelasnya', async () => {
+    const gulir = vi.fn();
+    const asli = HTMLElement.prototype.scrollIntoView;
+    HTMLElement.prototype.scrollIntoView = gulir;
+    try {
+      const { user } = await bukaPanel(bookingClient());
+      expect(gulir).not.toHaveBeenCalled();
+
+      await user.keyboard('{Escape}');
+      await waitFor(() =>
+        expect(screen.queryByRole('dialog', { name: 'Private Group' })).not.toBeInTheDocument(),
+      );
+      await waitFor(() =>
+        expect(
+          within(kalender()).getByRole('button', { name: /Private Group, Asrida/ }),
+        ).toHaveFocus(),
+      );
+    } finally {
+      HTMLElement.prototype.scrollIntoView = asli;
+    }
   });
 
   it('menyebut paket yang sudah habis dan tidak menawarkan tombol Tambah', async () => {

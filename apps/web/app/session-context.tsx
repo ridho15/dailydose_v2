@@ -34,6 +34,7 @@ const anonymousEntryPaths = new Set([
 
 const routeCapabilities: Array<[string, string[]]> = [
   ['/account/verification', ['customer:self']],
+  ['/account/lengkapi', ['customer:self']],
   ['/account/profile', []],
   ['/account/settings', []],
   ['/account/security', []],
@@ -56,7 +57,6 @@ const routeCapabilities: Array<[string, string[]]> = [
   ['/workspace/reminders', ['automation:read']],
   ['/workspace/bookings', ['booking:read', 'reschedule:read']],
   ['/workspace/branches', ['master:read', 'master:manage']],
-  ['/workspace/kiosk-pin', ['branch:manage']],
   ['/workspace/branch-performance', ['finance:read']],
   ['/workspace/packages', ['package-promotion:read', 'package-promotion:manage']],
   ['/workspace/vouchers', ['voucher:read', 'voucher:manage']],
@@ -73,10 +73,11 @@ const routeCapabilities: Array<[string, string[]]> = [
   ['/workspace/renewal', ['package:read']],
   ['/workspace/kas', ['expense:create', 'finance:read']],
   ['/workspace/koreksi-jam', ['instructor:hours:adjust']],
+  ['/workspace/ulasan', ['instructor-review:read']],
   ['/workspace/availability', ['availability:self:read']],
+  ['/workspace/payroll', ['attendance:self']],
   ['/operations', ['operations:read']],
   ['/bookings', ['booking:self:read']],
-  ['/check-in-scanner', ['attendance:manage', 'attendance:self']],
   ['/workspace/guide', []],
 ];
 
@@ -90,7 +91,6 @@ const protectedPathPrefixes = [
   '/notifications',
   '/notification-management',
   '/assignments',
-  '/check-in-scanner',
   '/master',
   '/purchases',
   '/finance',
@@ -146,8 +146,12 @@ export function safeReturnTo(value: string | null): string {
   }
 }
 
+/** Halaman melengkapi nomor WhatsApp dan selfie untuk akun yang mendaftar lewat Google. */
+export const LENGKAPI_AKUN = '/account/lengkapi';
+
 export function defaultSessionDestination(session: WebSession): string {
   if (session.passwordChangeRequired) return '/account/security?required=true';
+  if (session.phoneRequired && isCustomerOnlySession(session)) return LENGKAPI_AKUN;
   if (isInstructorOnlySession(session)) return '/workspace';
   if (session.roles.some((role) => internalStaffRoles.has(role))) return '/workspace';
   if (session.roles.some((role) => role === 'CUSTOMER'))
@@ -173,6 +177,8 @@ export function canAccessSessionPath(session: WebSession, value: string): boolea
   if (isPublicExperiencePath(path)) return true;
   if (session.passwordChangeRequired) return path === '/account/security';
   const customerOnly = isCustomerOnlySession(session);
+  // Nomor WhatsApp dulu; halaman publik tetap bisa dibuka.
+  if (customerOnly && session.phoneRequired) return path === LENGKAPI_AKUN;
   if (!customerOnly && (path === '/bookings' || path.startsWith('/bookings/'))) return false;
   if (customerOnly && (path === '/workspace/bookings' || path.startsWith('/workspace/bookings/')))
     return false;

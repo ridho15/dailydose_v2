@@ -184,12 +184,12 @@ describe('Tiket T-20: Halaman Hari Ini untuk Front Desk (Papan 14)', () => {
     expect(within(next).getByText(/6 dari 6 peserta/)).toBeVisible();
   });
 
-  it('3. Tidak menampilkan QR untuk dipindai member; meja depan membuka layar pindai studio', async () => {
+  it('3. Tidak menampilkan QR untuk dipindai member; meja depan membuka halaman Check-in', async () => {
     renderView(createTestClients());
     // Arah yang disepakati: member menyimpan QR statis, studio yang memindai.
-    expect(await screen.findByRole('link', { name: /Buka layar pindai studio/ })).toHaveAttribute(
+    expect(await screen.findByRole('link', { name: /Buka Check-in/ })).toHaveAttribute(
       'href',
-      '/kiosk/DD-SNP',
+      '/workspace/check-in',
     );
     expect(screen.queryByRole('button', { name: /QR check-in/ })).toBeNull();
   });

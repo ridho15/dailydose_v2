@@ -1093,14 +1093,14 @@ export function BookingView({
             <div>
               <h2 className="text-xl font-semibold text-dd-ink">Check-in & Kehadiran</h2>
               <p className="mt-1 text-sm leading-6 text-dd-muted">
-                Booking yang sudah hadir tercatat pada tabel di bawah. Untuk memindai pass
-                pelanggan, buka scanner dan pastikan cabang operasional sudah dipilih.
+                Booking yang sudah hadir tercatat pada tabel di bawah. Untuk memindai QR member
+                atau instruktur, buka halaman Check-in dengan cabang operasional yang sudah dipilih.
               </p>
               <Link
                 className="mt-4 inline-flex min-h-11 items-center rounded-dd-md border border-dd-forest bg-dd-forest px-4 text-sm font-bold text-white no-underline"
-                href="/check-in-scanner"
+                href="/workspace/check-in"
               >
-                Buka scanner check-in
+                Buka Check-in
               </Link>
             </div>
           </div>

@@ -1,6 +1,7 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service';
+import { punyaSelfie } from '../identity/verifikasi-selfie';
 import type { SessionPrincipal } from '../identity/identity.service';
 import { PolicyService } from '../identity/policy.service';
 import { ApiProblem } from '../identity/security';
@@ -63,7 +64,8 @@ export class PackageAccessService {
     });
     if (!user || user.status !== 'ACTIVE')
       throw new ApiProblem('IDENTITY_VERIFICATION_REQUIRED', HttpStatus.FORBIDDEN);
-    if (!user.profile?.notes?.includes('KYC_APPROVED'))
+    // Syaratnya foto selfie (tanpa KTP): staf mengenali member dari foto ini saat check-in.
+    if (!punyaSelfie(user.profile))
       throw new ApiProblem('CUSTOMER_VERIFICATION_REQUIRED', HttpStatus.FORBIDDEN);
   }
 

@@ -83,10 +83,10 @@ const roleGuides: Record<
           },
           {
             number: 3,
-            title: 'Unggah foto KTP dan selfie',
+            title: 'Ambil foto selfie',
             description:
-              'Foto KTP dan selfie dapat diunggah saat mendaftar atau nanti lewat menu "Verifikasi" di akun Anda. Data disimpan secara privat dan hanya dipakai untuk verifikasi.',
-            tips: 'Pastikan foto tidak buram dan seluruh teks pada KTP terbaca jelas.',
+              'Foto selfie diambil saat mendaftar, atau nanti lewat menu "Foto selfie" di akun Anda. Tidak perlu KTP. Foto disimpan secara privat dan hanya dipakai staf untuk mengenali Anda saat datang.',
+            tips: 'Pastikan wajah terlihat jelas dan tidak gelap.',
           },
           {
             number: 4,
@@ -100,8 +100,7 @@ const roleGuides: Record<
           title: 'Status Verifikasi Identitas',
           items: [
             { label: 'Status akun', value: 'Terverifikasi', tone: 'success' },
-            { label: 'Foto KTP', value: 'Sudah diperiksa', tone: 'success' },
-            { label: 'Foto selfie', value: 'Sesuai dengan KTP', tone: 'success' },
+                        { label: 'Foto selfie', value: 'Tersimpan', tone: 'success' },
             { label: 'Pesan kelas', value: 'Sudah bisa', tone: 'info' },
           ],
           statusBadge: { text: 'Terverifikasi', tone: 'success' },
@@ -247,19 +246,19 @@ const roleGuides: Record<
         title: '1. Scanner QR Code Kehadiran Member',
         badge: 'Check-In',
         description:
-          'Fitur pemindai kamera instan untuk memvalidasi kehadiran member yang datang ke studio.',
+          'Pindai QR member dan instruktur dengan barcode scanner di halaman Check-in.',
         steps: [
           {
             number: 1,
-            title: 'Buka Menu Scanner',
+            title: 'Buka Halaman Check-in',
             description:
-              'Masuk ke Workspace lalu pilih menu "Check-in Scanner" (/check-in-scanner).',
+              'Pilih menu "Check-in" dan pastikan cabang di bilah atas sudah benar. Kolom pindai langsung siap.',
           },
           {
             number: 2,
-            title: 'Arahkan Kamera ke QR Member',
+            title: 'Pindai QR Member atau Instruktur',
             description:
-              'Arahkan kamera tablet/smartphone ke layar QR Pass member. Sistem akan otomatis mendeteksi kode.',
+              'Arahkan barcode scanner ke QR di ponsel member atau instruktur (atau tekan "Pakai kamera"). Foto selfie member tampil untuk dicocokkan.',
           },
           {
             number: 3,

@@ -2,15 +2,16 @@
 
 import {
   BookOpenCheck,
+  CalendarClock,
   CalendarDays,
   CreditCard,
+  HandCoins,
   House,
   Landmark,
   LayoutDashboard,
   ListChecks,
   LockKeyhole,
   Menu,
-  QrCode,
   UserRound,
 } from 'lucide-react';
 import Link from 'next/link';
@@ -139,14 +140,13 @@ export function MobileBottomNavigation({
     );
   }
 
-  // Navigasi Bawah Instruktur: 4 item (Hari Ini | Jadwal Saya | QR saya | Akun) sesuai spesifikasi 5.4 & Bagian 3
+  // Navigasi Bawah Instruktur: sama dengan menu samping. QR ada di atas beranda, akun di menu profil.
   if (isInstructorOnlySession(context?.session)) {
     const instructorTabs = [
       { href: '/workspace', label: 'Hari Ini', icon: House },
       { href: '/workspace/classes', label: 'Jadwal Saya', icon: CalendarDays },
-      // Instruktur menunjukkan QR statisnya ke layar studio; bukan memindai.
-      { href: '/check-in-pass', label: 'QR saya', icon: QrCode },
-      { href: '/account/profile', label: 'Akun', icon: UserRound },
+      { href: '/workspace/availability', label: 'Ketersediaan', icon: CalendarClock },
+      { href: '/workspace/payroll', label: 'Payroll', icon: HandCoins },
     ];
 
     const isTabActive = (href: string) => {

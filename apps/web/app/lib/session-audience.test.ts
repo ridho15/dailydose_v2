@@ -33,14 +33,6 @@ describe('public detail routing and audience', () => {
     expect(isCustomerCatalogPath(pathname)).toBe(true);
   });
 
-  it.each(['/kiosk', '/kiosk/dd-gg'])(
-    'treats %s as public for every session, without making it a customer-catalog route',
-    (pathname) => {
-      expect(isPublicExperiencePath(pathname)).toBe(true);
-      expect(isCustomerCatalogPath(pathname)).toBe(false);
-    },
-  );
-
   it('treats /guide and public information routes as public experience paths', () => {
     expect(isPublicExperiencePath('/guide')).toBe(true);
     expect(isPublicExperiencePath('/contact')).toBe(true);

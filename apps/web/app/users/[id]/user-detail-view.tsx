@@ -407,7 +407,7 @@ export function UserDetailView({
                     Verifikasi Identitas
                   </h2>
                   <p className="mt-1 text-sm text-dd-muted">
-                    Status verifikasi dokumen Selfie dan KTP pengguna. Akses review penuh dan pratinjau berkas tersedia melalui antrean verifikasi.
+                    Status foto selfie pengguna (tanpa KTP). Akses review penuh dan pratinjau berkas tersedia melalui antrean verifikasi.
                   </p>
                 </div>
                 {verification && (
@@ -443,7 +443,7 @@ export function UserDetailView({
               ) : !verification ? (
                 <div className="mt-4 space-y-3">
                   <p className="text-sm text-dd-muted">
-                    Dokumen verifikasi belum tersedia atau fitur review belum diaktifkan. Anda dapat mengunggah berkas KTP dan Selfie di profil pelanggan.
+                    Dokumen verifikasi belum tersedia atau fitur review belum diaktifkan. Foto selfie dapat diunggah di profil pelanggan.
                   </p>
                   <ButtonLink
                     href={`/customers/${encodeURIComponent(user.id)}`}

@@ -458,7 +458,7 @@ export function PaymentReviewDetailView({
         <AlertBanner
           tone="info"
           title="Mode hanya baca"
-          message="Anda dapat melihat transaksi dan bukti. Keputusan dilakukan oleh Finance atau Super Admin."
+          message="Anda dapat melihat transaksi dan bukti. Keputusan dilakukan oleh Finance atau Super Owner."
         />
       )}      <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
         {/* Panel Kiri: Antrean Bukti Transfer Menunggu (Mockup 16) */}
@@ -820,7 +820,7 @@ export function PaymentReviewDetailView({
                     title={isPendingDecision ? 'Mode hanya baca' : 'Keputusan telah dibuat'}
                     message={
                       isPendingDecision
-                        ? 'Keputusan dilakukan Finance atau Super Admin.'
+                        ? 'Keputusan dilakukan Finance atau Super Owner.'
                         : 'Mutation control ditutup untuk transaksi yang sudah diputus.'
                     }
                   />

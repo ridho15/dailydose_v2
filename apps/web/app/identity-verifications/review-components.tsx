@@ -307,7 +307,7 @@ export function DocumentReviewCard({
           <AlertBanner
             tone="warning"
             title="Penghapusan gagal"
-            message="File belum dapat dihapus. Tindakan dapat dicoba ulang oleh Super Admin."
+            message="File belum dapat dihapus. Tindakan dapat dicoba ulang oleh Super Owner."
           />
         )}
 

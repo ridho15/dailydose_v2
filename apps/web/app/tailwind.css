@@ -157,12 +157,14 @@
    Dipakai hanya oleh komponen landing (app/components/public/landing/*).
    --------------------------------------------------------------------------- */
 
+/* Gerak kamera pelan pada foto hero: mendekat ke penari di sisi kanan foto sambil bergeser sedikit.
+   Titik pusatnya diatur lewat transform-origin pada elemen yang memakai animasi ini. */
 @keyframes ed-drift {
   from {
-    transform: scale(1.02) translateX(-1%);
+    transform: scale(1.03) translate3d(-1%, 0.5%, 0);
   }
   to {
-    transform: scale(1.08) translateX(1%);
+    transform: scale(1.11) translate3d(1%, -0.8%, 0);
   }
 }
 

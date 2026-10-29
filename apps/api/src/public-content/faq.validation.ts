@@ -32,3 +32,6 @@ export function validateFaq(payload: unknown) {
     }),
   };
 }
+
+/** FAQ tampil di halaman publik berbahasa Indonesia. */
+export const FAQ_LOCALE = 'id-ID';

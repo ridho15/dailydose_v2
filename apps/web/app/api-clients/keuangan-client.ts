@@ -81,14 +81,19 @@ export interface KeuanganClient {
 }
 
 export const browserKeuanganClient: KeuanganClient = {
-  ringkasanBulanan(period) {
-    return apiFetch(`/finance/owner-month?${new URLSearchParams({ period })}`, {
-      label: 'Memuat angka keuangan…',
-    });
+  async ringkasanBulanan(period) {
+    const hasil = await apiFetch<RingkasanBulanan>(
+      `/finance/owner-month?${new URLSearchParams({ period })}`,
+      { label: 'Memuat angka keuangan…' },
+    );
+    if (!hasil?.total || !Array.isArray(hasil.cabang)) throw new Error('RINGKASAN_TIDAK_DIKENAL');
+    return hasil;
   },
-  jurnalKas({ branchId, period }) {
+  async jurnalKas({ branchId, period }) {
     const qs = new URLSearchParams({ period, ...(branchId ? { branchId } : {}) });
-    return apiFetch(`/cash-journal?${qs}`, { label: 'Memuat jurnal kas…' });
+    const hasil = await apiFetch<JurnalKas>(`/cash-journal?${qs}`, { label: 'Memuat jurnal kas…' });
+    if (!Array.isArray(hasil?.rows)) throw new Error('JURNAL_TIDAK_DIKENAL');
+    return hasil;
   },
   catatPengeluaran(input) {
     return apiFetch('/other-costs', {

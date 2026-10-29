@@ -1,13 +1,11 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import QRCode from 'qrcode';
 import {
   browserBookingClient,
   bookingFailure,
   type BookingClient,
   type CheckInIssue,
-  type InstructorCheckInIssue,
 } from '@/api-clients/booking-client';
 import type {
   ClassSlot,
@@ -310,23 +308,6 @@ export function DetailPanel({
   const [cancelNote, setCancelNote] = useState('');
   const [completionReason, setCompletionReason] = useState('');
   const [attendanceNote, setAttendanceNote] = useState('');
-  const [instructorQr, setInstructorQr] = useState<InstructorCheckInIssue | null>(null);
-  const [instructorQrBusy, setInstructorQrBusy] = useState(false);
-  const [instructorQrError, setInstructorQrError] = useState('');
-  const issueInstructorQr = async () => {
-    const issue = bookingClient.issueInstructorCheckIn;
-    if (!issue) return;
-    setInstructorQrBusy(true);
-    setInstructorQrError('');
-    try {
-      setInstructorQr(await issue(slot.id, crypto.randomUUID()));
-    } catch (error) {
-      setInstructorQr(null);
-      setInstructorQrError(await bookingFailure(error));
-    } finally {
-      setInstructorQrBusy(false);
-    }
-  };
   const [editOpen, setEditOpen] = useState(false);
   const [issuing, setIssuing] = useState(false);
   const [issues, setIssues] = useState<CheckInIssue[]>([]);
@@ -501,58 +482,33 @@ export function DetailPanel({
                 keuangan sampai presensi instruktur dicatat.
               </p>
               {isConfirmed && !canManageAttendance && (
-                <div className="mt-3 p-4 rounded-dd-md border border-dd-line bg-dd-surface-muted flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div>
-                    <strong className="block text-sm text-dd-ink">Presensi Mengajar</strong>
-                    <span className="text-xs text-dd-muted">
-                      Arahkan kamera HP Anda ke QR di layar tablet studio saat tiba di studio.
-                    </span>
-                  </div>
+                <div className="mt-3 flex flex-col justify-between gap-3 rounded-dd-md border border-dd-line bg-dd-surface-muted p-4 sm:flex-row sm:items-center">
+                  <span className="text-sm text-dd-muted">
+                    Tunjukkan QR Anda ke staf di meja check-in saat tiba di studio.
+                  </span>
                   <ButtonLink
                     variant="primary"
                     size="sm"
-                    href="/check-in-scanner"
-                    className="w-full sm:w-auto shrink-0"
+                    href="/check-in-pass"
+                    className="w-full shrink-0 sm:w-auto"
                   >
-                    Buka Scanner Presensi (Scan QR)
+                    Tampilkan QR saya
                   </ButtonLink>
                 </div>
               )}
-              {isConfirmed && canManageAttendance && bookingClient.issueInstructorCheckIn && (
-                <div className="grid gap-3 rounded-dd-md border border-dd-line bg-dd-surface-muted p-4">
-                  <p className="m-0 text-sm">
-                    Tampilkan QR di layar studio agar dipindai instruktur dari menu Scan QR (tersedia
-                    30 menit sebelum kelas). Menampilkan ulang mengganti QR sebelumnya.
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    <Button
-                      variant="secondary"
-                      className="w-full sm:w-auto"
-                      loading={instructorQrBusy}
-                      disabled={busy}
-                      onClick={() => void issueInstructorQr()}
-                    >
-                      {instructorQr ? 'Ganti QR presensi' : 'Tampilkan QR presensi instruktur'}
-                    </Button>
-                    <ButtonLink
-                      variant="ghost"
-                      size="sm"
-                      href={branchCode ? `/kiosk/${encodeURIComponent(branchCode.toLowerCase())}` : '/kiosk'}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="w-full sm:w-auto text-xs"
-                    >
-                      Buka Layar Kiosk Cabang ↗
-                    </ButtonLink>
-                  </div>
-                  {instructorQrError && <Feedback kind="warning">{instructorQrError}</Feedback>}
-                  {instructorQr && (
-                    <InstructorQrCanvas
-                      payload={instructorQr.qrPayload}
-                      branchName={details.studio?.name ?? 'Studio'}
-                      classTypeName={classTypes.find((c) => c.id === slot.classTypeId)?.name ?? 'Kelas Pilates'}
-                    />
-                  )}
+              {isConfirmed && canManageAttendance && (
+                <div className="mt-3 flex flex-col justify-between gap-3 rounded-dd-md border border-dd-line bg-dd-surface-muted p-4 sm:flex-row sm:items-center">
+                  <span className="text-sm text-dd-muted">
+                    Pindai QR instruktur di halaman Check-in saat ia tiba.
+                  </span>
+                  <ButtonLink
+                    variant="secondary"
+                    size="sm"
+                    href="/workspace/check-in"
+                    className="w-full shrink-0 sm:w-auto"
+                  >
+                    Buka Check-in
+                  </ButtonLink>
                 </div>
               )}
               {canVerifyInstructor && onVerifyInstructor && (
@@ -777,99 +733,6 @@ export function DetailPanel({
             </Button>
           </div>
         </DetailSection>
-      )}
-    </div>
-  );
-}
-
-function InstructorQrCanvas({
-  payload,
-  branchName,
-  classTypeName,
-}: {
-  payload: string;
-  branchName?: string;
-  classTypeName?: string;
-}) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [fullscreen, setFullscreen] = useState(false);
-  const fullscreenCanvasRef = useRef<HTMLCanvasElement>(null);
-
-  useEffect(() => {
-    if (canvasRef.current)
-      void QRCode.toCanvas(canvasRef.current, payload, { width: 240, margin: 2, errorCorrectionLevel: 'M' });
-  }, [payload]);
-
-  useEffect(() => {
-    if (fullscreen && fullscreenCanvasRef.current) {
-      void QRCode.toCanvas(fullscreenCanvasRef.current, payload, {
-        width: 340,
-        margin: 3,
-        errorCorrectionLevel: 'M',
-      });
-    }
-  }, [fullscreen, payload]);
-
-  return (
-    <div className="space-y-3">
-      <div className="flex flex-col items-start gap-2">
-        <canvas
-          ref={canvasRef}
-          role="img"
-          aria-label="QR presensi instruktur"
-          className="justify-self-start rounded-dd-md border border-dd-line bg-white"
-        />
-        <Button
-          type="button"
-          variant="secondary"
-          size="sm"
-          onClick={() => setFullscreen(true)}
-        >
-          Perbesar QR / Mode Layar Kiosk Studio
-        </Button>
-      </div>
-
-      {fullscreen && (
-        <section
-          aria-label="Mode Layar Kiosk Studio"
-          className="my-4 rounded-dd-xl border-2 border-dd-forest/30 bg-dd-surface p-6 sm:p-8 text-center"
-        >
-          <div className="flex flex-col items-center justify-center">
-            <span className="text-[13px] font-bold text-dd-forest">
-              Presensi Instruktur · {branchName ?? 'Studio Daily Dose'}
-            </span>
-            <h3 className="mt-1 text-xl font-bold text-dd-ink">{classTypeName ?? 'Scan QR Kehadiran'}</h3>
-            <p className="text-xs text-dd-muted mt-1">
-              Arahkan kamera instruktur dari menu Scan QR di aplikasi
-            </p>
-
-            <div className="my-5 rounded-dd-lg border-2 border-dd-forest/20 p-3 bg-white">
-              <canvas
-                ref={fullscreenCanvasRef}
-                role="img"
-                aria-label="QR presensi instruktur layar studio"
-                className="rounded-dd-md"
-              />
-            </div>
-
-            <div className="rounded-dd-md bg-dd-surface-muted p-3 text-xs text-dd-muted text-left space-y-1 w-full max-w-sm">
-              <p className="font-semibold text-dd-ink">Ketentuan Presensi:</p>
-              <ul className="list-disc list-inside space-y-0.5">
-                <li>Instruktur harus berada di area studio ({branchName}).</li>
-                <li>Aktifkan izin lokasi (GPS) pada perangkat Anda.</li>
-                <li>Tersedia sejak 30 menit sebelum kelas dimulai.</li>
-              </ul>
-            </div>
-
-            <Button
-              variant="secondary"
-              className="mt-5 w-full max-w-sm"
-              onClick={() => setFullscreen(false)}
-            >
-              Tutup Mode Kiosk
-            </Button>
-          </div>
-        </section>
       )}
     </div>
   );

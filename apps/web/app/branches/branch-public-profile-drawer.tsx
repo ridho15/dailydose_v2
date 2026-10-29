@@ -173,7 +173,7 @@ export function BranchPublicProfileDrawer({
             name="heroImageKey"
             label="Foto Hero Utama Cabang"
             defaultValue={text(profile.heroImageKey)}
-            description="Unggah foto terbaik untuk banner utama cabang di halaman publik."
+            description="Foto ini tampil di halaman cabang ini dan di halaman Lokasi publik (/locations). Perubahan terlihat di situs dalam beberapa menit."
             presetOptions={assetKeys.map((key) => ({ id: key, label: key }))}
             required
             onChange={() => setDirty(true)}

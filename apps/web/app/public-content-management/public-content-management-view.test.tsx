@@ -30,6 +30,7 @@ const item = (overrides: Record<string, unknown>) => ({
   contentKey: 'HOME_HERO_CAROUSEL',
   kind: 'HERO_CAROUSEL',
   branchId: null,
+  locale: 'en-US',
   version: 1,
   status: 'PUBLISHED',
   payload: { autoplay: true, intervalMs: 6000, slides: [slide('s1', 'Slide Terbit')] },
@@ -91,6 +92,14 @@ describe('PublicContentManagementView', () => {
     items = [];
     render(<PublicContentManagementView />);
     await screen.findByText(/Hero Carousel Beranda/);
+    expect(screen.queryByRole('button', { name: 'Kembalikan ke Bawaan' })).toBeNull();
+  });
+
+  it('loads the old Indonesian slides for translation without treating them as live', async () => {
+    items = [item({ locale: 'id-ID' })];
+    render(<PublicContentManagementView />);
+    await screen.findByText(/Hero Carousel Beranda \(1 Slide\)/);
+    expect(screen.getByText(/belum tampil di beranda/)).toBeVisible();
     expect(screen.queryByRole('button', { name: 'Kembalikan ke Bawaan' })).toBeNull();
   });
 

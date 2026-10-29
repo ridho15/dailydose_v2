@@ -33,6 +33,7 @@ import { SearchSelect, TextInput } from '../../components/forms';
 import { useSessionContext } from '../../session-context';
 import { Feedback, Skeleton, StatusBadge } from '../../ui';
 import { AdminPageHeader } from '../../components/admin/admin-page-header';
+import { KirimQrWhatsApp } from '../../components/kirim-qr-whatsapp';
 import { AssistedSaleDrawer } from '../../purchases/assisted-sale-drawer';
 import { DataTable } from '../../components/admin/admin-ui';
 import { statusLabel } from '../../lib/status-labels';
@@ -346,7 +347,8 @@ export function CustomerDetailView({ id }: { id: string }) {
           preferredBranchId: data.get('preferredBranchId') || null,
           expectedVersion: customer.version,
           profile: {
-            nik: String(data.get('nik') || '').trim() || null,
+            // NIK tidak diminta lagi (tanpa KTP); nilai lama dibiarkan apa adanya.
+            nik: customer.profile?.nik ?? null,
             genderCode: String(data.get('genderCode') || '').trim() || null,
             birthDate: String(data.get('birthDate') || '').trim() || null,
             address: String(data.get('address') || '').trim() || null,
@@ -435,7 +437,6 @@ export function CustomerDetailView({ id }: { id: string }) {
       <Skeleton label="Memuat profil pelanggan" />
     );
 
-  const ktpDoc = customer.identityDocuments.find((d) => d.kind === 'KTP_FRONT');
   const selfieDoc = customer.identityDocuments.find((d) => d.kind === 'SELFIE');
 
   const nowForPackages = new Date();
@@ -511,6 +512,13 @@ export function CustomerDetailView({ id }: { id: string }) {
               >
                 Reset kata sandi
               </Button>
+            )}
+            {customer.status === 'ACTIVE' && (
+              <KirimQrWhatsApp
+                userId={customer.id}
+                nama={customer.displayName}
+                punyaNomor={Boolean(customer.phoneE164)}
+              />
             )}
             {canSell && customer.status === 'ACTIVE' && (
               <Button disabled={saleBranches.length === 0} onClick={() => setSaleOpen(true)}>
@@ -608,12 +616,6 @@ export function CustomerDetailView({ id }: { id: string }) {
             <div className="space-y-3 text-sm">
               <div className="grid grid-cols-2 gap-3">
                 <div className="rounded-dd-md border border-dd-line/70 bg-dd-surface-muted/20 p-3">
-                  <span className="text-[13px] font-bold text-dd-muted block">NIK (Nomor KTP)</span>
-                  <p className="mt-1 font-semibold text-dd-ink truncate" title={customer.profile?.nik || '—'}>
-                    {customer.profile?.nik || '—'}
-                  </p>
-                </div>
-                <div className="rounded-dd-md border border-dd-line/70 bg-dd-surface-muted/20 p-3">
                   <span className="text-[13px] font-bold text-dd-muted block">Jenis Kelamin</span>
                   <p className="mt-1 font-semibold text-dd-ink">
                     {customer.profile?.gender === 'FEMALE' || customer.profile?.genderCode === 'F'
@@ -675,10 +677,11 @@ export function CustomerDetailView({ id }: { id: string }) {
               <div>
                 <h2 className="text-base font-bold text-dd-ink flex items-center gap-2">
                   <ShieldCheck className="size-5 text-dd-forest" />
-                  Verifikasi Dokumen Identitas (KTP / Paspor)
+                  Foto selfie
                 </h2>
                 <p className="mt-0.5 text-xs text-dd-muted">
-                  KTP &amp; selfie terenkripsi. Staf dapat unggah berkas langsung.
+                  Satu-satunya foto identitas (tanpa KTP). Dipakai staf untuk mengenali member
+                  di meja check-in; wajib sebelum membeli paket dan booking.
                 </p>
               </div>
               <StatusBadge tone={customer.verificationStatus === 'APPROVED' ? 'success' : 'warning'}>
@@ -686,18 +689,7 @@ export function CustomerDetailView({ id }: { id: string }) {
               </StatusBadge>
             </div>
 
-            <div className="grid gap-4 sm:grid-cols-2">
-              <CustomerDocumentCard
-                title="Foto KTP Depan"
-                kind="KTP_FRONT"
-                doc={ktpDoc}
-                onZoom={(title, src) => setZoomImage({ title, src })}
-                onUpload={handleUploadDocument}
-                onError={(msg) => setError(msg)}
-                uploading={uploadingDoc === 'KTP_FRONT'}
-                canWrite={canWrite}
-                refreshKey={docRefreshKey}
-              />
+            <div className="grid max-w-sm gap-4">
               <CustomerDocumentCard
                 title="Foto Selfie Pelanggan"
                 kind="SELFIE"
@@ -1237,13 +1229,6 @@ export function CustomerDetailView({ id }: { id: string }) {
             />
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
-            <TextInput
-              label="NIK (Nomor KTP)"
-              name="nik"
-              defaultValue={customer.profile?.nik ?? ''}
-              placeholder="16 digit nomor induk kependudukan"
-              maxLength={32}
-            />
             <div className="grid gap-1.5">
               <label className="text-xs font-bold text-dd-ink" htmlFor="gender-select">
                 Jenis Kelamin
@@ -1438,7 +1423,7 @@ export function CustomerDetailView({ id }: { id: string }) {
           <div className="space-y-4 py-2">
             {impersonateError && <Feedback kind="error">{impersonateError}</Feedback>}
             <p className="text-sm text-dd-muted">
-              Sesi Super Admin di peramban ini akan dialihkan langsung ke tampilan portal pelanggan (Paket Saya).
+              Sesi Super Owner di peramban ini akan dialihkan langsung ke tampilan portal pelanggan (Paket Saya).
             </p>
             <div className="flex justify-end gap-2 pt-3 border-t border-dd-line">
               <Button

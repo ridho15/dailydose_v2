@@ -136,14 +136,14 @@ describe('MobileBottomNavigation (instructor - Tiket T-10)', () => {
     expect(links.map((l) => l.textContent?.trim())).toEqual([
       'Hari Ini',
       'Jadwal Saya',
-      'QR saya',
-      'Akun',
+      'Ketersediaan',
+      'Payroll',
     ]);
 
     expect(links[0]?.getAttribute('href')).toBe('/workspace');
     expect(links[1]?.getAttribute('href')).toBe('/workspace/classes');
-    expect(links[2]?.getAttribute('href')).toBe('/check-in-pass');
-    expect(links[3]?.getAttribute('href')).toBe('/account/profile');
+    expect(links[2]?.getAttribute('href')).toBe('/workspace/availability');
+    expect(links[3]?.getAttribute('href')).toBe('/workspace/payroll');
 
     // Does NOT render the 5th "Menu" button
     expect(screen.queryByRole('button', { name: 'Buka semua menu navigasi' })).not.toBeInTheDocument();
@@ -155,11 +155,11 @@ describe('MobileBottomNavigation (instructor - Tiket T-10)', () => {
   });
 
   it('marks active tab for instructor with #396552 color and indicator line', () => {
-    pathname = '/check-in-pass';
+    pathname = '/workspace/payroll';
     render(<MobileBottomNavigation customerOnly={false} />);
     const nav = screen.getByRole('navigation', { name: 'Navigasi Bawah Instruktur' });
     const links = within(nav).getAllByRole('link');
-    const scanLink = links.find((l) => l.textContent?.includes('QR saya'))!;
+    const scanLink = links.find((l) => l.textContent?.includes('Payroll'))!;
     const hariIniLink = links.find((l) => l.textContent?.includes('Hari Ini'))!;
 
     expect(scanLink).toHaveAttribute('aria-current', 'page');

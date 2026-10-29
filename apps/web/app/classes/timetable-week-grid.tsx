@@ -68,6 +68,17 @@ export function TimetableWeekGrid({
   const [diangkat, setDiangkat] = useState<string | null>(null);
   const [selPenuh, setSelPenuh] = useState<Set<string>>(new Set());
 
+  // Kelas dikelompokkan ke selnya sekali per render. Dulu setiap sel (7 hari x belasan jam)
+  // menyaring semua kelas, sehingga minggu yang padat membuat satu klik terasa tertahan.
+  const perSel = new Map<string, ClassSlot[]>();
+  for (const slot of slots) {
+    const p = posisi(slot);
+    const kunci = `${p.hari}-${p.jam}`;
+    const isi = perSel.get(kunci);
+    if (isi) isi.push(slot);
+    else perSel.set(kunci, [slot]);
+  }
+
   const bisaDipindah = (slot: ClassSlot) =>
     canMove &&
     slot.bookedCount === 0 &&
@@ -216,10 +227,7 @@ export function TimetableWeekGrid({
           </p>
           {days.map((day) => {
             const kunci = `${day}-${hour}`;
-            const diSini = slots.filter((slot) => {
-              const p = posisi(slot);
-              return p.hari === day && p.jam === hour;
-            });
+            const diSini = perSel.get(kunci) ?? [];
             const penuhkan = selPenuh.has(kunci) || diSini.length <= BATAS_TAMPIL + 1;
             const tampil = penuhkan ? diSini : diSini.slice(0, BATAS_TAMPIL);
             const tersembunyi = diSini.length - tampil.length;

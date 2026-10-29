@@ -49,7 +49,7 @@ const accountPageLabels: Record<string, string> = {
   '/account': 'Dashboard',
   '/account/profile': 'Profil Saya',
   '/account/security': 'Keamanan akun',
-  '/account/verification': 'Verifikasi identitas',
+  '/account/verification': 'Foto selfie',
   '/checkout': 'Checkout',
   '/orders': 'Pesanan',
   '/bookings': 'Booking',
@@ -510,6 +510,16 @@ export function ApplicationShell({ children }: { children: React.ReactNode }) {
               >
                 <Search className="size-[18px]" />
               </IconButton>
+              {session && !isInstructorOnlySession(session) && (
+                <Link
+                  href="/workspace/guide"
+                  aria-label="Panduan operasional (SOP)"
+                  title="Panduan operasional (SOP)"
+                  className="grid size-11 place-items-center rounded-dd-sm text-dd-muted hover:bg-black/5 hover:text-dd-ink"
+                >
+                  <CircleHelp className="size-[18px]" aria-hidden="true" />
+                </Link>
+              )}
               {Boolean(session) && (
                 <NotificationCenter
                   quiet

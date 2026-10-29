@@ -75,7 +75,7 @@ function verificationBannerFor(status: string | undefined, here: string) {
       };
     case 'ACTION_REQUIRED':
       return {
-        message: 'Lengkapi verifikasi identitas (KTP) dulu supaya bisa memesan kelas.',
+        message: 'Ambil foto selfie dulu supaya bisa memesan kelas. Tidak perlu KTP.',
         action: 'Lengkapi verifikasi',
         href: to,
       };

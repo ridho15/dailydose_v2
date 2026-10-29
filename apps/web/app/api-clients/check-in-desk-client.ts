@@ -61,8 +61,36 @@ export interface BarisTidakHadir {
   sudahDikoreksi: boolean;
 }
 
+/** Hasil pindaian QR tetap member atau instruktur di meja check-in. */
+export interface HasilPindai {
+  diterima: boolean;
+  tercatat: boolean;
+  alasan?:
+    | 'PASS_TIDAK_DIKENALI'
+    | 'AKUN_BERHENTI'
+    | 'TIDAK_ADA_KELAS'
+    | 'BELUM_WAKTUNYA'
+    | 'KELAS_SUDAH_LEWAT'
+    | 'SUDAH_TERCATAT';
+  orang?: { userId: string; nama: string; peran: 'MEMBER' | 'INSTRUKTUR' };
+  kelas?: {
+    classSlotId: string;
+    bookingId: string | null;
+    namaKelas: string | null;
+    studio: string | null;
+    mulai: string;
+    selesai: string;
+  };
+  bukaPadaMenitSebelum?: number;
+  tercatatPada?: string;
+  namaCabang: string;
+  timezone: string;
+}
+
 export interface CheckInDeskClient {
   meja(branchId: string): Promise<MejaCheckIn>;
+  /** Staf memindai QR tetap member atau instruktur (barcode scanner atau kamera). */
+  pindai(branchId: string, pass: string): Promise<HasilPindai>;
   tetapJalan(classSlotId: string, reason: string): Promise<{ selisihBebanRp: number }>;
   /** Peserta yang tidak hadir dan sesinya hangus pada satu tanggal (`YYYY-MM-DD`). */
   tidakHadir(branchId: string, tanggal: string): Promise<BarisTidakHadir[]>;
@@ -71,6 +99,13 @@ export interface CheckInDeskClient {
 export const browserCheckInDeskClient: CheckInDeskClient = {
   meja(branchId) {
     return apiFetch<MejaCheckIn>(`/attendance/desk?branchId=${encodeURIComponent(branchId)}`);
+  },
+  pindai(branchId, pass) {
+    return apiFetch<HasilPindai>('/attendance/desk/scan', {
+      method: 'POST',
+      body: JSON.stringify({ branchId, pass }),
+      label: 'Mencatat kehadiran…',
+    });
   },
   tetapJalan(classSlotId, reason) {
     return apiFetch(`/attendance/desk/${encodeURIComponent(classSlotId)}/continue-below-quota`, {

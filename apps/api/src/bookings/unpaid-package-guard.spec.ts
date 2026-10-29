@@ -91,7 +91,7 @@ describe('BookingsService - Unpaid Package Guard (Poin 6)', () => {
         findUnique: jest.fn(async () => ({
           id: customerUserId,
           status: 'ACTIVE',
-          profile: { notes: 'KYC_APPROVED' },
+          profile: { notes: 'KYC_APPROVED', selfieUrl: 'identity-documents/u/selfie.jpg' },
         })),
       },
     };

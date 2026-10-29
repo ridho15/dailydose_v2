@@ -335,7 +335,7 @@ describe('ClassSlotView', () => {
       ),
     );
     // Menekan kelas menampilkan pesertanya di bawah kalender, seperti mockup.
-    const panel = await screen.findByRole('complementary', { name: 'Reformer' });
+    const panel = await screen.findByRole('dialog', { name: 'Reformer' });
     expect(await within(panel).findByText('Customer Demo')).toBeVisible();
     expect(within(panel).getByText('Sisa 7 sesi')).toBeVisible();
     // Pengaturan kelas lengkap tetap ada, satu ketuk lagi lewat "Atur kelas".
@@ -523,24 +523,15 @@ describe('ClassSlotView instructor check-in QR for studio staff', () => {
     return { user, dialog: screen.getByRole('dialog', { name: 'Reformer' }) };
   };
 
-  it('issues and renders the QR the instructor scans, with an idempotency key', async () => {
-    const issueInstructorCheckIn = vi.fn().mockResolvedValue(issue);
-    const { user, dialog } = await open({}, { list: vi.fn(), issueInstructorCheckIn });
-    await user.click(within(dialog).getByRole('button', { name: 'Tampilkan QR presensi instruktur' }));
-    expect(issueInstructorCheckIn).toHaveBeenCalledWith('slot-1', expect.any(String));
-    expect(await within(dialog).findByRole('img', { name: 'QR presensi instruktur' })).toBeVisible();
-    expect(QRCode.toCanvas).toHaveBeenCalledWith(expect.anything(), 'dd-checkin:v1:raw-token', expect.anything());
-    expect(within(dialog).getByRole('button', { name: 'Ganti QR presensi' })).toBeVisible();
-  });
-
-  it('shows the backend refusal (e.g. window not open yet) and no QR', async () => {
-    const issueInstructorCheckIn = vi
-      .fn()
-      .mockRejectedValue({ status: 409, data: { error: { code: 'CHECK_IN_TOO_EARLY' } } });
-    const { user, dialog } = await open({}, { list: vi.fn(), issueInstructorCheckIn });
-    await user.click(within(dialog).getByRole('button', { name: 'Tampilkan QR presensi instruktur' }));
-    await within(dialog).findByText('QR belum aktif. Check-in dibuka 30 menit sebelum kelas.');
+  it('sends staff to the Check-in page to scan the instructor instead of showing a QR', async () => {
+    const issueInstructorCheckIn = vi.fn();
+    const { dialog } = await open({}, { list: vi.fn(), issueInstructorCheckIn });
+    expect(within(dialog).getByRole('link', { name: 'Buka Check-in' })).toHaveAttribute(
+      'href',
+      '/workspace/check-in',
+    );
     expect(within(dialog).queryByRole('img', { name: 'QR presensi instruktur' })).toBeNull();
+    expect(issueInstructorCheckIn).not.toHaveBeenCalled();
   });
 
   it('hides the QR action without attendance:manage', async () => {
@@ -625,6 +616,10 @@ describe('ClassSlotView detail drawer layout', () => {
       />,
     );
     const user = userEvent.setup();
+    // Kelas batal disembunyikan dulu; staf membukanya lewat tombol "Tampilkan kelas batal".
+    if ((target.status as string) === 'CANCELLED') {
+      await user.click(await screen.findByRole('button', { name: /Tampilkan 1 kelas batal/ }));
+    }
     await screen.findAllByText('Reformer');
     await user.click(
       within(screen.getByRole('region', { name: 'Kalender kelas tujuh hari' })).getByRole(
@@ -795,6 +790,10 @@ describe('ClassSlotView duplicate and delete', () => {
     const client = fake({ discover: vi.fn().mockResolvedValue({ ...workspace, slots: [target] }) });
     render(<ClassSlotView client={client} branchOverride={branch} capabilitiesOverride={capabilities} />);
     const user = userEvent.setup();
+    // Kelas batal disembunyikan dulu; staf membukanya lewat tombol "Tampilkan kelas batal".
+    if ((target.status as string) === 'CANCELLED') {
+      await user.click(await screen.findByRole('button', { name: /Tampilkan 1 kelas batal/ }));
+    }
     await screen.findAllByText('Reformer');
     await user.click(
       within(screen.getByRole('region', { name: 'Kalender kelas tujuh hari' })).getByRole('button', {

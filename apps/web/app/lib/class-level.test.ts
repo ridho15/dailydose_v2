@@ -14,3 +14,12 @@ describe('classLevelLabel', () => {
     expect(classLevelLabel(undefined)).toBe('');
   });
 });
+
+describe('classLevelLabel dalam bahasa Inggris', () => {
+  it('menerjemahkan kode dan teks bebas dari database', () => {
+    expect(classLevelLabel('ALL_LEVELS', 'en')).toBe('All Levels');
+    expect(classLevelLabel('Pemula–Menengah', 'en')).toBe('Beginner–Intermediate');
+    expect(classLevelLabel('Semua level', 'en')).toBe('All Levels');
+    expect(classLevelLabel('Prenatal', 'en')).toBe('Prenatal');
+  });
+});

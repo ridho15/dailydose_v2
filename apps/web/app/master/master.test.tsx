@@ -301,6 +301,72 @@ describe('MasterView tarif list', () => {
     expect(await screen.findByText('Tarif dihapus.')).toBeVisible();
   });
 
+  it('lets Super Owner delete an effective version entered by mistake, after seeing the honor impact', async () => {
+    const client = fakeMasterClient({
+      listSettings: vi.fn().mockResolvedValue([
+        fee({
+          id: 'fee-2',
+          value: { feeRp: 300_000 },
+          effectiveFrom: new Date('2025-01-01T00:00:00Z'),
+          deletable: false,
+          duplikat: true,
+        }),
+      ]),
+      dampakHapusTarif: vi.fn().mockResolvedValue({
+        id: 'fee-2',
+        sudahBerlaku: true,
+        duplikat: false,
+        kelasTerdampak: 2,
+        honorSekarangRp: 600_000,
+        honorSetelahHapusRp: 650_000,
+      }),
+    });
+    const user = userEvent.setup();
+    render(
+      <AppFeedbackProvider>
+        <MasterView
+          client={client}
+          activeTab="fees"
+          access={{ canManage: true, canFinance: true, canCorrect: true }}
+        />
+      </AppFeedbackProvider>,
+    );
+    await user.click(screen.getByRole('tab', { name: /Honor/i }));
+    await user.click(screen.getByRole('button', { name: 'Muat master data' }));
+    expect(await screen.findByText('Duplikat')).toBeVisible();
+    await user.click(screen.getByRole('button', { name: 'Hapus salah input' }));
+    expect(await screen.findByText(/Honor 2 kelas yang sudah selesai berubah/)).toBeVisible();
+    const confirm = screen.getByRole('button', { name: 'Hapus versi keliru' });
+    await user.type(screen.getByLabelText(/^Alasan/), 'Salah');
+    expect(confirm).toBeDisabled();
+    await user.type(screen.getByLabelText(/^Alasan/), ' pilih tipe kelas');
+    await user.click(confirm);
+    await waitFor(() =>
+      expect(client.deleteSetting).toHaveBeenCalledWith(
+        'INSTRUCTOR_FEE',
+        'fee-2',
+        'Salah pilih tipe kelas',
+        true,
+      ),
+    );
+  });
+
+  it('hides the wrong-entry delete from roles other than Super Owner', async () => {
+    const client = fakeMasterClient({
+      listSettings: vi.fn().mockResolvedValue([fee({ deletable: false })]),
+    });
+    const user = userEvent.setup();
+    render(
+      <AppFeedbackProvider>
+        <MasterView client={client} activeTab="fees" access={{ canManage: true, canFinance: true }} />
+      </AppFeedbackProvider>,
+    );
+    await user.click(screen.getByRole('tab', { name: /Honor/i }));
+    await user.click(screen.getByRole('button', { name: 'Muat master data' }));
+    await screen.findByText('Sudah berlaku');
+    expect(screen.queryByRole('button', { name: 'Hapus salah input' })).toBeNull();
+  });
+
   it('deletes a quota & capacity setting through the shared dialog (reason first, then the server check)', async () => {
     mockDeletability.mockResolvedValue({ kind: 'min-quota', id: 'quota-1', deletable: true, blockers: [] });
     mockRemove.mockResolvedValue({ id: 'quota-1', deleted: true });

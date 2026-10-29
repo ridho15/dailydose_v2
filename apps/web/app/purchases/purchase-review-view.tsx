@@ -508,7 +508,7 @@ export function PurchaseReviewView({
       <AdminPageHeader
         title="Antrean Pembayaran"
         titleId="payment-review-title"
-        description="Periksa bukti privat dan snapshot transaksi. Keputusan hanya dapat diambil oleh peran yang berwenang (Finance, Manager, dan Super Admin)."
+        description="Periksa bukti privat dan snapshot transaksi. Keputusan hanya dapat diambil oleh peran yang berwenang (Finance, Manager, dan Super Owner)."
         actions={
           <div className="flex flex-wrap items-center gap-3">
             <span className="text-xs text-dd-muted">

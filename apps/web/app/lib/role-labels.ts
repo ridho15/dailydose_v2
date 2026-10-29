@@ -5,7 +5,7 @@
 type RoleLabelVariant = 'scoped' | 'short';
 
 const labels: Record<string, { scoped: string; short: string }> = {
-  SUPER_OWNER: { scoped: 'Super Admin', short: 'Super Admin' },
+  SUPER_OWNER: { scoped: 'Super Owner', short: 'Super Owner' },
   OWNER: { scoped: 'Owner cabang', short: 'Owner' },
   ADMIN: { scoped: 'Admin cabang', short: 'Admin' },
   MANAGER: { scoped: 'Manager cabang', short: 'Manager' },

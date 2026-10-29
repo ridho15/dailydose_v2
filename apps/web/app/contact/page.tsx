@@ -1,9 +1,10 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { ArrowRight, MessageCircle } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 import { PublicFooter } from '../components/public/public-footer';
 import { PublicHeader } from '../components/public/public-header';
 import { PublicPageHero, PublicSectionHeading } from '../components/public/public-page';
+import { KontakWhatsapp } from './kontak-whatsapp';
 
 export const metadata: Metadata = {
   title: 'Hubungi Kami',
@@ -61,31 +62,7 @@ export default function ContactPage() {
                   </Link>
                 </li>
               ))}
-              <li className="grid gap-x-8 gap-y-3 border-b border-ed-line py-8 transition-colors duration-200 hover:bg-ed-tint md:grid-cols-[48px_minmax(0,0.9fr)_minmax(0,1.3fr)_auto] md:items-center">
-                <span className="text-xs font-bold text-ed-green">03</span>
-                <h3 className="m-0 text-[clamp(24px,2.4vw,34px)] leading-[1.1] font-medium tracking-[-0.05em]">
-                  Bantuan &amp; Kontak
-                </h3>
-                <p className="m-0 text-[15px] leading-[1.65] text-ed-muted">
-                  Hubungi kami langsung melalui WhatsApp studio atau kanal kontak resmi Daily Dose
-                  Pilates.
-                </p>
-                <div className="flex flex-col items-start gap-5 md:items-end">
-                  <a
-                    className="ed-button"
-                    href={`https://wa.me/${process.env.NEXT_PUBLIC_OFFICIAL_WHATSAPP || '62895329736127'}?text=Halo%20Daily%20Dose%20Pilates,%20saya%20ingin%20bertanya%20seputar%20kelas%20dan%20paket%20studio`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    <MessageCircle aria-hidden="true" className="mr-2 size-4" />
-                    <span>Chat WhatsApp CS</span>
-                  </a>
-                  <Link className="ed-link text-ed-green" href="/locations">
-                    <span>Lihat kontak per studio</span>
-                    <ArrowRight aria-hidden="true" className="size-4" />
-                  </Link>
-                </div>
-              </li>
+              <KontakWhatsapp />
             </ol>
             <div className="mt-12 border-l-2 border-ed-green bg-ed-mist p-6">
               <strong className="text-ed-ink">Privasi Anda tetap penting.</strong>

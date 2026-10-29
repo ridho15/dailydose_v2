@@ -444,42 +444,27 @@ for (const breakpoint of breakpoints) {
       }),
     ).toBeVisible();
     if (breakpoint.width >= 1024) {
-      await expect(page.getByRole('navigation', { name: 'Navigasi publik' })).toBeVisible();
+      await expect(page.getByRole('navigation', { name: 'Main navigation' })).toBeVisible();
     } else {
-      await expect(page.getByRole('button', { name: 'Buka menu navigasi' })).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Open navigation menu' })).toBeVisible();
     }
     await expect(
       page.getByRole('heading', { name: 'Reformer Pilates', exact: true }),
     ).toBeVisible();
     if (breakpoint.width >= 640) {
-      // Sesi mock adalah staf (SUPER_OWNER), jadi menu akun berlabel "Staf Panel".
-      await expect(page.getByText('Staf Panel', { exact: true }).first()).toBeVisible();
+      // Sesi mock adalah staf (SUPER_OWNER); beranda berbahasa Inggris, jadi "Staff Panel".
+      await expect(page.getByText('Staff Panel', { exact: true }).first()).toBeVisible();
     } else {
-      await expect(page.getByRole('link', { name: /Buka workspace/i })).toHaveAttribute(
+      await expect(page.getByRole('link', { name: /Open workspace/i })).toHaveAttribute(
         'href',
         '/workspace',
       );
     }
-    for (const link of await page.getByRole('link', { name: 'Jelajahi Studio' }).all()) {
-      await expect(link).toHaveAttribute('href', '/locations');
-    }
-    const scheduleLinks = page.getByRole('link', { name: 'Lihat Jadwal' });
+    const scheduleLinks = page.getByRole('link', { name: 'See Schedule' });
     expect(await scheduleLinks.count()).toBeGreaterThanOrEqual(2);
     for (const link of await scheduleLinks.all()) {
       await expect(link).toHaveAttribute('href', '/classes#schedule');
     }
-    const studioShowcase = page.getByRole('img', {
-      name: 'Reception Daily Dose Pilates dengan interior hangat',
-    });
-    await studioShowcase.scrollIntoViewIfNeeded(); // gambar di bawah fold dimuat lazy
-    await expect
-      .poll(() =>
-        studioShowcase.evaluate(
-          (image) =>
-            (image as HTMLImageElement).complete && (image as HTMLImageElement).naturalWidth > 0,
-        ),
-      )
-      .toBe(true);
     await expect(page.getByText(/trial class/i)).toHaveCount(0);
     const dimensions = await page.evaluate(() => ({
       viewport: document.documentElement.clientWidth,

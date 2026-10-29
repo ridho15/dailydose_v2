@@ -42,7 +42,7 @@ export const CUSTOMER_PRIMARY_NAVIGATION: CustomerNavigationItem[] = [
 
 export const CUSTOMER_ACCOUNT_NAVIGATION: CustomerNavigationItem[] = [
   { href: '/account/profile', label: 'Profil Saya', icon: UserRound },
-  { href: '/account/verification', label: 'Verifikasi Identitas', icon: ShieldCheck },
+  { href: '/account/verification', label: 'Foto selfie', icon: ShieldCheck },
   { href: '/account/security', label: 'Keamanan & Password', icon: LockKeyhole },
   { href: '/orders', label: 'Pesanan Saya', icon: CreditCard },
   { href: '/account/packages', label: 'Paket Saya', icon: PackageCheck },

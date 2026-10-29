@@ -39,6 +39,53 @@ export class CustomerProfileService {
     };
   }
 
+  /**
+   * Nomor WhatsApp untuk akun yang belum punya, terutama yang mendaftar lewat Google. Hanya bisa diisi
+   * sekali di sini; mengganti nomor yang sudah ada tetap lewat staf.
+   */
+  async setPhone(principal: SessionPrincipal, input: { phone?: unknown }, correlationId?: string) {
+    if (!principal.roles.some(({ role }) => role === 'CUSTOMER'))
+      throw new ApiProblem('FORBIDDEN', HttpStatus.FORBIDDEN);
+    const phone = typeof input?.phone === 'string' ? input.phone.replace(/[\s().-]/gu, '') : '';
+    if (!/^(\+?62|0)8\d{7,12}$/u.test(phone)) {
+      throw new ApiProblem('VALIDATION_ERROR', HttpStatus.UNPROCESSABLE_ENTITY, false, [
+        { field: 'phone', issue: 'Nomor WhatsApp tidak valid. Contoh: 0812 3456 7890.' },
+      ]);
+    }
+    const existing = await this.db.user.findUnique({ where: { id: principal.userId } });
+    if (!existing || existing.status !== 'ACTIVE')
+      throw new ApiProblem('SESSION_REVOKED', HttpStatus.UNAUTHORIZED);
+    if (existing.phone) throw new ApiProblem('PHONE_ALREADY_SET', HttpStatus.CONFLICT);
+
+    // Nomor yang sama bisa tertulis 0812..., 62812..., atau +62812...; semuanya dianggap satu nomor.
+    const lokal = phone.replace(/^\+?62/u, '0');
+    const varian = [lokal, `62${lokal.slice(1)}`, `+62${lokal.slice(1)}`];
+    const dipakai = await this.db.user.findFirst({
+      where: { phone: { in: varian }, NOT: { id: principal.userId } },
+      select: { id: true },
+    });
+    if (dipakai) throw new ApiProblem('PHONE_ALREADY_REGISTERED', HttpStatus.CONFLICT);
+
+    try {
+      await this.db.user.update({ where: { id: principal.userId }, data: { phone } });
+    } catch (error: any) {
+      if (error?.code === 'P2002')
+        throw new ApiProblem('PHONE_ALREADY_REGISTERED', HttpStatus.CONFLICT);
+      throw error;
+    }
+    if ((this.db as any).auditLog?.create) {
+      await (this.db as any).auditLog.create({
+        data: {
+          action: 'security.my_phone_added',
+          actorId: principal.userId,
+          targetUserId: principal.userId,
+          correlationId,
+        },
+      });
+    }
+    return { phoneMasked: maskPhone(phone) };
+  }
+
   async update(
     principal: SessionPrincipal,
     input: { displayName: string; preferredBranchId?: string | null; expectedVersion?: number },

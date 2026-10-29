@@ -1134,3 +1134,24 @@ model PackagePromotion {
   @@index([packageId, status, activeFrom, activeUntil])
   @@map("package_promotion")
 }
+
+/// Ulasan member untuk instruktur kelas yang ia hadiri (bintang 1-5 dan komentar opsional).
+/// Internal saja, tidak tampil di situs publik. Satu baris per booking. `rating` kosong berarti member
+/// melewati ulasan untuk kelas itu, supaya tidak ditanya lagi.
+/// Sengaja tanpa relasi Prisma agar tabel lain tidak berubah sama sekali; id diisi dari booking.
+model UlasanInstruktur {
+  id           String   @id @default(uuid()) @db.Char(36)
+  bookingId    String   @unique @db.Char(36)
+  userId       String   @db.Char(36)
+  classSlotId  String   @db.Char(36)
+  instructorId String   @db.Char(36)
+  branchId     String   @db.Char(36)
+  rating       Int?     @db.TinyInt
+  comment      String?  @db.Text
+  createdAt    DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([instructorId, createdAt])
+  @@index([branchId, createdAt])
+  @@map("ulasan_instruktur")
+}

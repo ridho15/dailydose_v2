@@ -3,6 +3,24 @@ import type { SessionPrincipal } from '../identity/identity.service';
 import { ApiProblem, ENTITY_ID_REGEX } from '../identity/security';
 import { MasterAccessService } from './master-access.service';
 import { PrismaService } from '../database/prisma.service';
+import {
+  calculateSlotFee,
+  sortFeesNewestFirst,
+  type InstructorFeeRow,
+} from '../packages/instructor-fee-calculator';
+
+/** Hanya Super Owner: menghapus versi tarif yang sudah berlaku karena salah input. */
+export const CAP_KOREKSI_TARIF = 'instructor-fee:correct';
+
+export interface DampakHapusTarif {
+  id: string;
+  sudahBerlaku: boolean;
+  /** Versi ini sama nilainya dengan versi sebelumnya; menghapusnya tidak mengubah honor apa pun. */
+  duplikat: boolean;
+  kelasTerdampak: number;
+  honorSekarangRp: number;
+  honorSetelahHapusRp: number;
+}
 
 export type SettingKind = 'INSTRUCTOR_FEE' | 'QUOTA_CAPACITY';
 export type SettingInput = {
@@ -99,6 +117,15 @@ export class EffectiveSettingsService {
         },
         orderBy: [{ effectiveDate: 'desc' }, { createdAt: 'desc' }],
       });
+      // Versi yang nilainya sama dengan versi sebelumnya (instruktur, cabang, tipe kelas sama) tidak
+      // mengubah honor apa pun; ditandai supaya mudah dirapikan.
+      const duplikat = new Set<string>();
+      const terakhir = new Map<string, number>();
+      for (const r of [...rows].reverse()) {
+        const kunci = `${r.instructorId}|${r.branchId}|${r.classTypeId}`;
+        if (terakhir.get(kunci) === r.feePerJamRp) duplikat.add(r.id);
+        terakhir.set(kunci, r.feePerJamRp);
+      }
       return {
         items: rows.map((r) => ({
           id: r.id,
@@ -111,6 +138,7 @@ export class EffectiveSettingsService {
           feePerJamRp: r.feePerJamRp,
           effectiveDate: dateKey(r.effectiveDate),
           deletable: dateKey(r.effectiveDate) > todayKey(),
+          duplikat: duplikat.has(r.id),
           createdAt: r.createdAt.toISOString(),
         })),
         page: { nextCursor: null, hasMore: false },
@@ -232,8 +260,82 @@ export class EffectiveSettingsService {
   }
 
   /**
-   * Hapus tarif yang BELUM berlaku (tanggal efektif di masa depan). Tarif yang sudah berlaku tidak
-   * boleh hilang karena dipakai perhitungan honor; koreksinya dengan menambah tarif baru.
+   * Akibat menghapus satu versi tarif: kelas selesai yang honornya berubah, dan honornya sebelum
+   * dan sesudah. Dipakai dialog konfirmasi sebelum versi keliru dihapus.
+   */
+  async dampakHapus(principal: SessionPrincipal, id: string): Promise<DampakHapusTarif> {
+    // Nominal honor hanya untuk pemegang keuangan, sama seperti yang boleh menghapus tarif.
+    this.access.authorize(principal, true);
+    if (!principal.capabilities.includes('finance:manage'))
+      throw new ApiProblem('FORBIDDEN', HttpStatus.FORBIDDEN);
+    if (!ENTITY_ID_REGEX.test(id)) throw new ApiProblem('NOT_FOUND', HttpStatus.NOT_FOUND);
+    const row = await this.db.instructorFee.findUnique({ where: { id } });
+    if (!row) throw new ApiProblem('NOT_FOUND', HttpStatus.NOT_FOUND);
+    this.access.ensureBranchScope(principal, row.branchId, true);
+    return this.hitungDampak(this.db, row);
+  }
+
+  private async hitungDampak(
+    db: Pick<PrismaService, 'instructorFee' | 'slotKelas'>,
+    row: InstructorFeeRow & { id: string },
+  ): Promise<DampakHapusTarif> {
+    const [tarif, slots] = await Promise.all([
+      db.instructorFee.findMany({
+        where: { instructorId: row.instructorId, classTypeId: row.classTypeId },
+      }),
+      db.slotKelas.findMany({
+        where: {
+          instructorId: row.instructorId,
+          classTypeId: row.classTypeId,
+          status: 'COMPLETED',
+          startAt: { gte: row.effectiveDate },
+        },
+        select: {
+          startAt: true,
+          endAt: true,
+          branchId: true,
+          classTypeId: true,
+          instructorFeeRp: true,
+          isManualFee: true,
+        },
+      }),
+    ]);
+    const sekarang = sortFeesNewestFirst(tarif);
+    const tanpa = sortFeesNewestFirst(tarif.filter((t) => t.id !== row.id));
+    let kelasTerdampak = 0;
+    let honorSekarangRp = 0;
+    let honorSetelahHapusRp = 0;
+    for (const slot of slots) {
+      const s = { ...slot, instructorId: row.instructorId };
+      const a = calculateSlotFee(sekarang, s).feeRp;
+      const b = calculateSlotFee(tanpa, s).feeRp;
+      if (a === b) continue;
+      kelasTerdampak += 1;
+      honorSekarangRp += a;
+      honorSetelahHapusRp += b;
+    }
+    const sebelumnya = sortFeesNewestFirst(
+      tarif.filter(
+        (t) =>
+          t.id !== row.id &&
+          t.branchId === row.branchId &&
+          t.effectiveDate.getTime() <= row.effectiveDate.getTime(),
+      ),
+    )[0];
+    return {
+      id: row.id,
+      sudahBerlaku: dateKey(row.effectiveDate) <= todayKey(),
+      duplikat: sebelumnya?.feePerJamRp === row.feePerJamRp,
+      kelasTerdampak,
+      honorSekarangRp,
+      honorSetelahHapusRp,
+    };
+  }
+
+  /**
+   * Hapus tarif yang BELUM berlaku (tanggal efektif di masa depan). Tarif yang sudah berlaku dipakai
+   * perhitungan honor; hanya Super Owner yang boleh menghapusnya sebagai salah input, dengan alasan
+   * minimal 10 karakter, dan dampaknya ikut dicatat di audit.
    */
   async remove(
     principal: SessionPrincipal,
@@ -241,6 +343,7 @@ export class EffectiveSettingsService {
     id: string,
     correlationId: string,
     reasonInput?: string,
+    salahInput = false,
   ) {
     this.access.authorize(principal, true);
     if (!principal.capabilities.includes('finance:manage'))
@@ -257,8 +360,18 @@ export class EffectiveSettingsService {
       const row = await tx.instructorFee.findUnique({ where: { id } });
       if (!row) throw new ApiProblem('NOT_FOUND', HttpStatus.NOT_FOUND);
       this.access.ensureBranchScope(principal, row.branchId, true);
-      if (dateKey(row.effectiveDate) <= todayKey())
-        throw new ApiProblem('RATE_IN_EFFECT', HttpStatus.CONFLICT);
+      const sudahBerlaku = dateKey(row.effectiveDate) <= todayKey();
+      let dampak: DampakHapusTarif | undefined;
+      if (sudahBerlaku) {
+        if (!salahInput) throw new ApiProblem('RATE_IN_EFFECT', HttpStatus.CONFLICT);
+        if (!principal.capabilities.includes(CAP_KOREKSI_TARIF))
+          throw new ApiProblem('FORBIDDEN', HttpStatus.FORBIDDEN);
+        if (reason.length < 10)
+          throw new ApiProblem('VALIDATION_ERROR', HttpStatus.UNPROCESSABLE_ENTITY, false, [
+            { field: 'reason', issue: 'TOO_SHORT' },
+          ]);
+        dampak = await this.hitungDampak(tx as never, row);
+      }
 
       await tx.instructorFee.delete({ where: { id } });
 
@@ -266,14 +379,16 @@ export class EffectiveSettingsService {
         tx,
         principal,
         correlationId,
-        'master.instructor_fee_deleted',
+        sudahBerlaku ? 'master.instructor_fee_deleted_effective' : 'master.instructor_fee_deleted',
         'InstructorFee',
         id,
         row.branchId,
         {
+          instructorId: row.instructorId,
           classTypeId: row.classTypeId,
           effectiveDate: dateKey(row.effectiveDate),
           feePerJamRp: row.feePerJamRp,
+          ...(dampak ? { dampak: { ...dampak } } : {}),
         },
         undefined,
         reason,

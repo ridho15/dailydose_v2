@@ -4,17 +4,8 @@ export type PackageAudienceState = 'GUEST' | 'CUSTOMER_UNVERIFIED' | 'CUSTOMER_A
 
 const publicRoutePrefixes = ['/classes', '/packages', '/schedule', '/locations', '/check-in'] as const;
 
-/**
- * Portal kiosk untuk tablet studio. Terbuka tanpa login (dikunci PIN cabang) dan tampil layar penuh tanpa
- * rangka staf, jadi ia publik bagi penjaga halaman, tetapi bukan bagian katalog pelanggan.
- */
-function isKioskPath(pathname: string) {
-  return pathname === '/kiosk' || pathname.startsWith('/kiosk/');
-}
-
 export function isPublicExperiencePath(pathname: string) {
   return (
-    isKioskPath(pathname) ||
     [
       '/',
       '/contact',

@@ -45,6 +45,17 @@ export interface MasterSetting {
   instructorId?: string;
   /** Tarif belum berlaku sehingga masih boleh dihapus. */
   deletable?: boolean;
+  /** Nilainya sama dengan versi sebelumnya; menghapusnya tidak mengubah honor. */
+  duplikat?: boolean;
+}
+
+export interface DampakHapusTarif {
+  id: string;
+  sudahBerlaku: boolean;
+  duplikat: boolean;
+  kelasTerdampak: number;
+  honorSekarangRp: number;
+  honorSetelahHapusRp: number;
 }
 
 export interface MasterSettingInput {
@@ -154,7 +165,14 @@ export interface MasterClient {
   ): Promise<void>;
   listSettings(kind: MasterKind, branchId?: string): Promise<MasterSetting[]>;
   createSetting(input: MasterSettingInput): Promise<void>;
-  deleteSetting(kind: 'INSTRUCTOR_FEE', id: string, reason: string): Promise<void>;
+  deleteSetting(
+    kind: 'INSTRUCTOR_FEE',
+    id: string,
+    reason: string,
+    salahInput?: boolean,
+  ): Promise<void>;
+  /** Kelas dan honor yang berubah bila versi tarif dihapus. */
+  dampakHapusTarif?(id: string): Promise<DampakHapusTarif>;
 }
 
 const date = (value?: string) => (value ? new Date(`${value}T00:00:00Z`) : undefined);
@@ -348,6 +366,7 @@ export const browserMasterClient: MasterClient = {
         instructorName: row.instructorName,
         instructorId: row.instructorId,
         deletable: Boolean(row.deletable),
+        duplikat: Boolean(row.duplikat),
       }));
     }
     const res = await apiFetch<{ items: Array<Record<string, any>> }>(`/quota-capacity-settings${qs}`, {
@@ -366,11 +385,17 @@ export const browserMasterClient: MasterClient = {
     }));
   },
 
-  async deleteSetting(kind, id, reason) {
+  async deleteSetting(kind, id, reason, salahInput) {
     await apiFetch(`/instructor-fees/${encodeURIComponent(id)}`, {
       method: 'DELETE',
       label: 'Menghapus tarif…',
-      body: JSON.stringify({ reason }),
+      body: JSON.stringify(salahInput ? { reason, salahInput: true } : { reason }),
+    });
+  },
+
+  dampakHapusTarif(id) {
+    return apiFetch<DampakHapusTarif>(`/instructor-fees/${encodeURIComponent(id)}/impact`, {
+      label: 'Menghitung dampak…',
     });
   },
 

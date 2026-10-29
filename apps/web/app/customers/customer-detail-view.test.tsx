@@ -66,7 +66,7 @@ describe('CustomerDetailView konsistensi status', () => {
   it('memberi label jelas pada status akun dan status verifikasi', async () => {
     render(<CustomerDetailView id="c1" />);
     expect(await screen.findByText(/Status Akun:\s*AKTIF/i)).toBeVisible();
-    expect(screen.getAllByText(/Verifikasi Identitas:\s*PERLU PERBAIKAN/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Verifikasi Identitas:\s*BELUM ADA SELFIE/i).length).toBeGreaterThan(0);
   });
 
   it('tidak menghitung paket dengan status ACTIVE jika remainingSessions 0', async () => {

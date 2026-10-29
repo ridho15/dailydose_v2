@@ -1,7 +1,5 @@
 import { render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import KioskPortalPage from '../kiosk/page';
-import * as bookingClient from '../api-clients/booking-client';
 import {
   formatAnomalyType,
   formatApiErrorCode,
@@ -21,41 +19,6 @@ describe('Tiket T-13: Hapus kode sistem dari tampilan pengguna', () => {
   });
 
   describe('Kriteria Penerimaan T-13: Tidak ada kode sistem mentah di hasil render', () => {
-    it('memastikan portal kiosk tidak merender kode cabang mentah DD-GG, DD-MK, dsb', async () => {
-      vi.spyOn(bookingClient, 'getKioskBranches').mockResolvedValue({
-        items: [
-          {
-            id: 'branch-1',
-            code: 'DD-GG',
-            name: 'Daily Dose Green Garden',
-            address: 'Jl. Green Garden Blok A No. 1',
-            timezone: 'Asia/Jakarta',
-          },
-          {
-            id: 'branch-2',
-            code: 'DD-MK',
-            name: 'Daily Dose Muara Karang',
-            address: 'Jl. Muara Karang Blok B No. 2',
-            timezone: 'Asia/Jakarta',
-          },
-        ],
-      });
-
-      render(<KioskPortalPage />);
-
-      // Tunggu hingga cabang selesai dimuat
-      expect(await screen.findByText('Daily Dose Green Garden')).toBeInTheDocument();
-
-      // Memastikan kode mentah DD-GG dan DD-MK tidak tampil di render UI
-      const bodyText = document.body.textContent || '';
-      expect(bodyText).not.toContain('DD-GG');
-      expect(bodyText).not.toContain('DD-MK');
-
-      // Memastikan nama studio yang ramah ditampilkan pada chip
-      expect(screen.getByText('Green Garden')).toBeInTheDocument();
-      expect(screen.getByText('Muara Karang')).toBeInTheDocument();
-    });
-
     it('membersihkan ALL_LEVELS, PRIVATE_GROUP, Asia/Jakarta, KYC, payload, idempotency, optimistic locking melalui sanitizeUserFacingText', () => {
       const rawText =
         'Proses verifikasi KYC dengan payload token dd-checkin:v1:abc untuk kelas PRIVATE_GROUP dan ALL_LEVELS di DD-GG (Asia/Jakarta) menggunakan mekanisme idempotency dan optimistic locking versi data.';

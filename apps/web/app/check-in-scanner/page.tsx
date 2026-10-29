@@ -1,10 +1,6 @@
-import type { Metadata } from 'next';
-import { CheckInScannerView } from './scanner-view';
+import { redirect } from 'next/navigation';
 
-export const metadata: Metadata = {
-  title: 'Scan QR Check-in',
-};
-
-export default function CheckInScannerPage() {
-  return <CheckInScannerView />;
+/** Alamat lama: pemindaian sekarang dilakukan staf di halaman Check-in, tanpa tablet ber-PIN. */
+export default function AlamatLama() {
+  redirect('/workspace/check-in');
 }

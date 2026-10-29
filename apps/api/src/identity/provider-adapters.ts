@@ -2,6 +2,13 @@ import { HttpStatus, Injectable } from '@nestjs/common';
 import { OAuth2Client } from 'google-auth-library';
 import { ApiProblem, configurationRequired, digest, safeEqual } from './security';
 
+/**
+ * Client ID OAuth Google milik studio (publik, sama dengan yang dipakai tombol login web). Token Google
+ * hanya diterima bila ditujukan ke Client ID ini; `GOOGLE_CLIENT_ID` di env tetap didahulukan.
+ */
+export const GOOGLE_CLIENT_ID_BAWAAN =
+  '223751724199-nhdfh02bnie3fjfm61ss0emknabqrbqf.apps.googleusercontent.com';
+
 export interface VerifiedIdentity {
   provider: 'GOOGLE' | 'WHATSAPP_PHONE';
   subjectHash: string;
@@ -29,7 +36,7 @@ export class ConfigGatedGoogleProvider implements GoogleIdentityProvider {
     const token = idToken.trim();
 
     if (isJwt(token)) {
-      const clientId = process.env.GOOGLE_CLIENT_ID?.trim();
+      const clientId = process.env.GOOGLE_CLIENT_ID?.trim() || GOOGLE_CLIENT_ID_BAWAAN;
       if (!clientId) return configurationRequired();
       try {
         const ticket = await new OAuth2Client(clientId).verifyIdToken({

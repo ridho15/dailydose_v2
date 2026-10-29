@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react';
 import { axe } from 'vitest-axe';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { accountClient } from '@/api-clients/account-client';
-import { classDurationSummary, PublicLanding, studioAreaSummary } from './public-landing';
+import { PublicLanding } from './public-landing';
 
 const mockReplace = vi.fn();
 let mockSessionContext: any = null;
@@ -87,87 +87,33 @@ describe('public landing page', () => {
         name: 'Stronger Body. Calmer Mind.',
       }),
     ).toBeInTheDocument();
-    expect(screen.getByRole('navigation', { name: 'Navigasi publik' })).toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: 'Main navigation' })).toBeInTheDocument();
     expect(await screen.findByRole('heading', { name: 'Reformer Pilates' })).toBeInTheDocument();
     expect(await screen.findByRole('heading', { name: 'Mat Pilates' })).toBeInTheDocument();
     expect(await screen.findByRole('heading', { name: 'Barre' })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Cadillac Pilates' })).not.toBeInTheDocument();
     expect(screen.queryByText(/Customer Demo|Synthetic/i)).not.toBeInTheDocument();
-    screen.getAllByRole('link', { name: 'Jelajahi Studio' }).forEach((link) => {
-      expect(link).toHaveAttribute('href', '/locations');
-    });
-    expect(screen.getByRole('link', { name: 'Masuk' })).toHaveAttribute('href', '/sign-in');
-    expect(screen.getByRole('link', { name: 'Daftar' })).toHaveAttribute('href', '/register');
-    expect(screen.getAllByRole('link', { name: 'Lihat Paket' }).length).toBeGreaterThan(0);
-    expect(screen.getByRole('link', { name: 'Pilih Paket' })).toHaveAttribute('href', '/packages');
-    expect(screen.getByText('2 lokasi')).toBeInTheDocument();
-    expect(screen.getAllByText('Jakarta & BSD').length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText('50 menit')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Sign in' })).toHaveAttribute('href', '/sign-in');
+    expect(screen.getByRole('link', { name: 'Sign up' })).toHaveAttribute('href', '/register');
+    expect(screen.getAllByRole('link', { name: 'See Packages' }).length).toBeGreaterThan(0);
+    expect(screen.getByRole('link', { name: 'Choose a Package' })).toHaveAttribute('href', '/packages');
     expect(
-      screen.getByText('Harga dan paket mengikuti lokasi tempat Anda berlatih.'),
+      screen.getByText('Prices and packages depend on where you train.'),
     ).toBeInTheDocument();
     expect(
-      screen.getByText('Gunakan paket aktif untuk memilih jadwal yang tersedia.'),
+      screen.getByText('Use your active package to pick an available time.'),
     ).toBeInTheDocument();
-    expect(screen.getByAltText('Reformer Pilates di Daily Dose Pilates')).toBeInTheDocument();
-    expect(screen.getByAltText('Mat Pilates di Daily Dose Pilates')).toBeInTheDocument();
-    expect(screen.getByAltText('Barre di Daily Dose Pilates')).toBeInTheDocument();
-    expect(screen.getAllByRole('link', { name: 'Lihat Jadwal' })).toHaveLength(2);
-    screen.getAllByRole('link', { name: 'Lihat Jadwal' }).forEach((link) => {
+    expect(screen.getAllByRole('link', { name: 'See Schedule' })).toHaveLength(2);
+    screen.getAllByRole('link', { name: 'See Schedule' }).forEach((link) => {
       expect(link).toHaveAttribute('href', '/classes#schedule');
     });
     expect(view.container).not.toHaveTextContent(/trial class/i);
+    // Seksi studio dan thumbnail kelas sudah dihapus; menu About tetap punya tujuan.
+    expect(view.container.querySelector('[data-testid="studio-showcase"]')).toBeNull();
+    expect(view.container.querySelector('#about')).not.toBeNull();
+    expect(view.container.querySelectorAll('#popular-title ~ * img, ol img')).toHaveLength(0);
     expect((await axe(view.container)).violations).toHaveLength(0);
   }, 30_000);
-
-  it('derives studio areas and class duration without hardcoded location claims', () => {
-    expect(
-      studioAreaSummary([
-        {
-          id: 'one',
-          code: 'ONE',
-          name: 'Daily Dose Jakarta',
-          timezone: 'Asia/Jakarta',
-          supportWhatsappE164: null,
-        },
-        {
-          id: 'two',
-          code: 'TWO',
-          name: 'Daily Dose BSD',
-          timezone: 'Asia/Jakarta',
-          supportWhatsappE164: null,
-        },
-      ]),
-    ).toBe('Jakarta & BSD');
-    expect(
-      classDurationSummary([
-        {
-          code: 'ONE',
-          name: 'One',
-          slug: 'one',
-          summary: 'One',
-          description: 'One',
-          level: 'Semua level',
-          durationMinutes: 45,
-          equipment: [],
-          benefits: [],
-          heroImageKey: 'one.png',
-        },
-        {
-          code: 'TWO',
-          name: 'Two',
-          slug: 'two',
-          summary: 'Two',
-          description: 'Two',
-          level: 'Semua level',
-          durationMinutes: 60,
-          equipment: [],
-          benefits: [],
-          heroImageKey: 'two.png',
-        },
-      ]),
-    ).toBe('45–60 menit');
-  });
 
   it('redirects authenticated customer from root (/) to member home (/account) - Tiket T-03', () => {
     mockSessionContext = {
@@ -180,7 +126,7 @@ describe('public landing page', () => {
     };
 
     render(<PublicLanding />);
-    expect(screen.getByText('Mengarahkan ke Beranda Member…')).toBeInTheDocument();
+    expect(screen.getByText('Taking you to your member home…')).toBeInTheDocument();
     expect(mockReplace).toHaveBeenCalledWith('/account');
   });
 });

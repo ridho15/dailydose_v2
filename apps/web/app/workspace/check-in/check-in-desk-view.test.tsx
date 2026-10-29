@@ -69,6 +69,22 @@ function deskClient(respons: MejaCheckIn[]): CheckInDeskClient {
     meja,
     tetapJalan: vi.fn().mockResolvedValue({ selisihBebanRp: 100_000 }),
     tidakHadir: vi.fn().mockResolvedValue([]),
+    pindai: vi.fn().mockResolvedValue({
+      diterima: true,
+      tercatat: true,
+      orang: { userId: 'i-1', nama: 'Asrida', peran: 'INSTRUKTUR' },
+      kelas: {
+        classSlotId: 'k',
+        bookingId: null,
+        namaKelas: 'Group',
+        studio: 'Studio 2',
+        mulai: '2026-10-28T02:00:00Z',
+        selesai: '2026-10-28T02:55:00Z',
+      },
+      tercatatPada: '2026-10-28T01:50:00Z',
+      namaCabang: 'Green Garden',
+      timezone: 'Asia/Jakarta',
+    }),
   };
 }
 

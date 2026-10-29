@@ -179,6 +179,17 @@ describe('PublicContentManagementService', () => {
     expect(saved).toMatchObject({ status: 'PUBLISHED', version: 4 });
   });
 
+  it('menyimpan slider hero sebagai en-US untuk beranda Inggris, FAQ tetap id-ID', async () => {
+    const { service, db } = setup(null, false);
+    await service.save(owner, 'HERO_CAROUSEL', { payload: hero() }, 'c');
+    expect(db.publicContent.findFirst.mock.calls[0]![0].where).toMatchObject({ locale: 'en-US' });
+    expect(db.publicContent.create.mock.calls[0]![0].data).toMatchObject({ locale: 'en-US' });
+    await service.reset(owner, 'HERO_CAROUSEL', 'c');
+    expect(db.publicContent.findMany.mock.calls.at(-1)![0].where).toMatchObject({ locale: 'en-US' });
+    await service.reset(owner, 'FAQ', 'c');
+    expect(db.publicContent.findMany.mock.calls.at(-1)![0].where).toMatchObject({ locale: 'id-ID' });
+  });
+
   it('resetting archives the live content so the site shows its defaults; optional reason', async () => {
     const { service, db } = setup();
     await expect(service.reset(owner, 'HERO_CAROUSEL', 'c', 'ab')).rejects.toMatchObject({

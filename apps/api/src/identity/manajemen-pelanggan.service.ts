@@ -1,5 +1,6 @@
 import { HttpStatus, Inject, Injectable, Optional } from '@nestjs/common';
 import { randomBytes } from 'node:crypto';
+import { filterStatusSelfie, statusSelfie } from './verifikasi-selfie';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service';
 import { AuditService } from '../foundation/audit.service';
@@ -13,7 +14,7 @@ import { PRIVATE_FILE_STORAGE, type PrivateFileStorage } from './private-file-st
 import { ApiProblem, newId } from './security';
 
 type CustomerStatus = 'PENDING_ACTIVATION' | 'ACTIVE' | 'INACTIVE';
-type VerificationStatus = 'PENDING' | 'ACTION_REQUIRED' | 'APPROVED';
+type VerificationStatus = 'PENDING' | 'ACTION_REQUIRED' | 'APPROVED' | 'REJECTED';
 
 export function buildPhoneSearchVariants(query: string): string[] {
   const trimmed = query.trim();
@@ -40,40 +41,13 @@ export function buildPhoneSearchVariants(query: string): string[] {
 
 type ProfileDocs = { ktpUrl?: string | null; selfieUrl?: string | null; notes?: string | null } | null | undefined;
 
-/** Satu sumber status verifikasi: dipakai daftar dan detail agar keduanya tidak bertentangan. */
+/** Satu sumber status verifikasi (selfie saja): dipakai daftar dan detail agar tidak bertentangan. */
 export function customerVerificationStatus(profile: ProfileDocs): VerificationStatus {
-  const hasBoth = Boolean(profile?.ktpUrl && profile?.selfieUrl);
-  const hasDocs = Boolean(profile?.ktpUrl || profile?.selfieUrl);
-  if (hasBoth && Boolean(profile?.notes?.includes('KYC_APPROVED'))) return 'APPROVED';
-  return hasDocs ? 'PENDING' : 'ACTION_REQUIRED';
+  return statusSelfie(profile);
 }
 
 export function verificationStatusWhere(status: VerificationStatus): Prisma.UserWhereInput {
-  const approved: Prisma.ProfilPenggunaWhereInput = {
-    ktpUrl: { not: null },
-    selfieUrl: { not: null },
-    notes: { contains: 'KYC_APPROVED' },
-  };
-  if (status === 'APPROVED') return { profile: approved };
-  if (status === 'PENDING')
-    // Eksplisit aman-NULL: "NOT (notes LIKE ...)" bernilai NULL (bukan benar) saat notes kosong,
-    // sehingga baris tanpa catatan akan hilang dari hasil.
-    return {
-      profile: {
-        AND: [
-          { OR: [{ ktpUrl: { not: null } }, { selfieUrl: { not: null } }] },
-          {
-            OR: [
-              { ktpUrl: null },
-              { selfieUrl: null },
-              { notes: null },
-              { notes: { not: { contains: 'KYC_APPROVED' } } },
-            ],
-          },
-        ],
-      },
-    };
-  return { OR: [{ profile: null }, { profile: { ktpUrl: null, selfieUrl: null } }] };
+  return filterStatusSelfie(status);
 }
 
 function normalizePhone(value: string): string {

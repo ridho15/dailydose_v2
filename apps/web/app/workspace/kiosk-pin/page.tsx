@@ -1,10 +1,6 @@
-import type { Metadata } from 'next';
-import { KioskPinView } from './kiosk-pin-view';
+import { redirect } from 'next/navigation';
 
-export const metadata: Metadata = {
-  title: 'PIN Kiosk Studio',
-};
-
-export default function KioskPinPage() {
-  return <KioskPinView />;
+/** Alamat lama: pemindaian sekarang dilakukan staf di halaman Check-in, tanpa tablet ber-PIN. */
+export default function AlamatLama() {
+  redirect('/workspace/check-in');
 }

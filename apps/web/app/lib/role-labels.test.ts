@@ -4,7 +4,7 @@ import { roleLabel } from './role-labels';
 
 describe('roleLabel', () => {
   it('labels every canonical role', () => {
-    expect(roleLabel('SUPER_OWNER')).toBe('Super Admin');
+    expect(roleLabel('SUPER_OWNER')).toBe('Super Owner');
     expect(roleLabel('OWNER')).toBe('Owner cabang');
     expect(roleLabel('ADMIN')).toBe('Admin cabang');
     expect(roleLabel('FINANCE')).toBe('Finance');
@@ -36,7 +36,7 @@ describe('roleLabel', () => {
       { role: 'SUPER_OWNER', branchId: null, branch: null, source: 'DIRECT' },
       { role: 'KASIR_SHIFT', branchId: null, branch: null, source: 'DIRECT' },
     ] as never);
-    expect(summary).toEqual(['Instruktur · Jakarta', 'Super Admin', 'Kasir Shift']);
+    expect(summary).toEqual(['Instruktur · Jakarta', 'Super Owner', 'Kasir Shift']);
     expect(summary.join(' ')).not.toContain('undefined');
   });
 });

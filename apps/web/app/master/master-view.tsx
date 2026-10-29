@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   browserMasterClient,
   masterFailureMessage,
+  type DampakHapusTarif,
   type MasterClient,
   type MasterKind,
   type MasterSetting,
@@ -66,6 +67,16 @@ const tabToKind = (tab: MasterTab): MasterKind => {
   return 'QUOTA_CAPACITY';
 };
 
+/** Kalimat konfirmasi hapus tarif; untuk versi yang sudah berlaku menyebut dampaknya pada honor. */
+function keteranganHapus(item: MasterSetting, dampak: DampakHapusTarif | null): string {
+  const nilai = `${settingValue(item)} yang berlaku mulai ${dateValue(item.effectiveFrom)}`;
+  if (item.deletable) return `${nilai} akan dihapus.`;
+  if (!dampak) return `${nilai} akan dihapus. Menghitung kelas yang terdampak…`;
+  if (dampak.kelasTerdampak === 0)
+    return `${nilai} akan dihapus. Tidak ada honor kelas yang berubah${dampak.duplikat ? ' (versi ini duplikat)' : ''}.`;
+  return `${nilai} akan dihapus. Honor ${dampak.kelasTerdampak} kelas yang sudah selesai berubah dari ${formatRupiah(dampak.honorSekarangRp)} menjadi ${formatRupiah(dampak.honorSetelahHapusRp)}. Tercatat di audit bersama alasan Anda.`;
+}
+
 export function MasterView({
   client = browserMasterClient,
   activeTab = 'classTypes',
@@ -76,7 +87,7 @@ export function MasterView({
   client?: MasterClient;
   activeTab?: MasterTab;
   onTabChange?: (tab: MasterTab) => void;
-  access?: { canManage: boolean; canFinance: boolean };
+  access?: { canManage: boolean; canFinance: boolean; canCorrect?: boolean };
   visibleTabs?: MasterTab[];
 }) {
   const tabItems = visibleTabs
@@ -97,7 +108,13 @@ export function MasterView({
   const canFinance =
     testAccess?.canFinance ??
     (sessionContext?.status === 'authenticated' && sessionContext.hasCapability('finance:manage'));
+  // Hanya Super Owner: hapus versi tarif yang sudah berlaku karena salah input.
+  const canCorrect = testAccess
+    ? Boolean(testAccess.canCorrect)
+    : sessionContext?.status === 'authenticated' &&
+      sessionContext.hasCapability('instructor-fee:correct');
   const [classTypeId, setClassTypeId] = useState('');
+  const [dampakHapus, setDampakHapus] = useState<DampakHapusTarif | null>(null);
   const [branches, setBranches] = useState<Branches>([]);
   const [classTypes, setClassTypes] = useState<ClassTypes>([]);
   const [settings, setSettings] = useState<MasterSetting[]>([]);
@@ -247,7 +264,21 @@ export function MasterView({
 
   const deleteSetting = (item: MasterSetting) => {
     if (item.kind === 'QUOTA_CAPACITY') return;
+    setDampakHapus(null);
     setSettingToDelete(item);
+    // Versi yang sudah berlaku: tampilkan dulu kelas dan honor yang berubah bila dihapus.
+    if (!item.deletable && client.dampakHapusTarif)
+      void client
+        .dampakHapusTarif(item.id)
+        .then(setDampakHapus)
+        .catch(() => setDampakHapus(null));
+  };
+
+  /** Form tarif baru selalu mulai kosong; tipe kelas dan instruktur sebelumnya tidak terbawa. */
+  const bukaFormTarifBaru = () => {
+    setClassTypeId('');
+    setInstructor(undefined);
+    setIsCreateSettingModalOpen(true);
   };
 
   const loadBranchContent = async (selectedBranchId: string, selectedKind = kind) => {
@@ -796,7 +827,7 @@ export function MasterView({
                   </strong>
                   .
                   {kind !== 'QUOTA_CAPACITY' &&
-                    ' Nilai yang sudah berlaku tidak dapat dihapus; buat versi baru untuk menggantinya.'}
+                    ' Untuk mengubah nilai, buat versi baru. Versi yang keliru (salah tipe kelas atau duplikat) dapat dihapus oleh Super Owner.'}
                 </p>
               </div>
 
@@ -810,7 +841,7 @@ export function MasterView({
                   />
                 </div>
                 <Button
-                  onClick={() => setIsCreateSettingModalOpen(true)}
+                  onClick={bukaFormTarifBaru}
                   disabled={!canManage || (kind === 'INSTRUCTOR_FEE' && !canFinance)}
                 >
                   {kind === 'INSTRUCTOR_FEE' ? '+ Atur honor baru' : '+ Atur kuota baru'}
@@ -873,6 +904,11 @@ export function MasterView({
                             ) : (
                               <StatusBadge tone="neutral">Sudah berlaku</StatusBadge>
                             )}
+                            {item.duplikat && (
+                              <span className="ml-1.5">
+                                <StatusBadge tone="warning">Duplikat</StatusBadge>
+                              </span>
+                            )}
                           </td>
                           <td className="py-3 text-right">
                             <div className="flex items-center justify-end gap-1.5">
@@ -910,16 +946,18 @@ export function MasterView({
                                   Hapus
                                 </Button>
                               )}
-                              {kind !== 'QUOTA_CAPACITY' && canFinance && item.deletable && (
-                                <Button
-                                  size="sm"
-                                  variant="danger"
-                                  disabled={loading}
-                                  onClick={() => void deleteSetting(item)}
-                                >
-                                  Hapus
-                                </Button>
-                              )}
+                              {kind !== 'QUOTA_CAPACITY' &&
+                                canFinance &&
+                                (item.deletable || canCorrect) && (
+                                  <Button
+                                    size="sm"
+                                    variant="danger"
+                                    disabled={loading}
+                                    onClick={() => void deleteSetting(item)}
+                                  >
+                                    {item.deletable ? 'Hapus' : 'Hapus salah input'}
+                                  </Button>
+                                )}
                             </div>
                           </td>
                         </tr>
@@ -959,7 +997,7 @@ export function MasterView({
                   description="Pilih cabang lalu tambahkan konfigurasi efektif pertama."
                 />
                 <Button
-                  onClick={() => setIsCreateSettingModalOpen(true)}
+                  onClick={bukaFormTarifBaru}
                   disabled={!canManage || (kind === 'INSTRUCTOR_FEE' && !canFinance)}
                 >
                   {kind === 'INSTRUCTOR_FEE'
@@ -1338,14 +1376,15 @@ export function MasterView({
       />
       <ReasonDialog
         open={Boolean(settingToDelete)}
-        title="Hapus tarif yang belum berlaku?"
-        description={
-          settingToDelete
-            ? `${settingValue(settingToDelete)} yang berlaku mulai ${dateValue(settingToDelete.effectiveFrom)} akan dihapus. Tarif yang sudah berlaku tidak dapat dihapus.`
-            : undefined
+        title={
+          settingToDelete?.deletable
+            ? 'Hapus tarif yang belum berlaku?'
+            : 'Hapus versi tarif yang salah input?'
         }
-        confirmLabel="Hapus tarif"
+        description={settingToDelete ? keteranganHapus(settingToDelete, dampakHapus) : undefined}
+        confirmLabel={settingToDelete?.deletable ? 'Hapus tarif' : 'Hapus versi keliru'}
         tone="danger"
+        minLength={settingToDelete?.deletable ? 3 : 10}
         maxLength={500}
         busy={loading}
         onCancel={() => setSettingToDelete(null)}
@@ -1354,7 +1393,8 @@ export function MasterView({
           if (!item) return;
           setSettingToDelete(null);
           void run(async () => {
-            await client.deleteSetting('INSTRUCTOR_FEE', item.id, reason);
+            if (item.deletable) await client.deleteSetting('INSTRUCTOR_FEE', item.id, reason);
+            else await client.deleteSetting('INSTRUCTOR_FEE', item.id, reason, true);
             await loadBranchContent(branchId, kind);
           }, 'Tarif dihapus.');
         }}

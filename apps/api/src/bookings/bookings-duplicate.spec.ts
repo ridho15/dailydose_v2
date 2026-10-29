@@ -119,7 +119,7 @@ describe('BookingsService - Anti-Booking Kembar Duplicate Guard (Poin 8)', () =>
         findUnique: jest.fn().mockResolvedValue({
           id: customerUserId,
           status: 'ACTIVE',
-          profile: { notes: 'KYC_APPROVED' },
+          profile: { notes: 'KYC_APPROVED', selfieUrl: 'identity-documents/u/selfie.jpg' },
         }),
       },
     };

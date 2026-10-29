@@ -1,8 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { RuntimeConfigService } from '../configuration/runtime-config.service';
 import { PrismaService } from '../database/prisma.service';
-import { FAQ_CONTENT_KEY } from './faq.validation';
-import { HERO_CONTENT_KEY } from './hero-carousel.validation';
+import { FAQ_CONTENT_KEY, FAQ_LOCALE } from './faq.validation';
+import { HERO_CONTENT_KEY, HERO_LOCALE } from './hero-carousel.validation';
 import { branchPublicLocation } from '../master/branch-location';
 
 @Injectable()
@@ -108,15 +108,16 @@ export class PublicSiteConfigService {
         (ct.code.includes('MAT') ? 'classes/mat-pilates.png' : 'classes/reformer-pilates.png'),
     }));
 
-    const published = (contentKey: string) =>
+    const published = (contentKey: string, locale: string) =>
       this.db.publicContent.findFirst({
-        where: { contentKey, scopeKey: 'GLOBAL', locale: 'id-ID', status: 'PUBLISHED' },
+        where: { contentKey, scopeKey: 'GLOBAL', locale, status: 'PUBLISHED' },
         orderBy: { version: 'desc' },
         select: { payload: true },
       });
     const [publishedHero, publishedFaq] = await Promise.all([
-      published(HERO_CONTENT_KEY),
-      published(FAQ_CONTENT_KEY),
+      // Beranda berbahasa Inggris: slider hero id-ID lama tidak lagi ditampilkan.
+      published(HERO_CONTENT_KEY, HERO_LOCALE),
+      published(FAQ_CONTENT_KEY, FAQ_LOCALE),
     ]);
 
     return {

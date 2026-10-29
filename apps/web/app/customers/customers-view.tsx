@@ -22,8 +22,9 @@ export const customerStatusLabels: Record<string, string> = {
 };
 
 export const verificationStatusLabels: Record<string, string> = {
-  APPROVED: 'Disetujui',
-  ACTION_REQUIRED: 'Perlu perbaikan',
+  APPROVED: 'Selfie ada',
+  ACTION_REQUIRED: 'Belum ada selfie',
+  REJECTED: 'Selfie perlu diulang',
   PENDING: 'Menunggu',
 };
 
@@ -166,7 +167,7 @@ export function CustomersView() {
         code === 'IDENTITY_CONFLICT'
           ? 'Email atau nomor telepon sudah terdaftar atas nama pelanggan lain. Gunakan data berbeda atau cari akun pelanggan di tabel.'
           : code === 'MFA_REQUIRED'
-            ? 'Verifikasi MFA Super Admin diperlukan untuk membuat pelanggan.'
+            ? 'Verifikasi MFA Super Owner diperlukan untuk membuat pelanggan.'
             : 'Pelanggan belum dapat dibuat. Pastikan format nomor telepon benar (+62... atau 08...).',
       );
     } finally {
@@ -743,7 +744,7 @@ export function CustomersView() {
           <div className="space-y-4 py-2">
             {impersonateError && <Feedback kind="error">{impersonateError}</Feedback>}
             <p className="text-sm text-dd-muted">
-              Sesi Super Admin di peramban ini akan dialihkan langsung ke tampilan portal pelanggan (Paket Saya).
+              Sesi Super Owner di peramban ini akan dialihkan langsung ke tampilan portal pelanggan (Paket Saya).
             </p>
             <div className="flex justify-end gap-2 pt-3 border-t border-dd-line">
               <Button

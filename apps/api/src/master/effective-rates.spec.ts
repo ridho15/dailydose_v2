@@ -142,3 +142,75 @@ describe('deleting a tariff needs a typed reason', () => {
     expect(tx.instructorFee.delete).not.toHaveBeenCalled();
   });
 });
+
+describe('Super Owner menghapus versi tarif yang sudah berlaku karena salah input', () => {
+  const superOwner = principalFor(['master:manage', 'finance:manage', 'instructor-fee:correct']);
+  const lama = new Date('2026-01-01');
+  const keliru = {
+    id: rowId,
+    instructorId: instructor,
+    branchId: branchA,
+    classTypeId: classType,
+    effectiveDate: new Date('2026-09-01'),
+    feePerJamRp: 300_000,
+  };
+  const benar = { ...keliru, id: id(51), effectiveDate: lama, feePerJamRp: 200_000 };
+
+  function setupBerlaku() {
+    const slot = {
+      startAt: new Date('2026-10-05T02:00:00Z'),
+      endAt: new Date('2026-10-05T03:00:00Z'),
+      branchId: branchA,
+      classTypeId: classType,
+      instructorFeeRp: null,
+      isManualFee: false,
+    };
+    const tx = {
+      instructorFee: {
+        findUnique: jest.fn().mockResolvedValue(keliru),
+        findMany: jest.fn().mockResolvedValue([keliru, benar]),
+        delete: jest.fn().mockResolvedValue({}),
+      },
+      slotKelas: { findMany: jest.fn().mockResolvedValue([slot]) },
+    };
+    const db = { ...tx, $transaction: jest.fn(async (fn: (t: typeof tx) => unknown) => fn(tx)) };
+    const service = new EffectiveSettingsService(
+      new MasterAccessService(new PolicyService()),
+      db as never,
+    );
+    return { service, tx };
+  }
+
+  it('menunjukkan dampaknya pada honor sebelum dihapus', async () => {
+    const { service } = setupBerlaku();
+    await expect(service.dampakHapus(superOwner, rowId)).resolves.toMatchObject({
+      sudahBerlaku: true,
+      duplikat: false,
+      kelasTerdampak: 1,
+      honorSekarangRp: 300_000,
+      honorSetelahHapusRp: 200_000,
+    });
+  });
+
+  it('menghapus bila diminta sebagai salah input, dengan alasan cukup panjang', async () => {
+    const { service, tx } = setupBerlaku();
+    await expect(
+      service.remove(superOwner, 'INSTRUCTOR_FEE', rowId, 'c', 'Salah pilih tipe kelas', true),
+    ).resolves.toEqual({ id: rowId, deleted: true });
+    expect(tx.instructorFee.delete).toHaveBeenCalledWith({ where: { id: rowId } });
+  });
+
+  it('tetap menolak tanpa tanda salah input, tanpa izin, atau dengan alasan pendek', async () => {
+    const { service, tx } = setupBerlaku();
+    await expect(
+      service.remove(superOwner, 'INSTRUCTOR_FEE', rowId, 'c', 'Salah pilih tipe kelas'),
+    ).rejects.toMatchObject({ code: 'RATE_IN_EFFECT' });
+    await expect(
+      service.remove(finance, 'INSTRUCTOR_FEE', rowId, 'c', 'Salah pilih tipe kelas', true),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    await expect(
+      service.remove(superOwner, 'INSTRUCTOR_FEE', rowId, 'c', 'Salah', true),
+    ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+    expect(tx.instructorFee.delete).not.toHaveBeenCalled();
+  });
+});

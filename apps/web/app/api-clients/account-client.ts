@@ -54,6 +54,8 @@ export interface HeroSlideItem {
   highlightTitle?: string;
   description: string;
   imageSrc: string;
+  /** Titik fokus foto (CSS object-position), misalnya '50% 62%'. Tanpa isi: fokus bawaan hero. */
+  imagePosition?: string;
   primaryCta?: {
     label: string;
     href: string;

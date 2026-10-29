@@ -29,13 +29,13 @@ describe('HeroCarousel (editorial)', () => {
     expect(
       screen.getByRole('heading', { level: 1, name: 'Stronger Body. Calmer Mind.' }),
     ).toHaveAttribute('id', 'marketing-hero-title');
-    expect(screen.getByRole('link', { name: 'Lihat Jadwal' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: 'See Schedule' })).toHaveAttribute(
       'href',
       '/classes#schedule',
     );
-    expect(screen.getByRole('link', { name: 'Lihat Paket' })).toHaveAttribute('href', '/packages');
-    expect(screen.getByRole('navigation', { name: 'Pilih slide' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Slide berikutnya' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'See Packages' })).toHaveAttribute('href', '/packages');
+    expect(screen.getByRole('navigation', { name: 'Choose a slide' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Next slide' })).toBeInTheDocument();
     expect((await axe(view.container)).violations).toHaveLength(0);
   });
 
@@ -43,16 +43,16 @@ describe('HeroCarousel (editorial)', () => {
     const user = userEvent.setup();
     render(<HeroCarousel />);
 
-    await user.click(screen.getByRole('button', { name: 'Slide berikutnya' }));
+    await user.click(screen.getByRole('button', { name: 'Next slide' }));
     expect(
-      screen.getByRole('heading', { level: 1, name: /Mulai Langkah Pilates Anda/ }),
+      screen.getByRole('heading', { level: 1, name: /Start Your Pilates Journey/ }),
     ).toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: 'Buka slide 3 dari 3' }));
-    expect(screen.getByRole('heading', { level: 1, name: /Suasana Tenang/ })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Show slide 3 of 3' }));
+    expect(screen.getByRole('heading', { level: 1, name: /Calm & Personal/ })).toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: 'Slide sebelumnya' }));
-    expect(screen.getByRole('heading', { level: 1, name: /Mulai Langkah/ })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Previous slide' }));
+    expect(screen.getByRole('heading', { level: 1, name: /Start Your Pilates/ })).toBeInTheDocument();
   });
 
   it('memakai slide dari CMS yang aktif dan terurut, tanpa kontrol bila hanya satu slide', () => {
@@ -83,8 +83,8 @@ describe('HeroCarousel (editorial)', () => {
     expect(
       screen.getByRole('heading', { level: 1, name: 'Hanya Satu Slide CMS' }),
     ).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Slide berikutnya' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('navigation', { name: 'Pilih slide' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Next slide' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('navigation', { name: 'Choose a slide' })).not.toBeInTheDocument();
   });
 
   it('autoplay berjalan, kecuali pengguna meminta gerak dikurangi', () => {
@@ -93,7 +93,7 @@ describe('HeroCarousel (editorial)', () => {
     act(() => {
       vi.advanceTimersByTime(6100);
     });
-    expect(screen.getByRole('heading', { level: 1, name: /Mulai Langkah/ })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1, name: /Start Your Pilates/ })).toBeInTheDocument();
     unmount();
 
     mockReducedMotion(true);

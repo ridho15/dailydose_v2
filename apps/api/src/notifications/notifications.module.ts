@@ -11,6 +11,8 @@ import { WhatsAppGatewayService } from './whatsapp-gateway.service';
 import { ReminderScheduleService } from './reminder-schedule.service';
 import { NotificationTemplateService } from './notification-template.service';
 import { OperationsAutomationController } from './operations-automation.controller';
+import { KirimQrController } from './kirim-qr.controller';
+import { KirimQrService } from './kirim-qr.service';
 
 @Global()
 @Module({
@@ -19,6 +21,7 @@ import { OperationsAutomationController } from './operations-automation.controll
     NotificationsController,
     NotificationManagementController,
     OperationsAutomationController,
+    KirimQrController,
   ],
   providers: [
     NotificationsService,
@@ -27,8 +30,10 @@ import { OperationsAutomationController } from './operations-automation.controll
     WhatsAppGatewayService,
     ReminderScheduleService,
     NotificationTemplateService,
+    KirimQrService,
   ],
   exports: [
+    KirimQrService,
     NotificationWriterService,
     WhatsAppGatewayService,
     ReminderScheduleService,

@@ -1,6 +1,7 @@
 import { HttpStatus, Inject, Injectable, Optional } from '@nestjs/common';
 export type SessionChannel = 'WEB' | 'MOBILE' | string;
 import { PrismaService } from '../database/prisma.service';
+import { alasanPenolakanSelfie, statusSelfie } from './verifikasi-selfie';
 import { AuditService } from '../foundation/audit.service';
 import { IdempotencyService } from '../foundation/idempotency.service';
 import { RuntimeConfigService } from '../configuration/runtime-config.service';
@@ -105,19 +106,11 @@ export class IdentityService {
     const profile = await this.db.profilPengguna.findUnique({
       where: { userId },
     });
-    const hasDocs = Boolean(profile?.ktpUrl || profile?.selfieUrl);
-    const isApproved = Boolean(profile?.notes?.includes('KYC_APPROVED'));
-    const documents: Array<{ kind: 'SELFIE' | 'KTP_FRONT'; status: string }> = [];
-    if (profile?.selfieUrl) {
-      documents.push({ kind: 'SELFIE', status: isApproved ? 'APPROVED' : 'PENDING' });
-    }
-    if (profile?.ktpUrl) {
-      documents.push({ kind: 'KTP_FRONT', status: isApproved ? 'APPROVED' : 'PENDING' });
-    }
-    return {
-      status: isApproved ? 'APPROVED' : hasDocs ? 'PENDING' : 'ACTION_REQUIRED',
-      documents,
-    };
+    const status = statusSelfie(profile);
+    const documents: Array<{ kind: 'SELFIE'; status: string }> = profile?.selfieUrl
+      ? [{ kind: 'SELFIE', status: 'APPROVED' }]
+      : [];
+    return { status, documents };
   }
 
   async requireCustomerVerification(_userId: string) {
@@ -176,18 +169,24 @@ export class IdentityService {
 
     const isCustomerOnly = projection.roles.every((r) => r === 'CUSTOMER');
     let identityVerificationStatus = 'APPROVED';
+    // Member tanpa nomor WhatsApp (biasanya daftar lewat Google) diminta melengkapinya lebih dulu.
+    let phoneRequired = false;
     if (isCustomerOnly) {
+      const pemilik = this.db.user?.findUnique
+        ? await this.db.user.findUnique({ where: { id: userId }, select: { phone: true } })
+        : null;
+      phoneRequired = Boolean(pemilik) && !pemilik?.phone;
       const profile = (this.db as any).profilPengguna?.findUnique
         ? await (this.db as any).profilPengguna.findUnique({ where: { userId } })
         : null;
-      const isApproved = Boolean(profile?.notes?.includes('KYC_APPROVED'));
-      const hasDocs = Boolean(profile?.ktpUrl || profile?.selfieUrl);
-      identityVerificationStatus = isApproved ? 'APPROVED' : hasDocs ? 'PENDING' : 'ACTION_REQUIRED';
+      // Selfie saja: punya foto berarti terverifikasi.
+      identityVerificationStatus = statusSelfie(profile);
     }
 
     return {
       ...projection,
       identityVerificationStatus,
+      phoneRequired,
       sessionExpiresAt: sessionExpiresAt.toISOString(),
       branches,
     };
@@ -720,7 +719,7 @@ export class IdentityService {
       where: { userId: principal.userId },
     });
 
-    const isApproved = Boolean(profile?.notes?.includes('KYC_APPROVED'));
+    const isApproved = Boolean(profile?.selfieUrl);
     const documents: any[] = [];
     if (profile?.selfieUrl) {
       documents.push({
@@ -739,27 +738,12 @@ export class IdentityService {
         version: 1,
       });
     }
-    if (profile?.ktpUrl) {
-      documents.push({
-        id: `doc-ktp-${principal.userId}`,
-        kind: 'KTP_FRONT',
-        status: isApproved ? 'APPROVED' : 'PENDING',
-        uploadStatus: 'FINALIZED',
-        scanStatus: 'CLEAN',
-        fileName: 'ktp.jpg',
-        mimeType: 'image/jpeg',
-        sizeBytes: 1024,
-        rejectionReasonCode: null,
-        rejectionNote: null,
-        reviewedAt: profile.updatedAt?.toISOString() ?? new Date().toISOString(),
-        deletedAt: null,
-        version: 1,
-      });
-    }
 
     return {
-      status: isApproved ? 'APPROVED' : documents.length > 0 ? 'PENDING' : 'ACTION_REQUIRED',
+      status: statusSelfie(profile),
       documents,
+      /** Alasan foto terakhir ditolak staf, bila member diminta mengambil ulang. */
+      rejectionReason: alasanPenolakanSelfie(profile?.notes),
     };
   }
 

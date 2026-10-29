@@ -4,6 +4,7 @@ import { Prisma, type BookingStatus } from '@prisma/client';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { RuntimeConfigService } from '../configuration/runtime-config.service';
 import { PrismaService } from '../database/prisma.service';
+import { punyaSelfie } from '../identity/verifikasi-selfie';
 import { IdempotencyService } from '../foundation/idempotency.service';
 import type { SessionPrincipal } from '../identity/identity.service';
 import { PolicyService } from '../identity/policy.service';
@@ -117,9 +118,9 @@ export class BookingsService {
     });
     if (!user || user.status !== 'ACTIVE')
       throw new ApiProblem('IDENTITY_VERIFICATION_REQUIRED', HttpStatus.FORBIDDEN);
-    if (!user.profile?.notes?.includes('KYC_APPROVED')) {
+    // Syaratnya foto selfie (tanpa KTP): staf mengenali member dari foto ini saat check-in.
+    if (!punyaSelfie(user.profile))
       throw new ApiProblem('IDENTITY_VERIFICATION_REQUIRED', HttpStatus.FORBIDDEN);
-    }
   }
 
   /** Booking yang masih memesan satu sesi (BOOKED) per paket pelanggan; dasar "sisa sesi" yang tersedia. */

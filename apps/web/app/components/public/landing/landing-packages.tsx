@@ -5,9 +5,9 @@ import { routes } from '@/lib/routes';
 import { Reveal } from './reveal';
 
 const steps = [
-  ['01', 'Pilih studio', 'Harga dan paket mengikuti lokasi tempat Anda berlatih.'],
-  ['02', 'Bandingkan paket', 'Lihat jumlah sesi, masa berlaku, dan harga per sesi.'],
-  ['03', 'Booking kelas', 'Gunakan paket aktif untuk memilih jadwal yang tersedia.'],
+  ['01', 'Choose a studio', 'Prices and packages depend on where you train.'],
+  ['02', 'Compare packages', 'See the number of sessions, validity period, and price per session.'],
+  ['03', 'Book a class', 'Use your active package to pick an available time.'],
 ] as const;
 
 /**
@@ -24,25 +24,25 @@ export function LandingPackages() {
       <div className="ed-wrap ed-section" data-testid="package-journey">
         <Reveal className="grid items-end gap-10 lg:grid-cols-[1.25fr_0.75fr] lg:gap-[clamp(40px,8vw,140px)]">
           <div>
-            <span className="ed-eyebrow text-ed-mint">Paket Daily Dose</span>
+            <span className="ed-eyebrow text-ed-mint">Daily Dose packages</span>
             <h2
               className="ed-display mt-6 text-[clamp(40px,5vw,72px)] text-balance"
               id="package-cta-title"
             >
-              Bangun rutinitas yang <span className="ed-serif">konsisten.</span>
+              Build a routine that <span className="ed-serif">lasts.</span>
             </h2>
           </div>
           <div className="flex flex-col items-start gap-8 pb-2">
             <p className="m-0 max-w-[440px] text-[17px] leading-[1.7] text-ed-mint">
-              Bandingkan paket berdasarkan studio, tipe kelas, jumlah sesi, dan masa berlaku.
-              Seluruh harga ditampilkan langsung dari katalog aktif.
+              Compare packages by studio, class type, number of sessions, and validity period.
+              All prices come straight from the current catalog.
             </p>
             <div className="flex flex-wrap items-center gap-x-10 gap-y-6">
               <Link className="ed-button-light" href={routes.packages}>
-                Pilih Paket
+                Choose a Package
               </Link>
               <Link className="ed-link" href={`${routes.classes}#schedule`}>
-                <span>Lihat Jadwal</span>
+                <span>See Schedule</span>
                 <ArrowRight aria-hidden="true" className="size-4" />
               </Link>
             </div>
@@ -65,7 +65,7 @@ export function LandingPackages() {
             ))}
           </ol>
           <p className="m-0 mt-6 text-[13px] text-ed-mint">
-            Pilih kelas berdasarkan studio dan waktu yang tersedia.
+            Pick a class by studio and available time.
           </p>
         </Reveal>
       </div>

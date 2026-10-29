@@ -1,18 +1,6 @@
-import type { Metadata } from 'next';
-import { KioskView } from './kiosk-view';
+import { redirect } from 'next/navigation';
 
-export const metadata: Metadata = {
-  title: 'Layar Kiosk Studio & Presensi Instruktur',
-  robots: { index: false, follow: false },
-};
-
-export const dynamic = 'force-dynamic';
-
-export default async function KioskBranchPage({
-  params,
-}: {
-  params: Promise<{ branchCode: string }>;
-}) {
-  const { branchCode } = await params;
-  return <KioskView branchCode={branchCode} />;
+/** Alamat lama: pemindaian sekarang dilakukan staf di halaman Check-in, tanpa tablet ber-PIN. */
+export default function AlamatLama() {
+  redirect('/workspace/check-in');
 }

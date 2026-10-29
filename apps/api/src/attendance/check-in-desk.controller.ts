@@ -13,11 +13,24 @@ import {
 import type { Response } from 'express';
 import { AuthGuard, type AuthenticatedRequest } from '../identity/auth.guard';
 import { CheckInDeskService } from './check-in-desk.service';
+import { StudioCheckInService } from './studio-check-in.service';
 
 @Controller()
 @UseGuards(AuthGuard)
 export class CheckInDeskController {
-  constructor(private readonly desk: CheckInDeskService) {}
+  constructor(
+    private readonly desk: CheckInDeskService,
+    private readonly studioCheckIn: StudioCheckInService,
+  ) {}
+
+  /**
+   * Staf memindai QR tetap milik member atau instruktur (kamera atau barcode scanner) di meja
+   * check-in cabangnya. Menggantikan tablet kiosk ber-PIN.
+   */
+  @Post('attendance/desk/scan')
+  pindai(@Req() req: AuthenticatedRequest, @Body() body: { branchId?: string; pass?: unknown }) {
+    return this.studioCheckIn.pindai(req.principal, body?.branchId, body?.pass);
+  }
 
   /** Kelas hari ini, kehadiran yang sudah tercatat, dan kelas yang perlu diputuskan atau ditutup. */
   @Get('attendance/desk')

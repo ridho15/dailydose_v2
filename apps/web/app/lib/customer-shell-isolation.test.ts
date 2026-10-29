@@ -30,7 +30,7 @@ describe('Customer & Member Shell Isolation and Workspace Button Protection', ()
 
   const staffAdminSession: WebSession = {
     id: 'user-admin-1',
-    displayName: 'Super Admin',
+    displayName: 'Super Owner',
     roles: ['ADMIN', 'SUPER_OWNER'],
     branchIds: [],
     capabilities: ['branches:read', 'branches:write'],

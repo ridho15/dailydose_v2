@@ -65,6 +65,8 @@ export function PublicContentManagementView() {
   // Image Upload State
   const [uploadingImage, setUploadingImage] = useState(false);
   const [liveHero, setLiveHero] = useState<boolean>(false);
+  // Isi slider lama berbahasa Indonesia dipakai sebagai titik awal sampai versi Inggrisnya disimpan.
+  const [perluTerjemahan, setPerluTerjemahan] = useState(false);
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string>('');
   const [isDragOver, setIsDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -73,9 +75,17 @@ export function PublicContentManagementView() {
     return request('/public-content-management')
       .then((data: any[]) => {
         setItems(data);
-        // Editor memuat isi yang sedang tampil di situs; tanpa isi, situs memakai slide bawaan.
-        const latestHero = data.find((item) => item.contentKey === 'HOME_HERO_CAROUSEL');
-        setLiveHero(Boolean(latestHero));
+        // Beranda berbahasa Inggris, jadi yang tampil di situs adalah slider en-US. Tanpa itu, editor
+        // memuat slider id-ID lama sebagai bahan terjemahan, dan situs memakai slide bawaan.
+        const heroInggris = data.find(
+          (item) => item.contentKey === 'HOME_HERO_CAROUSEL' && item.locale === 'en-US',
+        );
+        const heroLama = data.find(
+          (item) => item.contentKey === 'HOME_HERO_CAROUSEL' && item.locale !== 'en-US',
+        );
+        const latestHero = heroInggris ?? heroLama;
+        setLiveHero(Boolean(heroInggris));
+        setPerluTerjemahan(!heroInggris && Boolean(heroLama));
 
         if (latestHero && latestHero.payload?.slides) {
           setSliderConfig({
@@ -349,6 +359,8 @@ export function PublicContentManagementView() {
                 <h2 className="text-lg font-bold text-dd-ink">Pengaturan Slider Beranda</h2>
                 <p className="mt-0.5 text-xs text-dd-muted">
                   Atur waktu rotasi banner otomatis dan kelola slide yang aktif di halaman depan.
+                  Beranda situs berbahasa Inggris: tulis judul, deskripsi, dan tombol dalam bahasa
+                  Inggris.
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -362,6 +374,15 @@ export function PublicContentManagementView() {
                 </Button>
               </div>
             </div>
+
+            {perluTerjemahan && (
+              <div className="mt-4">
+                <Feedback kind="warning">
+                  Slide di bawah adalah isi lama berbahasa Indonesia dan belum tampil di beranda.
+                  Terjemahkan teksnya ke bahasa Inggris, lalu tekan Simpan &amp; Tampilkan di Website.
+                </Feedback>
+              </div>
+            )}
 
             <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               <label className="flex items-center gap-3 rounded-dd-lg border border-dd-line bg-dd-surface-muted p-3 cursor-pointer">

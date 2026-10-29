@@ -15,7 +15,9 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import type { Response } from 'express';
 import { AuthGuard, type AuthenticatedRequest } from '../identity/auth.guard';
+import { SelfService } from '../identity/route-access';
 import { KoreksiJamService } from './koreksi-jam.service';
+import { PayrollInstrukturService } from './payroll-instruktur.service';
 import { RingkasanKeuanganService } from './ringkasan-keuangan.service';
 
 @Controller()
@@ -24,7 +26,15 @@ export class RingkasanKeuanganController {
   constructor(
     private readonly ringkasan: RingkasanKeuanganService,
     private readonly koreksiJam: KoreksiJamService,
+    private readonly payroll: PayrollInstrukturService,
   ) {}
+
+  /** Payroll instruktur yang sedang masuk: kelas terverifikasi dan koreksi jam satu bulan. */
+  @SelfService()
+  @Get('me/payroll')
+  payrollSaya(@Req() req: AuthenticatedRequest, @Query('period') period?: string) {
+    return this.payroll.milikSaya(req.principal, { period });
+  }
 
   /** Omzet, payroll, pengeluaran, dan laba satu bulan: total dan per cabang. */
   @Get('finance/owner-month')

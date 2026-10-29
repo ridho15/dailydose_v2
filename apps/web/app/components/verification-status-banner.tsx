@@ -56,18 +56,18 @@ export function VerificationStatusBanner({
       >
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="space-y-1">
-            <h2 className="text-lg font-bold text-ed-ink">Verifikasi identitas ditolak</h2>
+            <h2 className="text-lg font-bold text-ed-ink">Foto selfie perlu diambil ulang</h2>
             <p className="text-base leading-relaxed text-ed-muted">
               {rejectionReason
-                ? `Data ditolak: ${rejectionReason}. Perbaiki lalu kirim lagi.`
-                : 'Data verifikasi belum disetujui. Perbaiki data lalu kirim lagi.'}
+                ? `Foto sebelumnya belum bisa dipakai (${rejectionReason}). Ambil foto baru untuk lanjut.`
+                : 'Foto sebelumnya belum bisa dipakai. Ambil foto baru untuk lanjut.'}
             </p>
           </div>
           <ButtonLink
             href={`/account/verification${returnParam}`}
             className="w-full sm:w-auto min-h-[44px] shrink-0"
           >
-            Perbaiki data
+            Ambil foto baru
           </ButtonLink>
         </div>
       </aside>
@@ -83,16 +83,16 @@ export function VerificationStatusBanner({
     >
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="space-y-1">
-          <h2 className="text-lg font-bold text-ed-ink">Identitas kamu belum diverifikasi</h2>
+          <h2 className="text-lg font-bold text-ed-ink">Ambil foto selfie dulu</h2>
           <p className="text-base leading-relaxed text-ed-muted">
-            Verifikasi diperlukan sebelum kamu bisa membeli paket dan booking kelas. Satu halaman, sekitar 2 menit.
+            Satu foto wajah, tanpa KTP. Wajib sebelum membeli paket dan booking kelas.
           </p>
         </div>
         <ButtonLink
           href={`/account/verification${returnParam}`}
           className="w-full sm:w-auto min-h-[44px] shrink-0"
         >
-          Isi data verifikasi
+          Ambil foto selfie
         </ButtonLink>
       </div>
     </aside>

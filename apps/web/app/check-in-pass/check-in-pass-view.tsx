@@ -328,7 +328,7 @@ export function CheckInPassView() {
         </h1>
         <p className="mt-2 max-w-sm text-center text-sm font-normal text-white/85">
           {statis
-            ? 'Simpan sekali ke galeri. Tunjukkan ke tablet studio setiap datang, tanpa perlu masuk aplikasi.'
+            ? 'Simpan sekali ke galeri. Tunjukkan ke staf di meja check-in setiap datang, tanpa perlu masuk aplikasi.'
             : 'Tunjukkan QR ini ke pemindai tablet di meja resepsionis atau kiosk studio.'}
         </p>
       </header>

@@ -19,11 +19,27 @@ export interface SendWhatsAppOptions {
   bypassDeduplication?: boolean;
   dedupWindowMs?: number; // Jendela waktu deduplikasi (ms)
   sentAt?: Date;
+  /** Gambar PNG yang dikirim bersama `text` sebagai keterangannya (mis. QR kehadiran). */
+  imagePng?: Buffer;
 }
 
 export interface WhatsAppProvider {
   name: string;
-  sendMessage(to: string, text: string, payload?: Record<string, any>): Promise<{
+  sendMessage(
+    to: string,
+    text: string,
+    payload?: Record<string, any>,
+  ): Promise<{
+    success: boolean;
+    messageId?: string;
+    error?: string;
+  }>;
+  /** Kirim gambar PNG dengan keterangan. */
+  sendImage?(
+    to: string,
+    png: Buffer,
+    caption: string,
+  ): Promise<{
     success: boolean;
     messageId?: string;
     error?: string;
@@ -32,11 +48,27 @@ export interface WhatsAppProvider {
 
 export class MockWhatsAppProvider implements WhatsAppProvider {
   name = 'MOCK';
-  public sentMessages: Array<{ to: string; text: string; payload?: Record<string, any>; sentAt: Date }> = [];
+  public sentMessages: Array<{
+    to: string;
+    text: string;
+    payload?: Record<string, any>;
+    sentAt: Date;
+  }> = [];
 
   async sendMessage(to: string, text: string, payload?: Record<string, any>) {
     const messageId = `mock-wa-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     this.sentMessages.push({ to, text, payload, sentAt: new Date() });
+    return { success: true, messageId };
+  }
+
+  async sendImage(to: string, png: Buffer, caption: string) {
+    const messageId = `mock-wa-img-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    this.sentMessages.push({
+      to,
+      text: caption,
+      payload: { image: 'image/png', bytes: png.length },
+      sentAt: new Date(),
+    });
     return { success: true, messageId };
   }
 }
@@ -85,6 +117,54 @@ export class OfficialWhatsAppProvider implements WhatsAppProvider {
       return { success: false, error: err.message || 'WhatsApp network error' };
     }
   }
+
+  /** Meta Cloud API: gambar diunggah sebagai media lebih dulu, lalu dikirim dengan id-nya. */
+  async sendImage(to: string, png: Buffer, caption: string) {
+    try {
+      const cleanPhone = to.replace(/\D/g, '');
+      if (!cleanPhone || cleanPhone.length < 8) {
+        return { success: false, error: 'Nomor telepon tujuan tidak valid' };
+      }
+      const form = new FormData();
+      form.append('messaging_product', 'whatsapp');
+      form.append('type', 'image/png');
+      form.append('file', new Blob([new Uint8Array(png)], { type: 'image/png' }), 'qr.png');
+      const upload = await fetch(`${this.apiUrl}/${this.phoneNumberId}/media`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${this.token}` },
+        body: form,
+      });
+      if (!upload.ok) {
+        return {
+          success: false,
+          error: `Meta media HTTP ${upload.status}: ${await upload.text()}`,
+        };
+      }
+      const media = (await upload.json()) as { id?: string };
+      if (!media.id) return { success: false, error: 'Meta media tanpa id' };
+
+      const response = await fetch(`${this.apiUrl}/${this.phoneNumberId}/messages`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${this.token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messaging_product: 'whatsapp',
+          to: cleanPhone,
+          type: 'image',
+          image: { id: media.id, caption },
+        }),
+      });
+      if (!response.ok) {
+        return {
+          success: false,
+          error: `Meta API HTTP ${response.status}: ${await response.text()}`,
+        };
+      }
+      const data = (await response.json()) as any;
+      return { success: true, messageId: data.messages?.[0]?.id ?? `wa-${Date.now()}` };
+    } catch (err: any) {
+      return { success: false, error: err.message || 'WhatsApp network error' };
+    }
+  }
 }
 
 /**
@@ -112,8 +192,14 @@ export class WhatsAppGatewayService {
     const config = resolveWhatsAppConfig(process.env);
 
     if (config) {
-      this.provider = new OfficialWhatsAppProvider(config.token, config.phoneNumberId, config.apiUrl);
-      this.logger.log(`WhatsApp Gateway aktif menggunakan Official Provider: ${this.provider.name}`);
+      this.provider = new OfficialWhatsAppProvider(
+        config.token,
+        config.phoneNumberId,
+        config.apiUrl,
+      );
+      this.logger.log(
+        `WhatsApp Gateway aktif menggunakan Official Provider: ${this.provider.name}`,
+      );
     } else {
       this.provider = this.mockProvider;
       this.logger.log(`WhatsApp Gateway aktif menggunakan ${this.provider.name} (Dev / Test mode)`);
@@ -226,7 +312,11 @@ export class WhatsAppGatewayService {
 
     try {
       // 2. Eksekusi Pengiriman Pesan via Provider
-      const result = await this.provider.sendMessage(phone, options.text, options.payload);
+      const result = options.imagePng
+        ? this.provider.sendImage
+          ? await this.provider.sendImage(phone, options.imagePng, options.text)
+          : { success: false, error: 'Penyedia WhatsApp tidak mendukung gambar' }
+        : await this.provider.sendMessage(phone, options.text, options.payload);
 
       // 3. Catat ke tabel ReminderLog
       const status = result.success ? 'SENT' : 'FAILED';
@@ -240,6 +330,7 @@ export class WhatsAppGatewayService {
             provider: this.provider.name,
             messageId: result.messageId,
             textPreview: options.text.slice(0, 160),
+            ...(options.imagePng ? { image: 'image/png' } : {}),
             error: result.error,
           },
           status,
@@ -262,11 +353,7 @@ export class WhatsAppGatewayService {
     }
   }
 
-  private buildLogsWhere(params: {
-    phone?: string;
-    reminderType?: string;
-    status?: string;
-  }) {
+  private buildLogsWhere(params: { phone?: string; reminderType?: string; status?: string }) {
     const where: any = {};
     if (params.phone) {
       where.recipientPhone = { contains: params.phone.replace(/[^0-9]/g, '') };
@@ -306,11 +393,7 @@ export class WhatsAppGatewayService {
   /**
    * Hitung total log pengingat sesuai filter
    */
-  async countLogs(params: {
-    phone?: string;
-    reminderType?: string;
-    status?: string;
-  }) {
+  async countLogs(params: { phone?: string; reminderType?: string; status?: string }) {
     const where = this.buildLogsWhere(params);
     return this.db.reminderLog.count({ where });
   }

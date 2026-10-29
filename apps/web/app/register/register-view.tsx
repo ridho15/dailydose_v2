@@ -12,6 +12,7 @@ import { browserIdentityClient } from '@/api-clients/identity-client';
 import { useSessionContext } from '../session-context';
 import { useReturnTo } from '../lib/return-to';
 import { GoogleIdentityButton } from '../components/auth/google-identity-button';
+import { googleClientId } from '../lib/google-client-id';
 import {
   type RegisterErrors,
   type RegisterFieldName,
@@ -122,7 +123,7 @@ export function RegisterView() {
   const session = useSessionContext();
   const { withReturnTo } = useReturnTo();
   const loading = state === 'loading';
-  const googleEnabled = Boolean(process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID);
+  const googleEnabled = Boolean(googleClientId());
 
   const handleGoogleComplete = async () => {
     if (session) {

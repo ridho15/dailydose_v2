@@ -29,6 +29,71 @@ function isCurrent(pathname: string, hash: string, href: string) {
 }
 
 export type PublicChromeVariant = 'default' | 'editorial';
+/** Bahasa kerangka publik. Beranda berbahasa Inggris; halaman publik lain masih Indonesia. */
+export type PublicChromeLang = 'id' | 'en';
+
+const navigasiInggris: Record<string, string> = {
+  '/#about': 'About',
+  '/classes#schedule': 'Classes',
+  '/packages': 'Packages',
+  '/locations': 'Studios',
+  '/contact': 'Contact',
+};
+
+const kamusHeader = {
+  id: {
+    bookingKelas: 'Booking Kelas',
+    lihatPaket: 'Lihat Paket',
+    lihatJadwal: 'Lihat Jadwal',
+    navigasi: 'Navigasi publik',
+    navigasiMobile: 'Navigasi publik mobile',
+    masukKeAkun: 'Masuk ke akun',
+    akunSaya: 'Akun Saya',
+    bukaWorkspace: 'Buka workspace',
+    masuk: 'Masuk',
+    stafPanel: 'Staf Panel',
+    dashboardSaya: 'Dashboard Saya',
+    bookingSaya: 'Booking Saya',
+    paketSaya: 'Paket Saya',
+    riwayatPesanan: 'Riwayat Pesanan',
+    profilSaya: 'Profil Saya',
+    gantiStudio: 'Ganti studio',
+    workspace: 'Buka Workspace',
+    keluar: 'Keluar',
+    daftar: 'Daftar',
+    bukaMenu: 'Buka menu navigasi',
+    menuNavigasi: 'Menu navigasi',
+    tutupMenu: 'Tutup menu navigasi',
+    tutup: 'Tutup',
+    menu: 'Menu',
+  },
+  en: {
+    bookingKelas: 'Book a Class',
+    lihatPaket: 'See Packages',
+    lihatJadwal: 'See Schedule',
+    navigasi: 'Main navigation',
+    navigasiMobile: 'Mobile navigation',
+    masukKeAkun: 'Sign in to your account',
+    akunSaya: 'My Account',
+    bukaWorkspace: 'Open workspace',
+    masuk: 'Sign in',
+    stafPanel: 'Staff Panel',
+    dashboardSaya: 'My Dashboard',
+    bookingSaya: 'My Bookings',
+    paketSaya: 'My Packages',
+    riwayatPesanan: 'Order History',
+    profilSaya: 'My Profile',
+    gantiStudio: 'Change studio',
+    workspace: 'Open Workspace',
+    keluar: 'Sign out',
+    daftar: 'Sign up',
+    bukaMenu: 'Open navigation menu',
+    menuNavigasi: 'Navigation menu',
+    tutupMenu: 'Close navigation menu',
+    tutup: 'Close',
+    menu: 'Menu',
+  },
+} as const;
 
 // Kelas per varian. `default` mempertahankan tampilan lama persis; `editorial` mengikuti
 // konsep "Editorial Calm" (datar, persegi, garis tipis, tanpa bayangan/blur).
@@ -142,8 +207,14 @@ const headerStyles = {
   },
 } as const;
 
-export function PublicHeader({ variant = 'default' }: { variant?: PublicChromeVariant } = {}) {
+export function PublicHeader({
+  variant = 'default',
+  lang = 'id',
+}: { variant?: PublicChromeVariant; lang?: PublicChromeLang } = {}) {
   const editorial = variant === 'editorial';
+  const k = kamusHeader[lang];
+  const labelNav = (item: { href: string; label: string }) =>
+    lang === 'en' ? (navigasiInggris[item.href] ?? item.label) : item.label;
   const t = headerStyles[variant];
   const pathname = usePathname() ?? '/';
   const sessionContext = useSessionContext();
@@ -167,11 +238,11 @@ export function PublicHeader({ variant = 'default' }: { variant?: PublicChromeVa
   useOverlayInteraction({ open, onClose: close, panelRef: drawerRef });
 
   const primaryCta = editorial
-    ? { href: `${routes.classes}#schedule`, label: 'Booking Kelas' }
-    : { href: routes.packages, label: 'Lihat Paket' };
+    ? { href: `${routes.classes}#schedule`, label: k.bookingKelas }
+    : { href: routes.packages, label: k.lihatPaket };
   const secondaryCta = editorial
-    ? { href: routes.packages, label: 'Lihat Paket' }
-    : { href: `${routes.classes}#schedule`, label: 'Lihat Jadwal' };
+    ? { href: routes.packages, label: k.lihatPaket }
+    : { href: `${routes.classes}#schedule`, label: k.lihatJadwal };
 
   return (
     <>
@@ -179,7 +250,7 @@ export function PublicHeader({ variant = 'default' }: { variant?: PublicChromeVa
         <div className={t.inner}>
           <BrandMark className={t.brand} priority />
 
-          <nav className={t.navList} aria-label="Navigasi publik">
+          <nav className={t.navList} aria-label={k.navigasi}>
             {publicNavigation.map((item) => {
               const current = isCurrent(pathname, hash, item.href);
               return (
@@ -189,7 +260,7 @@ export function PublicHeader({ variant = 'default' }: { variant?: PublicChromeVa
                   href={item.href}
                   aria-current={current ? 'page' : undefined}
                 >
-                  {item.label}
+                  {labelNav(item)}
                 </Link>
               );
             })}
@@ -199,60 +270,60 @@ export function PublicHeader({ variant = 'default' }: { variant?: PublicChromeVa
             className={`ml-auto flex shrink-0 items-center gap-2 lg:ml-2 ${editorial ? 'lg:gap-5' : ''}`}
           >
             {!session ? (
-              <Link className={t.mobileAccount} href={routes.signIn} aria-label="Masuk ke akun">
+              <Link className={t.mobileAccount} href={routes.signIn} aria-label={k.masukKeAkun}>
                 <UserRound className="size-5" aria-hidden="true" />
               </Link>
             ) : (
               <Link
                 className={t.mobileAccount}
                 href={customerOnly ? routes.account : routes.workspace}
-                aria-label={customerOnly ? 'Akun Saya' : 'Buka workspace'}
+                aria-label={customerOnly ? k.akunSaya : k.bukaWorkspace}
               >
                 <UserRound className="size-5" aria-hidden="true" />
               </Link>
             )}
             {!session ? (
               <Link className={t.signIn} href={routes.signIn}>
-                Masuk
+                {k.masuk}
               </Link>
             ) : (
               <details className="relative hidden sm:block">
                 <summary className={t.accountSummary}>
-                  <UserRound className="size-4" /> {customerOnly ? 'Akun Saya' : 'Staf Panel'}
+                  <UserRound className="size-4" /> {customerOnly ? k.akunSaya : k.stafPanel}
                 </summary>
                 <div className={t.accountPanel}>
                   {customerOnly ? (
                     <>
                       <Link href="/account" className={t.menuItem}>
-                        Dashboard Saya
+                        {k.dashboardSaya}
                       </Link>
                       <Link href="/bookings" className={t.menuItem}>
-                        Booking Saya
+                        {k.bookingSaya}
                       </Link>
                       <Link href="/account/packages" className={t.menuItem}>
-                        Paket Saya
+                        {k.paketSaya}
                       </Link>
                       <Link href="/orders" className={t.menuItem}>
-                        Riwayat Pesanan
+                        {k.riwayatPesanan}
                       </Link>
                       <Link href="/account/profile" className={t.menuItem}>
-                        Profil Saya
+                        {k.profilSaya}
                       </Link>
                       <button
                         type="button"
                         onClick={() => studioPreference?.openStudioPreference()}
                         className={t.menuButton}
                       >
-                        Ganti studio
+                        {k.gantiStudio}
                       </button>
                     </>
                   ) : (
                     <>
                       <Link href="/workspace" className={t.menuItem}>
-                        Buka Workspace
+                        {k.workspace}
                       </Link>
                       <Link href="/account/profile" className={t.menuItem}>
-                        Profil Saya
+                        {k.profilSaya}
                       </Link>
                     </>
                   )}
@@ -262,7 +333,7 @@ export function PublicHeader({ variant = 'default' }: { variant?: PublicChromeVa
                       onClick={() => void sessionContext?.logout()}
                       className={t.menuLogout}
                     >
-                      Keluar
+                      {k.keluar}
                     </button>
                   </div>
                 </div>
@@ -270,7 +341,7 @@ export function PublicHeader({ variant = 'default' }: { variant?: PublicChromeVa
             )}
             {!session && (
               <Link className={t.register} href={routes.register}>
-                Daftar
+                {k.daftar}
               </Link>
             )}
             <Link className={t.primary} href={primaryCta.href}>
@@ -280,18 +351,18 @@ export function PublicHeader({ variant = 'default' }: { variant?: PublicChromeVa
               <button
                 ref={triggerRef}
                 type="button"
-                aria-label="Buka menu navigasi"
+                aria-label={k.bukaMenu}
                 aria-expanded={open}
                 aria-controls="public-mobile-navigation"
                 className="min-h-12 min-w-12 border border-ed-green bg-transparent px-3 text-sm font-bold text-ed-forest hover:bg-ed-tint lg:hidden"
                 onClick={() => setOpen(true)}
               >
-                Menu
+                {k.menu}
               </button>
             ) : (
               <IconButton
                 ref={triggerRef}
-                label="Buka menu navigasi"
+                label={k.bukaMenu}
                 variant="secondary"
                 className="rounded-full border-dd-line bg-white text-dd-forest shadow-none lg:hidden"
                 aria-expanded={open}
@@ -319,25 +390,25 @@ export function PublicHeader({ variant = 'default' }: { variant?: PublicChromeVa
             className={`${t.panel} ${drawer.visible ? 'translate-x-0' : 'translate-x-full'}`}
             role="dialog"
             aria-modal="true"
-            aria-label="Menu navigasi"
+            aria-label={k.menuNavigasi}
           >
             <div className={t.drawerHead}>
               <BrandMark className={t.drawerBrand} />
               {editorial ? (
                 <button
                   type="button"
-                  aria-label="Tutup menu navigasi"
+                  aria-label={k.tutupMenu}
                   className="min-h-12 min-w-12 border border-ed-green bg-transparent px-3 text-sm font-bold text-ed-forest hover:bg-ed-tint"
                   onClick={() => {
                     close();
                     triggerRef.current?.focus();
                   }}
                 >
-                  Tutup
+                  {k.tutup}
                 </button>
               ) : (
                 <IconButton
-                  label="Tutup menu navigasi"
+                  label={k.tutupMenu}
                   variant="secondary"
                   className="rounded-full border-dd-line bg-white text-dd-forest shadow-none"
                   onClick={() => {
@@ -350,7 +421,7 @@ export function PublicHeader({ variant = 'default' }: { variant?: PublicChromeVa
               )}
             </div>
 
-            <nav className="grid py-6" aria-label="Navigasi publik mobile">
+            <nav className="grid py-6" aria-label={k.navigasiMobile}>
               {publicNavigation.map((item) => {
                 const current = isCurrent(pathname, hash, item.href);
                 return (
@@ -361,7 +432,7 @@ export function PublicHeader({ variant = 'default' }: { variant?: PublicChromeVa
                     aria-current={current ? 'page' : undefined}
                     onClick={close}
                   >
-                    <span>{item.label}</span>
+                    <span>{labelNav(item)}</span>
                     <ChevronRight className={t.mobileChevron} aria-hidden="true" />
                   </Link>
                 );
@@ -372,23 +443,23 @@ export function PublicHeader({ variant = 'default' }: { variant?: PublicChromeVa
               {!session && (
                 <>
                   <Link className={t.mobileSecondary} href={routes.signIn} onClick={close}>
-                    Masuk
+                    {k.masuk}
                   </Link>
                   <Link className={t.mobileOutline} href={routes.register} onClick={close}>
-                    Daftar
+                    {k.daftar}
                   </Link>
                 </>
               )}
               {session && customerOnly ? (
                 <>
                   <Link className={t.mobileSecondary} href="/account" onClick={close}>
-                    Dashboard Saya
+                    {k.dashboardSaya}
                   </Link>
                   <Link className={t.mobileSecondary} href="/bookings" onClick={close}>
-                    Booking Saya
+                    {k.bookingSaya}
                   </Link>
                   <Link className={t.mobileSecondary} href="/account/packages" onClick={close}>
-                    Paket Saya
+                    {k.paketSaya}
                   </Link>
                   <button
                     type="button"
@@ -398,12 +469,12 @@ export function PublicHeader({ variant = 'default' }: { variant?: PublicChromeVa
                       studioPreference?.openStudioPreference();
                     }}
                   >
-                    Ganti studio
+                    {k.gantiStudio}
                   </button>
                 </>
               ) : session ? (
                 <Link className={t.mobileSecondary} href="/workspace" onClick={close}>
-                  Buka Workspace
+                  {k.workspace}
                 </Link>
               ) : null}
               <Link className={t.mobilePrimary} href={primaryCta.href} onClick={close}>
@@ -418,7 +489,7 @@ export function PublicHeader({ variant = 'default' }: { variant?: PublicChromeVa
                   className={t.mobileLogout}
                   onClick={() => void sessionContext?.logout()}
                 >
-                  Keluar
+                  {k.keluar}
                 </button>
               )}
             </div>

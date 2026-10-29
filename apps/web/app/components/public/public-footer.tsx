@@ -2,7 +2,59 @@ import Link from 'next/link';
 import { ChevronRight, Heart, Mail, MapPin, MessageCircle } from 'lucide-react';
 
 import { BrandMark } from './brand-mark';
-import type { PublicChromeVariant } from './public-header';
+import type { PublicChromeLang, PublicChromeVariant } from './public-header';
+
+/** Kelompok tautan footer versi Inggris, dipakai beranda. */
+const footerLinksEn = [
+  {
+    label: 'Studio',
+    links: [
+      { href: '/locations', label: 'Studio Locations' },
+      { href: '/classes', label: 'Class Schedule' },
+      { href: '/packages', label: 'Packages & Pricing' },
+    ],
+  },
+  {
+    label: 'Help & Info',
+    links: [
+      { href: '/guide', label: 'Studio Guide & Etiquette' },
+      { href: '/#about', label: 'About the Studio' },
+      { href: '/contact', label: 'Contact Us' },
+    ],
+  },
+  {
+    label: 'Legal & Privacy',
+    links: [
+      { href: '/terms', label: 'Terms & Conditions' },
+      { href: '/privacy', label: 'Privacy Policy' },
+    ],
+  },
+];
+
+const kamusFooter = {
+  id: {
+    kabar: 'Kabar studio',
+    tetapDekat: 'Tetap dekat dengan',
+    ritme: 'ritme gerakmu.',
+    hubungi: 'Hubungi Kami',
+    kembali: 'Daily Dose Pilates, kembali ke halaman utama',
+    deskripsi:
+      'Studio Pilates modern di Jakarta, Tangerang & Surabaya. Bergerak lebih baik, hidup lebih seimbang.',
+    viaWa: 'Hubungi via WhatsApp',
+    dibuat: 'Dibuat untuk komunitas Pilates Indonesia',
+  },
+  en: {
+    kabar: 'Studio news',
+    tetapDekat: 'Stay close to',
+    ritme: 'your movement rhythm.',
+    hubungi: 'Contact Us',
+    kembali: 'Daily Dose Pilates, back to the home page',
+    deskripsi:
+      'A modern Pilates studio in Jakarta, Tangerang & Surabaya. Move better, live more balanced.',
+    viaWa: 'Contact via WhatsApp',
+    dibuat: 'Made for the Pilates community in Indonesia',
+  },
+} as const;
 
 const footerLinks = [
   {
@@ -186,7 +238,9 @@ const editorialLink =
  * Footer varian "Editorial Calm": latar `ed-deep`, tanpa kartu/ikon bulat,
  * hanya teks, garis tipis, dan tautan bergaris bawah.
  */
-function EditorialPublicFooter() {
+function EditorialPublicFooter({ lang }: { lang: PublicChromeLang }) {
+  const k = kamusFooter[lang];
+  const grupTautan = lang === 'en' ? footerLinksEn : footerLinks;
   const year = new Date().getFullYear();
   const whatsapp = process.env.NEXT_PUBLIC_OFFICIAL_WHATSAPP || '62895329736127';
 
@@ -194,34 +248,27 @@ function EditorialPublicFooter() {
     <footer className="ed-scope bg-ed-deep text-white">
       <div className="ed-wrap flex flex-col items-start justify-between gap-6 border-b border-white/35 py-12 sm:flex-row sm:items-end">
         <div>
-          <span className="ed-eyebrow text-ed-mint">Kabar studio</span>
+          <span className="ed-eyebrow text-ed-mint">{k.kabar}</span>
           <p className="ed-display mt-4 max-w-[22ch] text-[clamp(32px,4vw,56px)] text-balance">
-            Tetap dekat dengan <span className="ed-serif text-ed-mint">ritme gerakmu.</span>
+            {k.tetapDekat} <span className="ed-serif text-ed-mint">{k.ritme}</span>
           </p>
         </div>
         <Link className="ed-button-light shrink-0" href="/contact">
-          Hubungi Kami
+          {k.hubungi}
         </Link>
       </div>
 
       <div className="ed-wrap grid gap-12 py-[65px] sm:grid-cols-[1.4fr_repeat(3,1fr)] lg:gap-16">
         <div>
-          <BrandMark
-            tone="light"
-            className="w-[200px]"
-            ariaLabel="Daily Dose Pilates — kembali ke halaman utama"
-          />
-          <p className="mt-6 max-w-[310px] text-sm leading-relaxed text-ed-mist">
-            Studio Pilates modern di Jakarta, Tangerang &amp; Surabaya. Bergerak lebih baik, hidup
-            lebih seimbang.
-          </p>
+          <BrandMark tone="light" className="w-[200px]" ariaLabel={k.kembali} />
+          <p className="mt-6 max-w-[310px] text-sm leading-relaxed text-ed-mist">{k.deskripsi}</p>
           <div className="mt-6 flex flex-wrap gap-x-6 gap-y-2">
             <a
               className={editorialLink}
               href={`https://wa.me/${whatsapp}`}
               target="_blank"
               rel="noreferrer"
-              aria-label="Hubungi via WhatsApp"
+              aria-label={k.viaWa}
             >
               WhatsApp Admin
             </a>
@@ -240,7 +287,7 @@ function EditorialPublicFooter() {
           </div>
         </div>
 
-        {footerLinks.map((group) => (
+        {grupTautan.map((group) => (
           <nav key={group.label} aria-label={group.label}>
             <h3 className="ed-eyebrow m-0 mb-4 text-ed-mint">{group.label}</h3>
             <ul className="m-0 grid list-none gap-2 p-0">
@@ -258,12 +305,15 @@ function EditorialPublicFooter() {
 
       <div className="ed-wrap flex flex-col justify-between gap-2 border-t border-white/35 pb-6 pt-5 text-xs text-ed-mist sm:flex-row sm:gap-6">
         <span>© {year} Daily Dose Pilates. All rights reserved.</span>
-        <span>Dibuat untuk komunitas Pilates Indonesia</span>
+        <span>{k.dibuat}</span>
       </div>
     </footer>
   );
 }
 
-export function PublicFooter({ variant = 'default' }: { variant?: PublicChromeVariant } = {}) {
-  return variant === 'editorial' ? <EditorialPublicFooter /> : <DefaultPublicFooter />;
+export function PublicFooter({
+  variant = 'default',
+  lang = 'id',
+}: { variant?: PublicChromeVariant; lang?: PublicChromeLang } = {}) {
+  return variant === 'editorial' ? <EditorialPublicFooter lang={lang} /> : <DefaultPublicFooter />;
 }

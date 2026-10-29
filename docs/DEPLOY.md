@@ -25,9 +25,10 @@ membangun dan mengirim image).
 
 1. **Secret repository yang sudah dipakai** (Settings, Secrets and variables, Actions): `SERVER_HOST`, `SERVER_USER`,
    `SERVER_SSH_KEY`, `SERVER_PORT` (opsional), `PROJECT_PATH` (bawaan `/var/www/dailydose_v2`).
-2. **Variabel repository baru `NEXT_PUBLIC_GOOGLE_CLIENT_ID`** (tab Variables). Nilainya sama dengan yang ada di
-   `.env.production` server. Tanpa itu, tombol "Lanjutkan dengan Google" tidak berfungsi, karena nilai ini
-   ikut dibakukan ke dalam image saat dibangun. Workflow memberi peringatan bila kosong.
+2. **Client ID Google** sudah tersimpan di kode sebagai bawaan (`apps/web/app/lib/google-client-id.ts` dan
+   `apps/api/src/identity/provider-adapters.ts`); nilainya publik. Variabel repository `NEXT_PUBLIC_GOOGLE_CLIENT_ID`
+   dan `GOOGLE_CLIENT_ID` di `.env.production` hanya perlu diisi bila ingin memakai Client ID lain, dan keduanya
+   harus sama. Client secret tidak dipakai.
 3. **Environment `production`** (Settings, Environments): dibuat otomatis pada deploy pertama. Tambahkan
    "Required reviewers" bila ingin persetujuan manual sebelum server disentuh.
 4. **Paket GHCR**: dibuat otomatis oleh workflow dan bersifat privat. Server menariknya dengan token singkat dari
@@ -55,6 +56,34 @@ Deploy pertama di server tetap perlu menarik image sekitar 1 GB; berikutnya hany
 3. `docker compose up -d --remove-orphans --no-build` (tanpa build), lalu menunggu container sehat. Bila tidak sehat
    dalam 2 menit, skrip gagal dan job GitHub menjadi merah.
 4. Mencatat tag di `.deployed-version` dan menyimpan hanya 3 versi `sha-*` terbaru.
+
+## Tabel baru
+
+Skema hanya disinkronkan otomatis pada start pertama (`docker-entrypoint.sh`, berkas penanda
+`.bootstrapped_schema`). Tabel yang ditambahkan sesudahnya dibuat sekali secara manual, atau dengan satu kali deploy
+memakai `FORCE_DB_SYNC=true`. Pernyataan di bawah hanya membuat tabel baru; tabel lama tidak disentuh.
+
+`ulasan_instruktur` (ulasan member untuk instruktur, Oktober 2026):
+
+```sql
+CREATE TABLE `ulasan_instruktur` (
+    `id` CHAR(36) NOT NULL,
+    `bookingId` CHAR(36) NOT NULL,
+    `userId` CHAR(36) NOT NULL,
+    `classSlotId` CHAR(36) NOT NULL,
+    `instructorId` CHAR(36) NOT NULL,
+    `branchId` CHAR(36) NOT NULL,
+    `rating` TINYINT NULL,
+    `comment` TEXT NULL,
+    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+
+    UNIQUE INDEX `ulasan_instruktur_bookingId_key`(`bookingId`),
+    INDEX `ulasan_instruktur_userId_createdAt_idx`(`userId`, `createdAt`),
+    INDEX `ulasan_instruktur_instructorId_createdAt_idx`(`instructorId`, `createdAt`),
+    INDEX `ulasan_instruktur_branchId_createdAt_idx`(`branchId`, `createdAt`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+```
 
 ## Kembali ke versi sebelumnya
 

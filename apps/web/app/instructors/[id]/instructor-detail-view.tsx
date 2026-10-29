@@ -5,6 +5,7 @@ import { ArrowLeft, Building2, Calendar, Pencil, Power, PowerOff, ShieldAlert, U
 import { useCallback, useEffect, useState } from 'react';
 import { Feedback, Skeleton, StatusBadge } from '../../ui';
 import { AdminPageHeader } from '../../components/admin/admin-page-header';
+import { KirimQrWhatsApp } from '../../components/kirim-qr-whatsapp';
 import { formatRupiah } from '../../lib/formatters';
 import { instructorClient, type InstructorDetail } from '../instructor-client';
 import { Button, ButtonLink } from '../../components/actions';
@@ -150,9 +151,18 @@ export function InstructorDetailView({ id }: { id: string }) {
             title={data.displayName}
             description={`${data.email ?? 'Email belum tersedia'} · ${data.phoneE164 ?? 'Telepon belum tersedia'}`}
             actions={
-              <StatusBadge tone={data.status === 'ACTIVE' ? 'success' : 'warning'}>
-                {data.status === 'ACTIVE' ? 'Aktif' : 'Nonaktif'}
-              </StatusBadge>
+              <div className="flex flex-wrap items-center gap-2">
+                <StatusBadge tone={data.status === 'ACTIVE' ? 'success' : 'warning'}>
+                  {data.status === 'ACTIVE' ? 'Aktif' : 'Nonaktif'}
+                </StatusBadge>
+                {data.status === 'ACTIVE' && (
+                  <KirimQrWhatsApp
+                    userId={data.id}
+                    nama={data.displayName}
+                    punyaNomor={Boolean(data.phoneE164)}
+                  />
+                )}
+              </div>
             }
           />
           {canManage && (

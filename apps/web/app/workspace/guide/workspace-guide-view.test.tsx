@@ -29,9 +29,9 @@ describe('WorkspaceGuideView (Poin 18)', () => {
       screen.getByRole('heading', { name: 'Front Desk & Operasional Cabang' }),
     ).toBeVisible();
     expect(screen.getByText('1. Scanner QR Code Kehadiran Member')).toBeVisible();
-    expect(screen.getByRole('link', { name: /Buka Scanner QR/i })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: /Buka Check-in/i })).toHaveAttribute(
       'href',
-      '/check-in-scanner',
+      '/workspace/check-in',
     );
 
     // Verify a11y

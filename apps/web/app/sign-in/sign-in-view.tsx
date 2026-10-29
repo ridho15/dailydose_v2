@@ -17,6 +17,7 @@ import { useHydrated } from '../lib/use-hydrated';
 import { useReturnTo } from '../lib/return-to';
 import { BrandMark } from '../components/public/brand-mark';
 import { GoogleIdentityButton } from '../components/auth/google-identity-button';
+import { googleClientId } from '../lib/google-client-id';
 
 const messages: Record<UiFailure, string> = {
   AUTHENTICATION_REQUIRED: 'Email, username/nomor WhatsApp, atau password tidak valid.',
@@ -41,7 +42,7 @@ export function SignInView({ client = browserIdentityClient }: { client?: Identi
   const hydrated = useHydrated();
   const sessionContext = useSessionContext();
   const { withReturnTo } = useReturnTo();
-  const googleEnabled = Boolean(process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID);
+  const googleEnabled = Boolean(googleClientId());
 
   const complete = useCallback(async () => {
     if (sessionContext) {

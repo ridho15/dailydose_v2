@@ -218,7 +218,7 @@ export function messageForApiError(error: unknown): {
     ],
     CUSTOMER_VERIFICATION_REQUIRED: [
       'Verifikasi Identitas Diperlukan',
-      'Akun Anda belum lolos verifikasi identitas resmi. Silakan lengkapi KTP dan foto selfie terlebih dahulu.',
+      'Ambil foto selfie dulu di menu Akun > Foto selfie, lalu lanjutkan. Tidak perlu KTP.',
     ],
     FORBIDDEN: ['Akses tidak tersedia', 'Akun Anda tidak memiliki izin untuk tindakan ini.'],
     UNAUTHORIZED: ['Sesi telah berakhir', 'Silakan masuk kembali untuk melanjutkan.'],

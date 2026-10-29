@@ -3,13 +3,16 @@ import { Prisma } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import { PrismaService } from '../database/prisma.service';
 import { AuditService } from '../foundation/audit.service';
-import { dateInTimeZone, startOfLocalDateUtc } from '../identity/assignment-boundary';
+import type { SessionPrincipal } from '../identity/identity.service';
+import { PolicyService } from '../identity/policy.service';
 import { ApiProblem } from '../identity/security';
-import { KioskAccessService } from './kiosk-access.service';
 import { StudioScanService, type ScanResult } from './studio-scan.service';
 
 /**
- * Mencatat kehadiran dari pindaian perangkat studio.
+ * Mencatat kehadiran dari pindaian di meja check-in.
+ *
+ * Staf yang sudah masuk memindai QR tetap milik member atau instruktur (kamera atau barcode
+ * scanner). Lokasi terbukti dari cabang yang boleh ditangani staf itu, bukan dari PIN perangkat.
  *
  * `StudioScanService` memutuskan apakah pass itu milik orang yang punya kelas sekarang; layanan ini
  * yang menulis. Penulisan diulang-periksa di dalam transaksi karena dua pindaian beruntun bisa
@@ -31,43 +34,40 @@ export interface HasilPindaiStudio extends ScanResult {
   timezone: string;
 }
 
-export interface CatatanKiosk {
-  nama: string;
-  peran: 'MEMBER' | 'INSTRUKTUR';
-  tercatatPada: string;
-}
-
 @Injectable()
 export class StudioCheckInService {
   constructor(
     private readonly db: PrismaService,
     private readonly scan: StudioScanService,
-    private readonly kiosk: KioskAccessService,
+    private readonly policy: PolicyService,
     @Optional() private readonly audit?: AuditService,
   ) {}
 
-  private async cabang(branchCode: string, token: string | undefined, now: Date) {
-    const akses = await this.kiosk.requireAccess(branchCode, token, now);
-    const detail = await this.db.cabang.findUnique({
-      where: { id: akses.id },
-      select: { id: true, name: true, timezone: true },
-    });
-    if (!detail) throw new ApiProblem('RESOURCE_NOT_FOUND', HttpStatus.NOT_FOUND);
-    return detail;
-  }
-
   async pindai(
-    branchCode: string,
-    token: string | undefined,
+    principal: SessionPrincipal,
+    branchId: string | undefined,
     pass: unknown,
     now = new Date(),
   ): Promise<HasilPindaiStudio> {
-    const cabang = await this.cabang(branchCode, token, now);
+    this.policy.requireCapability(principal.capabilities, 'attendance:manage');
+    if (!branchId) {
+      throw new ApiProblem('VALIDATION_ERROR', HttpStatus.UNPROCESSABLE_ENTITY, false, [
+        { field: 'branchId', issue: 'REQUIRED' },
+      ]);
+    }
+    if (!principal.capabilities.includes('branch:all') && !principal.branchIds.includes(branchId)) {
+      throw new ApiProblem('FORBIDDEN', HttpStatus.FORBIDDEN);
+    }
+    const cabang = await this.db.cabang.findUnique({
+      where: { id: branchId },
+      select: { id: true, name: true, timezone: true },
+    });
+    if (!cabang) throw new ApiProblem('RESOURCE_NOT_FOUND', HttpStatus.NOT_FOUND);
     const dasar = { namaCabang: cabang.name, timezone: cabang.timezone };
 
     const hasil = await this.scan.resolve(typeof pass === 'string' ? pass : '', cabang.id, now);
     if (!hasil.diterima || !hasil.orang || !hasil.kelas) {
-      await this.catatPenolakan(cabang.id, hasil);
+      await this.catatPenolakan(cabang.id, hasil, principal.userId);
       return { ...hasil, ...dasar, tercatat: false };
     }
 
@@ -77,7 +77,7 @@ export class StudioCheckInService {
     }
 
     await this.audit?.catat(null, {
-      actorType: 'KIOSK',
+      actorId: principal.userId,
       branchId: cabang.id,
       action: 'attendance.studio_scan',
       objectType: hasil.orang.peran === 'INSTRUKTUR' ? 'ClassSlot' : 'Booking',
@@ -116,9 +116,9 @@ export class StudioCheckInService {
                 instructorId: orang!.userId,
                 method: 'QR_SCAN',
                 checkedInAt: now,
-                // Perangkat yang memindai milik cabang dan berada di studionya, jadi lokasinya pasti.
+                // Dipindai staf di meja cabang itu, jadi instruktur memang berada di studionya.
                 isWithinGeofence: true,
-                notes: 'Dipindai perangkat studio',
+                notes: 'Dipindai di meja check-in',
               },
             });
             return false;
@@ -157,10 +157,10 @@ export class StudioCheckInService {
     }
   }
 
-  private async catatPenolakan(branchId: string, hasil: ScanResult) {
+  private async catatPenolakan(branchId: string, hasil: ScanResult, actorId: string) {
     if (hasil.alasan === 'SUDAH_TERCATAT') return;
     await this.audit?.catat(null, {
-      actorType: 'KIOSK',
+      actorId,
       branchId,
       action: 'attendance.studio_scan_rejected',
       objectType: 'Branch',
@@ -169,55 +169,5 @@ export class StudioCheckInService {
       reason: hasil.alasan ?? null,
       afterMasked: { alasan: hasil.alasan, classSlotId: hasil.kelas?.classSlotId ?? null },
     });
-  }
-
-  /**
-   * Daftar singkat untuk layar studio: nama, peran, dan jam. Sengaja tanpa foto dan tanpa nomor
-   * telepon, karena layar ini terlihat oleh siapa pun yang lewat di depan meja.
-   */
-  async hariIni(
-    branchCode: string,
-    token: string | undefined,
-    now = new Date(),
-  ): Promise<CatatanKiosk[]> {
-    const cabang = await this.cabang(branchCode, token, now);
-    const awal = startOfLocalDateUtc(dateInTimeZone(now, cabang.timezone), cabang.timezone);
-    const akhir = new Date(awal.getTime() + 24 * 3_600_000);
-
-    const [member, instruktur] = await Promise.all([
-      this.db.kehadiranPelanggan.findMany({
-        where: {
-          checkedInAt: { gte: awal, lt: akhir },
-          booking: { classSlot: { branchId: cabang.id } },
-        },
-        select: {
-          checkedInAt: true,
-          booking: { select: { user: { select: { displayName: true } } } },
-        },
-        orderBy: { checkedInAt: 'desc' },
-        take: 10,
-      }),
-      this.db.kehadiranInstruktur.findMany({
-        where: { checkedInAt: { gte: awal, lt: akhir }, classSlot: { branchId: cabang.id } },
-        select: { checkedInAt: true, instructor: { select: { displayName: true } } },
-        orderBy: { checkedInAt: 'desc' },
-        take: 10,
-      }),
-    ]);
-
-    return [
-      ...member.map((m) => ({
-        nama: m.booking.user.displayName,
-        peran: 'MEMBER' as const,
-        tercatatPada: m.checkedInAt.toISOString(),
-      })),
-      ...instruktur.map((i) => ({
-        nama: i.instructor.displayName,
-        peran: 'INSTRUKTUR' as const,
-        tercatatPada: i.checkedInAt.toISOString(),
-      })),
-    ]
-      .sort((a, b) => b.tercatatPada.localeCompare(a.tercatatPada))
-      .slice(0, 10);
   }
 }

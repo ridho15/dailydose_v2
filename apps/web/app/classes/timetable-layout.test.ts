@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { geserDenganPanah, nadaKeterisian, rentangJam } from './class-slot-presenters';
+import {
+  geserDenganPanah,
+  isDibatalkan,
+  kelompokTipeKelas,
+  nadaKeterisian,
+  rentangJam,
+} from './class-slot-presenters';
 
 const hari = ['2026-10-26', '2026-10-27', '2026-10-28'];
 const jam = [9, 10, 11];
@@ -63,5 +69,22 @@ describe('nadaKeterisian', () => {
 
   it('menganggap kelas privat satu orang penuh, bukan kurang', () => {
     expect(nadaKeterisian({ capacity: 1, minimumQuota: 1, bookedCount: 1 })).toBe('penuh');
+  });
+});
+
+describe('kelompokTipeKelas', () => {
+  it('menggabungkan tipe bernama sama dari banyak cabang menjadi satu chip', () => {
+    expect(
+      kelompokTipeKelas(['Group', 'Private Class', 'group ', 'Private  Class', undefined, '']),
+    ).toEqual([
+      { id: 'group', label: 'Group' },
+      { id: 'private class', label: 'Private Class' },
+    ]);
+  });
+
+  it('isDibatalkan mengenali batal manual dan otomatis', () => {
+    expect(isDibatalkan({ status: 'CANCELLED' })).toBe(true);
+    expect(isDibatalkan({ status: 'AUTO_CANCELLED' })).toBe(true);
+    expect(isDibatalkan({ status: 'PUBLISHED' })).toBe(false);
   });
 });

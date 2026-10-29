@@ -115,6 +115,33 @@ describe('InstructorManagementService attendance data', () => {
     );
   });
 
+  it('lists only instructors who are still teaching: active, not stopped, assigned somewhere', async () => {
+    const { service, userFindMany } = build();
+    await service.list(superOwner, {});
+    expect(userFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          status: 'ACTIVE',
+          stoppedAt: null,
+          instructorAssignments: { some: { active: true } },
+        }),
+      }),
+    );
+  });
+
+  it('keeps branch staff to instructors actively assigned at their branch', async () => {
+    const { service, userFindMany } = build();
+    await service.list(admin, {});
+    expect(userFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          stoppedAt: null,
+          instructorAssignments: { some: { branchId: { in: [branch] }, active: true } },
+        }),
+      }),
+    );
+  });
+
   it('refuses viewers without assignment:read', async () => {
     const { service } = build();
     await expect(

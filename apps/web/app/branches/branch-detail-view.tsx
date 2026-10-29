@@ -1,6 +1,15 @@
 'use client';
 
-import { ArrowLeft, ExternalLink, MapPin, Pencil, Plus, ShieldCheck, ShieldAlert } from 'lucide-react';
+import {
+  ArrowLeft,
+  Camera,
+  ExternalLink,
+  MapPin,
+  Pencil,
+  Plus,
+  ShieldCheck,
+  ShieldAlert,
+} from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useTrackedRouter } from '../components/app-loading';
 import { Button, ButtonLink } from '../components/actions';
@@ -127,6 +136,16 @@ export function BranchDetailView({ id }: { id: string }) {
               </Badge>
               {canManage && (
                 <>
+                  {/* Foto ini sama dengan foto cabang di halaman Lokasi publik. */}
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    leadingIcon={<Camera className="size-4" aria-hidden="true" />}
+                    className="bg-white/90 text-dd-ink hover:bg-white backdrop-blur-md"
+                    onClick={() => setPublicProfileOpen(true)}
+                  >
+                    Ganti foto
+                  </Button>
                   <Button
                     variant="secondary"
                     size="sm"
@@ -160,6 +179,13 @@ export function BranchDetailView({ id }: { id: string }) {
               </Badge>
               {canManage && (
                 <>
+                  <Button
+                    variant="secondary"
+                    leadingIcon={<Camera className="size-4" aria-hidden="true" />}
+                    onClick={() => setPublicProfileOpen(true)}
+                  >
+                    Tambah foto
+                  </Button>
                   <Button
                     variant="secondary"
                     leadingIcon={<Pencil className="size-4" aria-hidden="true" />}

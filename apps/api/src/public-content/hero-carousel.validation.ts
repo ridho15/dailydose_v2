@@ -64,3 +64,6 @@ export function validateHeroCarousel(payload: unknown) {
   });
   return { autoplay, intervalMs, slides };
 }
+
+/** Slider hero hanya tampil di beranda yang berbahasa Inggris. */
+export const HERO_LOCALE = 'en-US';

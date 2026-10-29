@@ -175,6 +175,19 @@ export class IdentityController {
     return this.customerProfiles.get(request.principal);
   }
 
+  /** Nomor WhatsApp untuk akun yang belum punya (mis. daftar lewat Google). */
+  @SelfService()
+  @UseGuards(AuthGuard)
+  @Post('me/phone')
+  @HttpCode(200)
+  setMyPhone(@Req() request: AuthenticatedRequest, @Body() body: { phone?: string }) {
+    return this.customerProfiles.setPhone(
+      request.principal,
+      body ?? {},
+      request.correlationId ?? 'unknown',
+    );
+  }
+
   @SelfService()
   @UseGuards(AuthGuard)
   @Patch('me/profile')

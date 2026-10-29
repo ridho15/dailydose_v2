@@ -122,6 +122,24 @@ export function geserDenganPanah(
  * Rentang jam kalender: jam operasional studio, diperluas bila ada kelas di luar jam itu supaya
  * tidak ada kelas yang hilang dari tampilan.
  */
+export function isDibatalkan(slot: { status: string }): boolean {
+  return slot.status === 'CANCELLED' || slot.status === 'AUTO_CANCELLED';
+}
+
+export const kunciTipeKelas = (nama: string) => nama.trim().replace(/\s+/g, ' ').toLowerCase();
+
+/** Satu chip per nama tipe kelas, urut abjad; nama kosong diabaikan. */
+export function kelompokTipeKelas(nama: readonly (string | null | undefined)[]) {
+  const unik = new Map<string, string>();
+  for (const n of nama) {
+    const label = n?.trim().replace(/\s+/g, ' ');
+    if (label && !unik.has(kunciTipeKelas(label))) unik.set(kunciTipeKelas(label), label);
+  }
+  return [...unik.entries()]
+    .map(([id, label]) => ({ id, label }))
+    .sort((a, b) => a.label.localeCompare(b.label, 'id'));
+}
+
 export function rentangJam(jamKelas: readonly number[], buka = 9, tutup = 22): number[] {
   const sah = jamKelas.filter((n) => Number.isFinite(n));
   const mulai = Math.min(buka, ...sah);

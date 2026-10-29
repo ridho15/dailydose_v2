@@ -422,7 +422,7 @@ describe('Customer Smart Booking on Public Classes Catalog', () => {
     it.each([
       [
         'ACTION_REQUIRED',
-        'Lengkapi verifikasi identitas (KTP) dulu supaya bisa memesan kelas.',
+        'Ambil foto selfie dulu supaya bisa memesan kelas. Tidak perlu KTP.',
         'Lengkapi verifikasi',
         /^\/account\/verification\?returnTo=%2F/,
       ],

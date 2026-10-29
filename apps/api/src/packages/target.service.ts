@@ -70,7 +70,13 @@ export class TargetService {
     input: PaceQuery = {},
     now = new Date(),
   ): Promise<PaceResult> {
-    this.policy.requireCapability(principal.capabilities, 'finance:read');
+    // Meja depan (Admin) boleh melihat target dari pusat untuk satu cabangnya sendiri, tanpa
+    // simulasi dan tanpa angka gabungan; laporan keuangan lengkap tetap butuh `finance:read`.
+    if (!principal.capabilities.includes('finance:read')) {
+      this.policy.requireCapability(principal.capabilities, 'attendance:manage');
+      if (!input.branchId || input.targetRpOverride !== undefined)
+        throw new ApiProblem('FORBIDDEN', HttpStatus.FORBIDDEN);
+    }
 
     const period = input.period ?? now.toISOString().slice(0, 7);
     this.wajibPeriode(period);

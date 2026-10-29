@@ -80,6 +80,12 @@ export class InstructorManagementService {
 
     const where: Prisma.UserWhereInput = {
       ...this.scope(principal, filters.branchId),
+      // Daftar hanya berisi instruktur yang masih mengajar: tidak ditandai berhenti dan masih
+      // ditugaskan aktif di setidaknya satu cabang (juga untuk tampilan semua cabang).
+      stoppedAt: null,
+      ...(principal.capabilities.includes('branch:all') && !filters.branchId
+        ? { instructorAssignments: { some: { active: true } } }
+        : {}),
       ...(q
         ? {
             OR: [

@@ -1,21 +1,44 @@
 import { SchedulerService } from './scheduler.service';
 
-function build(overrides: {
-  orders?: jest.Mock;
-  packages?: jest.Mock;
-  autoCancel?: jest.Mock;
-  reminders?: jest.Mock;
-} = {}) {
-  const db = { paketPelanggan: { updateMany: overrides.packages ?? jest.fn().mockResolvedValue({ count: 2 }) } };
-  const orders = { expirePendingOrders: overrides.orders ?? jest.fn().mockResolvedValue({ expiredCount: 3 }) };
+function build(
+  overrides: {
+    orders?: jest.Mock;
+    packages?: jest.Mock;
+    autoCancel?: jest.Mock;
+    reminders?: jest.Mock;
+  } = {},
+) {
+  const db = {
+    paketPelanggan: { updateMany: overrides.packages ?? jest.fn().mockResolvedValue({ count: 2 }) },
+  };
+  const orders = {
+    expirePendingOrders: overrides.orders ?? jest.fn().mockResolvedValue({ expiredCount: 3 }),
+  };
   const autoCancel = {
     evaluateClasses:
       overrides.autoCancel ??
-      jest.fn().mockResolvedValue({ evaluatedSlotsCount: 5, confirmedSlotsCount: 3, cancelledSlotsCount: 1 }),
+      jest
+        .fn()
+        .mockResolvedValue({
+          evaluatedSlotsCount: 5,
+          confirmedSlotsCount: 3,
+          cancelledSlotsCount: 1,
+        }),
   };
-  const reminders = { runAllReminders: overrides.reminders ?? jest.fn().mockResolvedValue({ adminDigestsSent: 1 }) };
-  const service = new SchedulerService(db as never, orders as never, autoCancel as never, reminders as never);
-  return { service, db, orders, autoCancel, reminders };
+  const reminders = {
+    runAllReminders: overrides.reminders ?? jest.fn().mockResolvedValue({ adminDigestsSent: 1 }),
+  };
+  const kirimQr = {
+    kirimOtomatis: jest.fn().mockResolvedValue({ dikirim: 0, gagal: 0, dilewati: 0 }),
+  };
+  const service = new SchedulerService(
+    db as never,
+    orders as never,
+    autoCancel as never,
+    reminders as never,
+    kirimQr as never,
+  );
+  return { service, db, orders, autoCancel, reminders, kirimQr };
 }
 
 describe('SchedulerService', () => {
@@ -31,7 +54,7 @@ describe('SchedulerService', () => {
     const { service, orders } = build();
     service.onApplicationBootstrap();
     expect(service.enabled).toBe(false);
-    expect(service.status().jobs).toHaveLength(4);
+    expect(service.status().jobs).toHaveLength(5);
     expect(orders.expirePendingOrders).not.toHaveBeenCalled();
     expect(service.isHealthy()).toBe(true);
     service.onModuleDestroy();
@@ -57,7 +80,10 @@ describe('SchedulerService', () => {
   });
 
   it('a failing job is recorded without throwing, keeps no raw message, and later runs still work', async () => {
-    const orders = jest.fn().mockRejectedValueOnce(new Error('password=secret')).mockResolvedValue({ expiredCount: 0 });
+    const orders = jest
+      .fn()
+      .mockRejectedValueOnce(new Error('password=secret'))
+      .mockResolvedValue({ expiredCount: 0 });
     const { service } = build({ orders });
     const failed = await service.runJob('expire-orders');
     expect(failed).toMatchObject({ lastOk: false, failCount: 1, lastError: 'Error' });
@@ -69,7 +95,10 @@ describe('SchedulerService', () => {
   it('never runs the same job twice at once', async () => {
     let release!: () => void;
     const slow = jest.fn(
-      () => new Promise<{ expiredCount: number }>((resolve) => (release = () => resolve({ expiredCount: 1 }))),
+      () =>
+        new Promise<{ expiredCount: number }>(
+          (resolve) => (release = () => resolve({ expiredCount: 1 })),
+        ),
     );
     const { service } = build({ orders: slow });
     const first = service.runJob('expire-orders');
@@ -78,7 +107,10 @@ describe('SchedulerService', () => {
     expect(slow).toHaveBeenCalledTimes(1);
     release();
     await first;
-    expect(service.status().jobs.find((job) => job.name === 'expire-orders')).toMatchObject({ running: false, runCount: 1 });
+    expect(service.status().jobs.find((job) => job.name === 'expire-orders')).toMatchObject({
+      running: false,
+      runCount: 1,
+    });
   });
 
   it('when enabled, waits before the first run, then repeats on each interval', async () => {

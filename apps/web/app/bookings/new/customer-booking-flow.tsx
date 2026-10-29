@@ -41,7 +41,7 @@ const dateTime = (value: Date, timezone: string) =>
 const eligibilityCopy = {
   IDENTITY_VERIFICATION_REQUIRED: {
     title: 'Verifikasi identitas diperlukan',
-    description: 'Selfie dan KTP harus disetujui sebelum sesi dapat direservasi atas nama Anda.',
+    description: 'Ambil foto selfie dulu sebelum memesan kelas. Tidak perlu KTP.',
   },
   MATCHING_PACKAGE_REQUIRED: {
     title: 'Paket yang sesuai diperlukan',

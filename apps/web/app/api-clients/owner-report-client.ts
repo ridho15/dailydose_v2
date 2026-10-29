@@ -25,8 +25,18 @@ export interface OwnerReportClient {
 }
 
 export const browserOwnerReportClient: OwnerReportClient = {
-  laporan({ from, until, branchId }) {
+  async laporan({ from, until, branchId }) {
     const qs = new URLSearchParams({ from, until, ...(branchId ? { branchId } : {}) });
-    return apiFetch(`/reports/owner-exceptions?${qs}`, { label: 'Memuat laporan owner…' });
+    const hasil = await apiFetch<LaporanOwner>(`/attendance/owner-exceptions?${qs}`, {
+      label: 'Memuat laporan owner…',
+    });
+    // Jawaban dengan bentuk lain (mis. rute yang tertimpa) harus gagal di sini, bukan merusak halaman.
+    if (
+      !Array.isArray(hasil?.dibawahKuota?.rows) ||
+      !Array.isArray(hasil?.pindaiDitolak?.perAlasan)
+    ) {
+      throw new Error('LAPORAN_OWNER_TIDAK_DIKENAL');
+    }
+    return hasil;
   },
 };

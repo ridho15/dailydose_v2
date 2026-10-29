@@ -31,6 +31,8 @@ export interface WebSession {
   branches: SessionBranch[];
   preferredBranch?: PreferredStudio | null;
   passwordChangeRequired?: boolean;
+  /** Member belum punya nomor WhatsApp (biasanya daftar lewat Google); wajib dilengkapi dulu. */
+  phoneRequired?: boolean;
 }
 
 export interface SessionClient {

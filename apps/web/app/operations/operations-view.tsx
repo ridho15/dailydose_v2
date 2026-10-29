@@ -122,7 +122,7 @@ export function OperationsView({
         title="Operasional"
         titleId="operations-title"
         description="Jalankan evaluasi kuota H-24 dan pantau pengiriman email transaksional."
-        badges={<StatusBadge tone="info">Ops / Super Admin</StatusBadge>}
+        badges={<StatusBadge tone="info">Ops / Super Owner</StatusBadge>}
       />
       <Panel className="space-y-4 p-6 sm:p-8">
         <div>

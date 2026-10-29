@@ -5,17 +5,35 @@ export interface WeekWindow {
   label: string;
 }
 
+/**
+ * Membuat `Intl.DateTimeFormat` itu mahal, sedangkan kalender memanggil fungsi di file ini ratusan
+ * kali per render. Satu formatter per zona waktu disimpan dan dipakai ulang.
+ */
+const formatterTersimpan = new Map<string, Intl.DateTimeFormat>();
+function formatter(kunci: string, buat: () => Intl.DateTimeFormat) {
+  let f = formatterTersimpan.get(kunci);
+  if (!f) {
+    f = buat();
+    formatterTersimpan.set(kunci, f);
+  }
+  return f;
+}
+
 const partsFormatter = (timeZone: string) =>
-  new Intl.DateTimeFormat('en-CA', {
-    timeZone,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hourCycle: 'h23',
-  });
+  formatter(
+    `parts|${timeZone}`,
+    () =>
+      new Intl.DateTimeFormat('en-CA', {
+        timeZone,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hourCycle: 'h23',
+      }),
+  );
 
 function parts(value: Date, timeZone: string) {
   const values = Object.fromEntries(
@@ -101,12 +119,16 @@ export function shiftWeek(reference: Date, amount: number) {
 }
 
 export function formatBranchTime(value: Date, timeZone: string) {
-  return new Intl.DateTimeFormat('id-ID', {
-    timeZone,
-    hour: '2-digit',
-    minute: '2-digit',
-    hourCycle: 'h23',
-  }).format(value);
+  return formatter(
+    `jam|${timeZone}`,
+    () =>
+      new Intl.DateTimeFormat('id-ID', {
+        timeZone,
+        hour: '2-digit',
+        minute: '2-digit',
+        hourCycle: 'h23',
+      }),
+  ).format(value);
 }
 
 /** `Sen, 2 Nov`; ditambah tahun bila bukan tahun berjalan di zona waktu itu, supaya riwayat tahun lalu tidak terbaca sebagai minggu ini. */

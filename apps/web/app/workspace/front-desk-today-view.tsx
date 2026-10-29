@@ -20,6 +20,7 @@ import {
 } from '../api-clients/dashboard-client';
 import { useSessionContext } from '../session-context';
 import { EmptyWeeksNotice } from './empty-weeks-notice';
+import { TargetCabang, ambilTargetCabang, type PaceCabang } from '../components/target-cabang';
 import { Button, ButtonLink } from '../components/actions';
 import { Modal, useAppFeedback } from '../components/app-feedback';
 import { Textarea } from '../components/forms';
@@ -48,6 +49,8 @@ export interface FrontDeskTodayViewProps {
   queues?: DashboardQueueSummary[] | null;
   /** Hanya untuk tes: jam acuan. */
   initialNow?: Date;
+  /** Target cabang dari pusat; tes mengganti pemuatnya. */
+  muatTarget?: (branchId: string) => Promise<PaceCabang>;
 }
 
 /**
@@ -65,6 +68,7 @@ export function FrontDeskTodayView({
   dashboardClient = browserDashboardClient,
   queues: queuesFromParent,
   initialNow,
+  muatTarget = ambilTargetCabang,
 }: FrontDeskTodayViewProps) {
   const feedback = useAppFeedback();
   const sessionContext = useSessionContext();
@@ -271,7 +275,6 @@ export function FrontDeskTodayView({
   );
   const queueTotal = (queues ?? []).reduce((sum, queue) => sum + queue.count, 0);
   const canReadRenewal = Boolean(sessionContext?.hasCapability('package:read'));
-  const kioskCode = (branch as { code?: string }).code;
 
   const slotRow = (slot: ClassSlot) => {
     const ended = slotPhase(slot, now) === 'Selesai';
@@ -328,15 +331,13 @@ export function FrontDeskTodayView({
           Kelas yang berjalan, presensi peserta, dan antrean yang perlu Anda putuskan.
         </p>
         <div className="flex flex-wrap gap-3 pt-1">
-          {kioskCode && (
-            <ButtonLink
-              href={`/kiosk/${encodeURIComponent(kioskCode)}`}
-              variant="secondary"
-              leadingIcon={<ScanLine className="size-4" aria-hidden="true" />}
-            >
-              Buka layar pindai studio
-            </ButtonLink>
-          )}
+          <ButtonLink
+            href="/workspace/check-in"
+            variant="secondary"
+            leadingIcon={<ScanLine className="size-4" aria-hidden="true" />}
+          >
+            Buka Check-in
+          </ButtonLink>
           <ButtonLink
             href="/customers"
             leadingIcon={<UserPlus className="size-4" aria-hidden="true" />}
@@ -345,6 +346,8 @@ export function FrontDeskTodayView({
           </ButtonLink>
         </div>
       </header>
+
+      <TargetCabang branchId={branch?.id} muat={muatTarget} />
 
       {queues && queueTotal > 0 && (
         <section

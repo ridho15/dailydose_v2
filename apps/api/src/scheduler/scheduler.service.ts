@@ -1,10 +1,12 @@
 import { Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
 import { AutoCancelService } from '../classes/auto-cancel.service';
 import { PrismaService } from '../database/prisma.service';
+import { KirimQrService } from '../notifications/kirim-qr.service';
 import { ReminderScheduleService } from '../notifications/reminder-schedule.service';
 import { PaymentExpirationWorkerService } from '../packages/payment-expiration-worker';
 
-export type SchedulerJobName = 'expire-orders' | 'expire-packages' | 'auto-cancel' | 'reminders';
+export type SchedulerJobName =
+  'expire-orders' | 'expire-packages' | 'auto-cancel' | 'reminders' | 'check-in-qr';
 
 export interface SchedulerJobStatus {
   name: SchedulerJobName;
@@ -53,6 +55,7 @@ export class SchedulerService implements OnApplicationBootstrap, OnModuleDestroy
     private readonly orders: PaymentExpirationWorkerService,
     private readonly autoCancel: AutoCancelService,
     private readonly reminders: ReminderScheduleService,
+    private readonly kirimQr: KirimQrService,
   ) {
     this.jobs = [
       {
@@ -99,6 +102,16 @@ export class SchedulerService implements OnApplicationBootstrap, OnModuleDestroy
           // Pengiriman berulang dicegah jendela dedup di ReminderLog.
           const result = await this.reminders.runAllReminders();
           return JSON.parse(JSON.stringify(result)) as Record<string, unknown>;
+        },
+      },
+      {
+        name: 'check-in-qr',
+        label: 'Kirim QR kehadiran ke WhatsApp akun baru',
+        intervalMs: 15 * MINUTE,
+        run: async () => {
+          // Sekali seumur akun: dedup di ReminderLog; yang gagal dicoba lagi putaran berikutnya.
+          const result = await this.kirimQr.kirimOtomatis();
+          return { ...result };
         },
       },
     ];
@@ -190,8 +203,7 @@ export class SchedulerService implements OnApplicationBootstrap, OnModuleDestroy
     if (!this.enabled || this.bootedAt === null) return true;
     return [...this.state.values()].every((job) => {
       const grace = FIRST_RUN_DELAY_MS + job.intervalMs * 3;
-      if (!job.lastFinishedAt || job.lastOk === false)
-        return now - this.bootedAt! < grace;
+      if (!job.lastFinishedAt || job.lastOk === false) return now - this.bootedAt! < grace;
       return now - Date.parse(job.lastFinishedAt) < job.intervalMs * 3;
     });
   }

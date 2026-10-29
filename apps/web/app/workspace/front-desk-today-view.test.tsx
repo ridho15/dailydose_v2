@@ -228,12 +228,12 @@ describe('FrontDeskTodayView', () => {
     expect(screen.queryByRole('button', { name: 'Tandai hadir' })).toBeNull();
   });
 
-  it('opens the studio scanner screen and registers members, and shows only decisions that exist', async () => {
+  it('opens the Check-in scanner and registers members, and shows only decisions that exist', async () => {
     renderDesk(clients());
-    // Studio memindai QR statis di ponsel member, jadi meja depan membuka layar pindai, bukan menampilkan QR.
-    expect(await screen.findByRole('link', { name: /Buka layar pindai studio/ })).toHaveAttribute(
+    // Staf memindai QR statis di ponsel member di halaman Check-in, bukan menampilkan QR.
+    expect(await screen.findByRole('link', { name: /Buka Check-in/ })).toHaveAttribute(
       'href',
-      '/kiosk/DD-GG',
+      '/workspace/check-in',
     );
     expect(screen.getByRole('link', { name: /Daftarkan member baru/ })).toHaveAttribute(
       'href',

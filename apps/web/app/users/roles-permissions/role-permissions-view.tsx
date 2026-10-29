@@ -90,15 +90,15 @@ function initialUrlState() {
 
 function errorMessage(code: string) {
   const messages: Record<string, string> = {
-    FORBIDDEN: 'Hanya Super Admin dengan izin pengelolaan role yang dapat membuka halaman ini.',
+    FORBIDDEN: 'Hanya Super Owner dengan izin pengelolaan role yang dapat membuka halaman ini.',
     CONFIGURATION_REQUIRED:
       'Management RBAC belum diaktifkan. Set RBAC_POLICY_SOURCE=database dan RBAC_MANAGEMENT_ENABLED=true.',
     ROLE_CODE_CONFLICT: 'Kode role sudah digunakan.',
     ROLE_IN_USE: 'Role masih digunakan user aktif dan tidak dapat dinonaktifkan.',
     PROTECTED_ROLE_CHANGE: 'Perubahan ini melanggar proteksi system role.',
     PROTECTED_CAPABILITY: 'Izin inti hanya dapat dimiliki SUPER_OWNER.',
-    LAST_SUPER_OWNER: 'Perubahan ditolak karena akan menghilangkan Super Admin aktif terakhir.',
-    SELF_ACCESS_CHANGE_FORBIDDEN: 'Super Admin tidak boleh mengubah akses akunnya sendiri.',
+    LAST_SUPER_OWNER: 'Perubahan ditolak karena akan menghilangkan Super Owner aktif terakhir.',
+    SELF_ACCESS_CHANGE_FORBIDDEN: 'Super Owner tidak boleh mengubah akses akunnya sendiri.',
     PERMISSION_OVERRIDE_EXISTS: 'Override aktif untuk user, izin, dan cakupan itu sudah ada.',
     STALE_VERSION: 'Data telah berubah. Muat ulang sebelum menyimpan kembali.',
     IDEMPOTENCY_KEY_REUSED: 'Intent penyimpanan telah berubah. Ulangi dari data terbaru.',
@@ -373,7 +373,7 @@ export function RolePermissionsView({
           <div className="grid justify-items-start gap-3 sm:justify-items-end">
             <div className="flex flex-wrap gap-2">
               <StatusBadge tone="info">Peran bawaan sistem (hanya baca)</StatusBadge>
-              <StatusBadge tone="info">Khusus Super Admin</StatusBadge>
+              <StatusBadge tone="info">Khusus Super Owner</StatusBadge>
             </div>
             <div className="flex flex-wrap gap-2">
               <ButtonLink

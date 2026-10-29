@@ -1,13 +1,24 @@
 'use client';
 
 import Link from 'next/link';
-import { ChevronRight, House, QrCode } from 'lucide-react';
+import { ChevronRight, Flame, House } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { AlertBanner } from '../components/app-feedback';
 import { ButtonLink } from '../components/actions';
 import { orderStatusLabels } from '@/lib/order-presenters';
 import { useSessionContext } from '../session-context';
 import { Skeleton } from '../ui';
+import { QrKehadiran } from '../components/qr-kehadiran';
+import {
+  browserBookingClient,
+  type BookingClient,
+  type CustomerBookingRecord,
+} from '../api-clients/booking-client';
+import {
+  browserPublicPackageCatalogClient,
+  type PublicPackage,
+  type PublicPackageCatalogClient,
+} from '../api-clients/public-package-catalog-client';
 import {
   browserPublicClassCatalogClient,
   type PublicClassCatalogClient,
@@ -88,10 +99,25 @@ type CustomerDashboardOverview = {
 
 import { formatRupiah } from '../lib/formatters';
 import { VerificationStatusBanner } from '../components/verification-status-banner';
+import { UlasanInstruktur } from '../components/customer/ulasan-instruktur';
+import type { UlasanInstrukturClient } from '@/api-clients/ulasan-instruktur-client';
 
 export function CustomerDashboard({
   classCatalogClient = browserPublicClassCatalogClient,
-}: { classCatalogClient?: PublicClassCatalogClient } = {}) {
+  packageCatalogClient = browserPublicPackageCatalogClient,
+  bookingClient = browserBookingClient,
+  muatQr,
+  ulasanClient,
+  now = Date.now(),
+}: {
+  classCatalogClient?: PublicClassCatalogClient;
+  packageCatalogClient?: PublicPackageCatalogClient;
+  bookingClient?: Pick<BookingClient, 'list'>;
+  /** Hanya untuk tes. */
+  muatQr?: () => Promise<string>;
+  ulasanClient?: Pick<UlasanInstrukturClient, 'tertunda' | 'kirim'>;
+  now?: number;
+} = {}) {
   const session = useSessionContext()?.session;
   const [overview, setOverview] = useState<CustomerDashboardOverview | null>(null);
   const [loading, setLoading] = useState(true);
@@ -157,6 +183,55 @@ export function CustomerDashboard({
         <ButtonLink href={bookingHref}>Booking kelas</ButtonLink>
       </header>
 
+      {/* QR di paling atas: yang paling sering dibutuhkan member saat tiba di studio. */}
+      <QrKehadiran nama={session.displayName} peran="member" muat={muatQr} />
+
+      {/* Kelas yang baru dihadiri: minta nilai untuk instruktur selagi masih segar. */}
+      <UlasanInstruktur client={ulasanClient} />
+
+      {overview && overview.packages.length > 0 && (
+        <section aria-labelledby="my-packages" className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 id="my-packages" className="m-0 text-xl font-semibold text-dd-ink">
+              Sisa paket saya
+            </h2>
+            <Link href="/account/packages" className="text-sm font-semibold text-dd-forest">
+              Lihat semua
+            </Link>
+          </div>
+          <ul className="m-0 grid list-none gap-3 p-0 sm:grid-cols-2">
+            {overview.packages.map((item) => (
+              <li
+                key={item.id}
+                className="flex items-center justify-between gap-4 rounded-dd-xl border border-dd-line bg-white p-5"
+              >
+                <span className="min-w-0">
+                  <strong className="block text-[16px] text-dd-ink">{item.packageName}</strong>
+                  <span className="block text-sm text-dd-muted">
+                    {item.branchName} · berlaku sampai{' '}
+                    {new Date(item.expiryAt).toLocaleDateString('id-ID', {
+                      day: 'numeric',
+                      month: 'short',
+                      year: 'numeric',
+                    })}
+                  </span>
+                </span>
+                <span className="shrink-0 text-right">
+                  <strong
+                    className={`block text-[34px] font-semibold leading-none tabular-nums ${
+                      item.available <= 1 ? 'text-dd-warning' : 'text-dd-forest'
+                    }`}
+                  >
+                    {item.available}
+                  </strong>
+                  <span className="block text-sm text-dd-muted">sesi tersisa</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       {error && (
         <div className="grid gap-3">
           <AlertBanner tone="danger" title="Dashboard belum lengkap" message={error} />
@@ -204,14 +279,6 @@ export function CustomerDashboard({
           <p className="m-0 mt-2 text-[17px] text-dd-ink">{nearest.date}</p>
           <p className="m-0 text-[17px] text-dd-ink">{nearest.time}</p>
           <p className="m-0 mt-1 text-[15px] text-dd-muted">{nearestBooking.branchName}</p>
-          {/* QR yang sama dipakai setiap datang; studio yang memindainya. */}
-          <Link
-            href="/check-in-pass"
-            className="mt-5 flex min-h-[52px] w-full items-center justify-center gap-2 rounded-dd-lg bg-dd-forest px-6 text-base font-semibold text-white no-underline transition hover:bg-dd-forest-dark"
-          >
-            <QrCode className="size-5" aria-hidden="true" />
-            <span>Lihat QR Pass</span>
-          </Link>
           <Link
             href={`/bookings/${encodeURIComponent(nearestBooking.id)}`}
             className="mt-3 block text-center text-[15px] font-semibold text-dd-forest underline"
@@ -274,6 +341,12 @@ export function CustomerDashboard({
         </section>
       )}
 
+      <RiwayatKelas client={bookingClient} />
+
+      {activeBranchId && (
+        <PromoHot branchId={activeBranchId} client={packageCatalogClient} now={now} />
+      )}
+
       {homeStudio && activeBranchId && (
         <WeekClasses
           branchId={activeBranchId}
@@ -281,42 +354,6 @@ export function CustomerDashboard({
           client={classCatalogClient}
           canBook={Boolean(overview?.packages.length)}
         />
-      )}
-
-      {overview && overview.packages.length > 0 && (
-        <section aria-labelledby="my-packages" className="space-y-3">
-          <div className="flex items-center justify-between">
-            <h2 id="my-packages" className="m-0 text-xl font-semibold text-dd-ink">
-              Paket saya
-            </h2>
-            <Link href="/account/packages" className="text-sm font-semibold text-dd-forest">
-              Lihat semua
-            </Link>
-          </div>
-          <ul className="m-0 grid list-none gap-2 p-0 sm:grid-cols-2">
-            {overview.packages.map((item) => (
-              <li
-                key={item.id}
-                className="flex items-end justify-between gap-3 rounded-dd-lg border border-dd-line bg-white p-4"
-              >
-                <span>
-                  <strong className="block text-[15px] text-dd-ink">{item.packageName}</strong>
-                  <span className="block text-sm text-dd-muted">
-                    {item.branchName} · berlaku sampai{' '}
-                    {new Date(item.expiryAt).toLocaleDateString('id-ID', {
-                      day: 'numeric',
-                      month: 'short',
-                      year: 'numeric',
-                    })}
-                  </span>
-                </span>
-                <strong className="shrink-0 text-xl font-semibold text-dd-forest">
-                  {item.available} sesi
-                </strong>
-              </li>
-            ))}
-          </ul>
-        </section>
       )}
     </main>
   );
@@ -401,6 +438,164 @@ function WeekClasses({
                   </span>
                 </span>
                 <ChevronRight className="size-5 shrink-0 text-dd-muted" aria-hidden="true" />
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
+
+/** Status booking yang memakai satu sesi paket: hadir, atau tidak hadir sehingga sesinya hangus. */
+const MEMAKAI_SESI = new Set(['ATTENDED', 'NO_SHOW']);
+
+/** Tiga kelas terakhir yang memakai sesi paket: kelas apa, dengan siapa, kapan. */
+export function RiwayatKelas({ client }: { client: Pick<BookingClient, 'list'> }) {
+  const [riwayat, setRiwayat] = useState<CustomerBookingRecord[] | null>(null);
+
+  useEffect(() => {
+    let batal = false;
+    Promise.resolve()
+      .then(() => client.list({ timeline: 'HISTORY', limit: 20 }))
+      .then((page) => {
+        if (batal) return;
+        const items = Array.isArray(page?.items) ? page.items : [];
+        setRiwayat(items.filter((b) => MEMAKAI_SESI.has(b.status)).slice(0, 3));
+      })
+      .catch(() => !batal && setRiwayat([]));
+    return () => {
+      batal = true;
+    };
+  }, [client]);
+
+  if (!riwayat || riwayat.length === 0) return null;
+
+  return (
+    <section aria-labelledby="riwayat-kelas" className="space-y-3">
+      <div className="flex items-center justify-between">
+        <h2 id="riwayat-kelas" className="m-0 text-xl font-semibold text-dd-ink">
+          Sesi terakhir yang terpakai
+        </h2>
+        <Link href="/bookings" className="text-sm font-semibold text-dd-forest">
+          Semua riwayat
+        </Link>
+      </div>
+      <ul className="m-0 grid list-none gap-2 p-0 sm:grid-cols-3">
+        {riwayat.map((b) => {
+          const slot = b.classSlot;
+          const tz = slot?.timezone ?? 'Asia/Jakarta';
+          const mulai = slot ? new Date(slot.startAt) : null;
+          return (
+            <li key={b.id} className="rounded-dd-lg border border-dd-line bg-white p-4">
+              <strong className="block text-[15px] text-dd-ink">
+                {slot?.classType?.name ?? 'Kelas'}
+              </strong>
+              <span className="block text-sm text-dd-muted">
+                {slot?.instructor?.displayName ?? 'Instruktur'}
+              </span>
+              {mulai && (
+                <span className="mt-1 block text-sm text-dd-ink">
+                  {new Intl.DateTimeFormat('id-ID', {
+                    weekday: 'short',
+                    day: 'numeric',
+                    month: 'short',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    hourCycle: 'h23',
+                    timeZone: tz,
+                  }).format(mulai)}
+                </span>
+              )}
+              <span
+                className={`mt-1 block text-xs font-semibold ${
+                  b.status === 'ATTENDED' ? 'text-dd-forest' : 'text-dd-warning'
+                }`}
+              >
+                {b.status === 'ATTENDED' ? 'Hadir · 1 sesi terpakai' : 'Tidak hadir · sesi hangus'}
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
+
+/** Promo paket yang sedang berlaku, paling cepat berakhir lebih dulu. */
+export function pilihPromoHot(items: readonly PublicPackage[], now: number): PublicPackage[] {
+  return items
+    .filter(
+      (p) =>
+        p.promotion &&
+        new Date(p.promotion.activeFrom).getTime() <= now &&
+        new Date(p.promotion.activeUntil).getTime() > now,
+    )
+    .sort(
+      (a, b) =>
+        new Date(a.promotion!.activeUntil).getTime() - new Date(b.promotion!.activeUntil).getTime(),
+    )
+    .slice(0, 3);
+}
+
+function PromoHot({
+  branchId,
+  client,
+  now,
+}: {
+  branchId: string;
+  client: PublicPackageCatalogClient;
+  now: number;
+}) {
+  const [promo, setPromo] = useState<PublicPackage[]>([]);
+
+  useEffect(() => {
+    let batal = false;
+    Promise.resolve()
+      .then(() => client.list(branchId))
+      .then((r) => !batal && setPromo(pilihPromoHot(Array.isArray(r?.items) ? r.items : [], now)))
+      .catch(() => !batal && setPromo([]));
+    return () => {
+      batal = true;
+    };
+  }, [branchId, client, now]);
+
+  if (promo.length === 0) return null;
+
+  return (
+    <section aria-labelledby="promo-hot" className="space-y-3">
+      <h2 id="promo-hot" className="m-0 flex items-center gap-2 text-xl font-semibold text-dd-ink">
+        <Flame className="size-5 text-dd-warning" aria-hidden="true" />
+        Promo yang sedang berlaku
+      </h2>
+      <ul className="m-0 grid list-none gap-2 p-0 sm:grid-cols-3">
+        {promo.map((p) => {
+          const promoInfo = p.promotion!;
+          return (
+            <li key={p.id}>
+              <Link
+                href={`/packages/${encodeURIComponent(p.id)}`}
+                className="block h-full rounded-dd-lg border border-dd-warning-line/60 bg-dd-warning-soft p-4 text-dd-ink no-underline hover:border-dd-warning"
+              >
+                <span className="inline-block rounded-full bg-dd-warning px-2 py-0.5 text-xs font-semibold text-white">
+                  {promoInfo.label || promoInfo.name}
+                </span>
+                <strong className="mt-2 block text-[15px]">{p.name}</strong>
+                <span className="mt-1 block">
+                  <span className="text-lg font-semibold text-dd-ink">
+                    {formatRupiah(promoInfo.promotionalPriceRp)}
+                  </span>{' '}
+                  <span className="text-sm text-dd-muted line-through">
+                    {formatRupiah(promoInfo.promotionalPriceRp + promoInfo.discountRp)}
+                  </span>
+                </span>
+                <span className="mt-1 block text-xs text-dd-muted">
+                  Berlaku sampai{' '}
+                  {new Date(promoInfo.activeUntil).toLocaleDateString('id-ID', {
+                    day: 'numeric',
+                    month: 'short',
+                  })}
+                </span>
               </Link>
             </li>
           );

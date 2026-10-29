@@ -1,10 +1,18 @@
 import { Prisma } from '@prisma/client';
+import { PolicyService } from '../identity/policy.service';
 import { StudioCheckInService } from './studio-check-in.service';
 import type { ScanResult } from './studio-scan.service';
 
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const cabang = id(1);
 const NOW = new Date('2026-10-28T02:10:00.000Z');
+const staf = {
+  sessionId: 's',
+  userId: id(200),
+  roles: [{ role: 'ADMIN', branchId: cabang }],
+  capabilities: ['attendance:manage'],
+  branchIds: [cabang],
+} as never;
 
 const diterimaMember: ScanResult = {
   diterima: true,
@@ -32,7 +40,6 @@ function setup(
     booking?: { status: string; attendance: { id: string } | null } | null;
     hadirInstruktur?: { id: string } | null;
     gagalTulis?: unknown;
-    kunci?: boolean;
   } = {},
 ) {
   const tx = {
@@ -63,33 +70,16 @@ function setup(
       if (opts.gagalTulis) throw opts.gagalTulis;
       return fn(tx);
     }),
-    kehadiranPelanggan: {
-      findMany: jest.fn().mockResolvedValue([
-        {
-          checkedInAt: new Date('2026-10-28T02:05:00.000Z'),
-          booking: { user: { displayName: 'Sari Dewi' } },
-        },
-      ]),
-    },
-    kehadiranInstruktur: {
-      findMany: jest.fn().mockResolvedValue([
-        {
-          checkedInAt: new Date('2026-10-28T01:50:00.000Z'),
-          instructor: { displayName: 'Asrida' },
-        },
-      ]),
-    },
   };
   const scan = { resolve: jest.fn().mockResolvedValue(opts.hasil ?? diterimaMember) };
-  const kiosk = {
-    requireAccess: jest.fn(async () => {
-      if (opts.kunci) throw Object.assign(new Error('KIOSK_LOCKED'), { status: 401 });
-      return { id: cabang, code: 'GG', name: 'Green Garden' };
-    }),
-  };
   const audit = { catat: jest.fn().mockResolvedValue(undefined) };
   return {
-    service: new StudioCheckInService(db as never, scan as never, kiosk as never, audit as never),
+    service: new StudioCheckInService(
+      db as never,
+      scan as never,
+      new PolicyService(),
+      audit as never,
+    ),
     db,
     tx,
     scan,
@@ -101,7 +91,7 @@ describe('StudioCheckInService.pindai', () => {
   it('mencatat kehadiran member dan menandai booking hadir', async () => {
     const { service, tx, audit } = setup();
 
-    const hasil = await service.pindai('gg', 'token', 'dd-pass:v1:x', NOW);
+    const hasil = await service.pindai(staf, cabang, 'dd-pass:v1:x', NOW);
 
     expect(hasil.tercatat).toBe(true);
     expect(tx.kehadiranPelanggan.create).toHaveBeenCalledWith({
@@ -113,14 +103,14 @@ describe('StudioCheckInService.pindai', () => {
     });
     expect(audit.catat).toHaveBeenCalledWith(
       null,
-      expect.objectContaining({ action: 'attendance.studio_scan', actorType: 'KIOSK' }),
+      expect.objectContaining({ action: 'attendance.studio_scan', actorId: id(200) }),
     );
   });
 
-  it('mencatat presensi instruktur dari perangkat studio, tanpa perlu geofence ponsel', async () => {
+  it('mencatat presensi instruktur yang dipindai staf, tanpa perlu geofence ponsel', async () => {
     const { service, tx } = setup({ hasil: diterimaInstruktur });
 
-    await service.pindai('gg', 'token', 'pass', NOW);
+    await service.pindai(staf, cabang, 'pass', NOW);
 
     expect(tx.kehadiranInstruktur.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
@@ -135,7 +125,7 @@ describe('StudioCheckInService.pindai', () => {
   it('menjawab sudah tercatat, bukan galat, bila pindaian lain menang lebih dulu', async () => {
     const { service, tx } = setup({ booking: { status: 'ATTENDED', attendance: { id: 'a' } } });
 
-    const hasil = await service.pindai('gg', 'token', 'pass', NOW);
+    const hasil = await service.pindai(staf, cabang, 'pass', NOW);
 
     expect(hasil.tercatat).toBe(false);
     expect(hasil.alasan).toBe('SUDAH_TERCATAT');
@@ -149,7 +139,7 @@ describe('StudioCheckInService.pindai', () => {
     });
     const { service } = setup({ gagalTulis: bentrok });
 
-    const hasil = await service.pindai('gg', 'token', 'pass', NOW);
+    const hasil = await service.pindai(staf, cabang, 'pass', NOW);
 
     expect(hasil.alasan).toBe('SUDAH_TERCATAT');
   });
@@ -157,7 +147,7 @@ describe('StudioCheckInService.pindai', () => {
   it('menolak kelas yang sudah dibatalkan di antara pemeriksaan dan penulisan', async () => {
     const { service } = setup({ slotStatus: 'CANCELLED' });
 
-    await expect(service.pindai('gg', 'token', 'pass', NOW)).rejects.toMatchObject({
+    await expect(service.pindai(staf, cabang, 'pass', NOW)).rejects.toMatchObject({
       status: 409,
     });
   });
@@ -170,7 +160,7 @@ describe('StudioCheckInService.pindai', () => {
     };
     const { service, tx, audit } = setup({ hasil: ditolak });
 
-    const hasil = await service.pindai('gg', 'token', 'pass', NOW);
+    const hasil = await service.pindai(staf, cabang, 'pass', NOW);
 
     expect(hasil.tercatat).toBe(false);
     expect(tx.kehadiranPelanggan.create).not.toHaveBeenCalled();
@@ -184,19 +174,24 @@ describe('StudioCheckInService.pindai', () => {
     );
   });
 
-  it('tidak bisa dipakai tanpa tablet yang dibuka dengan PIN cabang', async () => {
-    const { service, scan } = setup({ kunci: true });
-
-    await expect(service.pindai('gg', undefined, 'pass', NOW)).rejects.toMatchObject({
-      status: 401,
+  it('hanya staf dengan izin kehadiran di cabangnya sendiri yang bisa memindai', async () => {
+    const { service, scan } = setup();
+    const cabangLain = { ...(staf as object), branchIds: [id(2)] } as never;
+    await expect(service.pindai(cabangLain, cabang, 'pass', NOW)).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+    });
+    const tanpaIzin = { ...(staf as object), capabilities: ['booking:read'] } as never;
+    await expect(service.pindai(tanpaIzin, cabang, 'pass', NOW)).rejects.toBeDefined();
+    await expect(service.pindai(staf, undefined, 'pass', NOW)).rejects.toMatchObject({
+      code: 'VALIDATION_ERROR',
     });
     expect(scan.resolve).not.toHaveBeenCalled();
   });
 
-  it('memeriksa pass terhadap cabang tablet itu, bukan cabang yang dikirim pemanggil', async () => {
+  it('memeriksa pass terhadap cabang yang dipilih staf', async () => {
     const { service, scan } = setup();
 
-    await service.pindai('gg', 'token', 'pass', NOW);
+    await service.pindai(staf, cabang, 'pass', NOW);
 
     expect(scan.resolve).toHaveBeenCalledWith('pass', cabang, NOW);
   });
@@ -204,21 +199,8 @@ describe('StudioCheckInService.pindai', () => {
   it('memperlakukan isi yang bukan teks sebagai pass tak dikenal', async () => {
     const { service, scan } = setup();
 
-    await service.pindai('gg', 'token', { bukan: 'teks' }, NOW);
+    await service.pindai(staf, cabang, { bukan: 'teks' }, NOW);
 
     expect(scan.resolve).toHaveBeenCalledWith('', cabang, NOW);
-  });
-});
-
-describe('StudioCheckInService.hariIni', () => {
-  it('hanya membawa nama, peran, dan jam untuk layar yang terlihat publik', async () => {
-    const { service } = setup();
-
-    const daftar = await service.hariIni('gg', 'token', NOW);
-
-    expect(daftar).toEqual([
-      { nama: 'Sari Dewi', peran: 'MEMBER', tercatatPada: '2026-10-28T02:05:00.000Z' },
-      { nama: 'Asrida', peran: 'INSTRUKTUR', tercatatPada: '2026-10-28T01:50:00.000Z' },
-    ]);
   });
 });

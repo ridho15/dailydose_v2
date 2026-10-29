@@ -3,30 +3,29 @@ import { Reveal } from './reveal';
 const pillars = [
   {
     number: '01',
-    title: 'Kapasitas Kelas Eksklusif',
-    subtitle: 'Maksimal 4 peserta per sesi',
+    title: 'Small, Exclusive Classes',
+    subtitle: 'Up to 4 people per session',
     description:
-      'Kapasitas kelas kecil maksimal 4 peserta untuk perhatian personal dalam suasana yang nyaman, aman, dan terarah.',
+      'A maximum of 4 people per class, so you get personal attention in a comfortable, safe, and guided setting.',
   },
   {
     number: '02',
-    title: 'Instruktur Tersertifikasi',
-    subtitle: 'Berpengalaman & terarah',
-    description:
-      'Pendampingan yang terarah di setiap sesi oleh instruktur berdedikasi dan bersertifikasi.',
+    title: 'Certified Instructors',
+    subtitle: 'Experienced & attentive',
+    description: 'Every session is guided by dedicated, certified instructors.',
   },
   {
     number: '03',
-    title: 'Peralatan Pilates Modern',
-    subtitle: 'Presisi, halus & aman',
-    description: 'Peralatan Pilates berkualitas untuk latihan yang aman, halus, dan presisi.',
+    title: 'Modern Pilates Equipment',
+    subtitle: 'Precise, smooth & safe',
+    description: 'Quality Pilates equipment for training that is safe, smooth, and precise.',
   },
   {
     number: '04',
-    title: 'Suasana Studio Tenang',
-    subtitle: '5 pilihan studio',
+    title: 'A Calm Studio',
+    subtitle: '5 studios to choose from',
     description:
-      'Berlatih di 5 studio kami di Jakarta, Tangerang, dan Surabaya dengan jadwal fleksibel yang sesuai ritme Anda.',
+      'Train at our 5 studios in Jakarta, Tangerang, and Surabaya, on a flexible schedule that fits your rhythm.',
   },
 ] as const;
 

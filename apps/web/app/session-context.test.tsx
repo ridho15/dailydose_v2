@@ -202,18 +202,22 @@ describe('capability-aware session shell', () => {
     const breadcrumb = await screen.findByRole('navigation', { name: 'Breadcrumb' });
     // Bilah atas mengikuti mockup: "Daily Dose <halaman>", tanpa nama kelompok menu.
     expect(breadcrumb).toHaveTextContent('Daily Dose');
-    expect(within(breadcrumb).getByRole('link', { name: 'Pelanggan' })).toHaveAttribute(
+    expect(within(breadcrumb).getByRole('link', { name: 'Daftar member' })).toHaveAttribute(
       'href',
       '/customers',
     );
     expect(breadcrumb).toHaveTextContent('Detail');
   });
 
-  it('lets every signed-in session open the public kiosk portal instead of bouncing it to the dashboard', () => {
-    for (const session of [adminSession, instructorSession, customerSession]) {
-      expect(canAccessSessionPath(session, '/kiosk')).toBe(true);
-      expect(canAccessSessionPath(session, '/kiosk/dd-gg')).toBe(true);
-    }
+  it('sends a member without a WhatsApp number to complete the account first', () => {
+    const tanpaNomor: WebSession = { ...customerSession, phoneRequired: true };
+    expect(defaultSessionDestination(tanpaNomor)).toBe('/account/lengkapi');
+    expect(canAccessSessionPath(tanpaNomor, '/account/lengkapi')).toBe(true);
+    expect(canAccessSessionPath(tanpaNomor, '/account')).toBe(false);
+    expect(canAccessSessionPath(tanpaNomor, '/checkout')).toBe(false);
+    expect(canAccessSessionPath(tanpaNomor, '/packages')).toBe(true);
+    expect(defaultSessionDestination(customerSession)).toBe('/account');
+    expect(canAccessSessionPath(customerSession, '/account/lengkapi')).toBe(true);
   });
 
   it('keeps the WhatsApp automation route capability-scoped instead of closed for everyone', () => {
@@ -415,10 +419,11 @@ describe('capability-aware session shell', () => {
     expect(canAccessSessionPath(instructorSession, '/workspace/payments')).toBe(false);
   });
 
-  it('lets an instructor open the QR scanner for their own attendance but not the staff-only pages', () => {
-    expect(canAccessSessionPath(instructorSession, '/check-in-scanner')).toBe(true);
+  it('lets an instructor open their own static QR but not the staff-only pages', () => {
+    // Instruktur menunjukkan QR-nya; yang memindai adalah staf di halaman Check-in.
+    expect(canAccessSessionPath(instructorSession, '/check-in-pass')).toBe(true);
+    expect(canAccessSessionPath(instructorSession, '/workspace/check-in')).toBe(false);
     expect(canAccessSessionPath(instructorSession, '/workspace/bookings')).toBe(false);
-    expect(canAccessSessionPath(customerSession, '/check-in-scanner')).toBe(false);
   });
 
   it('keeps dual-role instructor+admin accounts on the full operational workspace', () => {
@@ -443,7 +448,7 @@ describe('capability-aware session shell', () => {
       'href',
       '/workspace/classes',
     );
-    expect(within(navigationRegion).getByRole('link', { name: 'Hari Ini' })).toHaveAttribute(
+    expect(within(navigationRegion).getByRole('link', { name: 'Hari ini' })).toHaveAttribute(
       'href',
       '/workspace',
     );
@@ -469,9 +474,8 @@ describe('capability-aware session shell', () => {
     expect(
       await screen.findByRole('heading', { name: /Halo, Coach/ }),
     ).toBeVisible();
-    expect(
-      screen.getByRole('link', { name: /Tampilkan QR presensi saya/ }),
-    ).toHaveAttribute('href', '/check-in-pass');
+    expect(screen.getByRole('heading', { name: 'QR kehadiran saya' })).toBeVisible();
+    expect(screen.getByRole('link', { name: 'Perbesar' })).toHaveAttribute('href', '/check-in-pass');
     expect(screen.queryByText('Pilih cabang aktif di bagian atas', { exact: false })).not.toBeInTheDocument();
   });
 

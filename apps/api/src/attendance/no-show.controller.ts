@@ -27,7 +27,9 @@ export class LaporanOwnerController {
   constructor(private readonly laporan: LaporanOwnerService) {}
 
   /** Kelas yang tetap jalan di bawah kuota dan pindaian studio yang ditolak, untuk Owner. */
-  @Get('reports/owner-exceptions')
+  // Bukan di bawah `reports/`: rute `reports/:reportType` milik keuangan terdaftar lebih dulu dan
+  // akan menjawab alamat itu dengan laporan omzet, sehingga panel Owner menerima bentuk data lain.
+  @Get('attendance/owner-exceptions')
   report(
     @Req() req: AuthenticatedRequest,
     @Query('branchId') branchId?: string,

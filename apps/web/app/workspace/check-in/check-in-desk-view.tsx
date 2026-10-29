@@ -28,6 +28,7 @@ import { Button } from '../../components/actions';
 import { Drawer, useAppFeedback } from '../../components/app-feedback';
 import { SelectInput, Textarea } from '../../components/forms';
 import { EmptyState, Feedback, Skeleton } from '../../ui';
+import { PemindaiMeja } from './pemindai-meja';
 import { useSessionContext } from '../../session-context';
 
 /** Lama kartu "sudah check-in" tampil sebelum menutup sendiri, seperti mockup. */
@@ -234,6 +235,11 @@ export function CheckInDeskView({
         Check-in hari ini{meja ? ` di ${meja.namaCabang}` : ''}
       </h1>
 
+      <PemindaiMeja
+        pindai={(pass) => client.pindai(branchId, pass)}
+        onTercatat={() => void muat()}
+      />
+
       {kartu ? (
         <KartuCheckIn kartu={kartu} timezone={tz} onClose={tutupKartu} />
       ) : (
@@ -242,8 +248,8 @@ export function CheckInDeskView({
           className="flex flex-wrap items-center gap-4 rounded-2xl border border-dashed border-dd-border-interactive bg-white p-6"
         >
           <p className="m-0 text-[17px] text-dd-muted">
-            Belum ada check-in baru. Kartu besar muncul di sini begitu seseorang memindai QR di
-            layar studio, lengkap dengan foto selfie-nya untuk dicocokkan.
+            Belum ada check-in baru. Kartu besar dengan foto selfie member muncul di sini begitu
+            QR-nya dipindai, supaya wajahnya bisa dicocokkan.
           </p>
         </section>
       )}

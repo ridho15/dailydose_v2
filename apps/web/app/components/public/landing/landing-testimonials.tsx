@@ -3,23 +3,23 @@ import { Reveal } from './reveal';
 const testimonials = [
   {
     quote:
-      'Suasana kelas reformer di Daily Dose sangat nyaman dan privat. Instruktur sangat teliti mengoreksi postur tubuh saya dari sesi pertama.',
+      'The reformer classes at Daily Dose feel comfortable and private. The instructor carefully corrected my posture from the very first session.',
     name: 'Maya S.',
-    role: 'Member Daily Dose Green Garden',
-    studio: 'Jakarta Barat',
+    role: 'Daily Dose Green Garden member',
+    studio: 'West Jakarta',
   },
   {
     quote:
-      'Peralatan reformer sangat mulus dan presisi. Jadwal kelas fleksibel dan terbukti sangat membantu meredakan keluhan sakit punggung saya.',
+      'The reformer equipment is smooth and precise. The flexible schedule has really helped ease my back pain.',
     name: 'Ronald K.',
-    role: 'Member Daily Dose Muara Karang',
-    studio: 'Jakarta Utara',
+    role: 'Daily Dose Muara Karang member',
+    studio: 'North Jakarta',
   },
   {
     quote:
-      'Sebagai pemula pilates, bimbingan Coach sangat sabar dan suportif. Suasana kelas kecil maksimal 4 orang membuat latihan terasa sangat personal.',
+      'As a Pilates beginner, I found the coach patient and supportive. With at most 4 people per class, every session feels personal.',
     name: 'Clarissa W.',
-    role: 'Member Daily Dose Graha Family',
+    role: 'Daily Dose Graha Family member',
     studio: 'Surabaya',
   },
 ] as const;
@@ -51,7 +51,7 @@ export function LandingTestimonials() {
     >
       <div className="ed-wrap ed-section border-t border-ed-line">
         <Reveal>
-          <span className="ed-eyebrow text-ed-green">Cerita &amp; pengalaman member</span>
+          <span className="ed-eyebrow text-ed-green">Member stories</span>
           <h2
             className="ed-display mt-6 text-[clamp(40px,5vw,72px)] text-balance"
             id="testimonials-title"

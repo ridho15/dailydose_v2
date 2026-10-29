@@ -198,25 +198,19 @@ for (const viewport of [
         };
       };
 
-      const stats = document.querySelector<HTMLElement>('[data-testid="studio-showcase"] dl')!;
       const journey = document.querySelector<HTMLElement>('[data-testid="package-journey"] ol')!;
       return {
         viewportWidth: document.documentElement.clientWidth,
         scrollWidth: document.documentElement.scrollWidth,
-        studio: measure('[data-testid="studio-showcase"]'),
+        intro: measure('#about'),
         packageJourney: measure('[data-testid="package-journey"]'),
-        statsWidth: stats.getBoundingClientRect().width,
         journeyWidth: journey.getBoundingClientRect().width,
         journeyRows: journey.children.length,
       };
     });
 
     expect(metrics.scrollWidth).toBeLessThanOrEqual(metrics.viewportWidth);
-    expect(metrics.studio.left).toBeGreaterThanOrEqual(24);
-    expect(metrics.studio.right).toBeLessThanOrEqual(metrics.viewportWidth - 24);
-    expect(metrics.studio.headingWidth).toBeGreaterThanOrEqual(360);
-    expect(metrics.studio.headingHeight).toBeLessThanOrEqual(180);
-    expect(metrics.statsWidth).toBeGreaterThanOrEqual(440);
+    expect(metrics.intro.headingWidth).toBeGreaterThanOrEqual(360);
     expect(metrics.packageJourney.left).toBeGreaterThanOrEqual(24);
     expect(metrics.packageJourney.right).toBeLessThanOrEqual(metrics.viewportWidth - 24);
     expect(metrics.packageJourney.headingWidth).toBeGreaterThanOrEqual(360);
@@ -229,12 +223,12 @@ for (const viewport of [
 test('mobile navigation uses a modal drawer instead of a horizontal menu', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
-  const trigger = page.getByRole('button', { name: 'Buka menu navigasi' });
+  const trigger = page.getByRole('button', { name: 'Open navigation menu' });
   await expect(trigger).toBeVisible();
   await trigger.click();
-  const drawer = page.getByRole('dialog', { name: 'Menu navigasi' });
+  const drawer = page.getByRole('dialog', { name: 'Navigation menu' });
   await expect(drawer).toBeVisible();
-  await expect(drawer.getByRole('link', { name: 'Paket', exact: true })).toBeVisible();
+  await expect(drawer.getByRole('link', { name: 'Packages', exact: true })).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(drawer).toBeHidden();
   await expect(trigger).toBeFocused();

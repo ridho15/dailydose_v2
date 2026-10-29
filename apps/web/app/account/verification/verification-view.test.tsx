@@ -1,215 +1,80 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { axe } from 'vitest-axe';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { VerificationView } from './verification-view';
-import { verificationClient } from '@/api-clients/identity-verification-client';
-import type { VerificationSummary } from '@/api-clients/identity-verification-client';
-import { AppFeedbackProvider } from '../../components/app-feedback';
 
-const navigation = vi.hoisted(() => ({ replace: vi.fn() }));
-const sessionRefresh = vi.hoisted(() => vi.fn());
+const navigation = vi.hoisted(() => ({ push: vi.fn(), params: new URLSearchParams() }));
+const sessionRefresh = vi.hoisted(() => vi.fn().mockResolvedValue(null));
 
 vi.mock('next/navigation', () => ({
-  useRouter: () => ({ replace: navigation.replace }),
+  useRouter: () => ({ push: navigation.push }),
+  useSearchParams: () => navigation.params,
 }));
-
-vi.mock('@/api-clients/identity-verification-client', async (original) => {
-  const actual = await original<typeof import('@/api-clients/identity-verification-client')>();
-  return {
-    ...actual,
-    verificationClient: {
-      mine: vi.fn(),
-      replace: vi.fn(),
-      authorizeMine: vi
-        .fn()
-        .mockResolvedValue({ url: '/private', expiresAt: new Date().toISOString() }),
-      readPrivateFile: vi.fn().mockResolvedValue(new Blob(['image'], { type: 'image/png' })),
-    },
-  };
-});
-
+vi.mock('next/link', () => ({
+  default: ({ href, children, ...rest }: { href: string; children: React.ReactNode }) => (
+    <a href={href} {...rest}>
+      {children}
+    </a>
+  ),
+}));
 vi.mock('../../session-context', () => ({
   useSessionContext: () => ({ refresh: sessionRefresh }),
 }));
 
-function renderVerification() {
-  return render(
-    <AppFeedbackProvider>
-      <VerificationView />
-    </AppFeedbackProvider>,
-  );
-}
+const client = (status: string, rejectionReason: string | null = null) => ({
+  mine: vi.fn().mockResolvedValue({ status, documents: [], rejectionReason }),
+  submit: vi.fn().mockResolvedValue({ status: 'APPROVED', message: 'ok' }),
+});
 
-const pending: VerificationSummary = {
-  status: 'PENDING' as const,
-  documents: [
-    {
-      id: 'selfie-1',
-      kind: 'SELFIE' as const,
-      status: 'PENDING' as const,
-      uploadStatus: 'FINALIZED',
-      scanStatus: 'CLEAN',
-      fileName: 'selfie',
-      mimeType: 'image/png',
-      sizeBytes: 100,
-      rejectionReasonCode: null,
-      rejectionNote: null,
-      reviewedAt: null,
-      deletedAt: null,
-      version: 0,
-    },
-    {
-      id: 'ktp-1',
-      kind: 'KTP_FRONT' as const,
-      status: 'PENDING' as const,
-      uploadStatus: 'FINALIZED',
-      scanStatus: 'CLEAN',
-      fileName: 'ktp-front',
-      mimeType: 'image/jpeg',
-      sizeBytes: 100,
-      rejectionReasonCode: null,
-      rejectionNote: null,
-      reviewedAt: null,
-      deletedAt: null,
-      version: 0,
-    },
-  ],
-};
-
-describe('customer verification view', () => {
+describe('VerificationView (selfie saja)', () => {
   beforeEach(() => {
-    navigation.replace.mockReset();
-    sessionRefresh.mockReset();
     sessionStorage.clear();
-    window.history.replaceState({}, '', '/account/verification');
-    vi.mocked(verificationClient.mine).mockResolvedValue(pending);
-    Object.defineProperty(URL, 'createObjectURL', {
-      configurable: true,
-      value: vi.fn(() => 'blob:https://daily-dose.test/replacement'),
-    });
-    Object.defineProperty(URL, 'revokeObjectURL', {
-      configurable: true,
-      value: vi.fn(),
-    });
+    navigation.push.mockReset();
+    navigation.params = new URLSearchParams();
   });
 
-  it('renders one customer-facing heading, progress and privacy guidance', async () => {
-    const view = renderVerification();
-    expect(
-      await screen.findByRole('heading', { name: 'Dokumen Anda sudah kami terima', level: 1 }),
-    ).toBeVisible();
-    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
-    expect(screen.getByText('Dokumen diterima')).toBeVisible();
-    expect(screen.getByText('Privasi dokumen Anda')).toBeVisible();
-    expect(screen.getByRole('link', { name: 'Lihat jadwal' })).toHaveAttribute('href', '/classes');
-    expect(
-      screen.getAllByText(/Unggah ulang tersedia jika tim peninjau meminta perbaikan/),
-    ).toHaveLength(2);
-    expect(screen.queryByRole('button', { name: 'Unggah ulang dokumen' })).not.toBeInTheDocument();
-    const violations = (await axe(view.container)).violations;
-    expect(violations, JSON.stringify(violations, null, 2)).toHaveLength(0);
+  it('tidak meminta KTP, NIK, atau alamat; cukup foto selfie', async () => {
+    const c = client('ACTION_REQUIRED');
+    const { container } = render(<VerificationView client={c as never} />);
+    expect(await screen.findByRole('heading', { level: 1, name: 'Foto selfie' })).toBeVisible();
+    expect(screen.getByLabelText('Pilih foto selfie')).toHaveAttribute('capture', 'user');
+    expect(screen.queryByText(/KTP/)).toHaveTextContent('tanpa KTP');
+    expect(screen.queryByText(/NIK/)).toBeNull();
+    expect((await axe(container)).violations).toHaveLength(0);
   });
 
-  it('translates rejection reasons and uploads a real replacement from a dialog', async () => {
-    vi.mocked(verificationClient.mine).mockResolvedValue({
-      status: 'ACTION_REQUIRED',
-      documents: [
-        {
-          ...pending.documents[0]!,
-          status: 'REJECTED',
-          rejectionReasonCode: 'BLURRY',
-          rejectionNote: 'Ambil foto di tempat terang.',
-          version: 2,
-        },
-      ],
-    });
-    vi.mocked(verificationClient.replace).mockResolvedValue({} as never);
+  it('menyimpan foto, menyegarkan sesi, lalu kembali ke langkah pembelian', async () => {
     const user = userEvent.setup();
-    renderVerification();
+    navigation.params = new URLSearchParams({ returnTo: '/checkout?order=1' });
+    const c = client('ACTION_REQUIRED');
+    c.mine.mockResolvedValueOnce({ status: 'ACTION_REQUIRED', documents: [] });
+    c.mine.mockResolvedValue({ status: 'APPROVED', documents: [] });
+    render(<VerificationView client={c as never} />);
 
-    expect(await screen.findByText('Foto terlalu buram')).toBeVisible();
-    await user.click(screen.getByRole('button', { name: 'Unggah ulang dokumen' }));
-    expect(screen.getByRole('dialog', { name: 'Unggah ulang Foto selfie' })).toBeVisible();
-    const file = new File(['replacement'], 'replacement.png', { type: 'image/png' });
-    await user.upload(screen.getByLabelText('Pilih foto pengganti'), file);
-    const submit = screen.getByRole('button', { name: 'Kirim dokumen pengganti' });
-    expect(submit).toBeEnabled();
-    fireEvent.submit(document.getElementById('identity-replacement-form')!);
-    await waitFor(() =>
-      expect(verificationClient.replace).toHaveBeenCalledWith('SELFIE', {
-        file,
-        expectedVersion: 2,
-      }),
-    );
+    const foto = new File(['x'], 'selfie.jpg', { type: 'image/jpeg' });
+    await user.upload(await screen.findByLabelText('Pilih foto selfie'), foto);
+    await user.click(screen.getByRole('button', { name: 'Simpan foto selfie' }));
+
+    expect(c.submit).toHaveBeenCalledWith({ selfie: foto });
+    await waitFor(() => expect(navigation.push).toHaveBeenCalledWith('/checkout?order=1'));
+    expect(sessionRefresh).toHaveBeenCalled();
   });
 
-  it('focuses a rejected document from a safe notification deep-link', async () => {
-    window.history.replaceState({}, '', '/account/verification?document=KTP_FRONT');
-    vi.mocked(verificationClient.mine).mockResolvedValue({
-      status: 'ACTION_REQUIRED',
-      documents: [
-        pending.documents[0]!,
-        {
-          ...pending.documents[1]!,
-          status: 'REJECTED',
-          rejectionReasonCode: 'GLARE',
-        },
-      ],
-    });
-    renderVerification();
-
-    await waitFor(() =>
-      expect(document.getElementById('verification-document-KTP_FRONT')).toHaveFocus(),
-    );
-    expect(screen.getByText('Pantulan cahaya menutupi dokumen')).toBeVisible();
-    expect(screen.getAllByRole('button', { name: 'Unggah ulang dokumen' })).toHaveLength(1);
+  it('menyebut alasan bila foto sebelumnya ditolak staf', async () => {
+    render(<VerificationView client={client('REJECTED', 'FOTO_BURAM') as never} />);
+    expect(
+      await screen.findByText(/Foto sebelumnya belum bisa dipakai \(FOTO_BURAM\)/),
+    ).toBeVisible();
+    expect(screen.getByLabelText('Pilih foto selfie')).toBeInTheDocument();
   });
 
-  it('preserves checkout continuation and returns there after approval', async () => {
-    const continuation = '/checkout?package=package-1&branch=branch-1';
-    window.history.replaceState(
-      {},
-      '',
-      `/account/verification?returnTo=${encodeURIComponent(continuation)}`,
-    );
-    vi.mocked(verificationClient.mine).mockResolvedValue({
-      ...pending,
-      status: 'APPROVED',
-      documents: pending.documents.map((document) => ({ ...document, status: 'APPROVED' })),
-    });
-    sessionRefresh.mockResolvedValue({ identityVerificationStatus: 'APPROVED' });
-    renderVerification();
-
-    await waitFor(() => expect(navigation.replace).toHaveBeenCalledWith(continuation));
-    expect(sessionStorage.getItem('dd_verification_return_to')).toBeNull();
-  });
-  it('keeps what a new member typed and picked in the first submission form when the page polls for status', async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true });
-    try {
-      // Akun baru: belum ada dokumen, jadi formulir pengiriman pertama yang tampil.
-      vi.mocked(verificationClient.mine).mockImplementation(async () => ({
-        status: 'ACTION_REQUIRED' as never,
-        documents: [],
-      }));
-      renderVerification();
-
-      const nik = await screen.findByLabelText(/Nomor Induk Kependudukan/i);
-      fireEvent.change(nik, { target: { value: '3174010101010002' } });
-      const ktp = document.getElementById('ktp') as HTMLInputElement;
-      const file = new File(['ktp'], 'ktp-uji.png', { type: 'image/png' });
-      await userEvent.setup({ advanceTimers: vi.advanceTimersByTime }).upload(ktp, file);
-      const callsBefore = vi.mocked(verificationClient.mine).mock.calls.length;
-
-      // Polling status tiap 20 detik tidak boleh membongkar formulir (bug: komponen dideklarasikan di dalam VerificationView).
-      await vi.advanceTimersByTimeAsync(41_000);
-      expect(vi.mocked(verificationClient.mine).mock.calls.length).toBeGreaterThan(callsBefore);
-
-      expect(screen.getByLabelText(/Nomor Induk Kependudukan/i)).toBe(nik);
-      expect(nik).toHaveValue('3174010101010002');
-      expect((document.getElementById('ktp') as HTMLInputElement).files?.[0]?.name).toBe('ktp-uji.png');
-    } finally {
-      vi.useRealTimers();
-    }
+  it('menampilkan foto yang sudah ada dan bisa diganti', async () => {
+    const user = userEvent.setup();
+    render(<VerificationView client={client('APPROVED') as never} />);
+    expect(await screen.findByText('Foto selfie sudah ada')).toBeVisible();
+    expect(screen.queryByLabelText('Pilih foto selfie')).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Ganti foto' }));
+    expect(screen.getByLabelText('Pilih foto selfie')).toBeInTheDocument();
   });
 });

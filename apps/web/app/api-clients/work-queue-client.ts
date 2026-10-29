@@ -27,8 +27,12 @@ export interface WorkQueueClient {
 }
 
 export const browserWorkQueueClient: WorkQueueClient = {
-  tertinggal(branchId) {
+  async tertinggal(branchId) {
     const qs = branchId ? `?${new URLSearchParams({ branchId })}` : '';
-    return apiFetch(`/work-queue/overdue${qs}`, { label: 'Memuat antrean…' });
+    const hasil = await apiFetch<AntreanTertinggal>(`/work-queue/overdue${qs}`, {
+      label: 'Memuat antrean…',
+    });
+    if (!Array.isArray(hasil?.items)) throw new Error('ANTREAN_TIDAK_DIKENAL');
+    return { ...hasil, gagal: Array.isArray(hasil.gagal) ? hasil.gagal : [] };
   },
 };

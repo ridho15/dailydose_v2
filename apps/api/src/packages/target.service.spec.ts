@@ -215,6 +215,29 @@ describe('TargetService isolasi cabang', () => {
   });
 });
 
+describe('TargetService meja depan', () => {
+  const admin = principal(['attendance:manage'], 'ADMIN', id(105), [cabangA]);
+
+  it('memberi Admin target cabangnya sendiri', async () => {
+    const { service } = setup();
+    const hasil = await service.pace(admin, { branchId: cabangA, period: '2026-10' }, NOW);
+    expect(hasil.branchId).toBe(cabangA);
+  });
+
+  it('menolak gabungan, simulasi, dan cabang lain untuk Admin', async () => {
+    const { service } = setup();
+    await expect(service.pace(admin, { period: '2026-10' }, NOW)).rejects.toMatchObject({
+      status: 403,
+    });
+    await expect(
+      service.pace(admin, { branchId: cabangA, period: '2026-10', targetRpOverride: 1 }, NOW),
+    ).rejects.toMatchObject({ status: 403 });
+    await expect(
+      service.pace(admin, { branchId: cabangB, period: '2026-10' }, NOW),
+    ).rejects.toMatchObject({ status: 403 });
+  });
+});
+
 describe('TargetService validasi', () => {
   it('memakai bulan berjalan ketika periode tidak diisi', async () => {
     const { service } = setup({ omzet: 0 });

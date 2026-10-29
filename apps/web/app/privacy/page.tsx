@@ -41,7 +41,7 @@ export default function PrivacyPage() {
                   <ul className="list-disc list-inside space-y-1.5 pl-2">
                     <li>Nama lengkap dan informasi kontak (nomor WhatsApp dan alamat email).</li>
                     <li>Riwayat transaksi, bukti pembayaran, dan paket sesi yang dibeli.</li>
-                    <li>Foto KTP dan selfie yang Anda unggah semata-mata untuk verifikasi identitas keanggotaan studio.</li>
+                    <li>Foto selfie yang Anda unggah semata-mata dipakai staf untuk mengenali Anda saat datang ke studio. Kami tidak meminta KTP.</li>
                     <li>Catatan kehadiran sesi kelas di studio Daily Dose Pilates.</li>
                   </ul>
                 </div>
@@ -66,15 +66,15 @@ export default function PrivacyPage() {
                 </div>
               </article>
 
-              {/* Seksi 3: Keamanan Dokumen Identitas (KTP & Selfie) */}
+              {/* Seksi 3: Keamanan foto selfie */}
               <article className="space-y-4 border-t border-ed-line py-8">
                 <div className="flex items-center gap-3 text-xl font-medium tracking-[-0.03em] text-ed-ink [&>svg]:size-5 [&>svg]:text-ed-green">
                   <Lock className="size-4" />
-                  <h2>3. Keamanan &amp; Penyimpanan Dokumen KTP</h2>
+                  <h2>3. Keamanan &amp; Penyimpanan Foto Selfie</h2>
                 </div>
                 <div className="space-y-3 text-[15px] leading-[1.7] text-ed-muted">
                   <p>
-                    Dokumen identitas (foto KTP dan foto selfie) disimpan pada media penyimpanan privat yang terenkripsi dan <strong>tidak pernah dipublikasikan atau dibagikan ke pihak ketiga</strong>.
+                    Foto selfie disimpan pada media penyimpanan privat yang terenkripsi dan <strong>tidak pernah dipublikasikan atau dibagikan ke pihak ketiga</strong>.
                   </p>
                   <p>
                     Akses ke dokumen identitas dibatasi secara ketat hanya untuk staf kepatuhan dan manajemen resmi yang memiliki wewenang verifikasi keanggotaan.

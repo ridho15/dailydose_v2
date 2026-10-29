@@ -25,25 +25,26 @@ export class IdentityDocumentWorkflowService {
     expectedVersion: number,
     _correlationId: string,
   ) {
-    if (this.db) {
-      const existing = await this.db.profilPengguna.findUnique({
-        where: { userId: principal.userId },
-      });
-      if (existing?.notes?.includes('KYC_APPROVED')) {
-        throw new ApiProblem('VERIFICATION_LOCKED_APPROVED', HttpStatus.FORBIDDEN);
-      }
+    // KTP tidak diminta lagi; hanya foto selfie yang bisa diganti, kapan saja.
+    if (kind !== 'SELFIE') {
+      throw new ApiProblem('VALIDATION_ERROR', HttpStatus.UNPROCESSABLE_ENTITY, false, [
+        { field: 'kind', issue: 'KTP_NOT_REQUIRED' },
+      ]);
+    }
+    if (!upload?.buffer?.length) {
+      throw new ApiProblem('VALIDATION_ERROR', HttpStatus.UNPROCESSABLE_ENTITY, false, [
+        { field: 'replacement', issue: 'REQUIRED' },
+      ]);
     }
 
     let key: string | null = null;
     const ext = upload?.originalName?.split('.').pop() || 'jpg';
     const generatedKey = `identity-documents/${principal.userId}/${kind.toLowerCase()}-${Date.now()}.${ext}`;
 
-    if (upload?.buffer && this.storage) {
-      await this.storage.put({ key: generatedKey, content: upload.buffer }).catch(() => null);
-      key = generatedKey;
-    } else {
-      key = generatedKey;
-    }
+    // Foto harus benar-benar tersimpan: selfie adalah syarat membeli paket dan booking.
+    if (!this.storage) throw new ApiProblem('STORAGE_UNAVAILABLE', HttpStatus.SERVICE_UNAVAILABLE);
+    await this.storage.put({ key: generatedKey, content: upload.buffer });
+    key = generatedKey;
 
     if (this.db) {
       await this.db.profilPengguna.upsert({
@@ -51,13 +52,12 @@ export class IdentityDocumentWorkflowService {
         create: {
           id: newId(),
           userId: principal.userId,
-          ktpUrl: kind === 'KTP_FRONT' ? key : null,
-          selfieUrl: kind === 'SELFIE' ? key : null,
-          notes: 'KYC_PENDING_REVIEW: Dokumen diperbarui, menunggu verifikasi staf',
+          selfieUrl: key,
+          notes: 'SELFIE_UPDATED: Foto selfie diperbarui',
         },
         update: {
-          ...(kind === 'KTP_FRONT' ? { ktpUrl: key } : { selfieUrl: key }),
-          notes: 'KYC_PENDING_REVIEW: Dokumen diperbarui, menunggu verifikasi staf',
+          selfieUrl: key,
+          notes: 'SELFIE_UPDATED: Foto selfie diperbarui',
         },
       });
     }
@@ -89,14 +89,13 @@ export class IdentityDocumentWorkflowService {
     },
     _correlationId: string,
   ) {
-    if (this.db) {
-      const existing = await this.db.profilPengguna.findUnique({
-        where: { userId: principal.userId },
-      });
-      if (existing?.notes?.includes('KYC_APPROVED')) {
-        throw new ApiProblem('VERIFICATION_LOCKED_APPROVED', HttpStatus.FORBIDDEN);
-      }
+    // Hanya selfie yang diminta; KTP yang ikut terkirim dari aplikasi lama diabaikan.
+    if (!input.selfie?.buffer?.length) {
+      throw new ApiProblem('VALIDATION_ERROR', HttpStatus.UNPROCESSABLE_ENTITY, false, [
+        { field: 'selfie', issue: 'REQUIRED' },
+      ]);
     }
+    input = { ...input, ktp: undefined };
 
     let ktpKey: string | null = null;
     let selfieKey: string | null = null;
@@ -113,9 +112,8 @@ export class IdentityDocumentWorkflowService {
     if (input.selfie?.buffer) {
       const ext = input.selfie.originalName?.split('.').pop() || 'png';
       const key = `identity-documents/${principal.userId}/selfie-${Date.now()}.${ext}`;
-      if (this.storage) {
-        await this.storage.put({ key, content: input.selfie.buffer }).catch(() => null);
-      }
+      if (!this.storage) throw new ApiProblem('STORAGE_UNAVAILABLE', HttpStatus.SERVICE_UNAVAILABLE);
+      await this.storage.put({ key, content: input.selfie.buffer });
       selfieKey = key;
     }
 
@@ -129,21 +127,21 @@ export class IdentityDocumentWorkflowService {
           address: input.address ?? null,
           ktpUrl: ktpKey,
           selfieUrl: selfieKey,
-          notes: 'KYC_PENDING_REVIEW: Menunggu verifikasi staf',
+          notes: 'SELFIE_UPDATED: Foto selfie dikirim',
         },
         update: {
           ...(input.nik !== undefined ? { nik: input.nik } : {}),
           ...(input.address !== undefined ? { address: input.address } : {}),
           ...(ktpKey ? { ktpUrl: ktpKey } : {}),
           ...(selfieKey ? { selfieUrl: selfieKey } : {}),
-          notes: 'KYC_PENDING_REVIEW: Menunggu verifikasi staf',
+          notes: 'SELFIE_UPDATED: Foto selfie dikirim',
         },
       });
     }
 
     return {
-      status: 'PENDING',
-      message: 'Dokumen verifikasi berhasil dikirim dan sedang menunggu pemeriksaan staf.',
+      status: 'APPROVED',
+      message: 'Foto selfie tersimpan. Anda sudah bisa membeli paket dan booking kelas.',
     };
   }
 
@@ -183,6 +181,9 @@ export class IdentityDocumentWorkflowService {
         where: { userId: targetUserId },
         data: {
           notes: `${currentNotes}KYC_${decision}: ${reasonText ?? 'tanpa catatan'} (ref: ${auditReference})`,
+          // Foto yang ditolak dihapus, jadi member diminta mengambil selfie baru sebelum membeli
+          // paket atau booking lagi. KTP tidak dipakai lagi dan ikut dibersihkan.
+          ...(decision === 'REJECTED' ? { selfieUrl: null, ktpUrl: null } : {}),
         },
       });
     }

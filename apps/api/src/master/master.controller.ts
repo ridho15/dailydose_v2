@@ -266,9 +266,23 @@ export class MasterController {
   @Delete('instructor-fees/:id') deleteFee(
     @Req() req: AuthenticatedRequest,
     @Param('id') id: string,
-    @Body() body?: { reason?: string },
+    @Body() body?: { reason?: string; salahInput?: boolean },
   ) {
-    return this.settings.remove(req.principal, 'INSTRUCTOR_FEE', id, req.correlationId ?? 'unknown', body?.reason);
+    return this.settings.remove(
+      req.principal,
+      'INSTRUCTOR_FEE',
+      id,
+      req.correlationId ?? 'unknown',
+      body?.reason,
+      body?.salahInput === true,
+    );
+  }
+  /** Kelas dan honor yang berubah bila versi tarif ini dihapus. */
+  @Get('instructor-fees/:id/impact') feeImpact(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') id: string,
+  ) {
+    return this.settings.dampakHapus(req.principal, id);
   }
   @Get('quota-capacity-settings') listQuota(
     @Req() req: AuthenticatedRequest,

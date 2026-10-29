@@ -6,16 +6,27 @@ import { optionalReason } from '../foundation/reason';
 import type { SessionPrincipal } from '../identity/identity.service';
 import { PolicyService } from '../identity/policy.service';
 import { ApiProblem } from '../identity/security';
-import { FAQ_CONTENT_KEY, FAQ_KIND, validateFaq } from './faq.validation';
-import { HERO_CONTENT_KEY, HERO_KIND, validateHeroCarousel } from './hero-carousel.validation';
+import { FAQ_CONTENT_KEY, FAQ_KIND, FAQ_LOCALE, validateFaq } from './faq.validation';
+import {
+  HERO_CONTENT_KEY,
+  HERO_KIND,
+  HERO_LOCALE,
+  validateHeroCarousel,
+} from './hero-carousel.validation';
 
 const GLOBAL_SCOPE = 'GLOBAL';
-const DEFAULT_LOCALE = 'id-ID';
 
-/** Jenis konten yang benar-benar dibaca situs publik. Konten tanpa pembaca tidak boleh disimpan. */
-const SUPPORTED_KINDS: Record<string, { contentKey: string; validate(payload: unknown): unknown }> = {
-  [HERO_KIND]: { contentKey: HERO_CONTENT_KEY, validate: validateHeroCarousel },
-  [FAQ_KIND]: { contentKey: FAQ_CONTENT_KEY, validate: validateFaq },
+/**
+ * Jenis konten yang benar-benar dibaca situs publik. Konten tanpa pembaca tidak boleh disimpan.
+ * Slider hero hanya tampil di beranda yang berbahasa Inggris, jadi isinya disimpan sebagai en-US;
+ * isi id-ID lama tetap di database dan dipakai editor sebagai titik awal terjemahan.
+ */
+const SUPPORTED_KINDS: Record<
+  string,
+  { contentKey: string; locale: string; validate(payload: unknown): unknown }
+> = {
+  [HERO_KIND]: { contentKey: HERO_CONTENT_KEY, locale: HERO_LOCALE, validate: validateHeroCarousel },
+  [FAQ_KIND]: { contentKey: FAQ_CONTENT_KEY, locale: FAQ_LOCALE, validate: validateFaq },
 };
 
 const invalid = (field: string, issue = 'INVALID') =>
@@ -115,10 +126,10 @@ export class PublicContentManagementService {
    * diganti; bila belum, dibuat. Tidak ada draf, versi, atau arsip.
    */
   async save(principal: SessionPrincipal, kindParam: string, input: { payload: unknown }, correlationId: string) {
-    const { kind, contentKey, validate } = this.supportedKind(kindParam);
+    const { kind, contentKey, locale, validate } = this.supportedKind(kindParam);
     this.assertManage(principal, null);
     const payload = validate(input?.payload) as Prisma.InputJsonValue;
-    const where = { contentKey, scopeKey: GLOBAL_SCOPE, locale: DEFAULT_LOCALE };
+    const where = { contentKey, scopeKey: GLOBAL_SCOPE, locale };
 
     const active = await this.db.publicContent.findFirst({
       where: { ...where, status: 'PUBLISHED' },
@@ -159,10 +170,10 @@ export class PublicContentManagementService {
 
   /** Kembalikan situs ke tampilan bawaan: isi aktif diarsipkan. Alasan opsional (3–500 karakter bila diisi). */
   async reset(principal: SessionPrincipal, kindParam: string, correlationId: string, reasonInput?: string) {
-    const { contentKey } = this.supportedKind(kindParam);
+    const { contentKey, locale } = this.supportedKind(kindParam);
     const reason = optionalReason(reasonInput) ?? '';
     this.assertManage(principal, null);
-    const where = { contentKey, scopeKey: GLOBAL_SCOPE, locale: DEFAULT_LOCALE, status: 'PUBLISHED' as const };
+    const where = { contentKey, scopeKey: GLOBAL_SCOPE, locale, status: 'PUBLISHED' as const };
     const active = await this.db.publicContent.findMany({ where });
     if (active.length === 0) return { reset: false };
     await this.db.publicContent.updateMany({ where, data: { status: 'ARCHIVED', archivedAt: new Date() } });

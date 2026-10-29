@@ -1,5 +1,6 @@
 import { PenyesuaianBuktiController } from './penyesuaian-bukti.controller';
 import { KoreksiJamService } from './koreksi-jam.service';
+import { PayrollInstrukturService } from './payroll-instruktur.service';
 import { RingkasanKeuanganController } from './ringkasan-keuangan.controller';
 import { RingkasanKeuanganService } from './ringkasan-keuangan.service';
 import { PenyesuaianBuktiService } from './penyesuaian-bukti.service';
@@ -49,6 +50,7 @@ import { PaymentExpirationWorkerService } from './payment-expiration-worker';
   providers: [
     PenyesuaianBuktiService,
     KoreksiJamService,
+    PayrollInstrukturService,
     RingkasanKeuanganService,
     CustomerOrderService,
     PackageAccessService,

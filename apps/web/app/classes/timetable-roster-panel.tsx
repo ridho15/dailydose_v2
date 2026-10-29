@@ -92,6 +92,7 @@ export function TimetableRosterPanel({
   canManageClass,
   onManage,
   onChanged,
+  dalamLaci = false,
 }: {
   slot: ClassSlot;
   classTypeName: string;
@@ -104,6 +105,8 @@ export function TimetableRosterPanel({
   onManage(): void;
   /** Dipanggil setelah peserta bertambah atau berkurang, agar angka keterisian ikut berubah. */
   onChanged(): void;
+  /** Di dalam laci samping: judul dan waktu sudah ada di kepala laci, jadi tidak diulang. */
+  dalamLaci?: boolean;
 }) {
   const [peserta, setPeserta] = useState<CustomerBookingRecord[]>([]);
   const [dikeluarkan, setDikeluarkan] = useState<Dikeluarkan[]>([]);
@@ -263,22 +266,28 @@ export function TimetableRosterPanel({
     }
   };
 
-  const waktu = `${tanggalPanjang(slot.startAt, slot.timezone)} · ${formatBranchTime(
-    slot.startAt,
-    slot.timezone,
-  )} sampai ${formatBranchTime(slot.endAt, slot.timezone)}`;
+  const waktu = waktuKelas(slot);
 
+  const Wadah = dalamLaci ? 'div' : 'aside';
   return (
-    <aside
-      aria-labelledby="tt-roster"
-      className="min-w-0 rounded-dd-md border border-dd-border-interactive bg-white p-5"
+    <Wadah
+      aria-labelledby={dalamLaci ? undefined : 'tt-roster'}
+      className={
+        dalamLaci
+          ? 'min-w-0'
+          : 'min-w-0 rounded-dd-md border border-dd-border-interactive bg-white p-5'
+      }
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <h2 id="tt-roster" className="m-0 text-xl font-semibold text-dd-ink">
-            {classTypeName}
-          </h2>
-          <p className="m-0 mt-0.5 text-base text-dd-ink">{waktu}</p>
+          {!dalamLaci && (
+            <>
+              <h2 id="tt-roster" className="m-0 text-xl font-semibold text-dd-ink">
+                {classTypeName}
+              </h2>
+              <p className="m-0 mt-0.5 text-base text-dd-ink">{waktu}</p>
+            </>
+          )}
           <p className="m-0 mt-1 text-[15px] text-dd-muted">
             {[studioName, instructorName, `${slot.bookedCount} dari ${slot.capacity} terisi`]
               .filter(Boolean)
@@ -447,13 +456,22 @@ export function TimetableRosterPanel({
           {canRemove && (
             <p className="m-0 mt-3 text-sm text-dd-muted">
               Mengeluarkan peserta langsung berlaku dan sesinya kembali utuh. Tidak ada kotak
-              konfirmasi; tombol Urungkan tersedia sampai halaman ditutup.
+              konfirmasi; tombol Urungkan tersedia sampai {dalamLaci ? 'panel' : 'halaman'} ini
+              ditutup.
             </p>
           )}
         </div>
       </div>
-    </aside>
+    </Wadah>
   );
+}
+
+/** Hari, tanggal, dan jam kelas menurut zona waktu cabang; dipakai juga sebagai keterangan laci. */
+export function waktuKelas(slot: Pick<ClassSlot, 'startAt' | 'endAt' | 'timezone'>) {
+  return `${tanggalPanjang(slot.startAt, slot.timezone)} · ${formatBranchTime(
+    slot.startAt,
+    slot.timezone,
+  )} sampai ${formatBranchTime(slot.endAt, slot.timezone)}`;
 }
 
 function tanggalPanjang(value: Date, timeZone: string) {
