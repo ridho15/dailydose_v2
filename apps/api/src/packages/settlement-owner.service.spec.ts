@@ -10,7 +10,7 @@ const so = {
 } as never;
 
 function setup() {
-  const db = {
+  const db: any = {
     user: {
       findMany: jest.fn(async () => [
         { id: 'so-1', displayName: 'Rina' },

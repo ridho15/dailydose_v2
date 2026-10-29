@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Query, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Query, Req, UseGuards } from '@nestjs/common';
 import { AuthGuard, type AuthenticatedRequest } from './auth.guard';
 import { InstructorManagementService } from './manajemen-instruktur.service';
 
@@ -20,5 +20,19 @@ export class InstructorManagementController {
   @Get(':id')
   detail(@Req() request: AuthenticatedRequest, @Param('id') id: string) {
     return this.instructors.detail(request.principal, id);
+  }
+
+  @Patch(':id/profile')
+  updateProfile(
+    @Req() request: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Body() body: Parameters<InstructorManagementService['updateProfile']>[2],
+  ) {
+    return this.instructors.updateProfile(
+      request.principal,
+      id,
+      body,
+      request.correlationId ?? 'unknown',
+    );
   }
 }

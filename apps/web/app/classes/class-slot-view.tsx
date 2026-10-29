@@ -927,9 +927,19 @@ export function ClassSlotView({
             classTypes={classTypes}
             instructors={instructors}
             studios={studios}
-            canManage={canOperate}
+            canManage={
+              canManage &&
+              (canViewAllBranches ||
+                Boolean(branch && branch.id === panel.slot.branchId) ||
+                branches.some((b) => b.id === panel.slot.branchId))
+            }
             canComplete={canCompleteClass}
-            canManageAttendance={canOperateAttendance}
+            canManageAttendance={
+              canManageAttendance &&
+              (canViewAllBranches ||
+                Boolean(branch && branch.id === panel.slot.branchId) ||
+                branches.some((b) => b.id === panel.slot.branchId))
+            }
             canReadBookings={canReadBookings}
             canVerifyInstructor={canOperateAttendance && Boolean(client.verifyInstructorAttendance)}
             bookingClient={bookingClient}

@@ -316,6 +316,37 @@ describe('ClassSlotView', () => {
     expect((client.update as ReturnType<typeof vi.fn>).mock.calls[0]![1]).not.toHaveProperty('expectedVersion');
   });
 
+  it('allows editing a published class if it has 0 bookings', async () => {
+    const publishedSlot = { ...slot, id: 'slot-pub', status: 'PUBLISHED' as const, bookedCount: 0 };
+    const client = fake({
+      discover: vi.fn().mockResolvedValue({
+        ...workspace,
+        slots: [publishedSlot],
+      }),
+    });
+    render(
+      <ClassSlotView
+        client={client}
+        branchOverride={branch}
+        capabilitiesOverride={manageCapabilities}
+      />,
+    );
+    const user = userEvent.setup();
+    await screen.findAllByText('Reformer');
+    await user.click(
+      within(screen.getByRole('region', { name: 'Kalender kelas tujuh hari' })).getByRole(
+        'button',
+        { name: /Reformer/ },
+      ),
+    );
+    const dialog = screen.getByRole('dialog', { name: 'Reformer' });
+    const editBtn = within(dialog).getByRole('button', { name: 'Edit kelas' });
+    expect(editBtn).toBeInTheDocument();
+    await user.click(editBtn);
+    const form = within(dialog).getByRole('form', { name: 'Edit draft kelas' });
+    expect(form).toBeInTheDocument();
+  });
+
   it('renders safe configuration failure', async () => {
     const client = fake({ discover: vi.fn().mockRejectedValue({ response: { status: 503 } }) });
     render(

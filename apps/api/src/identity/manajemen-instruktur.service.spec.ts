@@ -48,16 +48,21 @@ const fee = {
   feePerJamRp: 200_000,
 };
 
-function build(opts: { recent?: unknown[]; month?: unknown[]; fees?: unknown[]; rows?: unknown[] } = {}) {
+function build(opts: { recent?: unknown[]; month?: unknown[]; fees?: unknown[]; rows?: unknown[]; profile?: unknown } = {}) {
   const userFindFirst = jest.fn().mockResolvedValue({
     id: coach.id,
     displayName: coach.displayName,
     email: null,
     phone: null,
     status: 'ACTIVE',
+    profile: opts.profile ?? null,
     instructorAssignments: [],
     instructedClassSlots: opts.recent ?? [],
   });
+  const userUpdate = jest.fn().mockResolvedValue({});
+  const profilPenggunaUpsert = jest.fn().mockResolvedValue({});
+  const penugasanInstrukturUpdateMany = jest.fn().mockResolvedValue({});
+  const penugasanInstrukturUpsert = jest.fn().mockResolvedValue({});
   const userFindMany = jest.fn().mockResolvedValue(
     opts.rows ?? [
       {
@@ -74,13 +79,20 @@ function build(opts: { recent?: unknown[]; month?: unknown[]; fees?: unknown[]; 
   const slotFindMany = jest.fn().mockResolvedValue(opts.month ?? []);
   const feeFindMany = jest.fn().mockResolvedValue(opts.fees ?? [fee]);
   const db = {
-    user: { findFirst: userFindFirst, findMany: userFindMany, count: jest.fn().mockResolvedValue(1) },
+    user: { findFirst: userFindFirst, findMany: userFindMany, count: jest.fn().mockResolvedValue(1), update: userUpdate },
+    profilPengguna: { upsert: profilPenggunaUpsert },
+    penugasanInstruktur: { updateMany: penugasanInstrukturUpdateMany, upsert: penugasanInstrukturUpsert },
     slotKelas: { findMany: slotFindMany },
     instructorFee: { findMany: feeFindMany },
   };
   return {
     service: new InstructorManagementService(db as never, new PolicyService()),
+    userFindFirst,
     userFindMany,
+    userUpdate,
+    profilPenggunaUpsert,
+    penugasanInstrukturUpdateMany,
+    penugasanInstrukturUpsert,
     slotFindMany,
     feeFindMany,
   };
@@ -211,5 +223,77 @@ describe('InstructorManagementService honor', () => {
         where: expect.objectContaining({ branchId: { in: [branch] }, status: 'COMPLETED' }),
       }),
     );
+  });
+});
+
+describe('InstructorManagementService profile and updates', () => {
+  it('parses bank info and notes from profile notes JSON in detail', async () => {
+    const profile = {
+      notes: JSON.stringify({
+        bankName: 'BCA',
+        accountNumber: '1234567890',
+        accountHolder: 'Sarah Coach',
+        notes: 'Sertifikasi Tower Intermediate',
+      }),
+      address: 'Jl. Graha Family Blok B',
+      gender: 'FEMALE',
+      birthDate: new Date('1995-05-15'),
+      emergencyContactName: 'Budi Darurat',
+      emergencyContactPhone: '+628111222333',
+    };
+    const { service } = build({ profile });
+    const detail = await service.detail(admin, coach.id);
+    expect(detail.profile).toBeDefined();
+    expect(detail.profile?.bankInfo).toEqual({
+      bankName: 'BCA',
+      accountNumber: '1234567890',
+      accountHolder: 'Sarah Coach',
+    });
+    expect(detail.profile?.notes).toBe('Sertifikasi Tower Intermediate');
+    expect(detail.profile?.address).toBe('Jl. Graha Family Blok B');
+  });
+
+  it('updates instructor profile including bank info, user contact, and branch assignments', async () => {
+    const { service, userUpdate, profilPenggunaUpsert, penugasanInstrukturUpdateMany, penugasanInstrukturUpsert } = build();
+    const result = await service.updateProfile(superOwner, coach.id, {
+      displayName: 'Coach Sarah Updated',
+      phoneE164: '08123456789',
+      branchIds: ['branch-1', 'branch-2'],
+      bankInfo: {
+        bankName: 'Mandiri',
+        accountNumber: '987654321',
+        accountHolder: 'Sarah Mandiri',
+      },
+      notes: 'Instruktur Tetap Graha',
+    });
+
+    expect(result.displayName).toBe('Coach Sarah Updated');
+    expect(userUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: coach.id },
+        data: expect.objectContaining({
+          displayName: 'Coach Sarah Updated',
+          phone: '+628123456789',
+        }),
+      }),
+    );
+    expect(profilPenggunaUpsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { userId: coach.id },
+        update: expect.objectContaining({
+          notes: expect.stringContaining('"bankName":"Mandiri"'),
+        }),
+      }),
+    );
+    expect(penugasanInstrukturUpdateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          coachId: coach.id,
+          branchId: { notIn: ['branch-1', 'branch-2'] },
+        }),
+        data: { active: false },
+      }),
+    );
+    expect(penugasanInstrukturUpsert).toHaveBeenCalledTimes(2);
   });
 });

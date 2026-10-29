@@ -346,6 +346,7 @@ export function CustomerDetailView({ id }: { id: string }) {
         id,
         {
           displayName: data.get('displayName'),
+          username: String(data.get('username') || '').trim().toLowerCase() || null,
           email: data.get('email') || null,
           phoneE164: data.get('phoneE164'),
           preferredBranchId: data.get('preferredBranchId') || null,
@@ -1207,20 +1208,29 @@ export function CustomerDetailView({ id }: { id: string }) {
               defaultValue={customer.displayName}
             />
             <TextInput
+              label="Username (ID Login)"
+              name="username"
+              defaultValue={(customer as any).username ?? ''}
+              placeholder="contoh: budi_santoso"
+              description="Digunakan untuk login member (3-30 karakter)."
+            />
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <TextInput
               type="email"
               label="Email (Opsional)"
               name="email"
               defaultValue={customer.email ?? ''}
               placeholder="nama@email.com"
             />
-          </div>
-          <div className="grid gap-3 sm:grid-cols-2">
             <TextInput
               required
               label="Nomor WhatsApp / HP"
               name="phoneE164"
               defaultValue={customer.phoneE164 ?? ''}
             />
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
             <SearchSelect
               label="Studio/Cabang Pilihan"
               name="preferredBranchId"

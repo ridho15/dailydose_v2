@@ -435,6 +435,7 @@ export class UserAdministrationService {
     targetId: string,
     input: {
       displayName: string;
+      email?: string | null;
       username?: string | null;
       phoneE164?: string | null;
       expectedVersion?: number;
@@ -446,6 +447,29 @@ export class UserAdministrationService {
     const displayName = input.displayName?.trim();
     if (!displayName || displayName.length < 2)
       throw new ApiProblem('VALIDATION_ERROR', HttpStatus.UNPROCESSABLE_ENTITY);
+
+    let cleanEmail: string | null | undefined;
+    if (input.email !== undefined) {
+      const trimmed = input.email?.trim().toLowerCase();
+      if (trimmed) {
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(trimmed)) {
+          throw new ApiProblem('VALIDATION_ERROR', HttpStatus.UNPROCESSABLE_ENTITY);
+        }
+        const existingWithEmail = await this.db.user.findFirst({
+          where: {
+            email: trimmed,
+            NOT: { id: targetId },
+          },
+          select: { id: true },
+        });
+        if (existingWithEmail) {
+          throw new ApiProblem('IDENTITY_CONFLICT', HttpStatus.CONFLICT);
+        }
+        cleanEmail = trimmed;
+      } else {
+        cleanEmail = null;
+      }
+    }
 
     let cleanUsername: string | undefined;
     if (input.username !== undefined) {
@@ -475,6 +499,7 @@ export class UserAdministrationService {
       where: { id: targetId },
       data: {
         displayName,
+        ...(cleanEmail !== undefined ? { email: cleanEmail } : {}),
         ...(cleanUsername !== undefined ? { username: cleanUsername } : {}),
         ...(phone !== undefined ? { phone } : {}),
       },
@@ -490,6 +515,7 @@ export class UserAdministrationService {
       detail: {
         fields: [
           'displayName',
+          ...(cleanEmail !== undefined ? ['email'] : []),
           ...(cleanUsername !== undefined ? ['username'] : []),
           ...(phone !== undefined ? ['phone'] : []),
         ],
@@ -642,6 +668,26 @@ export class UserAdministrationService {
       },
       include: { profile: true },
     });
+
+    if (role === 'INSTRUCTOR' && branchId && this.db.penugasanInstruktur?.upsert) {
+      await this.db.penugasanInstruktur.upsert({
+        where: {
+          coachId_branchId: { coachId: targetId, branchId },
+        },
+        create: {
+          id: newId(),
+          coachId: targetId,
+          branchId,
+          active: true,
+        },
+        update: { active: true },
+      });
+    } else if (role !== 'INSTRUCTOR' && this.db.penugasanInstruktur?.updateMany) {
+      await this.db.penugasanInstruktur.updateMany({
+        where: { coachId: targetId },
+        data: { active: false },
+      });
+    }
 
     await this.recordAudit({
       action: 'security.user_roles_updated',

@@ -470,9 +470,39 @@ export function DetailPanel({
         <DetailSection
           id="class-instructor-title"
           title="Instruktur kelas"
-          description="Instruktur dapat diganti selama kelas belum berjalan. Peserta yang sudah memesan akan melihat instruktur yang baru."
+          description="Instruktur dapat diganti selama kelas belum berjalan. Tipe kelas dan jadwal dapat diubah jika belum ada peserta yang memesan."
         >
           {assignRow}
+          {isPublished && (slot.bookedCount ?? 0) === 0 && (
+            <ActionRow
+              title="Jadwal dan tipe kelas"
+              description="Ubah waktu, tipe kelas, studio, atau ruangan sebelum ada peserta yang memesan. Kapasitas dihitung ulang dari konfigurasi."
+            >
+              <div>
+                <Button
+                  variant="secondary"
+                  className="w-full sm:w-auto"
+                  disabled={busy}
+                  onClick={() => setEditOpen((current) => !current)}
+                >
+                  {editOpen ? 'Tutup edit' : 'Edit kelas'}
+                </Button>
+              </div>
+              {editOpen && (
+                <DraftEditForm
+                  slot={slot}
+                  classTypes={classTypes}
+                  instructors={instructors}
+                  studios={studios}
+                  busy={busy}
+                  onSubmit={async (input) => {
+                    await onUpdate(input);
+                    setEditOpen(false);
+                  }}
+                />
+              )}
+            </ActionRow>
+          )}
         </DetailSection>
       )}
 

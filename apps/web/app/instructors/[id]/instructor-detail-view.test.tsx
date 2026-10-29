@@ -107,11 +107,51 @@ describe('InstructorDetailView CRUD Actions', () => {
     await userEvent.click(modalConfirmBtn);
 
     await waitFor(() => {
-      expect(instructorClient.updateProfile).toHaveBeenCalledWith('inst-1', {
-        displayName: 'Coach Devi',
-        phoneE164: '+628999888777',
-        expectedVersion: 3,
-      });
+      expect(instructorClient.updateProfile).toHaveBeenCalledWith(
+        'inst-1',
+        expect.objectContaining({
+          displayName: 'Coach Devi',
+          phoneE164: '+628999888777',
+          expectedVersion: 3,
+        }),
+      );
+    });
+  });
+
+  it('allows editing bank details and payroll info in the drawer', async () => {
+    render(
+      <AppFeedbackProvider>
+        <InstructorDetailView id="inst-1" />
+      </AppFeedbackProvider>,
+    );
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit Profil' }));
+
+    const bankInput = screen.getByLabelText(/Nama Bank/i);
+    const accInput = screen.getByLabelText(/Nomor Rekening/i);
+    const holderInput = screen.getByLabelText(/Atas Nama Pemilik Rekening/i);
+
+    await userEvent.type(bankInput, 'BCA');
+    await userEvent.type(accInput, '1234567890');
+    await userEvent.type(holderInput, 'Devi Permata');
+
+    const submitBtn = screen.getByRole('button', { name: 'Simpan Perubahan' });
+    await userEvent.click(submitBtn);
+
+    const confirmButtons = screen.getAllByRole('button', { name: 'Simpan Perubahan' });
+    await userEvent.click(confirmButtons[confirmButtons.length - 1]!);
+
+    await waitFor(() => {
+      expect(instructorClient.updateProfile).toHaveBeenCalledWith(
+        'inst-1',
+        expect.objectContaining({
+          bankInfo: {
+            bankName: 'BCA',
+            accountNumber: '1234567890',
+            accountHolder: 'Devi Permata',
+          },
+        }),
+      );
     });
   });
 

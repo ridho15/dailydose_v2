@@ -5,7 +5,7 @@ import { IdempotencyService } from '../foundation/idempotency.service';
 import { AuditService } from '../foundation/audit.service';
 import { mapUserToEffectiveRoles, type SessionPrincipal } from './identity.service';
 import { PolicyService } from './policy.service';
-import { ApiProblem } from './security';
+import { ApiProblem, newId } from './security';
 import { ROLE_CAPABILITIES, type ApplicationRole } from './role-capabilities';
 import { canonicalRole } from './role-aliases';
 
@@ -249,13 +249,34 @@ export class AccessManagementService {
         if (PROTECTED_ROLES.has(user.role))
           throw new ApiProblem('PROTECTED_ACCOUNT', HttpStatus.FORBIDDEN);
 
+        const effectiveBranchId = scope === 'BRANCH' ? (requestedBranchId ?? user.preferredBranchId) : user.preferredBranchId;
         const updated = await tx.user.update({
           where: { id: userId },
           data: {
             role: requested as Role,
-            preferredBranchId: scope === 'BRANCH' ? (requestedBranchId ?? user.preferredBranchId) : user.preferredBranchId,
+            preferredBranchId: effectiveBranchId,
           },
         });
+
+        if (requested === 'INSTRUCTOR' && effectiveBranchId && tx.penugasanInstruktur?.upsert) {
+          await tx.penugasanInstruktur.upsert({
+            where: {
+              coachId_branchId: { coachId: userId, branchId: effectiveBranchId },
+            },
+            create: {
+              id: newId(),
+              coachId: userId,
+              branchId: effectiveBranchId,
+              active: true,
+            },
+            update: { active: true },
+          });
+        } else if (requested !== 'INSTRUCTOR' && tx.penugasanInstruktur?.updateMany) {
+          await tx.penugasanInstruktur.updateMany({
+            where: { coachId: userId },
+            data: { active: false },
+          });
+        }
         // Sesi lama membawa izin lama; cabut agar pengguna wajib login ulang (sesuai keterangan di UI).
         await tx.userSession.updateMany({
           where: { userId, revokedAt: null },

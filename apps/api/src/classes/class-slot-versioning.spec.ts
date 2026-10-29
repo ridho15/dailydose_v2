@@ -141,8 +141,29 @@ describe('class slot status guards', () => {
     );
   });
 
-  it.each(['PUBLISHED', 'CONFIRMED', 'COMPLETED', 'CANCELLED'])('only a draft can be edited (%s refused)', async (status) => {
-    const { service } = build(slotRow({ status }));
+  it.each(['CONFIRMED', 'COMPLETED', 'CANCELLED'])(
+    'confirmed, completed, or cancelled classes cannot be edited (%s refused)',
+    async (status) => {
+      const { service } = build(slotRow({ status }));
+      await expect(
+        service.update(
+          principal,
+          slotId,
+          {
+            classTypeId,
+            startAt: '2026-10-12T21:00:00+07:00',
+            endAt: '2026-10-12T21:50:00+07:00',
+            expectedVersion: 4,
+          },
+          key,
+          'c',
+        ),
+      ).rejects.toMatchObject({ code: 'INVALID_STATE_TRANSITION' });
+    },
+  );
+
+  it('refuses to edit a published class if it already has bookings', async () => {
+    const { service } = build(slotRow({ status: 'PUBLISHED', bookedCount: 1 }));
     await expect(
       service.update(
         principal,
@@ -156,7 +177,26 @@ describe('class slot status guards', () => {
         key,
         'c',
       ),
-    ).rejects.toMatchObject({ code: 'INVALID_STATE_TRANSITION' });
+    ).rejects.toMatchObject({ code: 'CLASS_SLOT_HAS_BOOKINGS' });
+  });
+
+  it('allows editing a published class if it has 0 bookings', async () => {
+    const { service, tx } = build(slotRow({ status: 'PUBLISHED', bookedCount: 0 }));
+    await service.update(
+      principal,
+      slotId,
+      {
+        classTypeId,
+        startAt: '2026-10-12T21:00:00+07:00',
+        endAt: '2026-10-12T21:50:00+07:00',
+        expectedVersion: 4,
+      },
+      key,
+      'c',
+    );
+    expect(tx.slotKelas.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ classTypeId }) }),
+    );
   });
 
   it.each(['COMPLETED', 'CANCELLED'])('never cancels a %s class or touches its bookings', async (status) => {

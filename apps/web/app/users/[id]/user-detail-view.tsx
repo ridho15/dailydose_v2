@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { ArrowLeft, Eye, KeyRound, RefreshCw, ShieldCheck, Trash2, Upload, UserRoundCog } from 'lucide-react';
+import { ArrowLeft, Eye, KeyRound, RefreshCw, ShieldCheck, Trash2, Upload, UserCheck, UserRoundCog } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import {
   browserIdentityClient,
@@ -263,9 +263,9 @@ export function UserDetailView({
             <ButtonLink
               variant="secondary"
               href={`/customers/${encodeURIComponent(user.id)}`}
-              leadingIcon={<Upload className="size-4" aria-hidden="true" />}
+              leadingIcon={<UserCheck className="size-4" aria-hidden="true" />}
             >
-              Profil Pelanggan
+              Edit Profil Demografi Lengkap
             </ButtonLink>
           )}
             </>

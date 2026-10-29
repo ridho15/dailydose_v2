@@ -69,6 +69,19 @@ export interface InstructorDetail {
     activeFrom: string;
     activeUntil: string | null;
   }>;
+  profile?: {
+    address: string | null;
+    gender: string | null;
+    birthDate: string | null;
+    emergencyContactName: string | null;
+    emergencyContactPhone: string | null;
+    bankInfo: {
+      bankName: string;
+      accountNumber: string;
+      accountHolder: string;
+    };
+    notes: string;
+  } | null;
   instructedClassSlots: Array<{
     id: string;
     startAt: string;
@@ -154,10 +167,30 @@ export const instructorClient = {
   },
   updateProfile(
     id: string,
-    input: { displayName: string; phoneE164?: string | null; expectedVersion?: number; reason?: string },
+    input: {
+      displayName: string;
+      email?: string | null;
+      phoneE164?: string | null;
+      branchIds?: string[];
+      bankInfo?: {
+        bankName?: string | null;
+        accountNumber?: string | null;
+        accountHolder?: string | null;
+      };
+      notes?: string | null;
+      address?: string | null;
+      gender?: string | null;
+      birthDate?: string | null;
+      emergencyContactName?: string | null;
+      emergencyContactPhone?: string | null;
+      expectedVersion?: number;
+      reason?: string;
+    },
   ) {
-    return patch<Record<string, unknown>>(`/users/${encodeURIComponent(id)}/profile`, {
+    return patch<Record<string, unknown>>(`/instructors/${encodeURIComponent(id)}/profile`, {
+      ...input,
       displayName: input.displayName.trim(),
+      email: input.email ? input.email.trim() : null,
       phoneE164: input.phoneE164 ? input.phoneE164.trim() : null,
       expectedVersion: input.expectedVersion ?? 1,
       reason: input.reason ?? 'Pembaruan profil instruktur',

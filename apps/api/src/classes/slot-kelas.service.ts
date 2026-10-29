@@ -30,7 +30,7 @@ const STATUS_ALLOWED: Record<
   readonly ClassSlotStatus[]
 > = {
   assign: [ClassSlotStatus.DRAFT, ClassSlotStatus.PUBLISHED, ClassSlotStatus.CONFIRMED],
-  update: [ClassSlotStatus.DRAFT],
+  update: [ClassSlotStatus.DRAFT, ClassSlotStatus.PUBLISHED],
   publish: [ClassSlotStatus.DRAFT],
   cancel: [ClassSlotStatus.DRAFT, ClassSlotStatus.PUBLISHED, ClassSlotStatus.CONFIRMED],
   complete: [ClassSlotStatus.CONFIRMED],
@@ -565,10 +565,25 @@ export class ClassSlotService {
       input,
       HttpStatus.OK,
       async (tx) => {
-        const slot = await tx.slotKelas.findUnique({ where: { id } });
+        const slot = await tx.slotKelas.findUnique({
+          where: { id },
+          include: { bookings: { where: { status: 'BOOKED' }, select: { id: true } } },
+        });
         if (!slot) throw new ApiProblem('RESOURCE_NOT_FOUND', HttpStatus.NOT_FOUND);
         this.scope(principal, slot.branchId, 'class-slot:manage');
         this.assertClaimable(slot, expectedVersion, STATUS_ALLOWED.update);
+
+        if (
+          slot.status === ClassSlotStatus.PUBLISHED &&
+          (slot.bookedCount > 0 || (slot.bookings && slot.bookings.length > 0))
+        ) {
+          throw new ApiProblem('CLASS_SLOT_HAS_BOOKINGS', HttpStatus.CONFLICT, false, [
+            {
+              field: 'classSlotId',
+              issue: 'Tipe kelas atau jadwal tidak dapat diubah karena sudah ada peserta yang memesan.',
+            },
+          ]);
+        }
 
         const targetStudioId = input.studioId !== undefined ? input.studioId : slot.studioId;
         const targetRoomId = input.roomId !== undefined ? (input.roomId || null) : slot.roomId;
