@@ -82,7 +82,9 @@ describe('PayrollInstrukturService.milikSaya', () => {
       targetUserId: 'i-a',
     });
     expect(hasil.terverifikasiRp).toBe(200_000);
-    expect(hasil.belumTerverifikasiRp).toBe(200_000);
+    // Kelas tanpa check-in QR tidak diberi nominal sama sekali.
+    expect(hasil.belumTerverifikasiRp).toBe(0);
+    expect(hasil.kelas.find((k) => !k.terverifikasi)).toMatchObject({ honorRp: 0, tarifPerJamRp: 0 });
     expect(hasil.koreksi.map((k) => k.id)).toEqual(['k1']);
     expect(hasil.totalRp).toBe(400_000);
     expect(hasil.kelasTerverifikasi).toBe(1);

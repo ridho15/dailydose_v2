@@ -78,7 +78,8 @@ describe('KoreksiJamService.koreksi', () => {
       { buffer: PNG },
     );
 
-    expect(hasil).toMatchObject({ hours: 1, feePerJamRp: 200_000, amountRp: 200_000 });
+    // Manager mencatat jam tanpa melihat rupiah; nominal tetap tersimpan di audit untuk payroll.
+    expect(hasil).toMatchObject({ hours: 1, feePerJamRp: null, amountRp: null });
     expect(storage.put).toHaveBeenCalledWith(
       expect.objectContaining({ key: `instructor-hours-evidence/${hasil.id}.png` }),
     );
@@ -101,8 +102,12 @@ describe('KoreksiJamService.koreksi', () => {
 
   it('menerima pengurangan setengah jam dan menolak jam yang bukan kelipatan setengah', async () => {
     const { service } = setup();
+    const superOwner = {
+      ...(manager as object),
+      capabilities: ['instructor:hours:adjust', 'instructor:fee:read', 'branch:all'],
+    } as never;
     const kurang = await service.koreksi(
-      manager,
+      superOwner,
       { classSlotId: 'slot-1', hours: -0.5, reason: ALASAN },
       { buffer: PNG },
     );

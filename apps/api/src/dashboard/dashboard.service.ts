@@ -898,16 +898,25 @@ export class DashboardService {
         previousFrom: previousFromDate,
         previousUntil: previousUntilDate,
       },
-      financial: {
-        ...financial.totals,
-        completeness: financial.completeness,
-        instructorFeeMissing: financial.instructorFeeMissing,
-        anomalyCount: financial.anomalyCount,
-        sourceCutoffAt: financial.sourceCutoffAt,
-        controlHash: financial.controlHash,
-        omsetBreakdown: financial.omsetBreakdown,
-        profitBreakdown: financial.profitBreakdown,
-      },
+      // Admin dan Manager hanya menerima omzet cabangnya sendiri (cabang sudah dibatasi di atas);
+      // honor instruktur, modal sesi, pengeluaran, dan laba hanya untuk peran keuangan.
+      financial: showFinance
+        ? {
+            ...financial.totals,
+            completeness: financial.completeness,
+            instructorFeeMissing: financial.instructorFeeMissing,
+            anomalyCount: financial.anomalyCount,
+            sourceCutoffAt: financial.sourceCutoffAt,
+            controlHash: financial.controlHash,
+            omsetBreakdown: financial.omsetBreakdown,
+            profitBreakdown: financial.profitBreakdown,
+          }
+        : {
+            grossSalesRp: financial.totals.grossSalesRp,
+            discountRp: financial.totals.discountRp,
+            revenueRp: financial.totals.revenueRp,
+            sourceCutoffAt: financial.sourceCutoffAt,
+          },
       views: { finance: showFinance, operations: showOperations },
       sections: allowedSections,
       metrics: [

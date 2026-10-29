@@ -48,8 +48,9 @@ export interface KoreksiJam {
   /** Mulai kelas; koreksi masuk ke laporan honor bulan kelas ini. */
   classStartAt: string;
   hours: number;
-  feePerJamRp: number;
-  amountRp: number;
+  /** Null bila peran tidak berhak melihat nominal honor (mis. Manager). */
+  feePerJamRp: number | null;
+  amountRp: number | null;
   reason: string;
   decidedByName: string | null;
   createdAt: string;
@@ -72,6 +73,11 @@ export function detailKoreksi(detail: unknown): DetailKoreksi | null {
     return null;
   return after as DetailKoreksi;
 }
+
+/** Nominal honor hanya untuk peran dengan akses honor; Manager mencatat jam tanpa melihat rupiah. */
+const bolehLihatHonor = (principal: SessionPrincipal) =>
+  principal.capabilities.includes('instructor:fee:read') ||
+  principal.capabilities.includes('finance:read');
 
 type BarisAudit = {
   objectId: string | null;
@@ -280,8 +286,8 @@ export class KoreksiJamService {
       className: slot.classType?.name ?? null,
       classStartAt: detail.classStartAt,
       hours,
-      feePerJamRp: tarif.feePerJamRp,
-      amountRp,
+      feePerJamRp: bolehLihatHonor(principal) ? tarif.feePerJamRp : null,
+      amountRp: bolehLihatHonor(principal) ? amountRp : null,
       reason: alasan,
       decidedByName: null,
       createdAt: new Date().toISOString(),
@@ -360,8 +366,8 @@ export class KoreksiJamService {
         className: kelas.get(d.classSlotId) ?? null,
         classStartAt: d.classStartAt,
         hours: d.hours,
-        feePerJamRp: d.feePerJamRp,
-        amountRp: d.amountRp,
+        feePerJamRp: bolehLihatHonor(principal) ? d.feePerJamRp : null,
+        amountRp: bolehLihatHonor(principal) ? d.amountRp : null,
         reason: b.reason ?? '',
         decidedByName: b.actorId ? (nama.get(b.actorId) ?? null) : null,
         createdAt: b.createdAt.toISOString(),

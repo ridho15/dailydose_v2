@@ -48,7 +48,7 @@ export interface PayrollInstruktur {
   totalRp: number;
   terverifikasiRp: number;
   koreksiRp: number;
-  /** Honor kelas selesai yang belum terverifikasi; tidak masuk total. */
+  /** Selalu 0: kelas belum terverifikasi tidak diberi nominal sampai check-in tercatat. */
   belumTerverifikasiRp: number;
   kelasTerverifikasi: number;
   kelasBelumTerverifikasi: number;
@@ -137,8 +137,9 @@ export class PayrollInstrukturService {
         namaKelas: s.classType?.name ?? 'Kelas',
         namaCabang: s.branch?.name ?? '',
         jam: hitung.hours,
-        tarifPerJamRp: hitung.feePerJamRp,
-        honorRp: hitung.feeRp,
+        // Nominal hanya untuk kelas yang check-in QR-nya tercatat; kelas lain tampil tanpa rupiah.
+        tarifPerJamRp: s.instructorAttendance ? hitung.feePerJamRp : 0,
+        honorRp: s.instructorAttendance ? hitung.feeRp : 0,
         terverifikasi: Boolean(s.instructorAttendance),
         hadirPada: s.instructorAttendance?.checkedInAt.toISOString() ?? null,
       };
@@ -175,7 +176,8 @@ export class PayrollInstrukturService {
       totalRp: terverifikasiRp + koreksiRp,
       terverifikasiRp,
       koreksiRp,
-      belumTerverifikasiRp: jumlah(belum),
+      // Tidak dihitung dan tidak diberi nominal sampai check-in terverifikasi.
+      belumTerverifikasiRp: 0,
       kelasTerverifikasi: terverifikasi.length,
       kelasBelumTerverifikasi: belum.length,
       jamTerverifikasi: terverifikasi.reduce((s, k) => s + k.jam, 0),

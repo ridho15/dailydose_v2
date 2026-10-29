@@ -56,11 +56,11 @@ function KartuKelas({ baris }: { baris: BarisPayroll }) {
           </p>
         )}
       </div>
-      <p
-        className={`m-0 shrink-0 font-semibold tabular-nums ${baris.terverifikasi ? 'text-dd-ink' : 'text-dd-muted line-through'}`}
-      >
-        {rp(baris.honorRp)}
-      </p>
+      {baris.terverifikasi ? (
+        <p className="m-0 shrink-0 font-semibold tabular-nums text-dd-ink">{rp(baris.honorRp)}</p>
+      ) : (
+        <p className="m-0 shrink-0 text-sm text-dd-muted">Belum dihitung</p>
+      )}
     </li>
   );
 }
@@ -157,8 +157,8 @@ export function PayrollView({
 
           {belum.length > 0 && (
             <Feedback kind="warning">
-              {belum.length} kelas selesai belum ada check-in Anda ({rp(data.belumTerverifikasiRp)}
-              ), belum masuk total. Minta manager mencatat koreksi jam dengan bukti.
+              {belum.length} kelas selesai belum ada check-in Anda, belum masuk total. Minta
+              manager mencatat koreksi jam dengan bukti.
             </Feedback>
           )}
 

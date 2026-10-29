@@ -59,8 +59,9 @@ export interface KoreksiJam {
   className: string | null;
   classStartAt: string;
   hours: number;
-  feePerJamRp: number;
-  amountRp: number;
+  /** Null bila peran tidak berhak melihat nominal honor (mis. Manager). */
+  feePerJamRp: number | null;
+  amountRp: number | null;
   reason: string;
   decidedByName: string | null;
   createdAt: string;
