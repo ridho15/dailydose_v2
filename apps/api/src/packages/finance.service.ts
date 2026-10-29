@@ -387,6 +387,8 @@ export class FinanceService {
       categoryCode?: string;
       description: string;
       amountRp: number;
+      /** Super Owner yang membayar dengan uang pribadi; kosong berarti kas cabang. */
+      dibayarOlehId?: string | null;
     },
   ) {
     // Admin dan Manager mencatat pembelian barang cabangnya (jurnal kas); mengubah atau menghapus
@@ -412,6 +414,17 @@ export class FinanceService {
     // Cabang yang tidak ada (Super Owner lolos pemeriksaan akses cabang) harus berupa 404, bukan galat basis data.
     const branch = await this.db.cabang.findUnique({ where: { id: input.branchId }, select: { id: true } });
     if (!branch) throw new ApiProblem('NOT_FOUND', HttpStatus.NOT_FOUND);
+    const dibayarOlehId = input.dibayarOlehId || null;
+    if (dibayarOlehId) {
+      const pembayar = await this.db.user.findUnique({
+        where: { id: dibayarOlehId },
+        select: { role: true, status: true },
+      });
+      if (pembayar?.role !== 'SUPER_OWNER' || pembayar.status !== 'ACTIVE')
+        throw new ApiProblem('VALIDATION_ERROR', HttpStatus.UNPROCESSABLE_ENTITY, false, [
+          { field: 'dibayarOlehId', issue: 'NOT_SUPER_OWNER' },
+        ]);
+    }
 
     const created = await this.db.otherCost.create({
       data: {
@@ -424,6 +437,10 @@ export class FinanceService {
         createdById: principal.userId,
       },
     });
+    if (dibayarOlehId)
+      await this.db.pembayarPengeluaran.create({
+        data: { otherCostId: created.id, dibayarOlehId },
+      });
     await this.audit.catat(null, {
       actorId: principal.userId,
       branchId: created.branchId,
@@ -434,6 +451,7 @@ export class FinanceService {
         incurredOn: incurredOn.toISOString().slice(0, 10),
         category: created.category,
         amountRp: created.amountRp,
+        dibayarOlehId,
       },
     });
     return created;
@@ -544,6 +562,7 @@ export class FinanceService {
     this.ensureBranchAccess(principal, existing.branchId);
 
     await this.db.otherCost.delete({ where: { id } });
+    await this.db.pembayarPengeluaran.deleteMany({ where: { otherCostId: id } });
     await this.audit.catat(null, {
       actorId: principal.userId,
       branchId: existing.branchId,

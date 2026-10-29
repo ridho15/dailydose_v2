@@ -31,6 +31,7 @@ const slot = (branchId: string) => ({
 
 function setup() {
   const db = {
+    pembayarPengeluaran: { findMany: jest.fn(async () => []) },
     cabang: {
       findMany: jest.fn().mockResolvedValue([
         { id: 'gg', name: 'Green Garden', monthlyTargetRp: 100_000_000 },

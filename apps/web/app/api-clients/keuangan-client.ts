@@ -32,6 +32,8 @@ export interface BarisJurnal {
   amountRp: number;
   dicatatOleh: string | null;
   branchId: string;
+  /** Pengeluaran yang dibayar uang pribadi Super Owner. */
+  dibayarOleh?: string | null;
 }
 
 export interface JurnalKas {
@@ -60,7 +62,49 @@ export interface KoreksiJam {
   evidenceUrl: string;
 }
 
+export interface OwnerSingkat {
+  id: string;
+  nama: string;
+}
+
+export interface PorsiCabang {
+  branchId: string;
+  branchName: string;
+  porsi: { ownerId: string; nama: string; persen: number }[];
+  lengkap: boolean;
+}
+
+export interface BarisSettlement {
+  ownerId: string;
+  nama: string;
+  persen: number;
+  hakRp: number;
+  reimburseRp: number;
+  totalRp: number;
+}
+
+export interface SettlementOwner {
+  period: string;
+  owners: (OwnerSingkat & { hakRp: number; reimburseRp: number; totalRp: number })[];
+  cabang: {
+    branchId: string;
+    branchName: string;
+    labaRp: number;
+    porsiLengkap: boolean;
+    baris: BarisSettlement[];
+  }[];
+  labaBelumDibagiRp: number;
+}
+
 export interface KeuanganClient {
+  /** Super Owner aktif, untuk pilihan "Dibayar oleh". */
+  daftarOwner?(): Promise<OwnerSingkat[]>;
+  porsiOwner?(): Promise<PorsiCabang[]>;
+  simpanPorsi?(
+    branchId: string,
+    porsi: { ownerId: string; persen: number }[],
+  ): Promise<PorsiCabang>;
+  settlementOwner?(period: string): Promise<SettlementOwner>;
   ringkasanBulanan(period: string): Promise<RingkasanBulanan>;
   jurnalKas(input: { branchId?: string; period: string }): Promise<JurnalKas>;
   catatPengeluaran(input: {
@@ -69,6 +113,8 @@ export interface KeuanganClient {
     categoryCode: string;
     description: string;
     amountRp: number;
+    /** Super Owner yang membayar dengan uang pribadi; kosong berarti kas cabang. */
+    dibayarOlehId?: string;
   }): Promise<unknown>;
   daftarKoreksiJam(branchId?: string): Promise<{ items: KoreksiJam[] }>;
   kirimKoreksiJam(input: {
@@ -81,6 +127,28 @@ export interface KeuanganClient {
 }
 
 export const browserKeuanganClient: KeuanganClient = {
+  daftarOwner() {
+    return apiFetch<OwnerSingkat[]>('/owner-settlement/owners', { label: 'Memuat Super Owner…' });
+  },
+  porsiOwner() {
+    return apiFetch<PorsiCabang[]>('/owner-settlement/shares', { label: 'Memuat porsi…' });
+  },
+  simpanPorsi(branchId, porsi) {
+    return apiFetch<PorsiCabang>(`/owner-settlement/shares/${encodeURIComponent(branchId)}`, {
+      method: 'PUT',
+      body: JSON.stringify({ porsi }),
+      label: 'Menyimpan porsi…',
+    });
+  },
+  async settlementOwner(period) {
+    const hasil = await apiFetch<SettlementOwner>(
+      `/owner-settlement?${new URLSearchParams({ period })}`,
+      { label: 'Menghitung settlement…' },
+    );
+    if (!Array.isArray(hasil?.owners) || !Array.isArray(hasil.cabang))
+      throw new Error('SETTLEMENT_TIDAK_DIKENAL');
+    return hasil;
+  },
   async ringkasanBulanan(period) {
     const hasil = await apiFetch<RingkasanBulanan>(
       `/finance/owner-month?${new URLSearchParams({ period })}`,

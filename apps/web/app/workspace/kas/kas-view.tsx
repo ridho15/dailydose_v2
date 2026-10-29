@@ -6,11 +6,13 @@ import {
   keuanganFailure,
   type JurnalKas,
   type KeuanganClient,
+  type OwnerSingkat,
 } from '@/api-clients/keuangan-client';
 import { KATEGORI_PENGELUARAN, labelKategori } from '../../lib/kategori-pengeluaran';
 import { useSessionContext } from '../../session-context';
 import { Feedback, Skeleton } from '../../ui';
 import { tigaBulan } from '../owner-home';
+import { SettlementOwnerSection } from './settlement-owner';
 
 const rp = (n: number) => `${n < 0 ? '−' : ''}Rp ${Math.abs(n).toLocaleString('id-ID')}`;
 
@@ -62,7 +64,21 @@ function FormPengeluaran({
   const [kategori, setKategori] = useState<string>(KATEGORI_PENGELUARAN[0].code);
   const [keterangan, setKeterangan] = useState('');
   const [nominal, setNominal] = useState('');
+  // Kosong: dibayar dari kas cabang. Berisi id Super Owner: uang pribadinya, diganti saat settlement.
+  const [dibayarOleh, setDibayarOleh] = useState('');
+  const [owners, setOwners] = useState<OwnerSingkat[]>([]);
   const [sibuk, setSibuk] = useState(false);
+
+  useEffect(() => {
+    let batal = false;
+    client
+      .daftarOwner?.()
+      .then((daftar) => !batal && setOwners(daftar))
+      .catch(() => !batal && setOwners([]));
+    return () => {
+      batal = true;
+    };
+  }, [client]);
   const [pesan, setPesan] = useState<{ kind: 'status' | 'error'; text: string } | null>(null);
 
   const amountRp = bacaNominal(nominal);
@@ -80,13 +96,18 @@ function FormPengeluaran({
         categoryCode: kategori,
         description: keterangan.trim(),
         amountRp,
+        ...(dibayarOleh ? { dibayarOlehId: dibayarOleh } : {}),
       });
+      const pembayar = owners.find((o) => o.id === dibayarOleh)?.nama;
       setPesan({
         kind: 'status',
-        text: `${labelKategori(kategori)} ${rp(amountRp)} tercatat untuk ${branchName}.`,
+        text: `${labelKategori(kategori)} ${rp(amountRp)} tercatat untuk ${branchName}${
+          pembayar ? `, dibayar ${pembayar} (diganti saat settlement)` : ''
+        }.`,
       });
       setKeterangan('');
       setNominal('');
+      setDibayarOleh('');
       onSaved();
     } catch (error) {
       setPesan({
@@ -165,6 +186,23 @@ function FormPengeluaran({
             required
           />
         </label>
+        {owners.length > 0 && (
+          <label className="text-sm font-medium text-dd-ink">
+            Dibayar oleh
+            <select
+              value={dibayarOleh}
+              onChange={(e) => setDibayarOleh(e.target.value)}
+              className={kontrol}
+            >
+              <option value="">Kas cabang</option>
+              {owners.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.nama} (uang pribadi, diganti)
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         <div className="flex items-end">
           <button
             type="submit"
@@ -224,6 +262,12 @@ export function KasView({
   }, [muat]);
 
   const lintasCabang = !branchId;
+  const bisaSettlement = Boolean(
+    context?.hasCapability?.('owner-settlement:manage') &&
+    client.settlementOwner &&
+    client.porsiOwner &&
+    client.simpanPorsi,
+  );
   const namaCabang = (id: string) =>
     context?.session?.branches?.find((b) => b.id === id)?.name ?? '';
 
@@ -343,6 +387,11 @@ export function KasView({
                             : ''}
                           {r.dicatatOleh ? ` · ${r.dicatatOleh}` : ''}
                         </span>
+                        {r.dibayarOleh && (
+                          <span className="block text-sm font-medium text-dd-warning">
+                            Dibayar {r.dibayarOleh}, diganti saat settlement
+                          </span>
+                        )}
                       </td>
                       <td className="whitespace-nowrap py-3 pr-4 text-right tabular-nums text-dd-forest">
                         {r.arah === 'MASUK' ? rp(r.amountRp) : ''}
@@ -357,6 +406,18 @@ export function KasView({
             </div>
           )}
         </>
+      )}
+
+      {bisaSettlement && (
+        <SettlementOwnerSection
+          client={
+            client as Required<
+              Pick<KeuanganClient, 'settlementOwner' | 'porsiOwner' | 'simpanPorsi'>
+            >
+          }
+          periode={periode}
+          namaBulan={namaBulan(periode)}
+        />
       )}
     </section>
   );

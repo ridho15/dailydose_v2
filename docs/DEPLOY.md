@@ -85,6 +85,34 @@ CREATE TABLE `ulasan_instruktur` (
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 ```
 
+`porsi_owner_cabang` dan `pembayar_pengeluaran` (settlement Super Owner di Jurnal kas, Oktober 2026):
+
+```sql
+CREATE TABLE `porsi_owner_cabang` (
+    `id` CHAR(36) NOT NULL,
+    `branchId` CHAR(36) NOT NULL,
+    `ownerId` CHAR(36) NOT NULL,
+    `porsiBp` INTEGER NOT NULL,
+    `updatedById` CHAR(36) NULL,
+    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `updatedAt` DATETIME(3) NOT NULL,
+
+    UNIQUE INDEX `porsi_owner_cabang_branchId_ownerId_key`(`branchId`, `ownerId`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+CREATE TABLE `pembayar_pengeluaran` (
+    `id` CHAR(36) NOT NULL,
+    `otherCostId` CHAR(36) NOT NULL,
+    `dibayarOlehId` CHAR(36) NOT NULL,
+    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+
+    UNIQUE INDEX `pembayar_pengeluaran_otherCostId_key`(`otherCostId`),
+    INDEX `pembayar_pengeluaran_dibayarOlehId_idx`(`dibayarOlehId`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+```
+
 ## Kembali ke versi sebelumnya
 
 ```bash

@@ -89,6 +89,8 @@ const SUPER_OWNER_CAPABILITIES: readonly string[] = [
     'instructor-review:read',
     // Menyetujui pembatalan booking setelah batas H-24 (diajukan admin dari timetable).
     'booking:late-cancel:decide',
+    // Settlement akhir bulan antar Super Owner (porsi laba per cabang dan reimburse).
+    'owner-settlement:manage',
   ]),
 ];
 

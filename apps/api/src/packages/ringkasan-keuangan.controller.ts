@@ -4,6 +4,7 @@ import {
   Get,
   Param,
   Post,
+  Put,
   Query,
   Req,
   Res,
@@ -19,6 +20,7 @@ import { SelfService } from '../identity/route-access';
 import { KoreksiJamService } from './koreksi-jam.service';
 import { PayrollInstrukturService } from './payroll-instruktur.service';
 import { RingkasanKeuanganService } from './ringkasan-keuangan.service';
+import { SettlementOwnerService } from './settlement-owner.service';
 
 @Controller()
 @UseGuards(AuthGuard)
@@ -27,7 +29,35 @@ export class RingkasanKeuanganController {
     private readonly ringkasan: RingkasanKeuanganService,
     private readonly koreksiJam: KoreksiJamService,
     private readonly payroll: PayrollInstrukturService,
+    private readonly settlement: SettlementOwnerService,
   ) {}
+
+  /** Super Owner aktif untuk pilihan "Dibayar oleh" di form pengeluaran. */
+  @Get('owner-settlement/owners')
+  ownerSettlementOwners(@Req() req: AuthenticatedRequest) {
+    return this.settlement.daftarOwner(req.principal);
+  }
+
+  /** Porsi laba tiap Super Owner per cabang. */
+  @Get('owner-settlement/shares')
+  ownerSettlementShares(@Req() req: AuthenticatedRequest) {
+    return this.settlement.porsi(req.principal);
+  }
+
+  @Put('owner-settlement/shares/:branchId')
+  simpanOwnerSettlementShares(
+    @Req() req: AuthenticatedRequest,
+    @Param('branchId') branchId: string,
+    @Body() body: { porsi?: { ownerId: string; persen: number }[] },
+  ) {
+    return this.settlement.simpanPorsi(req.principal, branchId, body ?? {});
+  }
+
+  /** Settlement satu bulan: hak laba + reimburse yang dibayar cabang ke tiap Super Owner. */
+  @Get('owner-settlement')
+  ownerSettlement(@Req() req: AuthenticatedRequest, @Query('period') period?: string) {
+    return this.settlement.settlement(req.principal, { period });
+  }
 
   /** Payroll instruktur yang sedang masuk: kelas terverifikasi dan koreksi jam satu bulan. */
   @SelfService()
