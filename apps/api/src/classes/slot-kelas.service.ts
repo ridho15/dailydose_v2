@@ -36,6 +36,16 @@ const STATUS_ALLOWED: Record<
   complete: [ClassSlotStatus.CONFIRMED],
 };
 
+/** Kapasitas cabang + tipe kelas dari Data Master, atau null bila belum diatur. */
+async function kapasitasCabang(tx: any, branchId: string, classTypeId: string) {
+  if (typeof tx.kapasitasKelasCabang?.findUnique !== 'function') return null;
+  const row = await tx.kapasitasKelasCabang.findUnique({
+    where: { branchId_classTypeId: { branchId, classTypeId } },
+    select: { capacity: true },
+  });
+  return row?.capacity ?? null;
+}
+
 const VIEW_INCLUDE = {
   branch: true,
   studio: true,
@@ -416,9 +426,12 @@ export class ClassSlotService {
           }
           effectiveCapacity = parsed;
         } else {
+          // Kapasitas yang diatur di Data Master untuk cabang + tipe kelas ini menang.
+          const diatur = await kapasitasCabang(tx, branch.id, classType.id);
           const defaultCap = classType.defaultCapacity ?? 8;
           effectiveCapacity =
-            room && room.capacityBed > 0 ? Math.min(defaultCap, room.capacityBed) : defaultCap;
+            diatur ??
+            (room && room.capacityBed > 0 ? Math.min(defaultCap, room.capacityBed) : defaultCap);
         }
 
         const slot = await tx.slotKelas.create({
@@ -599,8 +612,10 @@ export class ClassSlotService {
         if ((tx as any).jenisKelas && !classType) throw new ApiProblem('RESOURCE_NOT_FOUND', HttpStatus.NOT_FOUND);
 
         const defaultCap = classType?.defaultCapacity ?? 8;
+        const diatur = await kapasitasCabang(tx, slot.branchId, input.classTypeId);
         const effectiveCapacity =
-          room && room.capacityBed > 0 ? Math.min(defaultCap, room.capacityBed) : defaultCap;
+          diatur ??
+          (room && room.capacityBed > 0 ? Math.min(defaultCap, room.capacityBed) : defaultCap);
 
         // Instruktur yang tidak dikirim tetap dipertahankan; hanya `null` eksplisit yang mengosongkannya.
         const targetInstructorId =

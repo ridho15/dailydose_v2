@@ -1219,3 +1219,19 @@ model ModalSesi {
   @@index([branchId, classTypeId, effectiveDate])
   @@map("modal_sesi")
 }
+
+/// Kapasitas kelas per cabang dan tipe kelas dari Data Master (Kuota & Kapasitas). Bila ada,
+/// dipakai untuk kelas baru dan kelas mendatang menggantikan kapasitas bawaan tipe kelas.
+/// Tanpa relasi Prisma; tabel lama tidak berubah.
+model KapasitasKelasCabang {
+  id          String   @id @default(uuid()) @db.Char(36)
+  branchId    String   @db.Char(36)
+  classTypeId String   @db.Char(36)
+  capacity    Int
+  updatedById String?  @db.Char(36)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([branchId, classTypeId])
+  @@map("kapasitas_kelas_cabang")
+}

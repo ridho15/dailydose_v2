@@ -686,7 +686,8 @@ export function DetailPanel({
         bookingClient={bookingClient}
       />
 
-      {(isDraft || isPublished) && canManage && (
+      {/* Kelas terkonfirmasi juga bisa dibatalkan (API mengizinkan), misalnya jadwal lama yang diganti. */}
+      {(isDraft || isPublished || isConfirmed) && canManage && (
         <DetailSection
           id="class-cancel-title"
           tone="danger"
