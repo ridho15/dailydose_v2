@@ -148,6 +148,23 @@ CREATE TABLE `modal_sesi` (
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 ```
 
+`kapasitas_kelas_cabang` (kapasitas kelas per cabang dan tipe kelas dari Data Master, Oktober 2026):
+
+```sql
+CREATE TABLE `kapasitas_kelas_cabang` (
+    `id` CHAR(36) NOT NULL,
+    `branchId` CHAR(36) NOT NULL,
+    `classTypeId` CHAR(36) NOT NULL,
+    `capacity` INTEGER NOT NULL,
+    `updatedById` CHAR(36) NULL,
+    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `updatedAt` DATETIME(3) NOT NULL,
+
+    UNIQUE INDEX `kapasitas_kelas_cabang_branchId_classTypeId_key`(`branchId`, `classTypeId`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+```
+
 ## Kembali ke versi sebelumnya
 
 ```bash

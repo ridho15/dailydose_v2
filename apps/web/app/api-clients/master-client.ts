@@ -378,7 +378,11 @@ export const browserMasterClient: MasterClient = {
       businessKey: row.id,
       branchId: row.branchId,
       classTypeId: row.classTypeId,
-      value: { minimumQuota: row.minimumQuota, cutoffHours: row.cutoffHours },
+      value: {
+        minimumQuota: row.minimumQuota,
+        cutoffHours: row.cutoffHours,
+        defaultCapacity: row.defaultCapacity ?? undefined,
+      },
       effectiveFrom: asDate(row.createdAt),
       effectiveUntil: null,
       version: 1,

@@ -3,6 +3,7 @@ import type { SessionPrincipal } from '../identity/identity.service';
 import { ApiProblem, ENTITY_ID_REGEX } from '../identity/security';
 import { MasterAccessService } from './master-access.service';
 import { PrismaService } from '../database/prisma.service';
+import { HITUNG_TERISI, terisi } from '../classes/terisi';
 import {
   calculateSlotFee,
   sortFeesNewestFirst,
@@ -79,13 +80,19 @@ export class EffectiveSettingsService {
       } else if (!principal.capabilities.includes('branch:all')) {
         scopeWhere.branchId = { in: principal.branchIds };
       }
-      const rows = await this.db.minQuotaSetting.findMany({
-        where: scopeWhere,
-        include: {
-          branch: { select: { id: true, code: true, name: true } },
-          classType: { select: { id: true, name: true } },
-        },
-      });
+      const [rows, kapasitas] = await Promise.all([
+        this.db.minQuotaSetting.findMany({
+          where: scopeWhere,
+          include: {
+            branch: { select: { id: true, code: true, name: true } },
+            classType: { select: { id: true, name: true } },
+          },
+        }),
+        typeof this.db.kapasitasKelasCabang?.findMany === 'function'
+          ? this.db.kapasitasKelasCabang.findMany({ where: scopeWhere })
+          : Promise.resolve([]),
+      ]);
+      const kap = new Map(kapasitas.map((k) => [`${k.branchId}|${k.classTypeId}`, k.capacity]));
       return {
         items: rows.map((r) => ({
           id: r.id,
@@ -93,6 +100,8 @@ export class EffectiveSettingsService {
           classTypeId: r.classTypeId,
           minimumQuota: r.minQuota,
           cutoffHours: r.cutoffHours,
+          /** Null bila kapasitas cabang ini belum diatur (memakai bawaan tipe kelas). */
+          defaultCapacity: kap.get(`${r.branchId}|${r.classTypeId}`) ?? null,
           branch: r.branch,
           classType: r.classType,
           createdAt: r.createdAt.toISOString(),
@@ -148,6 +157,47 @@ export class EffectiveSettingsService {
     return { items: [], page: { nextCursor: null, hasMore: false } };
   }
 
+  /**
+   * Menyimpan kapasitas cabang + tipe kelas dan menerapkannya ke kelas yang belum berjalan.
+   * Kapasitas kelas tidak pernah dibuat lebih kecil dari peserta yang sudah terdaftar.
+   */
+  private async simpanKapasitas(principal: SessionPrincipal, input: SettingInput) {
+    if (input.defaultCapacity === undefined || input.defaultCapacity === null) return null;
+    const capacity = Number(input.defaultCapacity);
+    if (!Number.isInteger(capacity) || capacity < 1 || capacity > 100)
+      throw new ApiProblem('VALIDATION_ERROR', HttpStatus.UNPROCESSABLE_ENTITY, false, [
+        { field: 'defaultCapacity', issue: 'OUT_OF_RANGE' },
+      ]);
+    if (typeof this.db.kapasitasKelasCabang?.upsert !== 'function') return null;
+    await this.db.kapasitasKelasCabang.upsert({
+      where: { branchId_classTypeId: { branchId: input.branchId, classTypeId: input.classTypeId } },
+      create: {
+        branchId: input.branchId,
+        classTypeId: input.classTypeId,
+        capacity,
+        updatedById: principal.userId,
+      },
+      update: { capacity, updatedById: principal.userId },
+    });
+    const kelas = await this.db.slotKelas.findMany({
+      where: {
+        branchId: input.branchId,
+        classTypeId: input.classTypeId,
+        startAt: { gt: new Date() },
+        status: { in: ['DRAFT', 'PUBLISHED', 'CONFIRMED'] },
+      },
+      select: { id: true, capacity: true, bookedCount: true, ...HITUNG_TERISI },
+    });
+    let kelasDiperbarui = 0;
+    for (const k of kelas) {
+      const baru = Math.max(capacity, terisi(k));
+      if (baru === k.capacity) continue;
+      await this.db.slotKelas.update({ where: { id: k.id }, data: { capacity: baru } });
+      kelasDiperbarui += 1;
+    }
+    return { capacity, kelasDiperbarui };
+  }
+
   async create(principal: SessionPrincipal, input: SettingInput, _correlationId: string) {
     this.access.authorize(principal, true);
 
@@ -176,6 +226,7 @@ export class EffectiveSettingsService {
           classType: { select: { id: true, name: true } },
         },
       });
+      const kapasitas = await this.simpanKapasitas(principal, input);
       await this.access.audit(
         this.db,
         principal,
@@ -185,7 +236,12 @@ export class EffectiveSettingsService {
         row.id,
         row.branchId,
         undefined,
-        { classTypeId: row.classTypeId, minQuota: row.minQuota, cutoffHours: row.cutoffHours },
+        {
+          classTypeId: row.classTypeId,
+          minQuota: row.minQuota,
+          cutoffHours: row.cutoffHours,
+          ...(kapasitas ? { capacity: kapasitas.capacity, kelasDiperbarui: kapasitas.kelasDiperbarui } : {}),
+        },
       );
       return {
         id: row.id,
@@ -193,6 +249,8 @@ export class EffectiveSettingsService {
         classTypeId: row.classTypeId,
         minimumQuota: row.minQuota,
         cutoffHours: row.cutoffHours,
+        defaultCapacity: kapasitas?.capacity ?? null,
+        kelasDiperbarui: kapasitas?.kelasDiperbarui ?? 0,
         branch: row.branch,
         classType: row.classType,
         createdAt: row.createdAt.toISOString(),
