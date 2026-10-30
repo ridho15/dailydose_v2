@@ -574,6 +574,20 @@ export const frontendPageGroups: FrontendPageGroup[] = [
   'Pengaturan & Sistem',
 ];
 
+/**
+ * 4 Menu inti untuk staf meja depan (Front Desk / Admin Cabang):
+ * 1. Hari Ini & Presensi (/workspace)
+ * 2. Kalender Kelas (/workspace/classes)
+ * 3. Member & Booking (/workspace/bookings)
+ * 4. Kasir & Pengeluaran (/workspace/kas)
+ */
+export const MENU_FRONT_DESK = [
+  '/workspace',
+  '/workspace/classes',
+  '/workspace/bookings',
+  '/workspace/kas',
+] as const;
+
 /** Halaman registry yang paling spesifik untuk sebuah path (detail `/x/[id]` memakai halaman `/x`). */
 export function pageForPath(pathname: string): FrontendPageDefinition | undefined {
   return [...frontendPages]

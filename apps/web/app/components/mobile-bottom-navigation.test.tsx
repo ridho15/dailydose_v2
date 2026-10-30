@@ -32,6 +32,7 @@ describe('MobileBottomNavigation (staff)', () => {
   beforeEach(() => {
     pathname = '/workspace';
     capabilities = [];
+    roles = [];
   });
 
   it('only shows tabs the account may open', () => {
@@ -76,6 +77,32 @@ describe('MobileBottomNavigation (staff)', () => {
     capabilities = ['booking:read'];
     render(<MobileBottomNavigation customerOnly={false} queueCounts={{ adjustments: 3 }} />);
     expect(screen.queryByLabelText('Ada antrean baru di menu lain')).not.toBeInTheDocument();
+  });
+});
+
+
+describe('MobileBottomNavigation (front desk / admin - Fase 5)', () => {
+  beforeEach(() => {
+    pathname = '/workspace';
+    capabilities = ['booking:read', 'class-slot:read', 'expense:create'];
+    roles = ['ADMIN'];
+  });
+
+  it('renders the 4 core studio tabs plus Menu button for admin', () => {
+    render(<MobileBottomNavigation customerOnly={false} />);
+    expect(tabs()).toEqual(['Hari Ini', 'Kalender', 'Booking', 'Kasir & Kas']);
+    expect(screen.getByRole('button', { name: 'Buka semua menu navigasi' })).toBeVisible();
+  });
+
+  it('shows badge counters for front desk tabs', () => {
+    render(
+      <MobileBottomNavigation
+        customerOnly={false}
+        queueCounts={{ total: 5, reschedules: 2 }}
+      />,
+    );
+    expect(screen.getByLabelText('5 antrean')).toHaveTextContent('5');
+    expect(screen.getByLabelText('2 antrean')).toHaveTextContent('2');
   });
 });
 

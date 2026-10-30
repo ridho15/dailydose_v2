@@ -15,7 +15,7 @@ import {
   Users,
   X,
 } from 'lucide-react';
-import { frontendPageGroups, frontendPages } from '@/lib/frontend-pages';
+import { frontendPageGroups, frontendPages, MENU_FRONT_DESK } from '@/lib/frontend-pages';
 import { PreviewTag } from './components/admin/preview-tag';
 import {
   isCustomerOnlySession,
@@ -38,6 +38,8 @@ export const MENU_INSTRUKTUR = [
   '/workspace/payroll',
 ];
 
+export { MENU_FRONT_DESK };
+
 /** Label badge di samping logo: peran tertinggi akun, bukan sekadar "Staf". */
 export function badgePeran(roles: readonly string[] | undefined, instructorOnly: boolean): string {
   if (instructorOnly) return 'Instruktur';
@@ -45,6 +47,7 @@ export function badgePeran(roles: readonly string[] | undefined, instructorOnly:
   if (roles?.includes('OWNER')) return 'Owner';
   if (roles?.includes('MANAGER')) return 'Manager';
   if (roles?.includes('FINANCE')) return 'Finance';
+  if (roles?.includes('ADMIN')) return 'Admin Cabang';
   return 'Staf';
 }
 
@@ -79,8 +82,9 @@ export function AppNavigation({
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const customerOnly = isCustomerOnlySession(session);
   const instructorOnly = !customerOnly && isInstructorOnlySession(session);
+  const frontDeskOnly = !customerOnly && isFrontDeskOnlySession(session);
   const advancedPages = frontendPages
-    .filter((item) => item.isAdvanced && !item.isDormant && !item.hideFromNav && !instructorOnly)
+    .filter((item) => item.isAdvanced && !item.isDormant && !item.hideFromNav && !instructorOnly && !frontDeskOnly)
     .filter(
       (item) => item.capabilities.length === 0 || context?.hasCapability(...item.capabilities),
     )
@@ -91,7 +95,7 @@ export function AppNavigation({
 
   // Beranda staf: meja depan dan instruktur melihat "Hari ini", Owner melihat ringkasan bulanannya.
   const berandaLabel =
-    instructorOnly || isFrontDeskOnlySession(session)
+    instructorOnly || frontDeskOnly
       ? 'Hari ini'
       : session?.roles.some((role) => role === 'SUPER_OWNER' || role === 'OWNER')
         ? 'Beranda'
@@ -242,7 +246,73 @@ export function AppNavigation({
                   </select>
                 </div>
               )}
-              {frontendPageGroups.map((group) => {
+              {frontDeskOnly ? (
+                <section
+                  className="space-y-1"
+                  aria-labelledby="nav-menu-studio"
+                >
+                  {!collapsed && (
+                    <h2
+                      id="nav-menu-studio"
+                      className="mb-1 px-2 text-[13px] font-bold text-dd-muted"
+                    >
+                      Menu Utama Cabang
+                    </h2>
+                  )}
+                  {MENU_FRONT_DESK.map((href) => {
+                    const item = frontendPages.find((p) => p.href === href);
+                    if (!item) return null;
+                    const active = item.href === activeHref;
+                    const Icon = iconForPage(item.href);
+                    const displayLabel =
+                      item.href === '/workspace'
+                        ? 'Hari Ini & Presensi'
+                        : item.href === '/workspace/classes'
+                          ? 'Kalender Kelas'
+                          : item.href === '/workspace/bookings'
+                            ? 'Member & Booking'
+                            : item.href === '/workspace/kas'
+                              ? 'Kasir & Pengeluaran'
+                              : item.shortLabel;
+                    return (
+                      <Link
+                        href={item.href}
+                        aria-current={active ? 'page' : undefined}
+                        key={item.href}
+                        title={
+                          collapsed
+                            ? `${displayLabel}${item.queueBadgeSource && (queueCounts[item.queueBadgeSource] ?? 0) > 0 ? ` (${queueCounts[item.queueBadgeSource]})` : ''}`
+                            : undefined
+                        }
+                        onClick={onClose}
+                        className={linkClass(active)}
+                      >
+                        <div className="relative shrink-0">
+                          <Icon className="size-[18px]" aria-hidden="true" />
+                          {collapsed &&
+                            item.queueBadgeSource &&
+                            (queueCounts[item.queueBadgeSource] ?? 0) > 0 && (
+                              <span
+                                aria-label={`${queueCounts[item.queueBadgeSource]} antrean`}
+                                className="absolute -top-1 -right-1 size-2.5 rounded-full bg-dd-danger ring-2 ring-white"
+                              />
+                            )}
+                        </div>
+                        {!collapsed && <span className="truncate">{displayLabel}</span>}
+                        {!collapsed && item.maturity === 'preview' && <PreviewTag tone="light" />}
+                        {!collapsed &&
+                          item.queueBadgeSource &&
+                          (queueCounts[item.queueBadgeSource] ?? 0) > 0 && (
+                            <span className="ml-auto rounded-full bg-dd-danger px-2 py-0.5 text-[13px] font-bold text-white">
+                              {queueCounts[item.queueBadgeSource]}
+                            </span>
+                          )}
+                      </Link>
+                    );
+                  })}
+                </section>
+              ) : (
+                frontendPageGroups.map((group) => {
                 const pagesInGroup = frontendPages
                   .filter((item) => item.group === group)
                   .filter((item) => !item.isDormant && !item.isAdvanced && !item.hideFromNav)
@@ -317,7 +387,8 @@ export function AppNavigation({
                     })}
                   </section>
                 );
-              })}
+              })
+              )}
 
               {advancedPages.length > 0 && (
                 <section
@@ -422,8 +493,8 @@ export function AppNavigation({
 }
 
 /** Dua huruf awal nama untuk kartu pengguna; satu huruf bila namanya satu kata. */
-function initials(nama: string) {
-  const kata = nama.trim().split(/\s+/).filter(Boolean);
+function initials(nama: string = '') {
+  const kata = (nama || '').trim().split(/\s+/).filter(Boolean);
   const huruf = kata.length > 1 ? `${kata[0]![0]}${kata[kata.length - 1]![0]}` : (kata[0] ?? '?').slice(0, 2);
   return huruf.toUpperCase();
 }

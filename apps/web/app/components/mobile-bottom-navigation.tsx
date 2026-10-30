@@ -13,11 +13,12 @@ import {
   LockKeyhole,
   Menu,
   UserRound,
+  Wallet,
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { frontendPages } from '@/lib/frontend-pages';
-import { isInstructorOnlySession } from '@/lib/session-audience';
+import { isFrontDeskOnlySession, isInstructorOnlySession } from '@/lib/session-audience';
 import { useSessionContext } from '../session-context';
 import { useCustomerBadges } from './customer/use-customer-badges';
 import { isCustomerTabActive } from './customer/customer-navigation';
@@ -197,6 +198,81 @@ export function MobileBottomNavigation({
               </Link>
             );
           })}
+        </div>
+      </nav>
+    );
+  }
+
+  // Navigasi Bawah Front Desk / Admin Cabang: 4 menu inti studio yang konsisten dengan sidebar.
+  if (isFrontDeskOnlySession(context?.session)) {
+    const frontDeskTabs = [
+      { href: '/workspace', label: 'Hari Ini', icon: House, badge: queueCounts.total ?? 0 },
+      { href: '/workspace/classes', label: 'Kalender', icon: CalendarDays, badge: 0 },
+      { href: '/workspace/bookings', label: 'Booking', icon: BookOpenCheck, badge: queueCounts.reschedules ?? 0 },
+      { href: '/workspace/kas', label: 'Kasir & Kas', icon: Wallet, badge: 0 },
+    ];
+
+    const isTabActive = (href: string) => {
+      if (href === '/workspace') {
+        return pathname === '/workspace';
+      }
+      return pathname === href || pathname.startsWith(`${href}/`);
+    };
+
+    return (
+      <nav
+        aria-label="Navigasi Bawah Workspace"
+        className="fixed bottom-0 inset-x-0 z-40 lg:hidden border-t border-dd-line/80 bg-white/95 backdrop-blur-xl shadow-[0_-4px_20px_rgba(0,0,0,0.06)] pb-[max(0.6rem,env(safe-area-inset-bottom))] pt-1.5 px-2"
+      >
+        <div className="grid grid-cols-5 items-center justify-around gap-1 max-w-lg mx-auto">
+          {frontDeskTabs.map((tab) => {
+            const active = isTabActive(tab.href);
+            const Icon = tab.icon;
+
+            return (
+              <Link
+                key={tab.href}
+                href={tab.href}
+                aria-current={active ? 'page' : undefined}
+                className={`flex flex-col items-center justify-center min-h-[48px] py-1 px-1 rounded-dd-md text-[13px] font-semibold transition-all select-none focus-visible:outline focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-[#09371f] ${
+                  active
+                    ? 'text-dd-forest font-bold bg-dd-forest/8'
+                    : 'text-dd-muted hover:text-dd-forest hover:bg-dd-surface-muted/60'
+                }`}
+              >
+                <div className="relative shrink-0 mb-0.5">
+                  <Icon
+                    className={`size-5 transition-transform ${active ? 'scale-110 stroke-[2.2]' : 'stroke-[1.8]'}`}
+                    aria-hidden="true"
+                  />
+                  {tab.badge > 0 ? (
+                    <span
+                      aria-label={`${tab.badge} antrean`}
+                      className="absolute -top-1.5 -right-2.5 grid min-h-4 min-w-4 place-items-center rounded-full px-1 text-[13px] font-bold text-white leading-none shadow-xs bg-dd-forest"
+                    >
+                      {tab.badge > 99 ? '99+' : tab.badge}
+                    </span>
+                  ) : null}
+                </div>
+                <span className="truncate max-w-[64px] tracking-tight">{tab.label}</span>
+                {active && (
+                  <span className="w-4 h-0.5 mt-0.5 rounded-full bg-dd-forest" aria-hidden="true" />
+                )}
+              </Link>
+            );
+          })}
+
+          <button
+            type="button"
+            onClick={onOpenMenu}
+            aria-label="Buka semua menu navigasi"
+            className="flex flex-col items-center justify-center min-h-[48px] py-1 px-1 rounded-dd-md text-[13px] font-semibold text-dd-muted hover:text-dd-forest hover:bg-dd-surface-muted/60 transition-all select-none focus-visible:outline focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-[#09371f]"
+          >
+            <div className="relative shrink-0 mb-0.5">
+              <Menu className="size-5 stroke-[1.8]" aria-hidden="true" />
+            </div>
+            <span className="truncate max-w-[64px] tracking-tight">Menu</span>
+          </button>
         </div>
       </nav>
     );
