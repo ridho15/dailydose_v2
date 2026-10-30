@@ -172,6 +172,7 @@ export class ClassSlotService {
       capacity: slot.capacity,
       bookedCount: terisi(slot),
       minimumQuota: slot.classType?.minimumQuota ?? 1,
+      bookingCutoffHours: slot.bookingCutoffHours ?? null,
       status: slot.status,
       cancellationReasonCode: slot.cancellationReason ?? null,
       cancellationReason: slot.cancellationReason ?? null,
@@ -347,6 +348,8 @@ export class ClassSlotService {
       instructorUserId?: string;
       startAt: string;
       endAt: string;
+      capacity?: number;
+      bookingCutoffHours?: number | null;
     },
     key: string,
     _correlationId: string,
@@ -445,6 +448,7 @@ export class ClassSlotService {
             startAt,
             endAt,
             capacity: effectiveCapacity,
+            bookingCutoffHours: input.bookingCutoffHours !== undefined && input.bookingCutoffHours !== null ? Number(input.bookingCutoffHours) : null,
             bookedCount: 0,
             status: ClassSlotStatus.DRAFT,
           },
@@ -539,6 +543,8 @@ export class ClassSlotService {
       instructorUserId?: string | null;
       startAt: string;
       endAt: string;
+      capacity?: number;
+      bookingCutoffHours?: number | null;
       expectedVersion?: number;
       reason?: string;
     },
@@ -611,11 +617,40 @@ export class ClassSlotService {
           : null;
         if ((tx as any).jenisKelas && !classType) throw new ApiProblem('RESOURCE_NOT_FOUND', HttpStatus.NOT_FOUND);
 
-        const defaultCap = classType?.defaultCapacity ?? 8;
-        const diatur = await kapasitasCabang(tx, slot.branchId, input.classTypeId);
-        const effectiveCapacity =
-          diatur ??
-          (room && room.capacityBed > 0 ? Math.min(defaultCap, room.capacityBed) : defaultCap);
+        let effectiveCapacity: number;
+        if (input.capacity !== undefined && input.capacity !== null && (input.capacity as any) !== "") {
+          const customCap = Number(input.capacity);
+          if (!Number.isInteger(customCap) || customCap < 1) {
+            throw new ApiProblem("VALIDATION_ERROR", HttpStatus.BAD_REQUEST, false, [
+              { field: "capacity", issue: "CAPACITY_MUST_BE_POSITIVE_INTEGER" },
+            ]);
+          }
+          const currentBooked = terisi(slot);
+          if (customCap < currentBooked) {
+            throw new ApiProblem("CAPACITY_BELOW_BOOKED_COUNT", HttpStatus.CONFLICT, false, [
+              { field: "capacity", issue: `Kapasitas baru (${customCap}) tidak boleh di bawah jumlah peserta yang sudah booking (${currentBooked}).` },
+            ]);
+          }
+          if (room && room.capacityBed > 0 && customCap > room.capacityBed) {
+            throw new ApiProblem("CAPACITY_EXCEEDS_ROOM_LIMIT", HttpStatus.BAD_REQUEST, false, [
+              { field: "capacity", issue: `EXCEEDS_ROOM_CAPACITY_BED_${room.capacityBed}` },
+            ]);
+          }
+          effectiveCapacity = customCap;
+        } else {
+          const defaultCap = classType?.defaultCapacity ?? 8;
+          const diatur = await kapasitasCabang(tx, slot.branchId, input.classTypeId);
+          effectiveCapacity =
+            diatur ??
+            (room && room.capacityBed > 0 ? Math.min(defaultCap, room.capacityBed) : defaultCap);
+        }
+
+        const targetCutoffHours =
+          input.bookingCutoffHours !== undefined
+            ? (input.bookingCutoffHours !== null && (input.bookingCutoffHours as any) !== ""
+                ? Number(input.bookingCutoffHours)
+                : null)
+            : slot.bookingCutoffHours;
 
         // Instruktur yang tidak dikirim tetap dipertahankan; hanya `null` eksplisit yang mengosongkannya.
         const targetInstructorId =
@@ -653,6 +688,7 @@ export class ClassSlotService {
           studioId: targetStudioId,
           roomId: targetRoomId,
           capacity: effectiveCapacity,
+          bookingCutoffHours: targetCutoffHours,
           startAt,
           endAt,
           notes: input.reason ?? slot.notes,

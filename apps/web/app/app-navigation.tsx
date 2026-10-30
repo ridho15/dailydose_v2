@@ -215,6 +215,33 @@ export function AppNavigation({
             </section>
           ) : (
             <>
+              {!customerOnly && session && session.branches.length > 1 && !collapsed && (
+                <div className="mb-3 rounded-dd-md border border-dd-line/80 bg-dd-surface p-2.5 lg:hidden">
+                  <label
+                    htmlFor="mobile-nav-branch"
+                    className="mb-1 block text-xs font-bold text-dd-muted uppercase tracking-wider"
+                  >
+                    Cabang Bertugas
+                  </label>
+                  <select
+                    id="mobile-nav-branch"
+                    aria-label="Pilih cabang bertugas"
+                    value={context?.activeBranchId ?? ''}
+                    onChange={(e) => {
+                      context?.setActiveBranchId(e.target.value);
+                      onClose?.();
+                    }}
+                    className="w-full min-h-10 rounded-dd-sm border border-dd-line bg-white px-2.5 py-1 text-sm font-semibold text-dd-ink shadow-2xs focus:border-dd-forest focus:outline-none"
+                  >
+                    <option value="">-- Pilih Cabang --</option>
+                    {session.branches.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
               {frontendPageGroups.map((group) => {
                 const pagesInGroup = frontendPages
                   .filter((item) => item.group === group)

@@ -179,13 +179,23 @@ export function TimetableWeekGrid({
           <span className="truncate text-[13px] font-bold text-dd-ink">{namaTipe(slot)}</span>
         </span>
         <span className="truncate text-[13px] text-dd-muted">{namaInstruktur(slot)}</span>
-        <span
-          className={`text-[13px] font-bold ${
-            dibatalkan ? 'text-dd-danger' : nada === 'kurang' ? 'text-dd-warning' : 'text-dd-forest'
-          }`}
-        >
-          {angka}
-        </span>
+        <div className="flex items-center justify-between gap-1">
+          <span
+            className={`text-[13px] font-bold ${
+              dibatalkan ? 'text-dd-danger' : nada === 'kurang' ? 'text-dd-warning' : 'text-dd-forest'
+            }`}
+          >
+            {angka}
+          </span>
+          {slot.bookingCutoffHours != null && !dibatalkan && (
+            <span
+              className="rounded bg-dd-forest/10 px-1 py-0.2 text-[10px] font-semibold text-dd-forest"
+              title={`Batas booking: ${slot.bookingCutoffHours} jam sebelum kelas`}
+            >
+              H-{Math.round(slot.bookingCutoffHours / 24) || 1}
+            </span>
+          )}
+        </div>
       </button>
     );
   };

@@ -3,8 +3,9 @@ import type { CustomerBookingRecord } from '../api-clients/booking-client';
 
 /** Alasan cepat untuk mencatat kehadiran manual; petugas memilih satu, atau menulis sendiri. */
 export const ATTENDANCE_REASON_PRESETS = [
-  'Pelanggan hadir tetapi belum mengonfirmasi lewat tautan',
+  'Hadir langsung di studio (tanpa HP)',
   'Ponsel pelanggan bermasalah saat konfirmasi',
+  'Pelanggan hadir tetapi belum mengonfirmasi lewat tautan',
   'Petugas melihat langsung pelanggan mengikuti kelas',
 ] as const;
 
@@ -52,7 +53,7 @@ export function attendanceWindow(slot: ClassSlot, now: Date): { open: boolean; r
   if (now.getTime() > slot.endAt.getTime() + BACKFILL_WINDOW_MS)
     return {
       open: false,
-      reason: 'Lewat 2 jam setelah kelas selesai. Ajukan penyesuaian sesi ke Manager.',
+      reason: 'Lewat 2 jam setelah kelas selesai. Batas presensi manual telah lewat; hubungi Manager jika perlu susulan.',
     };
   return { open: true };
 }

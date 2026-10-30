@@ -416,7 +416,7 @@ export class BookingsService {
     if (!slot) throw new ApiProblem('RESOURCE_NOT_FOUND', HttpStatus.NOT_FOUND);
 
     const now = new Date();
-    const cutoffHours = this.config.value?.booking?.cutoffHours ?? 2;
+    const cutoffHours = slot.bookingCutoffHours ?? this.config.value?.booking?.cutoffHours ?? 2;
     const cutoffAt = new Date(slot.startAt.getTime() - cutoffHours * 3_600_000);
 
     // Ambil paket aktif pelanggan yang sesuai dengan cabang dan jenis kelas
@@ -888,7 +888,8 @@ export class BookingsService {
         const now = new Date();
         if (slot.startAt <= now)
           throw new ApiProblem('BOOKING_CUTOFF_PASSED', HttpStatus.CONFLICT);
-        const cutoffAt = new Date(slot.startAt.getTime() - policy.cutoffHours * 3_600_000);
+        const effectiveCutoffHours = slot.bookingCutoffHours ?? policy.cutoffHours;
+        const cutoffAt = new Date(slot.startAt.getTime() - effectiveCutoffHours * 3_600_000);
         if (now >= cutoffAt) throw new ApiProblem('BOOKING_CUTOFF_PASSED', HttpStatus.CONFLICT);
 
         const duplicate = await tx.pemesananKelas.findFirst({

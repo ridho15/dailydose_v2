@@ -496,6 +496,17 @@ export function ApplicationShell({ children }: { children: React.ReactNode }) {
                   />
                 </div>
               )}
+              {session && (!instructorOnly || pemilihCabangInstruktur) && session.branches.length > 1 && (
+                <button
+                  type="button"
+                  onClick={() => setMobileOpen(true)}
+                  className="inline-flex md:hidden min-h-10 max-w-[130px] items-center gap-1.5 truncate rounded-full border border-dd-line/90 bg-white px-2.5 py-1 text-xs font-semibold text-dd-ink shadow-2xs hover:border-dd-forest active:bg-dd-surface-muted"
+                  title="Ganti cabang bertugas"
+                >
+                  <MapPin className="size-3.5 shrink-0 text-dd-forest" aria-hidden="true" />
+                  <span className="truncate">{context?.activeBranch?.name ?? 'Pilih cabang'}</span>
+                </button>
+              )}
               <span
                 data-zona-waktu
                 className="hidden min-h-11 items-center rounded-dd-sm border border-dd-line px-3.5 text-[15px] text-dd-muted sm:inline-flex"

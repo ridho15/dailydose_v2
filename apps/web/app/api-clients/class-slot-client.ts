@@ -32,6 +32,7 @@ export interface ClassSlot {
   minimumQuota: number;
   capacity: number;
   bookedCount: number;
+  bookingCutoffHours?: number | null;
   cancellationReasonCode?: ClassSlotCancellationReason | null;
   version: number;
   idempotentReplay?: boolean;
@@ -113,6 +114,8 @@ export interface ClassSlotClient {
     instructorUserId?: string;
     startAt: Date;
     endAt: Date;
+    capacity?: number;
+    bookingCutoffHours?: number | null;
   }): Promise<ClassSlot>;
   update(
     id: string,
@@ -123,6 +126,8 @@ export interface ClassSlotClient {
       instructorUserId?: string | null;
       startAt: Date;
       endAt: Date;
+      capacity?: number;
+      bookingCutoffHours?: number | null;
       /** Opsional: perubahan draf dan penetapan instruktur cukup dijaga status kelas. */
       expectedVersion?: number;
       reason?: string;
@@ -400,6 +405,8 @@ export const browserClassSlotClient: ClassSlotClient = {
         instructorUserId: input.instructorUserId,
         startAt: input.startAt.toISOString(),
         endAt: input.endAt.toISOString(),
+        capacity: input.capacity,
+        bookingCutoffHours: input.bookingCutoffHours,
       }),
       label: 'Membuat kelas…',
     }).then((slot) => ({
@@ -421,6 +428,8 @@ export const browserClassSlotClient: ClassSlotClient = {
         instructorUserId: input.instructorUserId,
         startAt: input.startAt.toISOString(),
         endAt: input.endAt.toISOString(),
+        capacity: input.capacity,
+        bookingCutoffHours: input.bookingCutoffHours,
         expectedVersion: input.expectedVersion,
         reason: input.reason,
       }),

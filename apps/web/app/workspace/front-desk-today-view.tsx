@@ -255,9 +255,31 @@ export function FrontDeskTodayView({
 
   if (!branch)
     return (
-      <Feedback kind="info">
-        Pilih cabang aktif di bagian atas supaya jadwal dan daftar hadir cabang itu tampil.
-      </Feedback>
+      <div className="space-y-4 font-sans text-dd-ink">
+        <Feedback kind="info">
+          Pilih cabang aktif di bagian atas supaya jadwal dan daftar hadir cabang itu tampil.
+        </Feedback>
+        {session?.branches && session.branches.length > 0 && (
+          <div className="rounded-dd-lg border border-dd-line bg-white p-5 space-y-3">
+            <h2 className="text-base font-semibold text-dd-ink">
+              Atau pilih cabang bertugas Anda hari ini:
+            </h2>
+            <div className="flex flex-wrap gap-2.5">
+              {session.branches.map((b) => (
+                <Button
+                  key={b.id}
+                  type="button"
+                  variant="secondary"
+                  className="font-semibold text-dd-forest hover:border-dd-forest"
+                  onClick={() => sessionContext?.setActiveBranchId(b.id)}
+                >
+                  🏢 {b.name}
+                </Button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
     );
 
   const selectedLabel = selected

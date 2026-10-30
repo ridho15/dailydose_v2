@@ -55,6 +55,8 @@ export class ClassSlotController {
       instructorUserId?: string;
       startAt: string;
       endAt: string;
+      capacity?: number;
+      bookingCutoffHours?: number | null;
     },
     @Res({ passthrough: true }) res: Response,
   ) {
@@ -91,6 +93,8 @@ export class ClassSlotController {
       instructorUserId?: string | null;
       startAt: string;
       endAt: string;
+      capacity?: number;
+      bookingCutoffHours?: number | null;
       expectedVersion?: number;
       reason: string;
     },
