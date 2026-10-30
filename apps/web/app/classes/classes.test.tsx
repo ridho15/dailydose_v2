@@ -717,6 +717,13 @@ describe('ClassSlotView detail drawer layout', () => {
     expect(within(dialog).getByText(/1 peserta aktif/)).toBeVisible();
   });
 
+  it('lets staff cancel a confirmed class, e.g. an old schedule being replaced', async () => {
+    const { user, dialog } = await openDetail({ status: 'CONFIRMED' });
+    const cancel = within(dialog).getByRole('button', { name: 'Batalkan kelas ini' });
+    await user.selectOptions(within(dialog).getByLabelText('Alasan pembatalan'), 'SAFETY_ISSUE');
+    expect(cancel).toBeEnabled();
+  });
+
   it('shows the cancellation reason on a closed class and offers no actions', async () => {
     const { dialog } = await openDetail({
       status: 'CANCELLED',
