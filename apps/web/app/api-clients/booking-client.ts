@@ -108,6 +108,19 @@ export interface CustomerPackageBalance {
   expiryAt: Date;
   packageName?: string;
   name?: string;
+  isShareable?: boolean;
+  sharedWithUserIds?: string[];
+  sharedMembers?: Array<{
+    id: string;
+    userId: string;
+    relationship?: string;
+    displayName?: string;
+    phoneMasked?: string | null;
+    email?: string;
+    addedById?: string | null;
+    addedByRole?: string;
+    createdAt?: string;
+  }>;
 }
 
 /** Pengajuan pembatalan booking setelah batas H-24, menunggu Manager/Owner. */
@@ -441,6 +454,9 @@ export function normalizePackageBalance(item: any): CustomerPackageBalance {
     available: item.available ?? item.remainingSessions ?? 0,
     reserved: item.reserved ?? 0,
     expiryAt: Number.isFinite(expiryAt.getTime()) ? expiryAt : new Date(0),
+    isShareable: Boolean(item.isShareable),
+    sharedWithUserIds: item.sharedWithUserIds ?? [],
+    sharedMembers: item.sharedMembers ?? [],
   };
 }
 

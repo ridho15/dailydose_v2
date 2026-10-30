@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Post,
@@ -56,6 +57,32 @@ export class LedgerController {
     @Body() body: { days?: number; reason?: string; expectedValidUntil?: string },
   ) {
     return this.ledger.manageCustomerPackage(req.principal, id, action, body);
+  }
+
+  @Get('customer-packages/:id/members')
+  listPackageMembers(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') id: string,
+  ) {
+    return this.ledger.listPackageMembers(req.principal, id);
+  }
+
+  @Post('customer-packages/:id/members')
+  addPackageMember(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Body() body: { userId: string; relationship?: string },
+  ) {
+    return this.ledger.addPackageMember(req.principal, id, body);
+  }
+
+  @Delete('customer-packages/:id/members/:userId')
+  removePackageMember(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Param('userId') userId: string,
+  ) {
+    return this.ledger.removePackageMember(req.principal, id, userId);
   }
 
   @Get('session-adjustments')

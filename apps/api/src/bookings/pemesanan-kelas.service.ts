@@ -205,6 +205,13 @@ export class BookingsService {
         ? {
             id: pkg.id,
             name: pkg.name,
+            isShareable: Boolean(pkg.isShareable),
+            owner: booking.customerPackage?.user
+              ? {
+                  id: booking.customerPackage.user.id,
+                  displayName: booking.customerPackage.user.displayName,
+                }
+              : undefined,
           }
         : undefined,
       // Saldo paket pelanggan pada saat dibaca; hanya diisi oleh daftar dan detail booking.
@@ -729,7 +736,7 @@ export class BookingsService {
           },
         },
         customerPackage: {
-          include: { package: true },
+          include: { package: true, user: true },
         },
         attendance: true,
         checkInTokens: { take: 1, orderBy: { createdAt: 'desc' } },
@@ -790,7 +797,7 @@ export class BookingsService {
           },
         },
         customerPackage: {
-          include: { package: true },
+          include: { package: true, user: true },
         },
         attendance: true,
         checkInTokens: { take: 1, orderBy: { createdAt: 'desc' } },
@@ -852,14 +859,21 @@ export class BookingsService {
         const [customerPackage, customer] = await Promise.all([
           tx.paketPelanggan.findUnique({
             where: { id: input.customerPackageId },
-            include: { package: true, purchase: true },
+            include: { package: true, purchase: true, sharedMembers: true },
           }),
           tx.user.findUnique({ where: { id: customerUserId } }),
         ]);
 
         if (!customerPackage || !customer || customer.status !== 'ACTIVE')
           throw new ApiProblem('RESOURCE_NOT_FOUND', HttpStatus.NOT_FOUND);
-        if (customerPackage.userId !== customerUserId)
+
+        const isOwner = customerPackage.userId === customerUserId;
+        const isAuthorizedSharedMember =
+          !isOwner &&
+          Boolean(customerPackage.package?.isShareable) &&
+          customerPackage.sharedMembers?.some((sm) => sm.userId === customerUserId);
+
+        if (!isOwner && !isAuthorizedSharedMember)
           throw new ApiProblem('RESOURCE_NOT_FOUND', HttpStatus.NOT_FOUND);
         if (
           (customerPackage.purchase && customerPackage.purchase.status !== 'PAID') ||

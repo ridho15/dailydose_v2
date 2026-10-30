@@ -32,6 +32,7 @@ export type InternalPackageRecord = {
   version: number;
   effectiveState?: 'ACTIVE' | 'SCHEDULED' | 'EXPIRED' | 'INACTIVE';
   isMultiBranch?: boolean;
+  isShareable?: boolean;
   livePromotion?: boolean;
   _count?: { purchases: number; customerPackages: number };
   branch?: { id: string; code: string; name: string };

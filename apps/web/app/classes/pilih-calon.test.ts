@@ -70,6 +70,108 @@ describe('pilihCalon', () => {
     expect(hasil.paket).toBeNull();
   });
 
+  it('memakai paket bersama (shared package) milik member lain jika member terdaftar di sharedWithUserIds', () => {
+    const hasil = pilihCalon(
+      member,
+      [
+        paket({
+          id: 'shared-pkg-1',
+          customerUserId: 'm-owner',
+          customer: { id: 'm-owner', displayName: 'Owner Budi' },
+          isShareable: true,
+          sharedWithUserIds: ['m-1'],
+        }),
+      ],
+      kelas,
+      TZ,
+    );
+
+    expect(hasil.kendala).toBeNull();
+    expect(hasil.paket?.id).toBe('shared-pkg-1');
+  });
+
+  it('tidak memakai paket bersama jika member tidak terdaftar di sharedWithUserIds', () => {
+    const hasil = pilihCalon(
+      member,
+      [
+        paket({
+          id: 'shared-pkg-1',
+          customerUserId: 'm-owner',
+          customer: { id: 'm-owner', displayName: 'Owner Budi' },
+          isShareable: true,
+          sharedWithUserIds: ['m-other'],
+        }),
+      ],
+      kelas,
+      TZ,
+    );
+
+    expect(hasil.paket).toBeNull();
+  });
+
+  it('menyebut sesi habis jika kuota paket bersama sudah 0 (no happy path)', () => {
+    const hasil = pilihCalon(
+      member,
+      [
+        paket({
+          id: 'shared-pkg-empty',
+          customerUserId: 'm-owner',
+          customer: { id: 'm-owner', displayName: 'Owner Budi' },
+          isShareable: true,
+          sharedWithUserIds: ['m-1'],
+          available: 0,
+        }),
+      ],
+      kelas,
+      TZ,
+    );
+
+    expect(hasil.paket).toBeNull();
+    expect(hasil.kendala).toBe('Sesi paket sudah habis');
+  });
+
+  it('menolak jika paket bersama sudah kadaluwarsa saat kelas dimulai (no happy path)', () => {
+    const hasil = pilihCalon(
+      member,
+      [
+        paket({
+          id: 'shared-pkg-expired',
+          customerUserId: 'm-owner',
+          customer: { id: 'm-owner', displayName: 'Owner Budi' },
+          isShareable: true,
+          sharedWithUserIds: ['m-1'],
+          expiryAt: new Date('2026-10-29T00:00:00.000Z'),
+        }),
+      ],
+      kelas,
+      TZ,
+    );
+
+    expect(hasil.paket).toBeNull();
+    expect(hasil.kendala).toBe('Paket habis 29 Okt 2026');
+  });
+
+  it('menolak jika paket bersama berbeda tipe kelas (no happy path)', () => {
+    const hasil = pilihCalon(
+      member,
+      [
+        paket({
+          id: 'shared-pkg-diff-ct',
+          customerUserId: 'm-owner',
+          customer: { id: 'm-owner', displayName: 'Owner Budi' },
+          isShareable: true,
+          sharedWithUserIds: ['m-1'],
+          classTypeId: 'mat',
+        }),
+      ],
+      kelas,
+      TZ,
+    );
+
+    expect(hasil.paket).toBeNull();
+    expect(hasil.kendala).toBe('Belum punya paket untuk kelas ini');
+  });
+
   it('menerima paket bebas tipe kelas', () => {
     const hasil = pilihCalon(member, [paket({ classTypeId: null })], kelas, TZ);
 

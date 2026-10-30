@@ -37,6 +37,7 @@ export type PackageFormValues = {
   effectiveFrom?: string;
   effectiveUntil?: string | null;
   isMultiBranch?: boolean;
+  isShareable?: boolean;
   selectedBranches?: string[];
   selectedClassTypes?: string[];
   reason?: string;
@@ -192,6 +193,7 @@ export function PackagesManagementView() {
       effectiveFrom: today,
       effectiveUntil,
       isMultiBranch: Boolean(source.isMultiBranch),
+      isShareable: Boolean(source.isShareable),
       selectedBranches: branchIds,
       selectedClassTypes: classTypeIds,
       reason: `Duplikasi dari paket ${source.name}`,
@@ -321,7 +323,10 @@ export function PackagesManagementView() {
               header: 'Paket',
               cell: (item) => (
                 <div>
-                  <strong>{item.name}</strong>
+                  <div className="flex items-center gap-1.5">
+                    <strong>{item.name}</strong>
+                    {item.isShareable && <Badge tone="success">Duet / Family</Badge>}
+                  </div>
                   <p className="text-xs text-dd-muted">
                     {item.sessionCount} sesi · {item.durationDays} hari
                   </p>
@@ -434,7 +439,14 @@ export function PackagesManagementView() {
             return (
               <div className="grid gap-2">
                 <div className="flex items-start justify-between gap-2">
-                  <strong>{item.name}</strong>
+                  <div>
+                    <strong>{item.name}</strong>
+                    {item.isShareable && (
+                      <div className="mt-0.5">
+                        <Badge tone="success">Duet / Family</Badge>
+                      </div>
+                    )}
+                  </div>
                   <Badge tone={item.effectiveState === 'ACTIVE' ? 'success' : 'neutral'}>
                     {stateLabels[item.effectiveState ?? 'INACTIVE']}
                   </Badge>
@@ -643,6 +655,9 @@ function PackageCreateForm({
   const [isMultiBranch, setIsMultiBranch] = useState(
     initialValues?.isMultiBranch !== undefined ? initialValues.isMultiBranch : true,
   );
+  const [isShareable, setIsShareable] = useState(
+    initialValues?.isShareable !== undefined ? initialValues.isShareable : false,
+  );
   const [selectedBranches, setSelectedBranches] = useState<string[]>(
     initialValues?.selectedBranches ?? [],
   );
@@ -676,6 +691,7 @@ function PackageCreateForm({
 
         void onSubmit({
           isMultiBranch,
+          isShareable,
           branchIds,
           branchId,
           classTypeIds: selectedClassTypes,
@@ -791,6 +807,24 @@ function PackageCreateForm({
           </div>
         )}
       </fieldset>
+      <fieldset className="grid gap-2 rounded-dd-md border border-dd-line p-3">
+        <legend className="px-1 text-sm font-semibold">Tipe Penggunaan Paket</legend>
+        <label className="flex items-start gap-2 text-sm cursor-pointer">
+          <input
+            type="checkbox"
+            name="isShareable"
+            checked={isShareable}
+            onChange={(e) => setIsShareable(e.target.checked)}
+            className="mt-1 accent-dd-forest cursor-pointer size-4 shrink-0 rounded"
+          />
+          <div>
+            <span className="font-semibold text-dd-forest">Bisa Dipakai Bersama (Family / Duet Package)</span>
+            <p className="text-xs text-dd-muted">
+              Jika dicentang, pembeli paket dapat mendaftarkan teman atau anggota keluarga untuk ikut memakai sisa sesi dari paket ini.
+            </p>
+          </div>
+        </label>
+      </fieldset>
       <div className="grid gap-4 sm:grid-cols-2">
         <TextInput
           name="businessKey"
@@ -878,6 +912,11 @@ function EditPackageModal({
   const [busy, setBusy] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [error, setError] = useState('');
+  const [isShareable, setIsShareable] = useState(Boolean(pkg?.isShareable));
+
+  useEffect(() => {
+    if (pkg) setIsShareable(Boolean(pkg.isShareable));
+  }, [pkg]);
 
   if (!pkg) return null;
 
@@ -965,12 +1004,14 @@ function EditPackageModal({
                 priceRp,
                 effectiveFrom: new Date().toISOString().slice(0, 10),
                 effectiveUntil,
+                isShareable,
                 reason,
               });
             } else {
               await browserPackagePromotionClient.updatePackage(pkg.id, {
                 expectedVersion: pkg.version,
                 name,
+                isShareable,
                 ...(canEditCommercialInPlace
                   ? { sessionCount, durationDays, priceRp, effectiveUntil }
                   : {}),
@@ -1004,6 +1045,28 @@ function EditPackageModal({
             </p>
           )}
         </div>
+
+        <fieldset className="grid gap-2 rounded-dd-md border border-dd-line p-3">
+          <legend className="px-1 text-sm font-semibold">Tipe Penggunaan Paket</legend>
+          <label className="flex items-start gap-2 text-sm cursor-pointer">
+            <input
+              type="checkbox"
+              name="isShareable"
+              checked={isShareable}
+              onChange={(e) => {
+                setDirty(true);
+                setIsShareable(e.target.checked);
+              }}
+              className="mt-1 accent-dd-forest cursor-pointer size-4 shrink-0 rounded"
+            />
+            <div>
+              <span className="font-semibold text-dd-forest">Bisa Dipakai Bersama (Family / Duet Package)</span>
+              <p className="text-xs text-dd-muted">
+                Dapat didaftarkan anggota keluarga atau teman untuk memakai kuota sesi bersama.
+              </p>
+            </div>
+          </label>
+        </fieldset>
 
         <div className="grid gap-4 sm:grid-cols-2">
           <TextInput

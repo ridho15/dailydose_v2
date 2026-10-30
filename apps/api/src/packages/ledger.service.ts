@@ -34,6 +34,19 @@ const packageInclude = {
   user: true,
   package: { include: { classType: true } },
   purchase: { include: { branch: true } },
+  sharedMembers: {
+    include: {
+      user: {
+        select: {
+          id: true,
+          displayName: true,
+          email: true,
+          phone: true,
+          status: true,
+        },
+      },
+    },
+  },
 } satisfies Prisma.PaketPelangganInclude;
 
 const adjustmentInclude = {
@@ -136,11 +149,18 @@ export class LedgerService {
         : {}
       : this.packageScopeWhere(principal, 'ledger:read', filters.branchId);
     const search = filters.search?.trim();
-    const customerFilter: Prisma.PaketPelangganWhereInput = isCustomer
-      ? { userId: principal.userId }
-      : filters.customerUserId
-        ? { userId: filters.customerUserId }
-        : {};
+    const targetUserId = isCustomer ? principal.userId : filters.customerUserId;
+    const customerFilter: Prisma.PaketPelangganWhereInput = targetUserId
+      ? {
+          OR: [
+            { userId: targetUserId },
+            {
+              package: { isShareable: true },
+              sharedMembers: { some: { userId: targetUserId } },
+            },
+          ],
+        }
+      : {};
 
     const base: Prisma.PaketPelangganWhereInput = {
       AND: [
@@ -320,6 +340,17 @@ export class LedgerService {
         displayName: row.user.displayName,
         phoneMasked: maskPhone(row.user.phone),
       },
+      customerUserId: row.userId,
+      isShareable: Boolean((row.package as any)?.isShareable),
+      sharedWithUserIds: ((row as any).sharedMembers ?? []).map((m: any) => m.userId),
+      sharedMembers: ((row as any).sharedMembers ?? []).map((m: any) => ({
+        id: m.id,
+        userId: m.userId,
+        relationship: m.relationship,
+        displayName: m.user?.displayName,
+        phoneMasked: maskPhone(m.user?.phone),
+        createdAt: m.createdAt,
+      })),
     };
   }
 
@@ -1078,6 +1109,215 @@ export class LedgerService {
       version: row.version,
       createdAt: row.createdAt.toISOString(),
       decidedAt: row.decidedAt?.toISOString() ?? null,
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Manajemen Anggota Paket Bersama (Family / Duet / Shared Package)
+  // ---------------------------------------------------------------------------
+
+  private canManagePackageMembers(principal: SessionPrincipal, pkg: PackageRow): boolean {
+    if (pkg.userId === principal.userId) return true;
+    const staffCapabilities = ['customer-package:manage', 'booking:create:assisted', 'master:manage'];
+    const hasCapability = staffCapabilities.some((cap) =>
+      principal.capabilities.includes(cap as any),
+    );
+    if (!hasCapability) return false;
+    this.assertPackageAccess(principal, 'customer-package:manage', pkg);
+    return true;
+  }
+
+  async listPackageMembers(principal: SessionPrincipal, customerPackageId: string) {
+    if (!UUID.test(customerPackageId)) throw new ApiProblem('RESOURCE_NOT_FOUND', HttpStatus.NOT_FOUND);
+    const pkg = await this.db.paketPelanggan.findUnique({
+      where: { id: customerPackageId },
+      include: packageInclude,
+    });
+    if (!pkg) throw new ApiProblem('RESOURCE_NOT_FOUND', HttpStatus.NOT_FOUND);
+
+    const isOwner = pkg.userId === principal.userId;
+    const isSharedMember = pkg.sharedMembers.some((sm) => sm.userId === principal.userId);
+    const isStaff = this.canManagePackageMembers(principal, pkg);
+
+    if (!isOwner && !isSharedMember && !isStaff) {
+      throw new ApiProblem('RESOURCE_NOT_FOUND', HttpStatus.NOT_FOUND);
+    }
+
+    return {
+      customerPackageId: pkg.id,
+      package: {
+        id: pkg.package.id,
+        name: pkg.package.name,
+        isShareable: Boolean(pkg.package.isShareable),
+      },
+      owner: {
+        id: pkg.user.id,
+        displayName: pkg.user.displayName,
+        phoneMasked: maskPhone(pkg.user.phone),
+      },
+      remainingSessions: pkg.remainingSessions,
+      status: pkg.status,
+      members: pkg.sharedMembers.map((m) => ({
+        id: m.id,
+        userId: m.userId,
+        relationship: m.relationship,
+        displayName: m.user?.displayName,
+        phoneMasked: maskPhone(m.user?.phone),
+        email: m.user?.email,
+        addedById: m.addedById,
+        addedByRole: m.addedByRole,
+        createdAt: m.createdAt.toISOString(),
+      })),
+    };
+  }
+
+  async addPackageMember(
+    principal: SessionPrincipal,
+    customerPackageId: string,
+    body: { userId: string; relationship?: string },
+  ) {
+    if (!UUID.test(customerPackageId) || !UUID.test(body?.userId)) {
+      throw problem('VALIDATION_ERROR', HttpStatus.BAD_REQUEST, 'userId');
+    }
+
+    const pkg = await this.db.paketPelanggan.findUnique({
+      where: { id: customerPackageId },
+      include: packageInclude,
+    });
+    if (!pkg) throw new ApiProblem('RESOURCE_NOT_FOUND', HttpStatus.NOT_FOUND);
+
+    if (!this.canManagePackageMembers(principal, pkg)) {
+      throw new ApiProblem('FORBIDDEN', HttpStatus.FORBIDDEN);
+    }
+
+    if (!pkg.package.isShareable) {
+      throw problem('PACKAGE_NOT_SHAREABLE', HttpStatus.BAD_REQUEST, 'package');
+    }
+
+    if (pkg.status !== 'ACTIVE') {
+      throw problem('PACKAGE_NOT_ACTIVE', HttpStatus.BAD_REQUEST, 'package');
+    }
+
+    if (body.userId === pkg.userId) {
+      throw problem('CANNOT_ADD_OWNER_AS_MEMBER', HttpStatus.BAD_REQUEST, 'userId');
+    }
+
+    const targetUser = await this.db.user.findUnique({
+      where: { id: body.userId },
+      select: { id: true, displayName: true, email: true, phone: true, status: true },
+    });
+    if (!targetUser || targetUser.status !== 'ACTIVE') {
+      throw problem('USER_NOT_FOUND', HttpStatus.NOT_FOUND, 'userId');
+    }
+
+    if (pkg.sharedMembers.some((sm) => sm.userId === body.userId)) {
+      throw problem('MEMBER_ALREADY_ADDED', HttpStatus.CONFLICT, 'userId');
+    }
+
+    const isAdmin = principal.userId !== pkg.userId;
+    const relationship = (body.relationship || 'FAMILY').trim().toUpperCase();
+
+    const created = await this.db.paketPelangganAnggota.create({
+      data: {
+        customerPackageId,
+        userId: body.userId,
+        relationship,
+        addedById: principal.userId,
+        addedByRole: isAdmin ? 'ADMIN' : 'CUSTOMER',
+      },
+      include: {
+        user: { select: { id: true, displayName: true, email: true, phone: true } },
+      },
+    });
+
+    await this.audit.catat(null, {
+      actorId: principal.userId,
+      branchId: pkg.purchase?.branchId ?? null,
+      action: 'CUSTOMER_PACKAGE_MEMBER_ADDED',
+      objectType: 'PaketPelangganAnggota',
+      objectId: created.id,
+      afterMasked: {
+        customerPackageId,
+        memberUserId: body.userId,
+        relationship,
+        addedByRole: isAdmin ? 'ADMIN' : 'CUSTOMER',
+      },
+    });
+
+    return {
+      id: created.id,
+      customerPackageId,
+      userId: created.userId,
+      relationship: created.relationship,
+      displayName: created.user.displayName,
+      phoneMasked: maskPhone(created.user.phone),
+      email: created.user.email,
+      addedById: created.addedById,
+      addedByRole: created.addedByRole,
+      createdAt: created.createdAt.toISOString(),
+    };
+  }
+
+  async removePackageMember(
+    principal: SessionPrincipal,
+    customerPackageId: string,
+    memberUserId: string,
+  ) {
+    if (!UUID.test(customerPackageId) || !UUID.test(memberUserId)) {
+      throw problem('VALIDATION_ERROR', HttpStatus.BAD_REQUEST, 'userId');
+    }
+
+    const pkg = await this.db.paketPelanggan.findUnique({
+      where: { id: customerPackageId },
+      include: packageInclude,
+    });
+    if (!pkg) throw new ApiProblem('RESOURCE_NOT_FOUND', HttpStatus.NOT_FOUND);
+
+    if (!this.canManagePackageMembers(principal, pkg)) {
+      throw new ApiProblem('FORBIDDEN', HttpStatus.FORBIDDEN);
+    }
+
+    const existing = pkg.sharedMembers.find((sm) => sm.userId === memberUserId);
+    if (!existing) {
+      throw problem('MEMBER_NOT_FOUND', HttpStatus.NOT_FOUND, 'userId');
+    }
+
+    const activeBookings = await this.db.pemesananKelas.count({
+      where: {
+        customerPackageId,
+        userId: memberUserId,
+        status: 'BOOKED',
+      },
+    });
+    if (activeBookings > 0) {
+      throw problem('MEMBER_HAS_ACTIVE_BOOKINGS', HttpStatus.CONFLICT, 'userId');
+    }
+
+    await this.db.paketPelangganAnggota.delete({
+      where: {
+        customerPackageId_userId: {
+          customerPackageId,
+          userId: memberUserId,
+        },
+      },
+    });
+
+    await this.audit.catat(null, {
+      actorId: principal.userId,
+      branchId: pkg.purchase?.branchId ?? null,
+      action: 'CUSTOMER_PACKAGE_MEMBER_REMOVED',
+      objectType: 'PaketPelangganAnggota',
+      objectId: existing.id,
+      afterMasked: {
+        customerPackageId,
+        memberUserId,
+      },
+    });
+
+    return {
+      success: true,
+      customerPackageId,
+      removedUserId: memberUserId,
     };
   }
 }

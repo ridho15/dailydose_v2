@@ -26,7 +26,22 @@ export type LedgerBalance = {
   /** Cabang tempat paket boleh dipakai (cabang paket dan cabang pembelian), atau 'SEMUA'. */
   allowedBranchIds?: string[] | 'SEMUA';
   isMultiBranch?: boolean;
+  isShareable?: boolean;
+  sharedWithUserIds?: string[];
+  sharedMembers?: SharedPackageMember[];
   customer?: { id: string; displayName: string; phoneMasked: string | null };
+};
+
+export type SharedPackageMember = {
+  id: string;
+  userId: string;
+  relationship: string;
+  displayName: string;
+  phoneMasked: string | null;
+  email?: string;
+  addedById?: string | null;
+  addedByRole?: string;
+  createdAt: string;
 };
 
 /** Apakah paket member boleh dipakai di cabang ini. Server tetap memeriksa ulang saat booking. */
@@ -485,14 +500,60 @@ export async function manageCustomerPackage(
   );
 }
 
+export async function listPackageMembers(customerPackageId: string) {
+  return apiFetch<{
+    customerPackageId: string;
+    package: { id: string; name: string; isShareable: boolean };
+    owner: { id: string; displayName: string; phoneMasked: string | null };
+    remainingSessions: number;
+    status: string;
+    members: SharedPackageMember[];
+  }>(`/customer-packages/${encodeURIComponent(customerPackageId)}/members`, {
+    label: 'Memuat anggota paket bersama…',
+  });
+}
+
+export async function addPackageMember(
+  customerPackageId: string,
+  input: { userId: string; relationship?: string },
+) {
+  return apiFetch<SharedPackageMember>(
+    `/customer-packages/${encodeURIComponent(customerPackageId)}/members`,
+    {
+      method: 'POST',
+      body: JSON.stringify(input),
+      label: 'Menambahkan anggota paket…',
+    },
+  );
+}
+
+export async function removePackageMember(
+  customerPackageId: string,
+  memberUserId: string,
+) {
+  return apiFetch<{ success: boolean; customerPackageId: string; removedUserId: string }>(
+    `/customer-packages/${encodeURIComponent(customerPackageId)}/members/${encodeURIComponent(memberUserId)}`,
+    {
+      method: 'DELETE',
+      label: 'Menghapus anggota paket…',
+    },
+  );
+}
+
 const packageActionMessages: Record<string, string> = {
   PACKAGE_CHANGED: 'Paket berubah sejak halaman dimuat. Perbarui halaman lalu ulangi.',
   PACKAGE_FROZEN: 'Paket sedang dibekukan. Buka kembali terlebih dahulu.',
-  PACKAGE_NOT_ACTIVE: 'Hanya paket aktif yang belum berakhir yang dapat dibekukan.',
+  PACKAGE_NOT_ACTIVE: 'Hanya paket aktif yang belum berakhir yang dapat dikelola.',
   PACKAGE_NOT_FROZEN: 'Paket ini tidak sedang dibekukan.',
   HAS_UPCOMING_BOOKINGS:
     'Paket masih punya booking mendatang. Batalkan booking tersebut sebelum membekukan.',
   NO_REMAINING_SESSIONS: 'Paket tidak punya sisa sesi, sehingga tidak perlu diperpanjang.',
+  PACKAGE_NOT_SHAREABLE: 'Paket ini bukan tipe paket bersama (isShareable: false).',
+  CANNOT_ADD_OWNER_AS_MEMBER: 'Pemilik paket tidak dapat ditambahkan sebagai anggota bersama.',
+  MEMBER_ALREADY_ADDED: 'Member tersebut sudah terdaftar di paket ini.',
+  USER_NOT_FOUND: 'Member tidak ditemukan atau akun sedang tidak aktif.',
+  MEMBER_HAS_ACTIVE_BOOKINGS: 'Member masih memiliki booking aktif dengan paket ini. Batalkan booking terlebih dahulu.',
+  MEMBER_NOT_FOUND: 'Member tidak terdaftar di paket ini.',
   VALIDATION_ERROR: 'Data belum valid. Periksa jumlah hari dan alasan.',
   FORBIDDEN: 'Anda tidak memiliki izin mengelola paket pelanggan.',
   RESOURCE_NOT_FOUND: 'Paket tidak ditemukan atau berada di luar cakupan cabang Anda.',

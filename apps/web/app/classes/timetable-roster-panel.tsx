@@ -45,7 +45,9 @@ export function pilihCalon(
   timeZone: string,
 ): Calon {
   const milik = packages.filter(
-    (item) => (item.customerUserId ?? item.customer?.id) === customer.id,
+    (item) =>
+      (item.customerUserId ?? item.customer?.id) === customer.id ||
+      item.sharedWithUserIds?.includes(customer.id),
   );
   const cocokTipeSemua = milik.filter(
     (item) => !item.classTypeId || item.classTypeId === slot.classTypeId,
@@ -322,6 +324,12 @@ export function TimetableRosterPanel({
                           <span className="block text-sm text-dd-forest">
                             {calon.paket?.packageName ?? calon.paket?.name ?? 'Paket aktif'} · sisa{' '}
                             {calon.paket?.available}
+                            {calon.paket?.customer?.id &&
+                              calon.paket.customer.id !== calon.customer.id && (
+                                <span className="block text-xs font-semibold text-dd-forest/80">
+                                  Milik {calon.paket.customer.displayName} (Paket Bersama)
+                                </span>
+                              )}
                           </span>
                         </span>
                         <span className="shrink-0 rounded-[6px] bg-dd-forest px-3 py-1.5 text-sm font-bold text-white">
@@ -371,6 +379,12 @@ export function TimetableRosterPanel({
                     {booking.sessionBalance && (
                       <span className="block text-sm text-dd-muted">
                         Sisa {booking.sessionBalance.available} sesi
+                        {(booking as any).package?.owner &&
+                          (booking as any).package.owner.id !== booking.customerUserId && (
+                            <span className="block text-xs text-dd-forest">
+                              Paket {(booking as any).package.name} (milik {(booking as any).package.owner.displayName})
+                            </span>
+                          )}
                       </span>
                     )}
                   </span>

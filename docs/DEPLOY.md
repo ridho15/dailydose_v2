@@ -165,6 +165,29 @@ CREATE TABLE `kapasitas_kelas_cabang` (
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 ```
 
+`paket` (kolom `is_shareable` untuk paket bersama / Duet / Family, Oktober 2026) dan `paket_pelanggan_anggota`:
+
+```sql
+ALTER TABLE `paket` ADD COLUMN `is_shareable` BOOLEAN NOT NULL DEFAULT FALSE;
+
+CREATE TABLE `paket_pelanggan_anggota` (
+    `id` CHAR(36) NOT NULL,
+    `customer_package_id` CHAR(36) NOT NULL,
+    `user_id` CHAR(36) NOT NULL,
+    `relationship` VARCHAR(32) NULL,
+    `added_by_id` CHAR(36) NOT NULL,
+    `added_by_role` VARCHAR(20) NOT NULL DEFAULT 'ADMIN',
+    `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+
+    UNIQUE INDEX `paket_pelanggan_anggota_customer_package_id_user_id_key`(`customer_package_id`, `user_id`),
+    INDEX `paket_pelanggan_anggota_user_id_idx`(`user_id`),
+    INDEX `paket_pelanggan_anggota_customer_package_id_idx`(`customer_package_id`),
+    PRIMARY KEY (`id`),
+    CONSTRAINT `paket_pelanggan_anggota_customer_package_id_fkey` FOREIGN KEY (`customer_package_id`) REFERENCES `paket_pelanggan`(`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT `paket_pelanggan_anggota_user_id_fkey` FOREIGN KEY (`user_id`) REFERENCES `user`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+```
+
 ## Kembali ke versi sebelumnya
 
 ```bash

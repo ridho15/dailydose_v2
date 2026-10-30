@@ -2,9 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { browserLedgerClient, type LedgerBalance } from '@/api-clients/ledger-client';
-import { ButtonLink } from '../../components/actions';
+import { Button, ButtonLink } from '../../components/actions';
 import { EmptyState, Feedback, PageHeader, Skeleton, StatusBadge } from '../../ui';
 import { Pagination } from '../../components/admin/admin-ui';
+import { useSessionContext } from '../../session-context';
+import { SharedPackageMembersDialog } from '../../components/shared-package-members-dialog';
 
 export function isExpiredPackage(item: LedgerBalance): boolean {
   const isPast = new Date(item.expiryAt).getTime() < Date.now();
@@ -12,7 +14,10 @@ export function isExpiredPackage(item: LedgerBalance): boolean {
 }
 
 export function CustomerPackagesView() {
+  const session = useSessionContext();
+  const currentUserId = session?.session?.id;
   const [items, setItems] = useState<LedgerBalance[]>([]);
+  const [selectedPackageForMembers, setSelectedPackageForMembers] = useState<LedgerBalance | null>(null);
   const [tab, setTab] = useState<'ACTIVE' | 'HISTORY'>('ACTIVE');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -128,6 +133,19 @@ export function CustomerPackagesView() {
                         <p className="mt-1 text-sm text-ed-muted">
                           {item.classTypeName ?? 'Kelas Daily Dose'}
                         </p>
+                        {item.isShareable && (
+                          <div className="mt-1 flex items-center gap-1.5">
+                            {item.customer?.id && currentUserId && item.customer.id !== currentUserId ? (
+                              <span className="text-xs font-semibold text-ed-forest">
+                                Paket bersama milik {item.customer.displayName}
+                              </span>
+                            ) : (
+                              <span className="text-xs font-semibold text-ed-forest">
+                                Paket Bersama (Family / Duet)
+                              </span>
+                            )}
+                          </div>
+                        )}
                       </div>
                     </div>
                     <StatusBadge
@@ -177,22 +195,32 @@ export function CustomerPackagesView() {
                       ? `Kedaluwarsa pada ${new Date(item.expiryAt).toLocaleDateString('id-ID')}`
                       : `Berlaku sampai ${new Date(item.expiryAt).toLocaleDateString('id-ID')}`}
                   </p>
-                  {!expired && item.status === 'ACTIVE' ? (
-                    <ButtonLink
-                      className="mt-5"
-                      href={`/classes?branch=${encodeURIComponent(item.branchId)}#schedule`}
-                    >
-                      Booking kelas
-                    </ButtonLink>
-                  ) : expired ? (
-                    <ButtonLink
-                      variant="secondary"
-                      className="mt-5"
-                      href="/packages"
-                    >
-                      Beli paket baru
-                    </ButtonLink>
-                  ) : null}
+                  <div className="mt-5 flex flex-wrap gap-2">
+                    {!expired && item.status === 'ACTIVE' ? (
+                      <ButtonLink
+                        href={`/classes?branch=${encodeURIComponent(item.branchId)}#schedule`}
+                      >
+                        Booking kelas
+                      </ButtonLink>
+                    ) : expired ? (
+                      <ButtonLink
+                        variant="secondary"
+                        href="/packages"
+                      >
+                        Beli paket baru
+                      </ButtonLink>
+                    ) : null}
+                    {item.isShareable && (
+                      <Button
+                        variant="secondary"
+                        onClick={() => setSelectedPackageForMembers(item)}
+                      >
+                        {item.customer?.id === currentUserId || !item.customer?.id
+                          ? `Kelola Anggota (${item.sharedMembers?.length ?? 0})`
+                          : 'Lihat Anggota Bersama'}
+                      </Button>
+                    )}
+                  </div>
                 </article>
               );
             })}
@@ -220,6 +248,20 @@ export function CustomerPackagesView() {
             }}
           />
         </>
+      )}
+
+      {selectedPackageForMembers && (
+        <SharedPackageMembersDialog
+          open={Boolean(selectedPackageForMembers)}
+          onClose={() => setSelectedPackageForMembers(null)}
+          customerPackageId={selectedPackageForMembers.id}
+          packageName={selectedPackageForMembers.packageName}
+          canManage={
+            selectedPackageForMembers.customer?.id === currentUserId ||
+            !selectedPackageForMembers.customer?.id
+          }
+          onChanged={() => void loadPage(cursor)}
+        />
       )}
     </main>
   );

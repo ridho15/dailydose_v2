@@ -19,6 +19,7 @@ import { AdminPageHeader } from '../../components/admin/admin-page-header';
 import { ReasonDialog } from '../../components/admin/reason-dialog';
 import { TextInput } from '../../components/forms';
 import { useSessionContext } from '../../session-context';
+import { SharedPackageMembersDialog } from '../../components/shared-package-members-dialog';
 
 const ledgerLabels: Record<string, string> = {
   PURCHASE: 'Aktivasi paket',
@@ -55,6 +56,7 @@ export function CustomerSessionDetailView({ id }: { id: string }) {
   const [acting, setActing] = useState(false);
   const [actionError, setActionError] = useState('');
   const [notice, setNotice] = useState('');
+  const [manageMembersOpen, setManageMembersOpen] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -204,6 +206,11 @@ export function CustomerSessionDetailView({ id }: { id: string }) {
                 Buka kembali paket
               </Button>
             )}
+            {balance.isShareable && (
+              <Button variant="secondary" onClick={() => setManageMembersOpen(true)}>
+                Kelola Anggota Bersama ({balance.sharedMembers?.length ?? 0})
+              </Button>
+            )}
           </div>
         )}
         {balance.customer?.id && (
@@ -212,6 +219,44 @@ export function CustomerSessionDetailView({ id }: { id: string }) {
           </ButtonLink>
         )}
       </Panel>
+      {balance.isShareable && (
+        <Panel className="p-5 sm:p-6">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-lg font-bold text-dd-ink">Anggota Bersama (Family / Duet)</h2>
+                <Badge tone="success">Paket Bersama</Badge>
+              </div>
+              <p className="mt-1 text-sm text-dd-muted">
+                Pemilik dan anggota terdaftar berbagi kuota {balance.available} sesi yang tersedia.
+              </p>
+            </div>
+            {canManagePackage && (
+              <Button variant="secondary" size="sm" onClick={() => setManageMembersOpen(true)}>
+                Kelola Anggota
+              </Button>
+            )}
+          </div>
+
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <div className="rounded-dd-sm border border-dd-line bg-dd-surface-muted/20 p-3">
+              <span className="text-xs font-bold text-dd-muted uppercase">Pemilik Utama</span>
+              <p className="text-sm font-semibold text-dd-ink">{balance.customer?.displayName}</p>
+              <p className="text-xs text-dd-muted">{balance.customer?.phoneMasked}</p>
+            </div>
+            {(balance.sharedMembers ?? []).map((m) => (
+              <div key={m.id} className="rounded-dd-sm border border-dd-line bg-white p-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-dd-forest uppercase">Anggota Terdaftar</span>
+                  <Badge tone="neutral">{m.relationship || 'FAMILY'}</Badge>
+                </div>
+                <p className="text-sm font-semibold text-dd-ink mt-0.5">{m.displayName}</p>
+                <p className="text-xs text-dd-muted">{m.phoneMasked}</p>
+              </div>
+            ))}
+          </div>
+        </Panel>
+      )}
       <Panel className="overflow-hidden">
         <div className="border-b border-dd-line px-5 py-4">
           <h2 className="font-semibold text-dd-ink">Reservation aktif</h2>
@@ -348,6 +393,17 @@ export function CustomerSessionDetailView({ id }: { id: string }) {
           />
         )}
       </ReasonDialog>
+
+      {manageMembersOpen && (
+        <SharedPackageMembersDialog
+          open={manageMembersOpen}
+          onClose={() => setManageMembersOpen(false)}
+          customerPackageId={id}
+          packageName={balance.packageName}
+          canManage={canManagePackage}
+          onChanged={() => void load()}
+        />
+      )}
     </section>
   );
 }
