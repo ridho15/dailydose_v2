@@ -19,6 +19,8 @@ const slot1Start = `${y}-${m}-${d}T11:00:00+07:00`;
 const slot1End = `${y}-${m}-${d}T12:00:00+07:00`;
 const slot2Start = `${y}-${m}-${d}T14:00:00+07:00`;
 const slot2End = `${y}-${m}-${d}T15:00:00+07:00`;
+const slot3Start = `${y}-${m}-${d}T16:00:00+07:00`;
+const slot3End = `${y}-${m}-${d}T17:00:00+07:00`;
 
 const mockBranch = {
   id: 'branch-surabaya',
@@ -46,15 +48,15 @@ const slotPublishedZeroBooking = {
   instructor: { id: 'inst-dina', displayName: 'Coach Dina' },
 };
 
-const slotPublishedWithBookings = {
+const slotConfirmedWithBookings = {
   id: 'slot-pub-booked',
   branchId: 'branch-surabaya',
   classTypeId: 'type-group',
-  instructorUserId: 'inst-agatha',
+  instructorUserId: 'inst-dina',
   startAt: new Date(slot2Start).toISOString(),
   endAt: new Date(slot2End).toISOString(),
   timezone: 'Asia/Jakarta',
-  status: 'PUBLISHED',
+  status: 'CONFIRMED',
   minimumQuota: 2,
   capacity: 8,
   bookedCount: 3,
@@ -62,7 +64,26 @@ const slotPublishedWithBookings = {
   version: 1,
   idempotentReplay: false,
   classType: { id: 'type-group', code: 'GRP', name: 'Group Class' },
-  instructor: { id: 'inst-agatha', displayName: 'Coach Agatha' },
+  instructor: { id: 'inst-dina', displayName: 'Coach Dina' },
+};
+
+const slotConfirmedZeroBooking = {
+  id: 'slot-conf-zero',
+  branchId: 'branch-surabaya',
+  classTypeId: 'type-private',
+  instructorUserId: 'inst-dina',
+  startAt: new Date(slot3Start).toISOString(),
+  endAt: new Date(slot3End).toISOString(),
+  timezone: 'Asia/Jakarta',
+  status: 'CONFIRMED',
+  minimumQuota: 1,
+  capacity: 4,
+  bookedCount: 0,
+  cancellationReasonCode: null,
+  version: 1,
+  idempotentReplay: false,
+  classType: { id: 'type-private', code: 'PRV', name: 'Private Group' },
+  instructor: { id: 'inst-dina', displayName: 'Coach Dina' },
 };
 
 test.use({ channel: 'chrome', video: 'off' });
@@ -155,7 +176,7 @@ test.describe('UAT Timetable: Update Tipe Kelas & Ganti Instruktur (Happy Path &
           status: 200,
           contentType: 'application/json',
           body: JSON.stringify({
-            items: [slotPublishedZeroBooking, slotPublishedWithBookings],
+            items: [slotPublishedZeroBooking, slotConfirmedWithBookings, slotConfirmedZeroBooking],
             page: { nextCursor: null },
           }),
         });
@@ -317,7 +338,7 @@ test.describe('UAT Timetable: Update Tipe Kelas & Ganti Instruktur (Happy Path &
     });
   });
 
-  test('UAT 2 (NO HAPPY PATH 1): Kelas PUBLISHED dengan pesanan (bookedCount > 0) DIKUNCI (tombol Edit kelas TIDAK ADA)', async ({
+  test('UAT 2 (NO HAPPY PATH 1): Kelas CONFIRMED dengan pesanan (bookedCount > 0) DIKUNCI (tombol Edit kelas Terkunci)', async ({
     page,
   }) => {
     await page.goto('/workspace/classes');
@@ -343,9 +364,16 @@ test.describe('UAT Timetable: Update Tipe Kelas & Ganti Instruktur (Happy Path &
     const drawer = page.getByRole('dialog').last();
     await expect(drawer).toBeVisible({ timeout: 5000 });
 
-    // BUKTI UAT 2 (NO HAPPY PATH): Tombol "Edit kelas" TIDAK BOLEH ADA karena sudah ada booking!
-    const editClassBtn = drawer.getByRole('button', { name: 'Edit kelas' });
+    // BUKTI UAT 2 (NO HAPPY PATH): Tombol "Edit kelas" biasa TIDAK ADA, melainkan tombol "Edit kelas (Terkunci)" yang disabled!
+    const editClassBtn = drawer.getByRole('button', { name: 'Edit kelas', exact: true });
     await expect(editClassBtn).not.toBeVisible();
+
+    const lockedBtn = drawer.getByRole('button', { name: 'Edit kelas (Terkunci)' });
+    await expect(lockedBtn).toBeVisible();
+    await expect(lockedBtn).toBeDisabled();
+
+    // Verifikasi pesan informatif alasan terkunci
+    await expect(drawer.getByText(/3 peserta sudah memesan kelas ini/)).toBeVisible();
 
     // Namun tombol Ganti instruktur tetap harus ada
     const changeInstructorBtn = drawer.getByRole('button', { name: 'Ganti instruktur' });

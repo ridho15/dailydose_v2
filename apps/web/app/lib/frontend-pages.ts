@@ -213,9 +213,9 @@ export const frontendPages: FrontendPageDefinition[] = [
   },
   {
     href: '/ledger',
-    label: 'Sesi Pelanggan',
-    shortLabel: 'Sesi Pelanggan',
-    description: 'Informasi sisa kuota latihan, sesi terpakai, dan riwayat kehadiran member.',
+    label: 'Paket & Sesi Pelanggan',
+    shortLabel: 'Paket & Sesi',
+    description: 'Kelola sisa kuota latihan, masa berlaku paket, pembekuan sesi, dan riwayat kehadiran.',
     group: 'Member & Pelanggan',
     capabilities: ['ledger:read'],
     priority: 11,
@@ -274,8 +274,8 @@ export const frontendPages: FrontendPageDefinition[] = [
   },
   {
     href: '/workspace/packages',
-    label: 'Paket & promo harga',
-    shortLabel: 'Paket',
+    label: 'Kelola Paket & Promo',
+    shortLabel: 'Kelola Paket',
     description: 'Kelola harga normal, promo aktif, dan histori harga paket.',
     group: 'Penjualan & Keuangan',
     capabilities: ['package-promotion:read'],

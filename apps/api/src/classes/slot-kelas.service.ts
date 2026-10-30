@@ -30,7 +30,7 @@ const STATUS_ALLOWED: Record<
   readonly ClassSlotStatus[]
 > = {
   assign: [ClassSlotStatus.DRAFT, ClassSlotStatus.PUBLISHED, ClassSlotStatus.CONFIRMED],
-  update: [ClassSlotStatus.DRAFT, ClassSlotStatus.PUBLISHED],
+  update: [ClassSlotStatus.DRAFT, ClassSlotStatus.PUBLISHED, ClassSlotStatus.CONFIRMED],
   publish: [ClassSlotStatus.DRAFT],
   cancel: [ClassSlotStatus.DRAFT, ClassSlotStatus.PUBLISHED, ClassSlotStatus.CONFIRMED],
   complete: [ClassSlotStatus.CONFIRMED],
@@ -536,11 +536,11 @@ export class ClassSlotService {
     this.validateKey(key);
     if (!UUID.test(id) || !UUID.test(input.classTypeId))
       throw new ApiProblem('VALIDATION_ERROR', HttpStatus.BAD_REQUEST);
-    if (input.studioId != null && !UUID.test(input.studioId))
+    if (input.studioId != null && input.studioId !== '' && !UUID.test(input.studioId))
       throw new ApiProblem('VALIDATION_ERROR', HttpStatus.BAD_REQUEST);
     if (input.roomId != null && input.roomId !== '' && !UUID.test(input.roomId))
       throw new ApiProblem('VALIDATION_ERROR', HttpStatus.BAD_REQUEST);
-    if (input.instructorUserId != null && !UUID.test(input.instructorUserId))
+    if (input.instructorUserId != null && input.instructorUserId !== '' && !UUID.test(input.instructorUserId))
       throw new ApiProblem('VALIDATION_ERROR', HttpStatus.BAD_REQUEST);
     const expectedVersion = this.optionalVersion(input.expectedVersion);
 
@@ -564,7 +564,7 @@ export class ClassSlotService {
         this.assertClaimable(slot, expectedVersion, STATUS_ALLOWED.update);
 
         if (
-          slot.status === ClassSlotStatus.PUBLISHED &&
+          (slot.status === ClassSlotStatus.PUBLISHED || slot.status === ClassSlotStatus.CONFIRMED) &&
           (slot.bookedCount > 0 || (slot.bookings && slot.bookings.length > 0))
         ) {
           throw new ApiProblem('CLASS_SLOT_HAS_BOOKINGS', HttpStatus.CONFLICT, false, [
@@ -575,7 +575,8 @@ export class ClassSlotService {
           ]);
         }
 
-        const targetStudioId = input.studioId !== undefined ? input.studioId : slot.studioId;
+        const targetStudioId =
+          input.studioId !== undefined && input.studioId !== '' ? input.studioId : slot.studioId;
         const targetRoomId = input.roomId !== undefined ? (input.roomId || null) : slot.roomId;
         if (targetStudioId && targetStudioId !== slot.studioId && tx.studio?.findUnique) {
           const studioBaru = await tx.studio.findUnique({ where: { id: targetStudioId } });
@@ -603,7 +604,9 @@ export class ClassSlotService {
 
         // Instruktur yang tidak dikirim tetap dipertahankan; hanya `null` eksplisit yang mengosongkannya.
         const targetInstructorId =
-          input.instructorUserId !== undefined ? input.instructorUserId : slot.instructorId;
+          input.instructorUserId !== undefined
+            ? (input.instructorUserId || null)
+            : slot.instructorId;
         const updateCollisionConditions: Prisma.SlotKelasWhereInput[] = [];
         if (targetRoomId) {
           updateCollisionConditions.push({ studioId: targetStudioId, roomId: targetRoomId });

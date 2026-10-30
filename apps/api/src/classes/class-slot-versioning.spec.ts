@@ -141,8 +141,8 @@ describe('class slot status guards', () => {
     );
   });
 
-  it.each(['CONFIRMED', 'COMPLETED', 'CANCELLED'])(
-    'confirmed, completed, or cancelled classes cannot be edited (%s refused)',
+  it.each(['COMPLETED', 'CANCELLED'])(
+    'completed or cancelled classes cannot be edited (%s refused)',
     async (status) => {
       const { service } = build(slotRow({ status }));
       await expect(
@@ -197,6 +197,43 @@ describe('class slot status guards', () => {
     expect(tx.slotKelas.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ classTypeId }) }),
     );
+  });
+
+  it('allows editing a confirmed class if it has 0 bookings', async () => {
+    const { service, tx } = build(slotRow({ status: 'CONFIRMED', bookedCount: 0 }));
+    await service.update(
+      principal,
+      slotId,
+      {
+        classTypeId,
+        startAt: '2026-10-12T21:00:00+07:00',
+        endAt: '2026-10-12T21:50:00+07:00',
+        expectedVersion: 4,
+      },
+      key,
+      'c',
+    );
+    expect(tx.slotKelas.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ classTypeId }) }),
+    );
+  });
+
+  it('refuses to edit a confirmed class if it already has bookings', async () => {
+    const { service } = build(slotRow({ status: 'CONFIRMED', bookedCount: 2 }));
+    await expect(
+      service.update(
+        principal,
+        slotId,
+        {
+          classTypeId,
+          startAt: '2026-10-12T21:00:00+07:00',
+          endAt: '2026-10-12T21:50:00+07:00',
+          expectedVersion: 4,
+        },
+        key,
+        'c',
+      ),
+    ).rejects.toMatchObject({ code: 'CLASS_SLOT_HAS_BOOKINGS' });
   });
 
   it.each(['COMPLETED', 'CANCELLED'])('never cancels a %s class or touches its bookings', async (status) => {

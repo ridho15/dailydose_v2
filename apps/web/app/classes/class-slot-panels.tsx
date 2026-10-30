@@ -448,7 +448,7 @@ export function DetailPanel({
           description="Instruktur dapat diganti selama kelas belum berjalan. Tipe kelas dan jadwal dapat diubah jika belum ada peserta yang memesan."
         >
           {assignRow}
-          {isPublished && (slot.bookedCount ?? 0) === 0 && (
+          {(isPublished || isConfirmed) && (slot.bookedCount ?? 0) === 0 ? (
             <ActionRow
               title="Jadwal dan tipe kelas"
               description="Ubah waktu, tipe kelas, studio, atau ruangan sebelum ada peserta yang memesan. Kapasitas dihitung ulang dari konfigurasi."
@@ -477,7 +477,23 @@ export function DetailPanel({
                 />
               )}
             </ActionRow>
-          )}
+          ) : (isPublished || isConfirmed) && (slot.bookedCount ?? 0) > 0 ? (
+            <ActionRow
+              title="Jadwal dan tipe kelas"
+              description={`${slot.bookedCount} peserta sudah memesan kelas ini. Tipe kelas dan jadwal terkunci untuk melindungi jadwal peserta.`}
+            >
+              <div>
+                <Button
+                  variant="secondary"
+                  className="w-full sm:w-auto opacity-60"
+                  disabled
+                  title="Jadwal dan tipe kelas terkunci karena sudah ada peserta yang booking"
+                >
+                  Edit kelas (Terkunci)
+                </Button>
+              </div>
+            </ActionRow>
+          ) : null}
         </DetailSection>
       )}
 
@@ -833,10 +849,10 @@ function DraftEditForm({
           if (endAt <= startAt) throw new Error('INVALID_RANGE');
           setFailure('');
           void onSubmit({
-            classTypeId: String(data.get('classTypeId')),
+            classTypeId: String(data.get('classTypeId') || slot.classTypeId),
             studioId: selectedStudioId || undefined,
             roomId: selectedRoomId || null,
-            instructorUserId: String(data.get('instructorUserId')) || null,
+            instructorUserId: String(data.get('instructorUserId') ?? '').trim() || null,
             startAt,
             endAt,
             reason: String(data.get('reason') ?? '').trim() || undefined,

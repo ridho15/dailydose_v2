@@ -985,13 +985,19 @@ export function ClassSlotView({
                 tone: 'warning',
                 title: 'Simpan perubahan kelas?',
                 message:
-                  'Jadwal draft dan konfigurasi kapasitas akan dihitung ulang. Perubahan dicatat dalam audit.',
+                  'Jadwal dan konfigurasi kapasitas akan dihitung ulang. Perubahan dicatat dalam audit.',
                 confirmLabel: 'Simpan perubahan',
               });
               if (accepted)
                 await run(
-                  () => client.update(panel.slot.id, input),
-                  'Draft kelas berhasil diperbarui.',
+                  () =>
+                    client.update(panel.slot.id, {
+                      ...input,
+                      ...(panel.slot.status !== 'DRAFT'
+                        ? { expectedVersion: panel.slot.version }
+                        : {}),
+                    }),
+                  'Perubahan kelas berhasil disimpan.',
                 );
             }}
             onPublish={async () => {
