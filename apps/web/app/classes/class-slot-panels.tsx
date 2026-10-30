@@ -119,6 +119,13 @@ export function CreatePanel({
     (item) => !item.branchId || item.branchId === selectedBranchId,
   );
 
+  // Auto-select studio bila cabang hanya punya 1 studio aktif
+  useEffect(() => {
+    if (!studioId && branchStudios.length === 1 && branchStudios[0]) {
+      setStudioId(branchStudios[0].id);
+    }
+  }, [studioId, branchStudios]);
+
   const rooms = branchStudios.find((studio) => studio.id === studioId)?.rooms ?? [];
 
   return (
@@ -224,7 +231,7 @@ export function CreatePanel({
         label="Instruktur"
         name="instructorUserId"
         defaultValue={template?.instructorUserId ?? ''}
-        placeholder="Tetapkan nanti"
+        placeholder="Tetapkan nanti (Dapat disimpan sebagai Draft)"
         options={branchInstructors.map((item) => ({ id: item.id, label: item.displayName }))}
       />
       <div className="grid gap-3 sm:grid-cols-3">
@@ -258,14 +265,14 @@ export function CreatePanel({
               <button
                 type="button"
                 onClick={() => tambahMenit(50)}
-                className="rounded-dd-sm border border-dd-line bg-dd-surface px-1.5 py-0.5 font-semibold text-dd-ink hover:border-dd-forest cursor-pointer"
+                className="rounded-dd-sm border border-dd-line bg-dd-surface px-2 py-0.5 font-semibold text-dd-ink hover:border-dd-forest cursor-pointer"
               >
                 +50 mnt
               </button>
               <button
                 type="button"
                 onClick={() => tambahMenit(60)}
-                className="rounded-dd-sm border border-dd-line bg-dd-surface px-1.5 py-0.5 font-semibold text-dd-ink hover:border-dd-forest cursor-pointer"
+                className="rounded-dd-sm border border-dd-line bg-dd-surface px-2 py-0.5 font-semibold text-dd-ink hover:border-dd-forest cursor-pointer"
               >
                 +60 mnt
               </button>

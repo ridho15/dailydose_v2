@@ -1,7 +1,9 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, ScanLine, UserPlus } from 'lucide-react';
+import { AlertTriangle, MessageSquare, ScanLine, UserPlus } from 'lucide-react';
+import { WhatsAppReminderDialog } from './whatsapp-reminder-dialog';
+import type { WhatsAppReminderContext, WhatsAppPreset } from './whatsapp-reminder-presets';
 import {
   browserClassSlotClient,
   type ClassSlot,
@@ -92,6 +94,10 @@ export function FrontDeskTodayView({
   const [reason, setReason] = useState('');
   const [marking, setMarking] = useState(false);
   const [markError, setMarkError] = useState('');
+  const [whatsAppModal, setWhatsAppModal] = useState<{
+    context: WhatsAppReminderContext;
+    defaultPresetId?: WhatsAppPreset['id'];
+  } | null>(null);
 
   useEffect(() => {
     if (initialNow) return;
@@ -524,21 +530,55 @@ export function FrontDeskTodayView({
                                   )}
                                 </td>
                                 <td className="py-3 text-right">
-                                  {present ? (
-                                    <span className="text-sm text-dd-muted">Sudah tercatat</span>
-                                  ) : canMark && window.open && booking.status === 'BOOKED' ? (
-                                    <Button
-                                      size="sm"
-                                      variant="secondary"
-                                      onClick={() => {
-                                        setMarkError('');
-                                        setReason('');
-                                        setMarkTarget(booking);
-                                      }}
-                                    >
-                                      Tandai hadir
-                                    </Button>
-                                  ) : null}
+                                  <div className="flex items-center justify-end gap-1.5">
+                                    {!cancelled && (
+                                      <Button
+                                        size="sm"
+                                        variant="secondary"
+                                        title="Kirim pesan pengingat WhatsApp"
+                                        aria-label={`Kirim WhatsApp ke ${booking.customer?.displayName ?? 'peserta'}`}
+                                        onClick={() => {
+                                          const cleanPhone =
+                                            booking.customer?.phoneMasked?.replace(/\*/g, '') || '';
+                                          setWhatsAppModal({
+                                            context: {
+                                              customerName: booking.customer?.displayName ?? 'Member',
+                                              phone: cleanPhone,
+                                              className: selected ? className(selected) : undefined,
+                                              branchName: branch?.name,
+                                              classTime: selected ? time(selected) : undefined,
+                                              instructorName: selected ? instructorName(selected) : undefined,
+                                              remainingSessions: booking.sessionBalance?.available,
+                                              checkInUrl:
+                                                typeof globalThis !== 'undefined' && 'location' in globalThis
+                                                  ? `${(globalThis as any).location.origin}/check-in`
+                                                  : 'https://dailydosepilates.com/check-in',
+                                            },
+                                            defaultPresetId: 'class_reminder',
+                                          });
+                                        }}
+                                        className="inline-flex items-center gap-1 text-xs font-medium text-dd-forest hover:bg-dd-forest/10"
+                                      >
+                                        <MessageSquare className="size-3.5 text-dd-forest" aria-hidden="true" />
+                                        <span>Kirim WA</span>
+                                      </Button>
+                                    )}
+                                    {present ? (
+                                      <span className="text-sm text-dd-muted">Sudah tercatat</span>
+                                    ) : canMark && window.open && booking.status === 'BOOKED' ? (
+                                      <Button
+                                        size="sm"
+                                        variant="secondary"
+                                        onClick={() => {
+                                          setMarkError('');
+                                          setReason('');
+                                          setMarkTarget(booking);
+                                        }}
+                                      >
+                                        Tandai hadir
+                                      </Button>
+                                    ) : null}
+                                  </div>
                                 </td>
                               </tr>
                             );
@@ -587,19 +627,50 @@ export function FrontDeskTodayView({
                 <ul className="m-0 mt-3 list-none divide-y divide-dd-line p-0">
                   {expiring.map((item) => (
                     <li key={item.id} className="py-3 first:pt-0 last:pb-0">
-                      <span className="block font-semibold text-dd-ink">
-                        {item.customer?.displayName ?? 'Member'}
-                      </span>
-                      <span className="block text-sm text-dd-muted">
-                        Kelas{' '}
-                        {item.classSlot ? formatBranchTime(item.classSlot.startAt, timezone) : ''}
-                        {item.package ? ` · ${item.package.name}` : ''}
-                      </span>
-                      <span className="block text-sm font-semibold text-dd-warning">
-                        {item.sessionBalance && item.sessionBalance.available > 0
-                          ? `Sisa ${item.sessionBalance.available} sesi`
-                          : 'Ini sesi terakhirnya'}
-                      </span>
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <span className="block font-semibold text-dd-ink">
+                            {item.customer?.displayName ?? 'Member'}
+                          </span>
+                          <span className="block text-sm text-dd-muted">
+                            Kelas{' '}
+                            {item.classSlot ? formatBranchTime(item.classSlot.startAt, timezone) : ''}
+                            {item.package ? ` · ${item.package.name}` : ''}
+                          </span>
+                          <span className="block text-sm font-semibold text-dd-warning">
+                            {item.sessionBalance && item.sessionBalance.available > 0
+                              ? `Sisa ${item.sessionBalance.available} sesi`
+                              : 'Ini sesi terakhirnya'}
+                          </span>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          title="Kirim pengingat perpanjangan via WhatsApp"
+                          aria-label={`Ingatkan perpanjangan ke ${item.customer?.displayName ?? 'member'}`}
+                          onClick={() => {
+                            const cleanPhone = item.customer?.phoneMasked?.replace(/\*/g, '') || '';
+                            setWhatsAppModal({
+                              context: {
+                                customerName: item.customer?.displayName ?? 'Member',
+                                phone: cleanPhone,
+                                className:
+                                  item.classSlot?.classType?.name ??
+                                  (item.classSlot && workspace?.classTypes
+                                    ? workspace.classTypes.find((t) => t.id === (item.classSlot as any)?.classTypeId)?.name
+                                    : 'Pilates'),
+                                branchName: branch?.name,
+                                remainingSessions: item.sessionBalance?.available ?? 0,
+                              },
+                              defaultPresetId: 'package_renewal',
+                            });
+                          }}
+                          className="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-dd-forest hover:bg-dd-forest/10"
+                        >
+                          <MessageSquare className="size-3.5 text-dd-forest" aria-hidden="true" />
+                          <span>Ingatkan WA</span>
+                        </Button>
+                      </div>
                     </li>
                   ))}
                 </ul>
@@ -683,6 +754,14 @@ export function FrontDeskTodayView({
           {markError && <Feedback kind="error">{markError}</Feedback>}
         </div>
       </Modal>
+
+      {/* Modal Preset Pesan Pengingat WhatsApp */}
+      <WhatsAppReminderDialog
+        open={whatsAppModal !== null}
+        onClose={() => setWhatsAppModal(null)}
+        context={whatsAppModal?.context ?? null}
+        defaultPresetId={whatsAppModal?.defaultPresetId}
+      />
     </div>
   );
 }
