@@ -568,6 +568,7 @@ model SlotKelas {
   capacity           Int
   bookedCount        Int             @default(0)
   minQuota           Int?
+  bookingCutoffHours Int?
   status             ClassSlotStatus @default(PUBLISHED)
   notes              String?         @db.Text
   cancellationReason String?         @db.Text
