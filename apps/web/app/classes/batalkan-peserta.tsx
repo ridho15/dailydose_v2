@@ -51,6 +51,7 @@ export function BatalkanPeserta({
   const feedback = useAppFeedback();
   const [mode, setMode] = useState<Mode | null>(null);
   const [alasan, setAlasan] = useState('');
+  const [isMedical, setIsMedical] = useState(false);
   const [sibuk, setSibuk] = useState(false);
   const [galat, setGalat] = useState('');
   const nama = booking.customer?.displayName ?? 'member';
@@ -128,6 +129,7 @@ export function BatalkanPeserta({
   const buka = async () => {
     setGalat('');
     setAlasan('');
+    setIsMedical(false);
     let langsung = booking.status === 'BOOKED';
     if (langsung && client.cancellationOptions) {
       try {
@@ -146,17 +148,29 @@ export function BatalkanPeserta({
     try {
       if (mode === 'langsung') {
         await client.cancelAsStaff!(booking.id, alasan.trim(), crypto.randomUUID());
+      } else if (isMedical) {
+        await client.ajukanPembatalanTerlambat!(booking.id, alasan.trim(), {
+          isMedical: true,
+          releaseSeat: true,
+        });
       } else {
         await client.ajukanPembatalanTerlambat!(booking.id, alasan.trim());
       }
       setMode(null);
       feedback.showToast({
         tone: 'success',
-        title: mode === 'langsung' ? 'Booking dibatalkan' : 'Pengajuan terkirim',
+        title:
+          mode === 'langsung'
+            ? 'Booking dibatalkan'
+            : isMedical
+              ? 'Izin Sakit Terkirim'
+              : 'Pengajuan terkirim',
         message:
           mode === 'langsung'
             ? `${nama} dikeluarkan dari kelas. Sesinya tetap utuh.`
-            : 'Menunggu persetujuan Manager atau Owner.',
+            : isMedical
+              ? `Kursi kelas ${nama} langsung dibuka untuk peserta lain. Pengembalian sesi menunggu persetujuan Manager.`
+              : 'Menunggu persetujuan Manager atau Owner.',
       });
       onBerubah();
     } catch (error) {
@@ -208,12 +222,68 @@ export function BatalkanPeserta({
               disabled={alasan.trim().length < MIN_ALASAN}
               onClick={() => void kirim()}
             >
-              {mode === 'langsung' ? 'Batalkan booking' : 'Kirim pengajuan'}
+              {mode === 'langsung'
+                ? 'Batalkan booking'
+                : isMedical
+                  ? 'Ajukan Izin Medis & Buka Kursi'
+                  : 'Kirim pengajuan'}
             </Button>
           </div>
         }
       >
         <div className="grid gap-3">
+          {mode === 'pengajuan' && (
+            <div className="rounded-dd-sm border border-dd-line bg-dd-sand/30 p-3 text-sm">
+              <div className="flex items-start gap-2.5">
+                <input
+                  type="checkbox"
+                  id="check-medical"
+                  checked={isMedical}
+                  onChange={(e) => {
+                    setIsMedical(e.target.checked);
+                    if (e.target.checked && !alasan) {
+                      setAlasan('Member sakit mendadak dengan surat dokter terlampir');
+                    }
+                  }}
+                  className="mt-0.5 size-4 rounded border-dd-border-interactive text-dd-forest focus:ring-dd-forest"
+                />
+                <label htmlFor="check-medical" className="cursor-pointer text-dd-ink font-medium">
+                  🏥 Izin Sakit / Medis (Surat Dokter)
+                  <span className="block text-xs font-normal text-dd-muted mt-0.5">
+                    Kursi kelas langsung dibuka seketika agar bisa diisi peserta lain. Tiket pengembalian sesi dikirim ke Studio Manager.
+                  </span>
+                </label>
+              </div>
+
+              {isMedical && (
+                <div className="mt-3 pt-2.5 border-t border-dd-line/60 flex flex-wrap items-center gap-1.5">
+                  <span className="text-xs text-dd-muted">Pilihan cepat:</span>
+                  <button
+                    type="button"
+                    onClick={() => setAlasan('Member sakit dengan surat dokter resmi')}
+                    className="rounded border border-dd-border-interactive bg-white px-2 py-0.5 text-xs text-dd-ink hover:border-dd-forest"
+                  >
+                    📄 Surat Dokter
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAlasan('Member rawat inap / tindakan medis darurat di RS')}
+                    className="rounded border border-dd-border-interactive bg-white px-2 py-0.5 text-xs text-dd-ink hover:border-dd-forest"
+                  >
+                    🏥 Rawat Inap RS
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAlasan('Member cedera fisik mendadak tidak dapat latihan')}
+                    className="rounded border border-dd-border-interactive bg-white px-2 py-0.5 text-xs text-dd-ink hover:border-dd-forest"
+                  >
+                    🩹 Cedera Fisik
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
           <Textarea
             label="Alasan"
             required

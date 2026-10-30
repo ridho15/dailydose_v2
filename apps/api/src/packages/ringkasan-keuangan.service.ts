@@ -55,12 +55,15 @@ export interface RingkasanBulanan {
 
 export interface BarisJurnal {
   id: string;
+  costId?: string | null;
   tanggal: string;
   arah: 'MASUK' | 'KELUAR';
   keterangan: string;
   kategori: string;
   amountRp: number;
   dicatatOleh: string | null;
+  createdById?: string | null;
+  createdAt?: string | null;
   branchId: string;
   /** Pengeluaran yang dibayar uang pribadi Super Owner (diganti saat settlement). */
   dibayarOleh?: string | null;
@@ -298,6 +301,7 @@ export class RingkasanKeuanganService {
           description: true,
           amountRp: true,
           createdAt: true,
+          createdById: true,
           createdBy: { select: { displayName: true } },
         },
         orderBy: { createdAt: 'desc' },
@@ -325,6 +329,7 @@ export class RingkasanKeuanganService {
       description: string;
       amountRp: number;
       createdAt: Date;
+      createdById: string | null;
       createdBy: { displayName: string } | null;
     };
 
@@ -360,12 +365,15 @@ export class RingkasanKeuanganService {
       })),
       ...(biaya as Biaya[]).map((b) => ({
         id: `out-${b.id}`,
+        costId: b.id,
         tanggal: otherCostDay(b),
         arah: 'KELUAR' as const,
         keterangan: b.description,
         kategori: b.category,
         amountRp: b.amountRp,
         dicatatOleh: b.createdBy?.displayName ?? null,
+        createdById: b.createdById ?? null,
+        createdAt: b.createdAt ? b.createdAt.toISOString() : null,
         branchId: b.branchId,
         dibayarOleh: dibayarOleh.get(b.id) ?? null,
       })),

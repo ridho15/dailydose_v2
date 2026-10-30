@@ -115,4 +115,41 @@ describe('BatalkanPeserta', () => {
     );
     expect(within(container).queryByRole('button')).toBeNull();
   });
+  it('Fase 4: admin mengajukan izin sakit (medis), mencentang checkbox dan opsi cepat surat dokter untuk langsung membuka kursi', async () => {
+    session = { id: 'admin-1', roles: ['ADMIN'], capabilities: ['booking:cancel:assisted'] };
+    const client = klien();
+    const onBerubah = vi.fn();
+    render(
+      <BatalkanPeserta
+        booking={booking}
+        kelasMulai={besok}
+        client={client}
+        onBerubah={onBerubah}
+      />,
+    );
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Batalkan booking Theresia' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Ajukan pembatalan Theresia?' });
+
+    // Centang Izin Sakit / Medis
+    const checkMedis = within(dialog).getByLabelText(/Izin Sakit/i);
+    await user.click(checkMedis);
+
+    // Klik preset Surat Dokter
+    const presetBtn = within(dialog).getByRole('button', { name: /Surat Dokter/ });
+    await user.click(presetBtn);
+
+    expect(within(dialog).getByLabelText(/Alasan/)).toHaveValue('Member sakit dengan surat dokter resmi');
+
+    // Klik tombol submit izin medis & buka kursi
+    const submitBtn = within(dialog).getByRole('button', { name: 'Ajukan Izin Medis & Buka Kursi' });
+    await user.click(submitBtn);
+
+    expect(client.ajukanPembatalanTerlambat).toHaveBeenCalledWith(
+      'b1',
+      'Member sakit dengan surat dokter resmi',
+      { isMedical: true, releaseSeat: true },
+    );
+    expect(onBerubah).toHaveBeenCalled();
+  });
 });

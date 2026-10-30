@@ -181,4 +181,52 @@ describe('PembatalanTerlambatService', () => {
     expect(hasil.status).toBe('REJECTED');
     expect(tx.pemesananKelas.update).not.toHaveBeenCalled();
   });
+  it('izin medis: kursi langsung dilepas saat pengajuan, dan saat disetujui sesi dikembalikan tanpa error', async () => {
+    const { tx, service } = setup('BOOKED');
+    const hasilAjukan = await service.ajukan(
+      admin,
+      BOOKING,
+      { reason: 'Member dirawat di RS, ada surat dokter', isMedical: true },
+      now,
+    );
+    expect(hasilAjukan).toMatchObject({
+      bookingId: BOOKING,
+      sessionCount: 1,
+    });
+    // Kursi langsung dikosongkan dan booking dibatalkan seketika
+    expect(tx.pemesananKelas.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: BOOKING },
+        data: expect.objectContaining({ status: 'CANCELLED' }),
+      }),
+    );
+    expect(tx.slotKelas.update).toHaveBeenCalledWith({
+      where: { id: 'slot-1' },
+      data: { bookedCount: { decrement: 1 } },
+    });
+
+    // Saat Manager menyetujui, sesi dikembalikan
+    tx.pemesananKelas.findUnique.mockResolvedValueOnce({ id: BOOKING, status: 'CANCELLED', classSlot: { branchId: MK } } as never);
+    tx.sessionAdjustRequest.findUnique.mockResolvedValue({
+      id: REQ,
+      version: 1,
+      status: 'PENDING',
+      reasonCode: 'LATE_CANCELLATION',
+      requestedById: 'admin-1',
+      bookingId: BOOKING,
+      customerPackageId: 'pkg-1',
+      sessionCount: 1,
+      reason: '[IZIN MEDIS] Member dirawat di RS, ada surat dokter',
+      booking: { status: 'CANCELLED', classSlot: { branchId: MK } },
+    } as never);
+
+    const hasilPutus = await service.putuskan(manager, REQ, 'approve', { expectedVersion: 1 }, now);
+    expect(hasilPutus).toMatchObject({ status: 'APPROVED', sessionsReturned: 1, resultingBalance: 1 });
+    expect(tx.paketPelanggan.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'pkg-1' },
+        data: expect.objectContaining({ remainingSessions: 1, status: 'ACTIVE' }),
+      }),
+    );
+  });
 });

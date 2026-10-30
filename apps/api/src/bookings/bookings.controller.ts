@@ -51,7 +51,7 @@ export class BookingsController {
   ajukanPembatalan(
     @Req() request: AuthenticatedRequest,
     @Param('id') id: string,
-    @Body() body: { reason?: string },
+    @Body() body: { reason?: string; isMedical?: boolean; releaseSeat?: boolean },
   ) {
     return this.pembatalan.ajukan(request.principal, id, body ?? {});
   }

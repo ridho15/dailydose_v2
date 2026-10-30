@@ -7,10 +7,11 @@ import { bacaNominal, KasView } from './kas-view';
 const ctx = vi.hoisted(() => ({
   caps: ['expense:create'] as string[],
   branchId: 'gg' as string,
+  session: { id: 'staff-1', displayName: 'Rina', roles: ['ADMIN'], branches: [{ id: 'gg', name: 'Green Garden' }] } as Record<string, unknown>,
 }));
 vi.mock('../../session-context', () => ({
   useSessionContext: () => ({
-    session: { branches: [{ id: 'gg', name: 'Green Garden' }] },
+    session: ctx.session,
     activeBranchId: ctx.branchId,
     activeBranch: ctx.branchId
       ? { id: 'gg', name: 'Green Garden', timezone: 'Asia/Jakarta' }
@@ -325,5 +326,73 @@ describe('KasView: transfer honor instruktur', () => {
       email: undefined,
     });
     expect(c.transferHonor).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('KasView: toleransi 15 menit koreksi & pembatalan pengeluaran', () => {
+  const staffId = 'staff-1';
+  const staffDisplayName = 'Rina';
+
+  it('menampilkan tombol koreksi pada pengeluaran baru (< 15 menit) dan mengoreksi data', async () => {
+    ctx.caps = ['expense:create'];
+    ctx.branchId = 'gg';
+    ctx.session = { id: staffId, displayName: staffDisplayName, roles: ['ADMIN'] };
+
+    const c = {
+      ...client(),
+      koreksiPengeluaran: vi.fn().mockResolvedValue({}),
+      hapusPengeluaran: vi.fn().mockResolvedValue({}),
+    } as unknown as KeuanganClient;
+
+    const user = userEvent.setup();
+    render(<KasView now={NOW} client={c} />);
+    await screen.findByText('Rp 1.400.000');
+
+    // Tombol koreksi muncul di baris Handuk 10 pcs
+    const koreksiBtn = await screen.findByRole('button', { name: /Koreksi/i });
+    expect(koreksiBtn).toBeVisible();
+
+    await user.click(koreksiBtn);
+
+    const dialog = await screen.findByRole('dialog', { name: /Koreksi Pengeluaran/ });
+    expect(dialog).toBeVisible();
+
+    // Ubah nominal dari 450000 ke 45000
+    const nominalInput = within(dialog).getByLabelText('Nominal (Rp)');
+    await user.clear(nominalInput);
+    await user.type(nominalInput, '45000');
+
+    // Simpan perubahan
+    await user.click(within(dialog).getByRole('button', { name: 'Simpan Perubahan' }));
+
+    expect(c.koreksiPengeluaran).toHaveBeenCalledWith('1', {
+      amountRp: 45_000,
+      description: 'Handuk 10 pcs',
+      categoryCode: 'PEMBELIAN_BARANG',
+    });
+  });
+
+  it('dapat membatalkan pengeluaran dalam toleransi 15 menit', async () => {
+    ctx.caps = ['expense:create'];
+    ctx.branchId = 'gg';
+    ctx.session = { id: staffId, displayName: staffDisplayName, roles: ['ADMIN'] };
+
+    const c = {
+      ...client(),
+      koreksiPengeluaran: vi.fn().mockResolvedValue({}),
+      hapusPengeluaran: vi.fn().mockResolvedValue({}),
+    } as unknown as KeuanganClient;
+
+    const user = userEvent.setup();
+    render(<KasView now={NOW} client={c} />);
+    await screen.findByText('Rp 1.400.000');
+
+    const koreksiBtn = await screen.findByRole('button', { name: /Koreksi/i });
+    await user.click(koreksiBtn);
+
+    const dialog = await screen.findByRole('dialog', { name: /Koreksi Pengeluaran/ });
+    await user.click(within(dialog).getByRole('button', { name: 'Hapus / Batalkan' }));
+
+    expect(c.hapusPengeluaran).toHaveBeenCalledWith('1', expect.any(String));
   });
 });

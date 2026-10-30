@@ -507,7 +507,7 @@ export class FinanceService {
     };
   }
 
-  /** Ubah tanggal, kategori, keterangan, atau nominal biaya lain. */
+  /** Ubah tanggal, kategori, keterangan, atau nominal biaya lain (mendukung toleransi 15 menit untuk staf kasir). */
   async updateOtherCost(
     principal: SessionPrincipal,
     id: string,
@@ -519,12 +519,24 @@ export class FinanceService {
       amountRp?: number;
     },
   ) {
-    this.policy.requireCapability(principal.capabilities, 'finance:manage');
     const existing = await this.db.otherCost.findUnique({ where: { id } });
     if (!existing) {
       throw new ApiProblem('NOT_FOUND', HttpStatus.NOT_FOUND);
     }
     this.ensureBranchAccess(principal, existing.branchId);
+
+    const nowMs = Date.now();
+    const isCreator = existing.createdById === principal.userId;
+    const withinGracePeriod =
+      Boolean(existing.createdAt) && nowMs - existing.createdAt.getTime() <= 15 * 60 * 1000;
+    const canEditUnderGracePeriod =
+      isCreator &&
+      withinGracePeriod &&
+      this.policy.hasCapability(principal, 'expense:create', existing.branchId);
+
+    if (!canEditUnderGracePeriod) {
+      this.policy.requireCapability(principal.capabilities, 'finance:manage');
+    }
 
     const data: {
       incurredOn?: Date;
@@ -567,7 +579,7 @@ export class FinanceService {
     await this.audit.catat(null, {
       actorId: principal.userId,
       branchId: existing.branchId,
-      action: 'finance.other_cost_updated',
+      action: canEditUnderGracePeriod ? 'finance.other_cost_corrected_grace_period' : 'finance.other_cost_updated',
       objectType: 'OtherCost',
       objectId: id,
       beforeMasked: { incurredOn: otherCostDay(existing), category: existing.category, amountRp: existing.amountRp },
@@ -581,21 +593,35 @@ export class FinanceService {
   }
 
   async deleteOtherCost(principal: SessionPrincipal, id: string, reasonInput?: string) {
-    this.policy.requireCapability(principal.capabilities, 'finance:manage');
-    // Menghapus biaya wajib beralasan (K4).
-    const reason = requireReason(reasonInput);
     const existing = await this.db.otherCost.findUnique({ where: { id } });
     if (!existing) {
       throw new ApiProblem('NOT_FOUND', HttpStatus.NOT_FOUND);
     }
     this.ensureBranchAccess(principal, existing.branchId);
 
+    const nowMs = Date.now();
+    const isCreator = existing.createdById === principal.userId;
+    const withinGracePeriod =
+      Boolean(existing.createdAt) && nowMs - existing.createdAt.getTime() <= 15 * 60 * 1000;
+    const canDeleteUnderGracePeriod =
+      isCreator &&
+      withinGracePeriod &&
+      this.policy.hasCapability(principal, 'expense:create', existing.branchId);
+
+    if (!canDeleteUnderGracePeriod) {
+      this.policy.requireCapability(principal.capabilities, 'finance:manage');
+    }
+
+    // Menghapus biaya wajib beralasan (K4).
+    const defaultReason = canDeleteUnderGracePeriod ? 'Koreksi salah ketik dalam batas toleransi 15 menit' : undefined;
+    const reason = requireReason(reasonInput || defaultReason);
+
     await this.db.otherCost.delete({ where: { id } });
     await this.db.pembayarPengeluaran.deleteMany({ where: { otherCostId: id } });
     await this.audit.catat(null, {
       actorId: principal.userId,
       branchId: existing.branchId,
-      action: 'finance.other_cost_deleted',
+      action: canDeleteUnderGracePeriod ? 'finance.other_cost_deleted_grace_period' : 'finance.other_cost_deleted',
       objectType: 'OtherCost',
       objectId: id,
       reason,

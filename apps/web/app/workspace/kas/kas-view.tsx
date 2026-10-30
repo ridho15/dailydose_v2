@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useCallback, useContext, useEffect, useMemo, useState, type FormEvent } from 'react';
 import {
   browserKeuanganClient,
   keuanganFailure,
@@ -11,6 +11,8 @@ import {
 import { KATEGORI_PENGELUARAN, labelKategori } from '../../lib/kategori-pengeluaran';
 import { useSessionContext } from '../../session-context';
 import { Feedback, Skeleton } from '../../ui';
+import { Modal, useOptionalAppFeedback } from '../../components/app-feedback';
+import { Button } from '../../components/actions';
 import { tigaBulan } from '../owner-home';
 import { SettlementOwnerSection } from './settlement-owner';
 import { TransferHonorSection } from './transfer-honor';
@@ -68,6 +70,13 @@ function FormPengeluaran({
   // Kosong: dibayar dari kas cabang. Berisi id Super Owner: uang pribadinya, diganti saat settlement.
   const [dibayarOleh, setDibayarOleh] = useState('');
   const [owners, setOwners] = useState<OwnerSingkat[]>([]);
+  const context = useSessionContext();
+  const session = context?.session;
+  const bisaOwnerSettlement = Boolean(
+    Boolean(Array.isArray(session?.roles) && session.roles.includes('SUPER_OWNER')) ||
+    context?.hasCapability?.('finance:manage') ||
+    context?.hasCapability?.('owner-settlement:manage')
+  );
   const [sibuk, setSibuk] = useState(false);
 
   useEffect(() => {
@@ -134,7 +143,7 @@ function FormPengeluaran({
           Catat pengeluaran
         </h2>
         <p className="m-0 mt-0.5 text-sm text-dd-muted">
-          Untuk {branchName}. Salah ketik? Minta Finance atau Owner mengubahnya.
+          Untuk {branchName}. Salah ketik nominal? Anda memiliki jendela toleransi 15 menit untuk mengoreksi atau membatalkan langsung pengeluaran yang baru dicatat.
         </p>
       </div>
       <div className="grid gap-4 sm:grid-cols-2">
@@ -240,6 +249,72 @@ export function KasView({
   const [periode, setPeriode] = useState(bulan[0]!);
   const [jurnal, setJurnal] = useState<JurnalKas | null>(null);
   const [gagal, setGagal] = useState('');
+  const feedback = useOptionalAppFeedback();
+  const [koreksi, setKoreksi] = useState<{
+    id: string;
+    costId: string;
+    nominal: string;
+    keterangan: string;
+    kategori: string;
+  } | null>(null);
+  const [koreksiSibuk, setKoreksiSibuk] = useState(false);
+  const [koreksiGalat, setKoreksiGalat] = useState('');
+
+  const simpanKoreksi = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!koreksi || !client.koreksiPengeluaran) return;
+    const amountRp = bacaNominal(koreksi.nominal);
+    if (!amountRp || !koreksi.keterangan.trim()) return;
+    setKoreksiSibuk(true);
+    setKoreksiGalat('');
+    try {
+      await client.koreksiPengeluaran(koreksi.costId, {
+        amountRp,
+        description: koreksi.keterangan.trim(),
+        categoryCode: koreksi.kategori,
+      });
+      feedback?.showToast({
+        tone: 'success',
+        title: 'Pengeluaran Dikoreksi',
+        message: `Nominal berhasil diperbarui menjadi ${rp(amountRp)}.`,
+      });
+      setKoreksi(null);
+      muat();
+    } catch (error) {
+      setKoreksiGalat(keuanganFailure(error, 'Gagal mengoreksi pengeluaran.'));
+    } finally {
+      setKoreksiSibuk(false);
+    }
+  };
+
+  const batalkanPengeluaran = async () => {
+    if (!koreksi || !client.hapusPengeluaran) return;
+    const yakin = feedback
+      ? await feedback.confirm({
+          tone: 'danger',
+          title: 'Batalkan Pengeluaran Ini?',
+          message: 'Pengeluaran ini akan dihapus dari jurnal kas cabang.',
+          confirmLabel: 'Ya, batalkan pengeluaran',
+        })
+      : true;
+    if (!yakin) return;
+    setKoreksiSibuk(true);
+    setKoreksiGalat('');
+    try {
+      await client.hapusPengeluaran(koreksi.costId, 'Koreksi salah ketik dalam batas toleransi 15 menit');
+      feedback?.showToast({
+        tone: 'success',
+        title: 'Pengeluaran Dibatalkan',
+        message: 'Catatan pengeluaran telah dihapus dari kas studio.',
+      });
+      setKoreksi(null);
+      muat();
+    } catch (error) {
+      setKoreksiGalat(keuanganFailure(error, 'Gagal membatalkan pengeluaran.'));
+    } finally {
+      setKoreksiSibuk(false);
+    }
+  };
 
   const muat = useCallback(() => {
     let batal = false;
@@ -399,6 +474,44 @@ export function KasView({
                             Dibayar {r.dibayarOleh}, diganti saat settlement
                           </span>
                         )}
+                        {(() => {
+                          const dibuatMs = r.createdAt ? new Date(r.createdAt).getTime() : 0;
+                          const costId = r.costId || (r.id.startsWith('out-') ? r.id.replace('out-', '') : null);
+                          const waktuTersisaMs = dibuatMs > 0 ? 15 * 60 * 1000 - (now - dibuatMs) : 15 * 60 * 1000;
+                          const dalamToleransi = waktuTersisaMs > 0;
+                          const adalahPembuat =
+                            r.createdById === context?.session?.id ||
+                            (!r.createdById && r.dicatatOleh === context?.session?.displayName);
+                          const bisaKoreksi = Boolean(
+                            costId &&
+                            r.arah === 'KELUAR' &&
+                            (context?.hasCapability?.('finance:manage') || (adalahPembuat && dalamToleransi))
+                          );
+                          if (!bisaKoreksi || !costId) return null;
+                          return (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setKoreksiGalat('');
+                                setKoreksi({
+                                  id: r.id,
+                                  costId,
+                                  nominal: String(r.amountRp),
+                                  keterangan: r.keterangan,
+                                  kategori: r.kategori,
+                                });
+                              }}
+                              className="mt-1.5 inline-flex items-center gap-1.5 rounded-dd-sm border border-dd-forest/30 bg-dd-forest/5 px-2.5 py-1 text-xs font-semibold text-dd-forest transition hover:bg-dd-forest/15"
+                            >
+                              <span>✏️ Koreksi / Batalkan</span>
+                              {dibuatMs > 0 && waktuTersisaMs > 0 && !context?.hasCapability?.('finance:manage') && (
+                                <span className="font-mono text-[11px] text-dd-forest/80">
+                                  ({Math.ceil(waktuTersisaMs / 60000)}m)
+                                </span>
+                              )}
+                            </button>
+                          );
+                        })()}
                       </td>
                       <td className="whitespace-nowrap py-3 pr-4 text-right tabular-nums text-dd-forest">
                         {r.arah === 'MASUK' ? rp(r.amountRp) : ''}
@@ -439,6 +552,79 @@ export function KasView({
           }
         />
       )}
+      <Modal
+        open={koreksi !== null}
+        title="Koreksi Pengeluaran (Toleransi 15 Menit)"
+        description="Ubah salah ketik nominal atau batalkan pengeluaran ini tanpa perlu eskalasi ke Finance/Owner."
+        busy={koreksiSibuk}
+        onClose={() => setKoreksi(null)}
+        footer={
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-between items-center gap-2 w-full">
+            <Button
+              variant="danger"
+              disabled={koreksiSibuk}
+              onClick={() => void batalkanPengeluaran()}
+            >
+              Hapus / Batalkan
+            </Button>
+            <div className="flex items-center gap-2">
+              <Button variant="secondary" disabled={koreksiSibuk} onClick={() => setKoreksi(null)}>
+                Kembali
+              </Button>
+              <Button
+                variant="primary"
+                loading={koreksiSibuk}
+                disabled={!bacaNominal(koreksi?.nominal ?? '') || !koreksi?.keterangan.trim()}
+                onClick={(e) => void simpanKoreksi(e as never)}
+              >
+                Simpan Perubahan
+              </Button>
+            </div>
+          </div>
+        }
+      >
+        {koreksi && (
+          <form onSubmit={simpanKoreksi} className="space-y-4">
+            <label className="block text-sm font-medium text-dd-ink">
+              Nominal (Rp)
+              <input
+                type="text"
+                inputMode="numeric"
+                value={koreksi.nominal}
+                onChange={(e) => setKoreksi({ ...koreksi, nominal: e.target.value })}
+                className="mt-1 block min-h-11 w-full rounded-dd-lg border border-dd-border-interactive bg-white px-3 text-[15px] text-dd-ink"
+                required
+              />
+            </label>
+            <label className="block text-sm font-medium text-dd-ink">
+              Keterangan
+              <input
+                type="text"
+                value={koreksi.keterangan}
+                maxLength={500}
+                onChange={(e) => setKoreksi({ ...koreksi, keterangan: e.target.value })}
+                className="mt-1 block min-h-11 w-full rounded-dd-lg border border-dd-border-interactive bg-white px-3 text-[15px] text-dd-ink"
+                required
+              />
+            </label>
+            <label className="block text-sm font-medium text-dd-ink">
+              Kategori
+              <select
+                value={koreksi.kategori}
+                onChange={(e) => setKoreksi({ ...koreksi, kategori: e.target.value })}
+                className="mt-1 block min-h-11 w-full rounded-dd-lg border border-dd-border-interactive bg-white px-3 text-[15px] text-dd-ink"
+              >
+                {KATEGORI_PENGELUARAN.map((k) => (
+                  <option key={k.code} value={k.code}>
+                    {k.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {koreksiGalat && <Feedback kind="error">{koreksiGalat}</Feedback>}
+          </form>
+        )}
+      </Modal>
     </section>
   );
 }

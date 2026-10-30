@@ -526,8 +526,12 @@ export interface BookingClient {
     supportAction: string | null;
     cutoffAt: string;
   }>;
-  /** Pengajuan pembatalan setelah batas H-24 (disetujui Manager/Owner). */
-  ajukanPembatalanTerlambat?(bookingId: string, reason: string): Promise<PengajuanPembatalan>;
+  /** Pengajuan pembatalan setelah batas H-24 (disetujui Manager/Owner, mendukung izin medis & pelepasan kursi langsung). */
+  ajukanPembatalanTerlambat?(
+    bookingId: string,
+    reason: string,
+    options?: { isMedical?: boolean; releaseSeat?: boolean },
+  ): Promise<PengajuanPembatalan>;
   pembatalanTertunda?(classSlotId: string): Promise<PengajuanPembatalan[]>;
   putuskanPembatalan?(
     requestId: string,
@@ -886,10 +890,18 @@ export const browserBookingClient: BookingClient = {
     );
     if (!response.ok) throw { response };
   },
-  ajukanPembatalanTerlambat(bookingId, reason) {
+  ajukanPembatalanTerlambat(bookingId, reason, options) {
     return apiFetch<PengajuanPembatalan>(
       `/bookings/${encodeURIComponent(bookingId)}/late-cancellation`,
-      { method: 'POST', body: JSON.stringify({ reason }), label: 'Mengirim pengajuan pembatalan…' },
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          reason,
+          isMedical: options?.isMedical,
+          releaseSeat: options?.releaseSeat,
+        }),
+        label: options?.isMedical ? 'Mengirim izin medis…' : 'Mengirim pengajuan pembatalan…',
+      },
     );
   },
   async pembatalanTertunda(classSlotId) {
