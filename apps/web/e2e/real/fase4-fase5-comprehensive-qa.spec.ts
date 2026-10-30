@@ -227,6 +227,20 @@ test.describe('Comprehensive QA UAT & No-Happy Path: Fase 4 & Fase 5', () => {
       fullPage: false,
     });
 
+    // 5.3 Direct URL ke /workspace/reminders (Otomasi WhatsApp - kini terlindungi dari Admin Cabang)
+    await page.goto('http://127.0.0.1:32120/workspace/reminders');
+    await page.waitForTimeout(2000);
+
+    // Verifikasi Route Guard: Admin Cabang otomatis di-redirect kembali ke /workspace karena automation:read telah dicabut
+    expect(page.url()).toContain('/workspace');
+    await expect(page.getByRole('heading', { name: /hari ini di meja depan/i })).toBeVisible();
+
+    // Screenshot 11: Direct URL Reminders Terproteksi & Redirect ke Workspace
+    await page.screenshot({
+      path: `${ARTIFACT_DIR}/qa_fase5_07_no_happy_path_direct_url_reminders_redirected.png`,
+      fullPage: false,
+    });
+
     // =========================================================================
     // BAGIAN 6: FASE 5 - NO-HAPPY PATH: ROLE BOUNDARY (SUPER OWNER TETAP PENUH)
     // =========================================================================
@@ -249,7 +263,7 @@ test.describe('Comprehensive QA UAT & No-Happy Path: Fase 4 & Fase 5', () => {
     await expect(ownerPage.locator('text=Pengaturan & Sistem')).toBeVisible();
     await expect(ownerPage.locator('text=Alat & Sistem Lanjutan')).toBeVisible();
 
-    // Screenshot 11: Super Owner Retains Full Multi-Group Menu
+    // Screenshot 12: Super Owner Retains Full Multi-Group Menu
     await ownerPage.screenshot({
       path: `${ARTIFACT_DIR}/qa_fase5_06_super_owner_retains_full_menu.png`,
       fullPage: false,

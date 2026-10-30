@@ -86,7 +86,7 @@ export class OperationsAutomationController {
    * Mengambil riwayat pengiriman pesan WhatsApp (ReminderLog)
    */
   @Get('reminders/logs')
-  @Roles('SUPER_OWNER', 'OWNER', 'MANAGER', 'ADMIN', 'FINANCE')
+  @Roles('SUPER_OWNER', 'OWNER', 'MANAGER', 'FINANCE')
   async listReminderLogs(
     @Req() _req: AuthenticatedRequest,
     @Query('phone') phone?: string,
@@ -129,7 +129,7 @@ export class OperationsAutomationController {
    * Ringkasan statistik pengiriman pengingat & otomasi
    */
   @Get('reminders/summary')
-  @Roles('SUPER_OWNER', 'OWNER', 'MANAGER', 'ADMIN', 'FINANCE')
+  @Roles('SUPER_OWNER', 'OWNER', 'MANAGER', 'FINANCE')
   async getRemindersSummary(@Req() _req: AuthenticatedRequest) {
     const recentLogs = await this.whatsapp.listLogs({ limit: 100 });
     const sentCount = recentLogs.filter((l) => l.status === 'SENT').length;

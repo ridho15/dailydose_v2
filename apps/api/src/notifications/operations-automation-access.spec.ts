@@ -22,8 +22,9 @@ describe('tombol berbahaya otomasi hanya untuk Super Owner', () => {
     expect(holders).toEqual(['SUPER_OWNER']);
   });
 
-  it('Admin dan Manager tetap bisa melihat log pengingat', () => {
-    expect(ROLE_CAPABILITIES.ADMIN).toContain('automation:read');
+  it('Manager dan Owner tetap bisa melihat log pengingat, Admin Cabang dibatasi', () => {
+    expect(ROLE_CAPABILITIES.ADMIN).not.toContain('automation:read');
     expect(ROLE_CAPABILITIES.MANAGER).toContain('automation:read');
+    expect(ROLE_CAPABILITIES.OWNER).toContain('automation:read');
   });
 });

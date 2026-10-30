@@ -115,7 +115,6 @@ export const ROLE_CAPABILITIES: Record<ApplicationRole, readonly string[]> = {
     'class-slot:read',
   ],
   ADMIN: [
-    'automation:read',
     'branch:operate',
     'user:read',
     // Baca-saja: dibutuhkan form jadwal untuk memilih instruktur cabang (dibatasi cakupan cabang).
