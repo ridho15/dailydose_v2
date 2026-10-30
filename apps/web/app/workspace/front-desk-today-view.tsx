@@ -1,7 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, MessageSquare, ScanLine, UserPlus } from 'lucide-react';
+import { AlertTriangle, MessageSquare, ScanLine, Sparkles, UserPlus } from 'lucide-react';
+import { WalkInDrawer } from './walk-in-drawer';
 import { WhatsAppReminderDialog } from './whatsapp-reminder-dialog';
 import type { WhatsAppReminderContext, WhatsAppPreset } from './whatsapp-reminder-presets';
 import {
@@ -98,6 +99,7 @@ export function FrontDeskTodayView({
     context: WhatsAppReminderContext;
     defaultPresetId?: WhatsAppPreset['id'];
   } | null>(null);
+  const [walkInOpen, setWalkInOpen] = useState(false);
 
   useEffect(() => {
     if (initialNow) return;
@@ -359,6 +361,14 @@ export function FrontDeskTodayView({
           Kelas yang berjalan, presensi peserta, dan antrean yang perlu Anda putuskan.
         </p>
         <div className="flex flex-wrap gap-3 pt-1">
+          <Button
+            type="button"
+            variant="primary"
+            leadingIcon={<Sparkles className="size-4" aria-hidden="true" />}
+            onClick={() => setWalkInOpen(true)}
+          >
+            + Member Baru Walk-In (Ikut Kelas)
+          </Button>
           <ButtonLink
             href="/workspace/check-in"
             variant="secondary"
@@ -368,6 +378,7 @@ export function FrontDeskTodayView({
           </ButtonLink>
           <ButtonLink
             href="/customers"
+            variant="secondary"
             leadingIcon={<UserPlus className="size-4" aria-hidden="true" />}
           >
             Daftarkan member baru
@@ -762,6 +773,23 @@ export function FrontDeskTodayView({
         context={whatsAppModal?.context ?? null}
         defaultPresetId={whatsAppModal?.defaultPresetId}
       />
+
+      {/* Drawer Alur Cepat Walk-In & Booking Kasir (Fase 3) */}
+      {branch && (
+        <WalkInDrawer
+          open={walkInOpen}
+          onClose={() => setWalkInOpen(false)}
+          branch={branch}
+          slots={slots}
+          workspace={workspace}
+          bookingClient={bookingClient}
+          now={now}
+          onSuccess={() => {
+            void loadClasses();
+            void loadAttendees();
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -5,6 +5,32 @@ import type { ClassSlot } from './class-slot-client';
 
 export type { ClassSlot };
 
+export interface WalkInCommand {
+  branchId: string;
+  classSlotId: string;
+  customerUserId: string;
+  packageId: string;
+  paymentMethod: 'CASH' | 'CARD' | 'QRIS' | 'BANK_TRANSFER' | 'MANUAL_STAFF';
+  paymentNote?: string;
+}
+
+export interface WalkInResult {
+  booking: Booking;
+  purchase: {
+    id: string;
+    invoiceNumber: string;
+    status: string;
+    totalAmountRp: number;
+    paymentMethod: string;
+  };
+  customerPackage: {
+    id: string;
+    totalSessions: number;
+    remainingSessions: number;
+    validUntil: string;
+  };
+}
+
 export interface BookingCommand {
   classSlotId: string;
   customerPackageId: string;
@@ -513,6 +539,7 @@ export interface BookingClient {
     customerId: string,
     branchId?: string,
   ): Promise<CustomerPackageBalance[]>;
+  walkIn?(input: WalkInCommand, idempotencyKey: string): Promise<WalkInResult>;
 }
 
 export const browserBookingClient: BookingClient = {
@@ -1035,6 +1062,22 @@ export const browserBookingClient: BookingClient = {
     if (!response.ok) throw { response };
     return response.json() as Promise<InstructorCheckInIssue>;
   },
+  async walkIn(input, idempotencyKey) {
+    const result = await apiFetch<any>('/bookings/walk-in', {
+      method: 'POST',
+      idempotent: true,
+      headers: idempotencyKey ? { 'idempotency-key': idempotencyKey } : undefined,
+      body: JSON.stringify(input),
+      label: 'Mendaftarkan walk-in…',
+    });
+    return {
+      ...result,
+      booking: {
+        ...result.booking,
+        createdAt: new Date(result.booking.createdAt),
+      },
+    };
+  },
   async consumeInstructorCheckIn(token, idempotencyKey, location) {
     const response = await foregroundFetch(
       '/api/v1/check-ins/instructors',
@@ -1062,6 +1105,7 @@ const messages: Record<string, string> = {
   PACKAGE_PAYMENT_PENDING: 'Pembelian paket ini belum disetujui atau belum lunas. Sesi baru dapat digunakan setelah pembayaran disahkan.',
   BOOKING_CUTOFF_PASSED: 'Waktu pemesanan kelas ini sudah ditutup.',
   CLASS_CAPACITY_FULL: 'Kapasitas kelas sudah penuh.',
+  CLASS_ALREADY_ENDED: 'Kelas ini sudah selesai dan tidak dapat menerima walk-in baru.',
   INSUFFICIENT_AVAILABLE_SESSIONS: 'Saldo sesi pelanggan tidak mencukupi.',
   DUPLICATE_ACTIVE_BOOKING: 'Pelanggan sudah memiliki booking aktif untuk kelas ini.',
   RESOURCE_NOT_FOUND: 'Data tidak tersedia dalam cabang yang dipilih.',

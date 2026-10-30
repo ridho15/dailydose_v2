@@ -649,35 +649,47 @@ export class PaymentReviewService {
 
           let customerPackage = null;
           if (decision === 'APPROVED') {
-            const validUntil = new Date(
-              decidedAt.getTime() + (purchase.package.validityDays || 30) * 24 * 60 * 60 * 1000,
-            );
-
-            customerPackage = await tx.paketPelanggan.create({
-              data: {
-                userId: purchase.userId,
-                packageId: purchase.packageId,
-                purchaseId: purchase.id,
-                totalSessions: purchase.package.sessionCount,
-                remainingSessions: purchase.package.sessionCount,
-                usedSessions: 0,
-                validFrom: decidedAt,
-                validUntil,
-                status: 'ACTIVE',
-              },
+            const existingPkg = await tx.paketPelanggan.findUnique({
+              where: { purchaseId: purchase.id },
             });
+            if (existingPkg) {
+              customerPackage = existingPkg;
+            } else {
+              const validUntil = new Date(
+                decidedAt.getTime() + (purchase.package.validityDays || 30) * 24 * 60 * 60 * 1000,
+              );
 
-            // Catat mutasi awal kuota sesi di SessionLedger (Spesifikasi v1.0)
-            await tx.sessionLedger.create({
-              data: {
-                customerPackageId: customerPackage.id,
-                type: SessionMutationType.PURCHASE,
-                amount: purchase.package.sessionCount,
-                balanceAfter: purchase.package.sessionCount,
-                referenceId: purchase.id,
-                notes: `Saldo awal pembelian paket #${purchase.invoiceNumber}`,
-                createdById: principal.userId,
-              },
+              customerPackage = await tx.paketPelanggan.create({
+                data: {
+                  userId: purchase.userId,
+                  packageId: purchase.packageId,
+                  purchaseId: purchase.id,
+                  totalSessions: purchase.package.sessionCount,
+                  remainingSessions: purchase.package.sessionCount,
+                  usedSessions: 0,
+                  validFrom: decidedAt,
+                  validUntil,
+                  status: 'ACTIVE',
+                },
+              });
+
+              // Catat mutasi awal kuota sesi di SessionLedger (Spesifikasi v1.0)
+              await tx.sessionLedger.create({
+                data: {
+                  customerPackageId: customerPackage.id,
+                  type: SessionMutationType.PURCHASE,
+                  amount: purchase.package.sessionCount,
+                  balanceAfter: purchase.package.sessionCount,
+                  referenceId: purchase.id,
+                  notes: `Saldo awal pembelian paket #${purchase.invoiceNumber}`,
+                  createdById: principal.userId,
+                },
+              });
+            }
+          } else if (decision === 'REJECTED') {
+            await tx.paketPelanggan.updateMany({
+              where: { purchaseId: purchase.id },
+              data: { status: 'EXPIRED', validUntil: new Date(0) },
             });
           }
 
