@@ -17,7 +17,7 @@ const footerLinksEn = [
   {
     label: 'Help & Info',
     links: [
-      { href: '/guide', label: 'Studio Guide & Etiquette' },
+      { href: '/help', label: 'Help Center & Studio Guide' },
       { href: '/#about', label: 'About the Studio' },
       { href: '/contact', label: 'Contact Us' },
     ],
@@ -68,7 +68,7 @@ const footerLinks = [
   {
     label: 'Bantuan & Info',
     links: [
-      { href: '/guide', label: 'Panduan & Etika Studio' },
+      { href: '/help', label: 'Pusat Bantuan & Panduan' },
       { href: '/#about', label: 'Tentang Studio' },
       { href: '/contact', label: 'Hubungi Kami' },
     ],

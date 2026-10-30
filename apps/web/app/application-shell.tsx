@@ -527,7 +527,7 @@ export function ApplicationShell({ children }: { children: React.ReactNode }) {
               </IconButton>
               {session && !isInstructorOnlySession(session) && (
                 <Link
-                  href="/workspace/guide"
+                  href="/help?role=admin"
                   aria-label="Panduan operasional (SOP)"
                   title="Panduan operasional (SOP)"
                   className="grid size-11 place-items-center rounded-dd-sm text-dd-muted hover:bg-black/5 hover:text-dd-ink"

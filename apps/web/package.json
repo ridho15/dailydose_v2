@@ -12,7 +12,8 @@
     "test:e2e:real": "playwright test --config=playwright.real.config.ts",
     "test:e2e:staff": "playwright test --config=playwright.real.config.ts e2e/real/staff-instructor-journey.spec.ts",
     "test:e2e:mock": "node e2e/support/run-mock-e2e.mjs",
-    "test:e2e:customer": "DD_CUSTOMER_FULLSTACK=true playwright test e2e/customer-fullstack.spec.ts --grep @customer-fullstack"
+    "test:e2e:customer": "DD_CUSTOMER_FULLSTACK=true playwright test e2e/customer-fullstack.spec.ts --grep @customer-fullstack",
+    "help:screenshots": "playwright test --config=playwright.help.config.ts"
   },
   "dependencies": {
     "@zxing/browser": "^0.2.1",

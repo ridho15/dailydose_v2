@@ -739,7 +739,7 @@ export function WalkInDrawer({
               />
             </div>
 
-            {/* Maker-Checker & Instant Reserve Explanation Box */}
+            {/* Penjelasan Verifikasi Berjenjang & Instant Reserve */}
             <div className="rounded-dd-md border border-dd-forest/30 bg-dd-forest/5 p-4 text-xs text-dd-ink space-y-2">
               <div className="flex items-center gap-1.5 font-bold text-dd-forest">
                 <Sparkles className="size-4 shrink-0" aria-hidden="true" />
@@ -749,7 +749,7 @@ export function WalkInDrawer({
                 <strong>1. Kursi Terkonfirmasi Instan:</strong> Member langsung terdaftar di kelas hari ini sehingga dapat segera masuk latihan tanpa menunggu persetujuan.
               </p>
               <p className="m-0 leading-relaxed text-dd-muted">
-                <strong>2. Rekapitulasi Kasir Studio (Maker-Checker):</strong> Catatan pembayaran kasir ini otomatis masuk antrean verifikasi Manager untuk rekonsiliasi kas harian studio.
+                <strong>2. Rekapitulasi Kasir Studio (Prinsip 4-Mata):</strong> Catatan pembayaran kasir ini otomatis masuk antrean verifikasi Manager untuk rekonsiliasi kas harian studio.
               </p>
             </div>
           </div>

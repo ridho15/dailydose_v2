@@ -10,6 +10,7 @@ dist/
 .next-playwright-runs/
 .next-customer-runs/
 .next-docs/
+.next-help/
 tsconfig.customer-e2e.*.json
 apps/web/playwright-evidence/
 apps/web/tsconfig.playwright.*.json
@@ -48,6 +49,7 @@ Archive.zip
 *.backup
 *.dump
 *.sql
+!apps/api/prisma/manual_add_branch_support_email.sql
 package-lock.json
 yarn.lock
 struktur_*.txt
