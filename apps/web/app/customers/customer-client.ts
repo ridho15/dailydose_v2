@@ -15,6 +15,12 @@ export interface CustomerSummary {
   emailVerified: boolean;
   mustChangePassword: boolean;
   activePackageCount: number;
+  activePackages?: Array<{
+    id: string;
+    name: string;
+    remainingSessions: number;
+    totalSessions: number;
+  }>;
   purchasedSessions: number;
   updatedAt: string;
   preferredBranch: { id: string; code: string; name: string } | null;

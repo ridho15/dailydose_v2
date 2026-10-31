@@ -62,6 +62,7 @@ export function CustomersView() {
     session?.roles?.includes('SUPER_OWNER') ||
     session?.globalCapabilities?.includes('customer:impersonate'),
   );
+  const activeBranchId = sessionContext?.activeBranchId;
   const saleBranch = sessionContext?.activeBranch ?? (session?.branches?.[0] ? { id: session.branches[0].id, name: session.branches[0].name } : null);
   const saleBranches = (session?.branches ?? []).map((item) => ({ id: item.id, name: item.name }));
 
@@ -105,6 +106,7 @@ export function CustomersView() {
           q: q || undefined,
           status: status || undefined,
           verificationStatus: verificationStatus || undefined,
+          preferredBranchId: activeBranchId || undefined,
           page: String(page),
           pageSize: String(ADMIN_PAGE_SIZE),
         });
@@ -128,7 +130,11 @@ export function CustomersView() {
     return () => {
       cancelled = true;
     };
-  }, [page, q, status, verificationStatus, refreshIndex]);
+  }, [page, q, status, verificationStatus, refreshIndex, activeBranchId]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [activeBranchId]);
 
   const reset = () => {
     setPage(1);
@@ -352,8 +358,28 @@ export function CustomersView() {
           },
           {
             id: 'packages',
-            header: 'Paket',
-            cell: (item) => `${item.activePackageCount} paket aktif · ${item._count?.purchases ?? 0} order`,
+            header: 'Paket & Sisa Sesi',
+            cell: (item) => {
+              if (item.activePackages && item.activePackages.length > 0) {
+                return (
+                  <div className="space-y-1">
+                    {item.activePackages.map((pkg) => (
+                      <div key={pkg.id} className="text-xs leading-snug">
+                        <span className="font-semibold text-dd-ink">{pkg.name}</span>
+                        <span className="ml-1.5 inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 font-bold text-emerald-700 text-[11px] border border-emerald-200">
+                          Sisa {pkg.remainingSessions}/{pkg.totalSessions} sesi
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                );
+              }
+              return (
+                <span className="text-xs text-dd-muted">
+                  {item.activePackageCount > 0 ? `${item.activePackageCount} paket aktif` : 'Belum ada paket'}
+                </span>
+              );
+            },
           },
           {
             id: 'activity',
@@ -438,10 +464,26 @@ export function CustomersView() {
                 {customerStatusLabels[item.status] ?? statusLabel(item.status)}
               </StatusBadge>
             </div>
+            {item.activePackages && item.activePackages.length > 0 ? (
+              <div className="rounded-dd-sm bg-emerald-50/70 border border-emerald-200/80 p-2 text-xs space-y-1">
+                {item.activePackages.map((pkg) => (
+                  <div key={pkg.id} className="flex justify-between items-center text-dd-ink">
+                    <span className="truncate font-semibold">{pkg.name}</span>
+                    <span className="text-emerald-800 font-bold ml-2 shrink-0 bg-emerald-100/90 rounded px-1.5 py-0.5 text-[11px]">
+                      Sisa {pkg.remainingSessions}/{pkg.totalSessions} sesi
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-dd-muted">
+                {item.activePackageCount > 0 ? `${item.activePackageCount} paket aktif` : 'Belum ada paket aktif'}
+              </p>
+            )}
             <p className="text-xs text-dd-muted">
               {verificationStatusLabels[item.verificationStatus] ??
                 statusLabel(item.verificationStatus)}{' '}
-              · {item.activePackageCount} paket aktif · {item._count?.purchases ?? 0} order ·{' '}
+              · {item._count?.purchases ?? 0} order ·{' '}
               {item._count?.customerBookings ?? 0} booking
             </p>
             <div className="flex flex-wrap items-center gap-1.5 pt-1">

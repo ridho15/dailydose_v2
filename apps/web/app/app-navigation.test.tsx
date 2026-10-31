@@ -71,7 +71,7 @@ describe('AppNavigation - Fase 5 Perampingan Navigasi Admin Cabang', () => {
     expect(badgePeran(['FINANCE'], false)).toBe('Finance');
   });
 
-  it('merampingkan sidebar Admin Cabang menjadi tepat 4 Menu Inti', () => {
+  it('merampingkan sidebar Admin Cabang menjadi tepat 5 Menu Inti studio', () => {
     render(<AppNavigation mobileOpen={false} />);
     const nav = screen.getByRole('navigation', { name: 'Navigasi utama' });
 
@@ -84,7 +84,7 @@ describe('AppNavigation - Fase 5 Perampingan Navigasi Admin Cabang', () => {
     expect(screen.queryByRole('heading', { name: 'Penjualan & Keuangan' })).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Pengaturan & Sistem' })).not.toBeInTheDocument();
 
-    // Memverifikasi 4 menu inti
+    // Memverifikasi 5 menu inti
     const links = within(nav).getAllByRole('link');
     const linkTexts = links
       .map((l) => l.textContent?.trim())
@@ -93,7 +93,8 @@ describe('AppNavigation - Fase 5 Perampingan Navigasi Admin Cabang', () => {
     expect(linkTexts).toEqual([
       'Hari Ini & Presensi',
       'Kalender Kelas',
-      'Member & Booking',
+      'Booking Kelas',
+      'Member & Paket',
       'Kasir & Pengeluaran',
     ]);
 
@@ -102,13 +103,14 @@ describe('AppNavigation - Fase 5 Perampingan Navigasi Admin Cabang', () => {
     expect(hrefs).toContain('/workspace');
     expect(hrefs).toContain('/workspace/classes');
     expect(hrefs).toContain('/workspace/bookings');
+    expect(hrefs).toContain('/customers');
     expect(hrefs).toContain('/workspace/kas');
 
     // Menu lanjutan disembunyikan untuk staf front desk
     expect(screen.queryByText('Alat & Sistem Lanjutan')).not.toBeInTheDocument();
   });
 
-  it('menampilkan badge antrean pada 4 menu inti admin cabang bila ada', () => {
+  it('menampilkan badge antrean pada 5 menu inti admin cabang bila ada', () => {
     render(
       <AppNavigation
         mobileOpen={false}

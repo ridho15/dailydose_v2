@@ -210,7 +210,7 @@ export const frontendPages: FrontendPageDefinition[] = [
   {
     href: '/customers',
     label: 'Data Pelanggan',
-    shortLabel: 'Daftar member',
+    shortLabel: 'Member & Paket',
     description: 'Profil pelanggan terpadu, keamanan akun, order, paket, booking, dan timeline.',
     group: 'Member & Pelanggan',
     capabilities: ['customer:read'],
@@ -220,7 +220,7 @@ export const frontendPages: FrontendPageDefinition[] = [
       'customer:security:manage',
     ],
     priority: 10,
-    branchScope: 'global',
+    branchScope: 'topbar',
     accent: 'brand',
     icon: 'users',
     roleRelevance: ['SUPER_OWNER', 'MANAGER', 'ADMIN'],
@@ -599,6 +599,7 @@ export const MENU_FRONT_DESK = [
   '/workspace',
   '/workspace/classes',
   '/workspace/bookings',
+  '/customers',
   '/workspace/kas',
 ] as const;
 

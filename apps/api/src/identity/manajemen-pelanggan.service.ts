@@ -150,7 +150,11 @@ export class CustomerManagementService {
         where,
         include: {
           profile: true,
-          customerPackages: { where: { status: 'ACTIVE' } },
+          customerPackages: {
+            where: { status: 'ACTIVE' },
+            include: { package: { select: { name: true } } },
+            orderBy: { createdAt: 'desc' },
+          },
           _count: {
             select: {
               customerPackages: true,
@@ -185,6 +189,12 @@ export class CustomerManagementService {
         preferredBranchId: u.preferredBranchId,
         verificationStatus: customerVerificationStatus(u.profile),
         activePackageCount: u.customerPackages.length,
+        activePackages: u.customerPackages.map((cp) => ({
+          id: cp.id,
+          name: cp.package.name,
+          remainingSessions: cp.remainingSessions,
+          totalSessions: cp.totalSessions,
+        })),
         totalBookings: u._count.bookings,
         _count: {
           purchases: u._count.purchases,

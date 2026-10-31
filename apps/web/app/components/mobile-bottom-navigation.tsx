@@ -13,6 +13,7 @@ import {
   LockKeyhole,
   Menu,
   UserRound,
+  Users,
   Wallet,
 } from 'lucide-react';
 import Link from 'next/link';
@@ -203,13 +204,14 @@ export function MobileBottomNavigation({
     );
   }
 
-  // Navigasi Bawah Front Desk / Admin Cabang: 4 menu inti studio yang konsisten dengan sidebar.
+  // Navigasi Bawah Front Desk / Admin Cabang: 5 menu inti studio yang konsisten dengan sidebar.
   if (isFrontDeskOnlySession(context?.session)) {
     const frontDeskTabs = [
       { href: '/workspace', label: 'Hari Ini', icon: House, badge: queueCounts.total ?? 0 },
       { href: '/workspace/classes', label: 'Kalender', icon: CalendarDays, badge: 0 },
       { href: '/workspace/bookings', label: 'Booking', icon: BookOpenCheck, badge: queueCounts.reschedules ?? 0 },
-      { href: '/workspace/kas', label: 'Kasir & Kas', icon: Wallet, badge: 0 },
+      { href: '/customers', label: 'Member', icon: Users, badge: 0 },
+      { href: '/workspace/kas', label: 'Kasir', icon: Wallet, badge: 0 },
     ];
 
     const isTabActive = (href: string) => {

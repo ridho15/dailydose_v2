@@ -270,10 +270,12 @@ export function AppNavigation({
                         : item.href === '/workspace/classes'
                           ? 'Kalender Kelas'
                           : item.href === '/workspace/bookings'
-                            ? 'Member & Booking'
-                            : item.href === '/workspace/kas'
-                              ? 'Kasir & Pengeluaran'
-                              : item.shortLabel;
+                            ? 'Booking Kelas'
+                            : item.href === '/customers'
+                              ? 'Member & Paket'
+                              : item.href === '/workspace/kas'
+                                ? 'Kasir & Pengeluaran'
+                                : item.shortLabel;
                     return (
                       <Link
                         href={item.href}
