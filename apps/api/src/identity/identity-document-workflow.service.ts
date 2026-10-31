@@ -153,7 +153,7 @@ export class IdentityDocumentWorkflowService {
     _correlationId: string,
   ) {
     if (this.policy) {
-      this.policy.requireGlobalCapability(principal, 'identity-verification:decide');
+      this.policy.requireCapability(principal.capabilities, 'identity-verification:decide');
     }
     if (id === 'document-1' && !this.db?.profilPengguna) {
       throw new ApiProblem('IDENTITY_DOCUMENT_NOT_READY', HttpStatus.CONFLICT);

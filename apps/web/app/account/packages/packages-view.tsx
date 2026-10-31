@@ -198,7 +198,11 @@ export function CustomerPackagesView() {
                   <div className="mt-5 flex flex-wrap gap-2">
                     {!expired && item.status === 'ACTIVE' ? (
                       <ButtonLink
-                        href={`/classes?branch=${encodeURIComponent(item.branchId)}#schedule`}
+                        href={
+                          item.branchId
+                            ? `/classes?branch=${encodeURIComponent(item.branchId)}#schedule`
+                            : '/classes#schedule'
+                        }
                       >
                         Booking kelas
                       </ButtonLink>
@@ -257,8 +261,10 @@ export function CustomerPackagesView() {
           customerPackageId={selectedPackageForMembers.id}
           packageName={selectedPackageForMembers.packageName}
           canManage={
-            selectedPackageForMembers.customer?.id === currentUserId ||
-            !selectedPackageForMembers.customer?.id
+            (selectedPackageForMembers.customer?.id === currentUserId ||
+              !selectedPackageForMembers.customer?.id) &&
+            !isExpiredPackage(selectedPackageForMembers) &&
+            selectedPackageForMembers.status === 'ACTIVE'
           }
           onChanged={() => void loadPage(cursor)}
         />

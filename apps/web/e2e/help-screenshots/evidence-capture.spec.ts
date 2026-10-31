@@ -78,6 +78,28 @@ const MOCK_CUSTOMER_SESSION = {
   preferredBranch: MOCK_BRANCH_GRAHA,
 };
 
+const MOCK_CO_MEMBER_SESSION = {
+  id: 'user-comember-wiwik',
+  displayName: 'Wiwik Then',
+  email: 'wiwik.then@dailydose.test',
+  phoneE164: '+6281234567890',
+  roles: ['CUSTOMER'],
+  branchIds: ['branch-graha'],
+  identityVerificationStatus: 'APPROVED',
+  phoneRequired: false,
+  sessionExpiresAt: new Date(Date.now() + 86400000).toISOString(),
+  capabilities: [
+    'customer:self',
+    'booking:self:read',
+    'booking:self:create',
+    'booking:read',
+    'booking:create',
+    'order:read',
+  ],
+  branches: [MOCK_BRANCH_GRAHA],
+  preferredBranch: MOCK_BRANCH_GRAHA,
+};
+
 test.beforeEach(async ({ page }) => {
   await hideDevelopmentAffordances(page);
 
@@ -116,11 +138,19 @@ test.beforeEach(async ({ page }) => {
     }),
   );
 
-  await page.route('**/api/v1/queue-counts**', (route) =>
+  await page.route('**/api/v1/bookings**', (route) =>
     route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify({ counts: { bookings: 0, payments: 0, verifications: 0 } }),
+      body: JSON.stringify({ items: [], page: { hasMore: false, nextCursor: null } }),
+    }),
+  );
+
+  await page.route('**/api/v1/dashboard/overview**', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ todayBookings: 0, checkedInCount: 0, activePackageCount: 0 }),
     }),
   );
 });
@@ -131,6 +161,8 @@ test('Evidence 1: Timetable Class Drawer dengan status DRAFT Guard', async ({ pa
   await page.addInitScript((branchId: string) => {
     try {
       sessionStorage.setItem('dd_active_branch', branchId);
+      sessionStorage.setItem('dd_session_hint', '1');
+      localStorage.setItem('dd_session_hint', '1');
     } catch {}
   }, 'branch-graha');
 
@@ -276,11 +308,45 @@ test('Evidence 1: Timetable Class Drawer dengan status DRAFT Guard', async ({ pa
 test('Evidence 2: Detail Pesanan REJECTED dengan Alasan, Actions & Reconstructed Timeline', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
 
+  await page.addInitScript((branchId: string) => {
+    try {
+      sessionStorage.setItem('dd_active_branch', branchId);
+      sessionStorage.setItem('dd_session_hint', '1');
+      localStorage.setItem('dd_session_hint', '1');
+    } catch {}
+  }, 'branch-graha');
+
   await page.route('**/api/v1/me', (route) =>
     route.fulfill({
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify(MOCK_CUSTOMER_SESSION),
+    }),
+  );
+
+  await page.route('**/api/v1/me/profile', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        id: '40000000-0000-4000-8000-000000017358',
+        displayName: 'Marcia Sumampow (Fiktif)',
+        email: 'marcia.sumampow@dailydose.test',
+        phoneE164: '+6281200000001',
+        preferredBranchId: 'branch-graha',
+        version: 1,
+      }),
+    }),
+  );
+
+  await page.route('**/api/v1/me/dashboard', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        upcomingBookings: [],
+        activePackages: [],
+      }),
     }),
   );
 
@@ -382,8 +448,200 @@ test('Evidence 2: Detail Pesanan REJECTED dengan Alasan, Actions & Reconstructed
 
   await page.waitForTimeout(500);
 
-  // Tangkap screenshot browser langsung
+  // Tangkap screenshot browser langsung (full page dan viewport)
   const outputPath = resolve(ARTIFACT_DIR, 'bukti-screenshot-2-order-rejected.png');
-  await page.screenshot({ path: outputPath, fullPage: false });
+  await page.screenshot({ path: outputPath, fullPage: true });
   console.log(`[EVIDENCE] Screenshot 2 tersimpan di: ${outputPath}`);
+});
+
+test('Evidence 3: Co-Member dapat memilih paket bersama Family & Duet dan melakukan booking mandiri', async ({
+  page,
+}) => {
+  page.on('console', (msg) => console.log('[BROWSER CONSOLE]', msg.type(), msg.text()));
+  page.on('pageerror', (err) => console.log('[BROWSER PAGEERROR]', err.message));
+  page.on('requestfailed', (req) =>
+    console.log('[BROWSER REQ FAILED]', req.url(), req.failure()?.errorText),
+  );
+  page.on('response', (res) => {
+    if (res.status() >= 400) console.log('[BROWSER RES >= 400]', res.status(), res.url());
+  });
+
+  await page.setViewportSize({ width: 1280, height: 800 });
+
+  await page.addInitScript((branchId: string) => {
+    try {
+      sessionStorage.setItem('dd_active_branch', branchId);
+      sessionStorage.setItem('dd_session_hint', '1');
+      localStorage.setItem('dd_session_hint', '1');
+    } catch {}
+  }, 'branch-graha');
+
+  await page.route('**/api/v1/me', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(MOCK_CO_MEMBER_SESSION),
+    }),
+  );
+
+  await page.route('**/api/v1/me/profile', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        id: 'user-comember-wiwik',
+        displayName: 'Wiwik Then',
+        email: 'wiwik.then@dailydose.test',
+        phoneE164: '+6281234567890',
+        preferredBranchId: 'branch-graha',
+        version: 1,
+      }),
+    }),
+  );
+
+  await page.route('**/api/v1/me/dashboard', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        upcomingBookings: [],
+        activePackages: [],
+      }),
+    }),
+  );
+
+  await page.route('**/api/v1/auth/session', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(MOCK_CO_MEMBER_SESSION),
+    }),
+  );
+
+  const slotId = 'slot-duet-01';
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const startAt = new Date(tomorrow.getFullYear(), tomorrow.getMonth(), tomorrow.getDate(), 10, 0, 0);
+  const endAt = new Date(tomorrow.getFullYear(), tomorrow.getMonth(), tomorrow.getDate(), 10, 50, 0);
+
+  const mockSlot = {
+    id: slotId,
+    branchId: 'branch-graha',
+    classTypeId: 'ct-duet',
+    studioId: 'studio-01',
+    roomId: 'room-01',
+    instructorUserId: 'inst-melissa',
+    startAt: startAt.toISOString(),
+    endAt: endAt.toISOString(),
+    timezone: 'Asia/Jakarta',
+    status: 'PUBLISHED',
+    capacity: 2,
+    bookedCount: 0,
+    available: 2,
+    branch: MOCK_BRANCH_GRAHA,
+    classType: {
+      id: 'ct-duet',
+      code: 'DUET-01',
+      name: 'Duet Reformer Pilates',
+      modality: 'DUET',
+      description: 'Sesi latihan duet dengan instruktur tersertifikasi untuk 2 orang.',
+    },
+    studio: { id: 'studio-01', name: 'Private Studio' },
+    room: { id: 'room-01', name: 'Studio Duet' },
+    instructor: { id: 'inst-melissa', displayName: 'Coach Melissa' },
+  };
+
+  const mockOptions = {
+    slot: mockSlot,
+    packages: [
+      {
+        id: 'cp-duet-family-01',
+        customerPackageId: 'cp-duet-family-01',
+        packageId: 'pkg-duet-10',
+        name: 'Family & Duet Package (10 Sesi)',
+        packageName: 'Family & Duet Package (10 Sesi)',
+        available: 8,
+        remainingSessions: 8,
+        projectedAvailable: 7,
+        totalSessions: 10,
+        expiryAt: new Date(Date.now() + 30 * 86400000).toISOString(),
+        expiresAt: new Date(Date.now() + 30 * 86400000).toISOString(),
+        isEligible: true,
+      },
+    ],
+    eligibility: {
+      canBook: true,
+      reasonCode: null,
+      requiredAction: null,
+      cutoffAt: new Date(startAt.getTime() - 2 * 3600000).toISOString(),
+    },
+  };
+
+  await page.route('**/api/v1/bookings**', async (route) => {
+    const url = route.request().url();
+    if (url.includes('/options/')) {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(mockOptions),
+      });
+    }
+    if (route.request().method() === 'POST') {
+      const payload = JSON.parse(route.request().postData() || '{}');
+      return route.fulfill({
+        status: 201,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          id: 'bkg-comember-001',
+          slotId: payload.classSlotId,
+          customerId: MOCK_CO_MEMBER_SESSION.id,
+          customerPackageId: payload.customerPackageId,
+          status: 'BOOKED',
+          bookedAt: new Date().toISOString(),
+          bookedByUserId: MOCK_CO_MEMBER_SESSION.id,
+          attendanceStatus: 'PENDING',
+        }),
+      });
+    }
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ items: [], page: { hasMore: false, nextCursor: null } }),
+    });
+  });
+
+  await page.goto(`/bookings/new?slot=${slotId}`, { waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(600);
+
+  // Verifikasi UI Step 1: Member Wiwik Then melihat paket bersama terpilih
+  await expect(page.locator('text=Duet Reformer Pilates').first()).toBeVisible({ timeout: 10_000 });
+  await expect(page.locator('text=Family & Duet Package (10 Sesi)').first()).toBeVisible();
+  await expect(page.locator('text=8 sesi tersedia').first()).toBeVisible();
+  await expect(page.locator('text=Lanjutkan ke review booking')).toBeVisible();
+
+  // Tangkap screenshot Step 1 (Pilihan paket bersama aktif)
+  const outputPathSelection = resolve(ARTIFACT_DIR, 'bukti-screenshot-3-co-member-booking.png');
+  await page.screenshot({ path: outputPathSelection, fullPage: true });
+  console.log(`[EVIDENCE] Screenshot 3 tersimpan di: ${outputPathSelection}`);
+
+  // Klik tombol Lanjutkan ke review booking
+  await page.getByRole('button', { name: 'Lanjutkan ke review booking' }).click();
+  await page.waitForTimeout(500);
+
+  // Verifikasi Step 2: Halaman review menampilkan konfirmasi detail booking
+  await expect(page.locator('text=Konfirmasi detail booking').first()).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Ya, konfirmasi booking' })).toBeVisible();
+
+  // Klik Konfirmasi Booking
+  await page.getByRole('button', { name: 'Ya, konfirmasi booking' }).click();
+  await page.waitForTimeout(800);
+
+  // Verifikasi Hasil Sukses: Kartu konfirmasi booking berhasil tampil
+  await expect(page.locator('text=Booking berhasil').first()).toBeVisible({ timeout: 10_000 });
+  await expect(page.locator('text=Lihat tiket & QR check-in')).toBeVisible();
+
+  // Tangkap screenshot Step 3 (Konfirmasi sukses booking)
+  const outputPathConfirmed = resolve(ARTIFACT_DIR, 'bukti-screenshot-4-co-member-confirmed.png');
+  await page.screenshot({ path: outputPathConfirmed, fullPage: true });
+  console.log(`[EVIDENCE] Screenshot 4 tersimpan di: ${outputPathConfirmed}`);
 });

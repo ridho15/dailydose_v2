@@ -39,7 +39,7 @@ const ROLE_LABELS: Record<string, string> = {
   CUSTOMER: 'Pelanggan',
 };
 const SENSITIVE = /:(manage|admin|decide|recover|export|delete|resolve|run|reconcile|credential|revoke)/;
-const GLOBAL_ONLY = new Set(['branch:all', 'role-permission:manage', 'identity-verification:decide']);
+const GLOBAL_ONLY = new Set(['branch:all', 'role-permission:manage']);
 const PROTECTED_ROLES: ReadonlySet<string> = new Set(['SUPER_OWNER']);
 const EPOCH = new Date(0).toISOString();
 

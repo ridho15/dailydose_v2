@@ -1,12 +1,11 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Search, Trash2, UserPlus, Users } from 'lucide-react';
+import { Mail, Phone, Trash2, UserPlus, Users } from 'lucide-react';
 import { Button } from './actions';
 import { AlertBanner, Modal, useOptionalAppFeedback } from './app-feedback';
 import { SelectInput, TextInput } from './forms';
 import { Badge } from './admin/admin-ui';
-import { apiFetch } from '../lib/api-client';
 import {
   addPackageMember,
   listPackageMembers,
@@ -43,14 +42,16 @@ export function SharedPackageMembersDialog({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [members, setMembers] = useState<SharedPackageMember[]>([]);
-  const [owner, setOwner] = useState<{ displayName: string; phoneMasked: string | null } | null>(null);
+  const [owner, setOwner] = useState<{
+    displayName: string;
+    phoneMasked: string | null;
+    activeBookings?: number;
+    attendedSessions?: number;
+  } | null>(null);
 
-  // Form tambah member
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searching, setSearching] = useState(false);
-  const [searchResults, setSearchResults] = useState<Array<{ id: string; label?: string; description?: string }>>([]);
-  const [selectedUser, setSelectedUser] = useState<{ id: string; name: string; info?: string } | null>(null);
-  const [relationship, setRelationship] = useState('FAMILY');
+  // Form self-service tambah member
+  const [identifier, setIdentifier] = useState('');
+  const [relationship, setRelationship] = useState('FRIEND');
 
   const load = useCallback(async () => {
     if (!open || !customerPackageId) return;
@@ -70,61 +71,32 @@ export function SharedPackageMembersDialog({
   useEffect(() => {
     if (open) {
       void load();
-      setSelectedUser(null);
-      setSearchQuery('');
-      setSearchResults([]);
+      setIdentifier('');
+      setError('');
     }
   }, [load, open]);
 
-  // Debounced search customer
-  useEffect(() => {
-    const q = searchQuery.trim();
-    if (q.length < 2) {
-      setSearchResults([]);
-      setSearching(false);
+  const handleAddMember = async (e?: React.FormEvent) => {
+    e?.preventDefault();
+    const cleanId = identifier.trim();
+    if (!cleanId) {
+      setError('Masukkan email atau nomor WhatsApp teman yang ingin diundang.');
       return;
     }
 
-    let cancelled = false;
-    setSearching(true);
-    const timer = setTimeout(async () => {
-      try {
-        const res = await apiFetch<{
-          items: Array<{ id: string; label?: string; description?: string }>;
-        }>(`/lookups/customers?${new URLSearchParams({ q, limit: '8', includeWithoutPackage: 'true' }).toString()}`);
-        if (!cancelled) {
-          setSearchResults(res.items ?? []);
-        }
-      } catch {
-        if (!cancelled) setSearchResults([]);
-      } finally {
-        if (!cancelled) setSearching(false);
-      }
-    }, 300);
-
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
-  }, [searchQuery]);
-
-  const handleAddMember = async () => {
-    if (!selectedUser) return;
     setBusy(true);
     setError('');
     try {
-      await addPackageMember(customerPackageId, {
-        userId: selectedUser.id,
+      const added = await addPackageMember(customerPackageId, {
+        identifier: cleanId,
         relationship,
       });
       feedback?.showToast({
         tone: 'success',
-        title: 'Anggota ditambahkan',
-        message: `${selectedUser.name} berhasil ditambahkan sebagai anggota bersama.`,
+        title: 'Anggota Berhasil Ditambahkan',
+        message: `${added.displayName} telah ditambahkan ke paket bersama.`,
       });
-      setSelectedUser(null);
-      setSearchQuery('');
-      setSearchResults([]);
+      setIdentifier('');
       await load();
       onChanged?.();
     } catch (cause) {
@@ -165,6 +137,8 @@ export function SharedPackageMembersDialog({
 
   if (!open) return null;
 
+  const isLimitReached = members.length >= 4;
+
   return (
     <Modal
       open={open}
@@ -184,7 +158,7 @@ export function SharedPackageMembersDialog({
         {error && <AlertBanner tone="danger" title="Terjadi kendala" message={error} />}
 
         <div className="rounded-dd-sm border border-dd-forest/20 bg-dd-forest/5 p-3 text-xs text-dd-forest">
-          <strong>Paket Bersama (Family / Duet):</strong> Sisa sesi kuota paket ini dipakai bersama. Setiap anggota yang terdaftar sah dapat memesan kelas, dan sisa sesi akan berkurang saat booking atau dihadiri.
+          <strong>Self-Service Paket Bersama (Family / Duet):</strong> Sisa sesi kuota paket ini dipakai bersama. Setiap anggota yang terdaftar sah dapat memesan kelas, dan sisa sesi akan berkurang saat booking atau dihadiri.
         </div>
 
         {owner && (
@@ -193,6 +167,11 @@ export function SharedPackageMembersDialog({
               <p className="text-xs font-bold text-dd-muted uppercase tracking-wider">Pemilik Utama</p>
               <p className="text-sm font-semibold text-dd-ink">{owner.displayName}</p>
               {owner.phoneMasked && <p className="text-xs text-dd-muted">{owner.phoneMasked}</p>}
+              {owner.attendedSessions !== undefined && (
+                <p className="mt-1 text-xs text-dd-forest font-medium">
+                  {owner.attendedSessions} sesi terpakai · {owner.activeBookings ?? 0} booking aktif
+                </p>
+              )}
             </div>
             <Badge tone="success">Pemilik</Badge>
           </div>
@@ -202,7 +181,7 @@ export function SharedPackageMembersDialog({
           <div className="flex items-center justify-between mb-2">
             <h3 className="text-sm font-bold text-dd-ink flex items-center gap-1.5">
               <Users className="size-4 text-dd-forest" />
-              Anggota Tambahan ({members.length})
+              Anggota Tambahan ({members.length}/4)
             </h3>
           </div>
 
@@ -226,6 +205,11 @@ export function SharedPackageMembersDialog({
                     {member.phoneMasked && (
                       <p className="text-xs text-dd-muted mt-0.5">{member.phoneMasked}</p>
                     )}
+                    {member.attendedSessions !== undefined && (
+                      <p className="mt-1 text-xs text-dd-forest font-medium">
+                        {member.attendedSessions} sesi terpakai · {member.activeBookings ?? 0} booking aktif
+                      </p>
+                    )}
                   </div>
                   {canManage && (
                     <Button
@@ -246,76 +230,34 @@ export function SharedPackageMembersDialog({
         </div>
 
         {canManage && (
-          <fieldset className="grid gap-3 rounded-dd-md border border-dd-line p-3 mt-2">
-            <legend className="px-1 text-sm font-semibold flex items-center gap-1.5">
-              <UserPlus className="size-4 text-dd-forest" />
-              Tambah Anggota Baru
-            </legend>
-
-            {!selectedUser ? (
-              <div className="relative">
-                <TextInput
-                  label="Cari Member"
-                  placeholder="Ketik nama atau nomor WhatsApp member…"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  disabled={busy}
-                />
-                {searching && (
-                  <p className="text-xs text-dd-muted mt-1">Mencari member…</p>
-                )}
-                {searchResults.length > 0 && (
-                  <ul className="absolute left-0 right-0 z-20 mt-1 max-h-48 overflow-auto rounded-dd-sm border border-dd-line bg-white shadow-lg">
-                    {searchResults.map((user) => (
-                      <li key={user.id}>
-                        <button
-                          type="button"
-                          className="w-full text-left p-2.5 hover:bg-dd-surface-muted/60 transition cursor-pointer border-b border-dd-line/50 text-sm"
-                          onClick={() => {
-                            setSelectedUser({
-                              id: user.id,
-                              name: user.label || 'Member',
-                              info: user.description,
-                            });
-                            setSearchQuery('');
-                            setSearchResults([]);
-                          }}
-                        >
-                          <strong className="block text-dd-ink">{user.label}</strong>
-                          {user.description && (
-                            <span className="block text-xs text-dd-muted">{user.description}</span>
-                          )}
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
+          <div className="mt-2">
+            {isLimitReached ? (
+              <div className="rounded-dd-sm border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+                <strong>Batas Kuota Tercapai:</strong> Paket bersama ini telah mencapai kuota maksimal 4 anggota tambahan. Hapus anggota lama terlebih dahulu jika ingin mengundang teman baru.
               </div>
             ) : (
-              <div className="grid gap-3">
-                <div className="flex items-center justify-between rounded-dd-sm border border-dd-forest/30 bg-dd-forest/5 p-2.5">
-                  <div>
-                    <span className="text-xs text-dd-muted">Member Terpilih:</span>
-                    <strong className="block text-sm text-dd-forest">{selectedUser.name}</strong>
-                    {selectedUser.info && (
-                      <span className="block text-xs text-dd-muted">{selectedUser.info}</span>
-                    )}
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setSelectedUser(null)}
-                    disabled={busy}
-                  >
-                    Ganti
-                  </Button>
-                </div>
+              <form onSubmit={handleAddMember} className="grid gap-3 rounded-dd-md border border-dd-line p-3">
+                <legend className="px-1 text-sm font-semibold flex items-center gap-1.5">
+                  <UserPlus className="size-4 text-dd-forest" />
+                  Undang Teman / Tambah Anggota (Self-Service)
+                </legend>
+
+                <TextInput
+                  label="Email atau Nomor WhatsApp Teman"
+                  placeholder="Contoh: teman@gmail.com atau 081234567890"
+                  value={identifier}
+                  onChange={(e) => setIdentifier(e.target.value)}
+                  disabled={busy}
+                  data-testid="input-member-identifier"
+                  required
+                />
 
                 <SelectInput
                   label="Hubungan / Relasi"
                   value={relationship}
                   onChange={(e) => setRelationship(e.target.value)}
                   disabled={busy}
+                  data-testid="select-member-relationship"
                 >
                   {RELATIONSHIP_OPTIONS.map((opt) => (
                     <option key={opt.value} value={opt.value}>
@@ -324,20 +266,24 @@ export function SharedPackageMembersDialog({
                   ))}
                 </SelectInput>
 
+                <p className="text-xs text-dd-muted">
+                  Pastikan teman yang diundang sudah terdaftar di Daily Dose. Kuota sesi paket akan langsung dapat digunakan olehnya untuk reservasi kelas.
+                </p>
+
                 <div className="flex justify-end gap-2 pt-1">
                   <Button
-                    type="button"
+                    type="submit"
                     variant="primary"
-                    disabled={busy}
+                    disabled={busy || !identifier.trim()}
                     loading={busy}
-                    onClick={() => void handleAddMember()}
+                    data-testid="btn-add-member"
                   >
-                    Simpan Anggota
+                    Undang / Tambah Anggota
                   </Button>
                 </div>
-              </div>
+              </form>
             )}
-          </fieldset>
+          </div>
         )}
       </div>
     </Modal>

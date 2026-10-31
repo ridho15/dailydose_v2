@@ -42,6 +42,8 @@ export type SharedPackageMember = {
   addedById?: string | null;
   addedByRole?: string;
   createdAt: string;
+  activeBookings?: number;
+  attendedSessions?: number;
 };
 
 /** Apakah paket member boleh dipakai di cabang ini. Server tetap memeriksa ulang saat booking. */
@@ -53,7 +55,19 @@ export function paketBerlakuDiCabang(
   if (Array.isArray(pkg.allowedBranchIds)) return pkg.allowedBranchIds.includes(branchId);
   return !pkg.packageBranchId || pkg.packageBranchId === 'global' || pkg.packageBranchId === branchId;
 }
+export type SharedUtilizationItem = {
+  userId: string;
+  displayName: string;
+  phoneMasked: string | null;
+  role: 'OWNER' | 'MEMBER';
+  relationship: string;
+  activeBookings: number;
+  attendedSessions: number;
+  totalBookings: number;
+};
+
 export type LedgerHistory = {
+  sharedUtilization?: SharedUtilizationItem[];
   balance: LedgerBalance;
   reservations: {
     activeQuantity: number;
@@ -66,6 +80,12 @@ export type LedgerHistory = {
       className?: string | null;
       branchName?: string | null;
       startsAt?: Date | null;
+      bookedByUser?: {
+        id: string;
+        displayName: string;
+        phoneMasked: string | null;
+        isOwner: boolean;
+      } | null;
     }>;
   };
   entries: Array<{
@@ -78,6 +98,12 @@ export type LedgerHistory = {
     referenceLabel?: string | null;
     bookingId?: string | null;
     balanceAfter?: number | null;
+    usedByUser?: {
+      id: string;
+      displayName: string;
+      phoneMasked: string | null;
+      isOwner: boolean;
+    } | null;
   }>;
   nextCursor?: string | null;
   previousCursor?: string | null;
@@ -283,6 +309,7 @@ export const browserLedgerClient: LedgerClient = {
 
     return {
       balance: mapLedgerBalance(result.balance as Parameters<typeof mapLedgerBalance>[0]),
+      sharedUtilization: (result as any).sharedUtilization,
       reservations: {
         activeQuantity: result.reservations?.activeQuantity ?? 0,
         items: (result.reservations?.items ?? []).map((reservation) => ({
@@ -515,7 +542,7 @@ export async function listPackageMembers(customerPackageId: string) {
 
 export async function addPackageMember(
   customerPackageId: string,
-  input: { userId: string; relationship?: string },
+  input: { userId?: string; identifier?: string; email?: string; phone?: string; relationship?: string },
 ) {
   return apiFetch<SharedPackageMember>(
     `/customer-packages/${encodeURIComponent(customerPackageId)}/members`,
@@ -549,6 +576,8 @@ const packageActionMessages: Record<string, string> = {
     'Paket masih punya booking mendatang. Batalkan booking tersebut sebelum membekukan.',
   NO_REMAINING_SESSIONS: 'Paket tidak punya sisa sesi, sehingga tidak perlu diperpanjang.',
   PACKAGE_NOT_SHAREABLE: 'Paket ini bukan tipe paket bersama (isShareable: false).',
+  PACKAGE_EXPIRED: 'Paket sudah kedaluwarsa sehingga tidak dapat menambah anggota baru.',
+  SHARING_LIMIT_EXCEEDED: 'Batas kuota anggota bersama untuk paket ini sudah tercapai (maksimal 4 anggota tambahan).',
   CANNOT_ADD_OWNER_AS_MEMBER: 'Pemilik paket tidak dapat ditambahkan sebagai anggota bersama.',
   MEMBER_ALREADY_ADDED: 'Member tersebut sudah terdaftar di paket ini.',
   USER_NOT_FOUND: 'Member tidak ditemukan atau akun sedang tidak aktif.',

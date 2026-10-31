@@ -242,4 +242,18 @@ describe('PackagesManagementView duplicate feature', () => {
       ),
     );
   });
+  it('generates a business key automatically when clicking Generate Otomatis button', async () => {
+    const user = userEvent.setup();
+    render(
+      <AppFeedbackProvider>
+        <PackagesManagementView />
+      </AppFeedbackProvider>,
+    );
+    await user.click(await screen.findByRole('button', { name: /Buat paket/i }));
+    const generateBtn = await screen.findByRole('button', { name: /Generate Otomatis/i });
+    expect(generateBtn).toBeInTheDocument();
+    await user.click(generateBtn);
+    const input = screen.getByPlaceholderText('Contoh: PKG-10X-GROUP') as HTMLInputElement;
+    expect(input.value).toMatch(/^PKG-[A-Z0-9]+-[A-Z0-9]{4}$/);
+  });
 });

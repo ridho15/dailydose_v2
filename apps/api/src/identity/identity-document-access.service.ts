@@ -49,7 +49,7 @@ export class IdentityDocumentAccessService {
         'customer:write',
       ]);
     } else {
-      this.policy.requireGlobalCapability(principal, 'identity-verification:read');
+      this.policy.requireCapability(principal.capabilities, 'identity-verification:read');
     }
     this.cleanExpired();
 

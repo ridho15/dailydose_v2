@@ -117,7 +117,7 @@ const staffGuides: Record<
             number: 1,
             title: 'Kelola Slot Kelas Cabang',
             description:
-              'Buka menu "Kelas" di workspace. Anda dapat memantau okupansi kursi per sesi dan daftar tunggu (waitlist).',
+              'Buka menu "Kelas" di workspace. Anda dapat memantau okupansi kursi per sesi dan ketersediaan slot kelas secara real-time.',
           },
           {
             number: 2,

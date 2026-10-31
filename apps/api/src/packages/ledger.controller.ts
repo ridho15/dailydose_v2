@@ -71,7 +71,7 @@ export class LedgerController {
   addPackageMember(
     @Req() req: AuthenticatedRequest,
     @Param('id') id: string,
-    @Body() body: { userId: string; relationship?: string },
+    @Body() body: { userId?: string; identifier?: string; email?: string; phone?: string; relationship?: string },
   ) {
     return this.ledger.addPackageMember(req.principal, id, body);
   }

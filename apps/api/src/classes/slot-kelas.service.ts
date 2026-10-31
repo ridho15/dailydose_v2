@@ -1,6 +1,7 @@
 import { HITUNG_TERISI, terisi } from './terisi';
 import { requireReason } from '../foundation/reason';
-import { HttpStatus, Injectable, Optional } from '@nestjs/common';
+import { HttpStatus, Injectable, Logger, Optional } from '@nestjs/common';
+import { WhatsAppGatewayService } from '../notifications/whatsapp-gateway.service';
 import { ClassSlotStatus, Prisma, SessionMutationType } from '@prisma/client';
 import { createHash } from 'node:crypto';
 import { PrismaService } from '../database/prisma.service';
@@ -99,12 +100,15 @@ export function classCompletionControlHash(
 
 @Injectable()
 export class ClassSlotService {
+  private readonly logger = new Logger(ClassSlotService.name);
+
   constructor(
     private readonly db: PrismaService,
     private readonly policy: PolicyService,
     private readonly idempotency: IdempotencyService,
     private readonly config: RuntimeConfigService,
     @Optional() private readonly audit?: AuditService,
+    @Optional() private readonly whatsapp?: WhatsAppGatewayService,
   ) {}
 
   /** Jejak audit permanen untuk perubahan kelas; ikut transaksi sehingga batal bersama perubahannya. */
@@ -777,7 +781,18 @@ export class ClassSlotService {
     const note =
       input.reasonCode === 'OTHER_REVIEW_REQUIRED' ? requireReason(input.note, 'note') : input.note?.trim() || undefined;
 
-    return this.execute(
+    let notificationPayload: {
+      slotId: string;
+      className: string;
+      branchName: string;
+      timezone: string;
+      startAt?: Date;
+      instructorPhone?: string | null;
+      instructorName?: string | null;
+      attendees: Array<{ phone?: string | null; name: string; bookingId: string }>;
+    } | null = null;
+
+    const result = await this.execute(
       principal,
       `class-slot:cancel:${id}`,
       key,
@@ -786,12 +801,35 @@ export class ClassSlotService {
       async (tx) => {
         const slot = await tx.slotKelas.findUnique({
           where: { id },
-          include: { bookings: { where: { status: 'BOOKED' } } },
+          include: {
+            bookings: {
+              where: { status: 'BOOKED' },
+              include: { user: true },
+            },
+            classType: true,
+            branch: true,
+            instructor: true,
+          },
         });
         if (!slot) throw new ApiProblem('RESOURCE_NOT_FOUND', HttpStatus.NOT_FOUND);
         this.scope(principal, slot.branchId, 'class-slot:manage');
         // Kelas selesai/batal tidak boleh "dibatalkan" lagi: riwayat kehadiran dan ledger harus utuh.
         this.assertClaimable(slot, expectedVersion, STATUS_ALLOWED.cancel);
+
+        notificationPayload = {
+          slotId: slot.id,
+          className: (slot as any).classType?.name || 'Pilates',
+          branchName: (slot as any).branch?.name || 'Daily Dose',
+          timezone: (slot as any).branch?.timezone || 'Asia/Jakarta',
+          startAt: slot.startAt,
+          instructorPhone: (slot as any).instructor?.phone,
+          instructorName: (slot as any).instructor?.displayName,
+          attendees: ((slot as any).bookings || []).map((b: any) => ({
+            bookingId: b.id,
+            phone: b.user?.phone,
+            name: b.user?.displayName || 'Member',
+          })),
+        };
 
         await this.claim(tx, id, expectedVersion, STATUS_ALLOWED.cancel, {
           status: ClassSlotStatus.CANCELLED,
@@ -836,6 +874,90 @@ export class ClassSlotService {
         return this.viewOf(tx, id);
       },
     );
+
+    if (this.whatsapp && notificationPayload) {
+      await this.dispatchCancellationBroadcast(notificationPayload, input.reasonCode, note).catch((err) => {
+        this.logger.warn(`Gagal kirim notifikasi pembatalan manual WA: ${err?.message || err}`);
+      });
+    }
+
+    return result;
+  }
+
+  private async dispatchCancellationBroadcast(
+    payload: {
+      slotId: string;
+      className: string;
+      branchName: string;
+      timezone: string;
+      startAt?: Date;
+      instructorPhone?: string | null;
+      instructorName?: string | null;
+      attendees: Array<{ phone?: string | null; name: string; bookingId: string }>;
+    },
+    reasonCode: ClassSlotCancellationReason,
+    note?: string,
+  ) {
+    if (!this.whatsapp) return;
+
+    const classDateStr = payload.startAt
+      ? new Intl.DateTimeFormat('id-ID', {
+          dateStyle: 'full',
+          timeStyle: 'short',
+          timeZone: payload.timezone,
+        }).format(payload.startAt)
+      : '';
+
+    const reasonLabelMap: Record<ClassSlotCancellationReason, string> = {
+      STUDIO_UNAVAILABLE: 'Studio tidak dapat digunakan / pemeliharaan',
+      INSTRUCTOR_UNAVAILABLE: 'Instruktur berhalangan hadir',
+      SAFETY_ISSUE: 'Kendala teknis / keselamatan',
+      OTHER_REVIEW_REQUIRED: 'Alasan operasional studio',
+    };
+
+    const reasonText = reasonLabelMap[reasonCode]
+      ? (note ? `${reasonLabelMap[reasonCode]} (${note})` : reasonLabelMap[reasonCode])
+      : (note ? `${reasonCode}: ${note}` : reasonCode);
+
+    for (const attendee of payload.attendees) {
+      if (attendee.phone) {
+        const message =
+          `Halo ${attendee.name},\n\n` +
+          `Kami menginformasikan bahwa kelas Pilates *${payload.className}* di cabang *${payload.branchName}* ` +
+          `pada *${classDateStr}* dibatalkan oleh pihak studio (${reasonText}).\n\n` +
+          `Kuota sesi Anda tetap aman dan dapat langsung Anda gunakan kembali untuk memilih jadwal kelas lainnya.\n\n` +
+          `Mohon maaf atas ketidaknyamanan ini.\n_Daily Dose Pilates_`;
+
+        await this.whatsapp.sendMessage({
+          to: attendee.phone,
+          text: message,
+          recipientType: 'CUSTOMER',
+          reminderType: 'CLASS_CANCELLED_MANUAL',
+          payload: { slotId: payload.slotId, bookingId: attendee.bookingId, reason: reasonCode },
+        }).catch((err) => {
+          this.logger.warn(`Gagal kirim WA ke ${attendee.phone}: ${err?.message || err}`);
+        });
+      }
+    }
+
+    if (payload.instructorPhone) {
+      const coachName = payload.instructorName || 'Coach';
+      const instructorMsg =
+        `Halo Coach ${coachName},\n\n` +
+        `Kelas *${payload.className}* di cabang *${payload.branchName}* pada *${classDateStr}* ` +
+        `telah dibatalkan oleh pihak studio (${reasonText}).\n\n` +
+        `Jadwal mengajar Anda telah dibebaskan. Terima kasih.\n_Daily Dose Pilates_`;
+
+      await this.whatsapp.sendMessage({
+        to: payload.instructorPhone,
+        text: instructorMsg,
+        recipientType: 'INSTRUCTOR',
+        reminderType: 'CLASS_CANCELLED_MANUAL_INSTRUCTOR',
+        payload: { slotId: payload.slotId, reason: reasonCode },
+      }).catch((err) => {
+        this.logger.warn(`Gagal kirim WA ke instruktur: ${err?.message || err}`);
+      });
+    }
   }
 
   async complete(

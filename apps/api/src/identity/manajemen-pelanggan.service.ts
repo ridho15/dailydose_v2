@@ -52,7 +52,12 @@ export function verificationStatusWhere(status: VerificationStatus): Prisma.User
 
 export function normalizePhone(value: string): string {
   const compact = value.replace(/[\s().-]/gu, '');
-  const normalized = compact.startsWith('0') ? `+62${compact.slice(1)}` : compact;
+  let normalized = compact;
+  if (compact.startsWith('0')) {
+    normalized = `+62${compact.slice(1)}`;
+  } else if (compact.startsWith('62')) {
+    normalized = `+${compact}`;
+  }
   if (!/^\+[1-9]\d{7,14}$/u.test(normalized))
     throw new ApiProblem('VALIDATION_ERROR', HttpStatus.UNPROCESSABLE_ENTITY);
   return normalized;

@@ -369,7 +369,7 @@ export function PurchaseReviewView({
     status === 'PENDING' || status === 'WAITING_VERIFICATION';
 
   const approve = async (item: ReviewPurchase) => {
-    if (!canDecide || !isPendingDecision(item.status)) return;
+    if (!canDecideItem(item) || !isPendingDecision(item.status)) return;
     const confirmed = feedback
       ? await feedback.confirm({
           tone: 'warning',
@@ -458,8 +458,14 @@ export function PurchaseReviewView({
     ),
   );
 
+  const isDirectCashOrCard = (item: ReviewPurchase) =>
+    item.paymentMethod === 'CASH' || item.paymentMethod === 'CARD' || item.paymentMethod === 'MANUAL_STAFF';
+
   const isOwnRecord = (item: ReviewPurchase) =>
-    !isSuper && Boolean(item.recordedById) && item.recordedById === currentUserId;
+    !isSuper && !isDirectCashOrCard(item) && Boolean(item.recordedById) && item.recordedById === currentUserId;
+
+  const canDecideItem = (item: ReviewPurchase) =>
+    canDecide || (canRecord && isDirectCashOrCard(item));
 
   const actions = (item: ReviewPurchase, compact = false) => (
     <div
@@ -481,12 +487,12 @@ export function PurchaseReviewView({
       >
         Preview bukti
       </Button>
-      {canDecide && isPendingDecision(item.status) && isOwnRecord(item) && (
+      {canDecideItem(item) && isPendingDecision(item.status) && isOwnRecord(item) && (
         <span className="self-center text-xs text-dd-muted">
           Dicatat oleh Anda — disetujui penyetuju lain.
         </span>
       )}
-      {canDecide && isPendingDecision(item.status) && !isOwnRecord(item) && (
+      {canDecideItem(item) && isPendingDecision(item.status) && !isOwnRecord(item) && (
         <Button
           size="sm"
           disabled={mutatingId === item.id || (Boolean(item.paymentProof) && !viewedProofIds.has(item.id))}
@@ -954,7 +960,7 @@ export function PurchaseReviewView({
                 </div>
               </div>
 
-              {canDecide && isPendingDecision(previewItem.status) && !isOwnRecord(previewItem) && (
+              {canDecideItem(previewItem) && isPendingDecision(previewItem.status) && !isOwnRecord(previewItem) && (
                 <div className="space-y-3">
                   <label className="flex cursor-pointer select-none items-start gap-3 rounded-dd-lg border border-dd-line p-3 hover:bg-dd-surface-muted/50">
                     <input

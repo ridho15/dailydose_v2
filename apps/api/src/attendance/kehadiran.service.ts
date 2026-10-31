@@ -458,7 +458,7 @@ export class AttendanceService {
           throw new ApiProblem('INVALID_STATE_TRANSITION', HttpStatus.CONFLICT);
         if (!['CONFIRMED', 'COMPLETED'].includes(booking.classSlot.status))
           throw new ApiProblem('INVALID_STATE_TRANSITION', HttpStatus.CONFLICT);
-        if (booking.classSlot.startAt > now)
+        if (checkInWindowState(booking.classSlot.startAt, booking.classSlot.endAt, now) === 'TOO_EARLY')
           throw new ApiProblem('CHECK_IN_TOO_EARLY', HttpStatus.CONFLICT);
 
         // Rule #9: Batas toleransi backfill admin adalah maksimal H+2 jam setelah kelas selesai

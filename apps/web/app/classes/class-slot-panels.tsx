@@ -764,7 +764,7 @@ export function DetailPanel({
           title="Batalkan kelas"
           description={
             slot.bookedCount > 0
-              ? `Kelas ini punya ${slot.bookedCount} peserta aktif. Reservasi sesi mereka dilepas dan pembatalan dicatat dalam audit. Tindakan ini tidak dapat diurungkan.`
+              ? `Kelas ini punya ${slot.bookedCount} peserta aktif. Reservasi sesi mereka dilepas, notifikasi otomatis dikirim via WhatsApp ke seluruh peserta & instruktur, dan pembatalan dicatat dalam audit. Tindakan ini tidak dapat diurungkan.`
               : 'Belum ada peserta aktif. Pembatalan dicatat dalam audit dan tidak dapat diurungkan.'
           }
         >

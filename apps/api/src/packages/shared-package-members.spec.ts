@@ -76,6 +76,19 @@ describe('LedgerService - Shared Package Members Management', () => {
       },
       user: {
         findUnique: jest.fn(async ({ where }: any) => mockUsers[where.id] ?? null),
+        findFirst: jest.fn(async ({ where }: any) => {
+          if (where.email) {
+            return Object.values(mockUsers).find((u: any) => u.email === where.email) ?? null;
+          }
+          if (where.OR) {
+            return (
+              Object.values(mockUsers).find((u: any) =>
+                where.OR.some((clause: any) => clause.phone && (u.phone === clause.phone || u.phone.includes(clause.phone.replace("+62", "0"))))
+              ) ?? null
+            );
+          }
+          return null;
+        }),
       },
       paketPelangganAnggota: {
         findMany: jest.fn(async () => sharedMembers),
@@ -307,5 +320,91 @@ describe('LedgerService - Shared Package Members Management', () => {
       code: 'RESOURCE_NOT_FOUND',
       status: HttpStatus.NOT_FOUND,
     });
+  });
+  it("Happy Path: member dapat mengundang teman via email secara self-service", async () => {
+    const { service, db } = setupTest({ isShareable: true, sharedMembers: [] });
+
+    const added = await service.addPackageMember(ownerPrincipal as any, packageId, {
+      identifier: "friend@test.com",
+      relationship: "FRIEND",
+    });
+
+    expect(added.userId).toBe(friendId);
+    expect(added.relationship).toBe("FRIEND");
+    expect(db.paketPelangganAnggota.create).toHaveBeenCalled();
+  });
+
+  it("Happy Path: member dapat mengundang teman via nomor HP Indonesia (08...)", async () => {
+    const { service, db } = setupTest({ isShareable: true, sharedMembers: [] });
+
+    const added = await service.addPackageMember(ownerPrincipal as any, packageId, {
+      identifier: "081299998888",
+      relationship: "SPOUSE",
+    });
+
+    expect(added.userId).toBe(friendId);
+    expect(added.relationship).toBe("SPOUSE");
+    expect(db.paketPelangganAnggota.create).toHaveBeenCalled();
+  });
+
+  it("No Happy Path: menolak menambah anggota jika kuota maksimal sharing (4) terlampaui (SHARING_LIMIT_EXCEEDED 400)", async () => {
+    const { service } = setupTest({
+      isShareable: true,
+      sharedMembers: [
+        { userId: id(101) },
+        { userId: id(102) },
+        { userId: id(103) },
+        { userId: id(104) },
+      ],
+    });
+
+    await expect(
+      service.addPackageMember(ownerPrincipal as any, packageId, {
+        userId: id(105),
+      }),
+    ).rejects.toMatchObject({
+      code: "SHARING_LIMIT_EXCEEDED",
+      status: HttpStatus.BAD_REQUEST,
+    });
+  });
+
+  it("No Happy Path: menolak menambah anggota jika paket sudah kedaluwarsa (PACKAGE_EXPIRED 400)", async () => {
+    const { service, mockPackage } = setupTest({ isShareable: true });
+    mockPackage.validUntil = new Date("2020-01-01"); // Expired
+
+    await expect(
+      service.addPackageMember(ownerPrincipal as any, packageId, {
+        userId: friendId,
+      }),
+    ).rejects.toMatchObject({
+      code: "PACKAGE_EXPIRED",
+      status: HttpStatus.BAD_REQUEST,
+    });
+  });
+
+  it("Transparansi Utilisasi: listPackageMembers menyertakan statistik booking aktif dan sesi dihadiri", async () => {
+    const { service, db } = setupTest({
+      isShareable: true,
+      sharedMembers: [
+        {
+          id: id(501),
+          userId: friendId,
+          relationship: "FAMILY",
+          user: { id: friendId, displayName: "Friend User", phone: "081299998888", email: "friend@test.com" },
+          createdAt: new Date(),
+        },
+      ],
+    });
+
+    (db.pemesananKelas as any).findMany = jest.fn(async () => [
+      { id: id(601), userId: ownerId, status: "ATTENDED" },
+      { id: id(602), userId: friendId, status: "BOOKED" },
+    ]);
+
+    const result = await service.listPackageMembers(ownerPrincipal as any, packageId);
+    expect(result.owner.attendedSessions).toBe(1);
+    expect(result.owner.activeBookings).toBe(0);
+    expect(result.members[0]?.attendedSessions).toBe(0);
+    expect(result.members[0]?.activeBookings).toBe(1);
   });
 });

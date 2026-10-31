@@ -29,9 +29,10 @@ export class PackageAccessService {
     );
   }
 
-  review(principal: SessionPrincipal, mutation = false) {
+  review(principal: SessionPrincipal, mutation = false, allowRecordForDirect = false) {
     const current = mutation ? 'payment:decide' : 'payment:review';
     const legacy = mutation ? 'purchase:decide' : 'purchase:review';
+    if (allowRecordForDirect && principal.capabilities.includes('purchase:record')) return;
     if (!principal.capabilities.includes(current) && !principal.capabilities.includes(legacy))
       this.policy.requireCapability(principal.capabilities, current);
   }

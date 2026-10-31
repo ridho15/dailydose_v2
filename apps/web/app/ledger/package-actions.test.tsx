@@ -93,4 +93,74 @@ describe('customer package actions panel', () => {
     expect(screen.queryByRole('button', { name: 'Bekukan paket' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Perpanjang masa berlaku' })).toBeNull();
   });
+  it("menampilkan panel transparansi pemakaian paket bersama lengkap dengan riwayat utilisasi per anggota", async () => {
+    detail.mockResolvedValue({
+      ...history("ACTIVE", { isShareable: true }),
+      sharedUtilization: [
+        {
+          userId: "owner-1",
+          displayName: "Maya Owner",
+          phoneMasked: "0812****",
+          role: "OWNER",
+          relationship: "Pemilik Utama",
+          activeBookings: 1,
+          attendedSessions: 3,
+          totalBookings: 4,
+        },
+        {
+          userId: "friend-1",
+          displayName: "Budi Teman",
+          phoneMasked: "0813****",
+          role: "MEMBER",
+          relationship: "Teman / Rekan",
+          activeBookings: 0,
+          attendedSessions: 2,
+          totalBookings: 2,
+        },
+      ],
+      reservations: {
+        activeQuantity: 1,
+        items: [
+          {
+            id: "res-1",
+            quantity: 1,
+            createdAt: new Date(),
+            className: "Reformer Core",
+            branchName: "Green Garden",
+            bookedByUser: {
+              id: "owner-1",
+              displayName: "Maya Owner",
+              phoneMasked: "0812****",
+              isOwner: true,
+            },
+          },
+        ],
+      },
+      entries: [
+        {
+          id: "ent-1",
+          type: "ATTEND",
+          quantity: -1,
+          occurredAt: new Date(),
+          referenceLabel: "Check-in Reformer",
+          usedByUser: {
+            id: "friend-1",
+            displayName: "Budi Teman",
+            phoneMasked: "0813****",
+            isOwner: false,
+          },
+        },
+      ],
+    });
+
+    render(<CustomerSessionDetailView id="pkg-1" />);
+
+    expect(await screen.findByText("Transparansi Riwayat Pemakaian Paket Bersama")).toBeInTheDocument();
+    expect(screen.getByText("Maya Owner")).toBeInTheDocument();
+    expect(screen.getByText("Budi Teman")).toBeInTheDocument();
+    expect(screen.getByText("3 sesi")).toBeInTheDocument();
+    expect(screen.getByText("2 sesi")).toBeInTheDocument();
+    expect(screen.getByText(/Dipesan oleh: Maya Owner/)).toBeInTheDocument();
+    expect(screen.getByText(/Digunakan oleh: Budi Teman/)).toBeInTheDocument();
+  });
 });

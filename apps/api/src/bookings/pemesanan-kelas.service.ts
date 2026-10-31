@@ -435,14 +435,27 @@ export class BookingsService {
     const cutoffHours = slot.bookingCutoffHours ?? this.config.value?.booking?.cutoffHours ?? 2;
     const cutoffAt = new Date(slot.startAt.getTime() - cutoffHours * 3_600_000);
 
-    // Ambil paket aktif pelanggan yang sesuai dengan cabang dan jenis kelas
+    // Ambil paket aktif pelanggan (milik sendiri atau paket bersama/duet di mana pelanggan terdaftar)
+    // yang sesuai dengan cabang dan jenis kelas
     const packages = await this.db.paketPelanggan.findMany({
       where: {
-        userId: principal.userId,
         status: 'ACTIVE',
         remainingSessions: { gt: 0 },
         validUntil: { gt: now },
-        OR: [{ purchaseId: null }, { purchase: { status: 'PAID' } }],
+        AND: [
+          {
+            OR: [
+              { userId: principal.userId },
+              {
+                package: { isShareable: true },
+                sharedMembers: { some: { userId: principal.userId } },
+              },
+            ],
+          },
+          {
+            OR: [{ purchaseId: null }, { purchase: { status: 'PAID' } }],
+          },
+        ],
         // Cabang diperiksa di bawah (cabang paket atau cabang pembelian), tidak di query ini.
         package: { OR: [{ classTypeId: null }, { classTypeId: slot.classTypeId }] },
       },

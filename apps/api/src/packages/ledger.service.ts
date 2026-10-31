@@ -10,7 +10,7 @@ import { AuditService } from '../foundation/audit.service';
 import type { SessionPrincipal } from '../identity/identity.service';
 import { PolicyService } from '../identity/policy.service';
 import { ApiProblem, ENTITY_ID_REGEX } from '../identity/security';
-import { buildPhoneSearchVariants } from '../identity/manajemen-pelanggan.service';
+import { buildPhoneSearchVariants, normalizePhone } from '../identity/manajemen-pelanggan.service';
 
 export const ADJUSTMENT_REASON_CODES = [
   'MIGRATION_CORRECTION',
@@ -25,6 +25,7 @@ export const ADJUSTMENT_REJECT_CODES = [
   'OUT_OF_SCOPE',
 ] as const;
 export const MAX_ADJUSTMENT_SESSIONS = 50;
+export const MAX_SHARED_MEMBERS = 4;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const PAGE_SIZE = 20;
@@ -386,22 +387,110 @@ export class LedgerService {
     const hasMore = rows.length > PAGE_SIZE;
     const pageRows = hasMore ? rows.slice(0, PAGE_SIZE) : rows;
 
+    const bookingIds = Array.from(
+      new Set([
+        ...(pkg.bookings ?? []).map((b) => b.id),
+        ...pageRows
+          .map((r) => r.referenceId)
+          .filter((ref): ref is string => Boolean(ref && UUID.test(ref))),
+      ]),
+    );
+
+    const relatedBookings =
+      bookingIds.length > 0 && this.db.pemesananKelas?.findMany
+        ? await this.db.pemesananKelas.findMany({
+            where: { id: { in: bookingIds } },
+            include: {
+              user: { select: { id: true, displayName: true, phone: true } },
+              classSlot: { include: { classType: true, branch: true } },
+            },
+          })
+        : [];
+    const bookingMap = new Map(relatedBookings.map((b) => [b.id, b]));
+
+    const allPackageBookings =
+      this.db.pemesananKelas?.findMany
+        ? await this.db.pemesananKelas.findMany({
+            where: { customerPackageId: id },
+            select: { id: true, userId: true, status: true },
+          })
+        : [];
+
+    const membersList = [
+      {
+        userId: pkg.userId,
+        displayName: pkg.user?.displayName ?? 'Pemilik',
+        phoneMasked: maskPhone(pkg.user?.phone),
+        role: 'OWNER' as const,
+        relationship: 'Pemilik Utama',
+      },
+      ...(pkg.sharedMembers ?? []).map((m) => ({
+        userId: m.userId,
+        displayName: m.user?.displayName ?? 'Anggota',
+        phoneMasked: maskPhone(m.user?.phone),
+        role: 'MEMBER' as const,
+        relationship: m.relationship || 'Anggota',
+      })),
+    ];
+
+    const sharedUtilization = membersList.map((m) => {
+      const userBookings = allPackageBookings.filter((b) => b.userId === m.userId);
+      return {
+        userId: m.userId,
+        displayName: m.displayName,
+        phoneMasked: m.phoneMasked,
+        role: m.role,
+        relationship: m.relationship,
+        activeBookings: userBookings.filter((b) => b.status === 'BOOKED').length,
+        attendedSessions: userBookings.filter(
+          (b) => b.status === 'ATTENDED',
+        ).length,
+        totalBookings: userBookings.length,
+      };
+    });
+
     return {
       balance: this.balanceView(pkg, pkg.bookings.length),
+      sharedUtilization,
       reservations: {
-        activeQuantity: pkg.bookings.length,
-        items: pkg.bookings.map((booking) => ({
-          id: booking.id,
-          quantity: 1,
-          createdAt: booking.bookedAt.toISOString(),
-          bookingId: booking.id,
-          bookingStatus: booking.status,
-          className: booking.classSlot?.classType?.name ?? 'Kelas',
-          branchName: booking.classSlot?.branch?.name ?? null,
-          startsAt: booking.classSlot?.startAt.toISOString() ?? null,
-        })),
+        activeQuantity: (pkg.bookings ?? []).length,
+        items: (pkg.bookings ?? []).map((booking) => {
+          const bookedUser = (booking as any).user ?? bookingMap.get(booking.id)?.user;
+          return {
+            id: booking.id,
+            quantity: 1,
+            createdAt: booking.bookedAt.toISOString(),
+            bookingId: booking.id,
+            bookingStatus: booking.status,
+            className: booking.classSlot?.classType?.name ?? 'Kelas',
+            branchName: booking.classSlot?.branch?.name ?? null,
+            startsAt: booking.classSlot?.startAt.toISOString() ?? null,
+            bookedByUser: bookedUser
+              ? {
+                  id: bookedUser.id,
+                  displayName: bookedUser.displayName,
+                  phoneMasked: maskPhone(bookedUser.phone),
+                  isOwner: bookedUser.id === pkg.userId,
+                }
+              : null,
+          };
+        }),
       },
-      entries: pageRows.map((entry) => this.ledgerEntryView(entry)),
+      entries: pageRows.map((entry) => {
+        const baseView = this.ledgerEntryView(entry);
+        const refBooking = entry.referenceId ? bookingMap.get(entry.referenceId) : null;
+        return {
+          ...baseView,
+          usedByUser: refBooking?.user
+            ? {
+                id: refBooking.user.id,
+                displayName: refBooking.user.displayName,
+                phoneMasked: maskPhone(refBooking.user.phone),
+                isOwner: refBooking.user.id === pkg.userId,
+              }
+            : null,
+        };
+      }),
       page: {
         hasMore,
         nextCursor: hasMore ? (pageRows[pageRows.length - 1]?.id ?? null) : null,
@@ -1172,6 +1261,15 @@ export class LedgerService {
       throw new ApiProblem('RESOURCE_NOT_FOUND', HttpStatus.NOT_FOUND);
     }
 
+    const allPackageBookings =
+      this.db.pemesananKelas?.findMany
+        ? await this.db.pemesananKelas.findMany({
+            where: { customerPackageId },
+            select: { id: true, userId: true, status: true },
+          })
+        : [];
+    const ownerBookings = allPackageBookings.filter((b) => b.userId === pkg.userId);
+
     return {
       customerPackageId: pkg.id,
       package: {
@@ -1183,29 +1281,49 @@ export class LedgerService {
         id: pkg.user.id,
         displayName: pkg.user.displayName,
         phoneMasked: maskPhone(pkg.user.phone),
+        activeBookings: ownerBookings.filter((b) => b.status === 'BOOKED').length,
+        attendedSessions: ownerBookings.filter(
+          (b) => b.status === 'ATTENDED',
+        ).length,
       },
       remainingSessions: pkg.remainingSessions,
       status: pkg.status,
-      members: pkg.sharedMembers.map((m) => ({
-        id: m.id,
-        userId: m.userId,
-        relationship: m.relationship,
-        displayName: m.user?.displayName,
-        phoneMasked: maskPhone(m.user?.phone),
-        email: m.user?.email,
-        addedById: m.addedById,
-        addedByRole: m.addedByRole,
-        createdAt: m.createdAt.toISOString(),
-      })),
+      members: (pkg.sharedMembers ?? []).map((m) => {
+        const userBookings = allPackageBookings.filter((b) => b.userId === m.userId);
+        return {
+          id: m.id,
+          userId: m.userId,
+          relationship: m.relationship,
+          displayName: m.user?.displayName,
+          phoneMasked: maskPhone(m.user?.phone),
+          email: m.user?.email,
+          addedById: m.addedById,
+          addedByRole: m.addedByRole,
+          createdAt: m.createdAt.toISOString(),
+          activeBookings: userBookings.filter((b) => b.status === 'BOOKED').length,
+          attendedSessions: userBookings.filter(
+            (b) => b.status === 'ATTENDED',
+          ).length,
+        };
+      }),
     };
   }
 
   async addPackageMember(
     principal: SessionPrincipal,
     customerPackageId: string,
-    body: { userId: string; relationship?: string },
+    body: { userId?: string; identifier?: string; email?: string; phone?: string; relationship?: string },
   ) {
-    if (!UUID.test(customerPackageId) || !UUID.test(body?.userId)) {
+    if (!UUID.test(customerPackageId)) {
+      throw problem('VALIDATION_ERROR', HttpStatus.BAD_REQUEST, 'customerPackageId');
+    }
+
+    const rawId = body?.userId?.trim();
+    const rawIdentifier = (body?.identifier || body?.email || body?.phone)?.trim();
+    if (!rawId && !rawIdentifier) {
+      throw problem('VALIDATION_ERROR', HttpStatus.BAD_REQUEST, 'userId');
+    }
+    if (rawId && !UUID.test(rawId) && !rawIdentifier) {
       throw problem('VALIDATION_ERROR', HttpStatus.BAD_REQUEST, 'userId');
     }
 
@@ -1227,19 +1345,58 @@ export class LedgerService {
       throw problem('PACKAGE_NOT_ACTIVE', HttpStatus.BAD_REQUEST, 'package');
     }
 
-    if (body.userId === pkg.userId) {
-      throw problem('CANNOT_ADD_OWNER_AS_MEMBER', HttpStatus.BAD_REQUEST, 'userId');
+    const isExpired = Boolean(pkg.validUntil && new Date(pkg.validUntil).getTime() < Date.now());
+    if (isExpired) {
+      throw problem('PACKAGE_EXPIRED', HttpStatus.BAD_REQUEST, 'package');
     }
 
-    const targetUser = await this.db.user.findUnique({
-      where: { id: body.userId },
-      select: { id: true, displayName: true, email: true, phone: true, status: true },
-    });
+    if (pkg.sharedMembers.length >= MAX_SHARED_MEMBERS) {
+      throw problem('SHARING_LIMIT_EXCEEDED', HttpStatus.BAD_REQUEST, 'sharedMembers');
+    }
+
+    let targetUser: { id: string; displayName: string; email: string | null; phone: string | null; status: string } | null = null;
+
+    if (rawId && UUID.test(rawId)) {
+      targetUser = await this.db.user.findUnique({
+        where: { id: rawId },
+        select: { id: true, displayName: true, email: true, phone: true, status: true },
+      });
+    } else if (rawIdentifier) {
+      if (rawIdentifier.includes('@')) {
+        targetUser = await this.db.user.findFirst({
+          where: { email: rawIdentifier.trim().toLowerCase() },
+          select: { id: true, displayName: true, email: true, phone: true, status: true },
+        });
+      } else {
+        let cleanPhone = rawIdentifier;
+        try {
+          cleanPhone = normalizePhone(rawIdentifier);
+        } catch {
+          cleanPhone = rawIdentifier.replace(/\D/g, '');
+        }
+        const phoneVariants = buildPhoneSearchVariants(rawIdentifier);
+        targetUser = await this.db.user.findFirst({
+          where: {
+            OR: [
+              { phone: cleanPhone },
+              { phone: rawIdentifier },
+              ...phoneVariants.map((p) => ({ phone: p })),
+            ],
+          },
+          select: { id: true, displayName: true, email: true, phone: true, status: true },
+        });
+      }
+    }
+
     if (!targetUser || targetUser.status !== 'ACTIVE') {
       throw problem('USER_NOT_FOUND', HttpStatus.NOT_FOUND, 'userId');
     }
 
-    if (pkg.sharedMembers.some((sm) => sm.userId === body.userId)) {
+    if (targetUser.id === pkg.userId) {
+      throw problem('CANNOT_ADD_OWNER_AS_MEMBER', HttpStatus.BAD_REQUEST, 'userId');
+    }
+
+    if (pkg.sharedMembers.some((sm) => sm.userId === targetUser.id)) {
       throw problem('MEMBER_ALREADY_ADDED', HttpStatus.CONFLICT, 'userId');
     }
 
@@ -1249,7 +1406,7 @@ export class LedgerService {
     const created = await this.db.paketPelangganAnggota.create({
       data: {
         customerPackageId,
-        userId: body.userId,
+        userId: targetUser.id,
         relationship,
         addedById: principal.userId,
         addedByRole: isAdmin ? 'ADMIN' : 'CUSTOMER',
@@ -1267,7 +1424,7 @@ export class LedgerService {
       objectId: created.id,
       afterMasked: {
         customerPackageId,
-        memberUserId: body.userId,
+        memberUserId: targetUser.id,
         relationship,
         addedByRole: isAdmin ? 'ADMIN' : 'CUSTOMER',
       },

@@ -1018,7 +1018,10 @@ export function ClassSlotView({
               const accepted = await feedback.confirm({
                 tone: 'danger',
                 title: 'Batalkan kelas?',
-                message: 'Reservasi aktif akan dilepaskan dan tindakan dicatat dalam audit.',
+                message:
+                  panel.slot.bookedCount > 0
+                    ? `Kelas memiliki ${panel.slot.bookedCount} peserta aktif. Kuota sesi peserta akan dipulihkan dan notifikasi WhatsApp otomatis dikirim ke peserta & instruktur.`
+                    : 'Reservasi aktif akan dilepaskan dan tindakan dicatat dalam audit.',
                 confirmLabel: 'Batalkan kelas',
               });
               if (accepted)

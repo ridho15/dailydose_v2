@@ -196,6 +196,9 @@ describe('BookingView', () => {
     expect(confirm).toBeEnabled();
     await user.click(confirm);
     expect(await screen.findByText(/Batas pembatalan H-24 sudah terlewati/)).toBeVisible();
+    const adjLink = screen.getByRole("link", { name: /Buka Form Penyesuaian Sesi/i });
+    expect(adjLink).toBeVisible();
+    expect(adjLink).toHaveAttribute("href", `/ledger/${packageId}?tab=adjustments`);
     expect(cancelAsStaff).toHaveBeenCalledWith(booking.id, 'Pelanggan sakit', expect.any(String));
     await user.click(confirm);
     await waitFor(() => expect(dialog).not.toBeInTheDocument());

@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { CalendarCheck2, Plus, RefreshCw, Search } from 'lucide-react';
+import { ArrowRight, CalendarCheck2, Plus, RefreshCw, Search } from 'lucide-react';
 import {
   bookingFailure,
   browserBookingClient,
@@ -771,6 +771,29 @@ export function BookingView({
             <li>Aksi ini dicatat permanen dalam jejak audit beserta identitas staf dan timestamp.</li>
           </ul>
         </div>
+        {cancelError && (cancelError.includes('H-24') || cancelError.includes('Penyesuaian Sesi')) && (
+          <div className="rounded-xl border border-rose-200 bg-rose-50/90 p-3.5 space-y-2 text-xs">
+            <strong className="block text-[13px] font-bold text-rose-900">
+              Pintasan Penyesuaian Sesi Medis:
+            </strong>
+            <p className="text-rose-800 leading-relaxed">
+              Untuk pembatalan mendesak karena izin sakit/surat dokter di bawah H-24, ajukan pengembalian sesi melalui menu Penyesuaian Sesi.
+            </p>
+            <div className="pt-1">
+              <Link
+                href={
+                  cancelTarget?.customerPackageId
+                    ? '/ledger/' + cancelTarget.customerPackageId + '?tab=adjustments'
+                    : '/ledger/adjustments'
+                }
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-700 text-white font-medium text-xs hover:bg-rose-800 transition"
+              >
+                <span>Buka Form Penyesuaian Sesi</span>
+                <ArrowRight className="size-3.5" />
+              </Link>
+            </div>
+          </div>
+        )}
       </ReasonDialog>
       <Modal
         open={pickBranchOpen}

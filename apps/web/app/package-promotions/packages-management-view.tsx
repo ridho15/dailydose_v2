@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Copy, Pencil, Plus, Trash2 } from 'lucide-react';
+import { Copy, Pencil, Plus, Sparkles, Trash2 } from 'lucide-react';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { Badge, DataTable, Pagination, Panel, StatCard, TableActionMenu } from '../components/admin/admin-ui';
 import { AlertBanner, Drawer, useAppFeedback } from '../components/app-feedback';
@@ -668,6 +668,24 @@ function PackageCreateForm({
   const [selectedClassTypes, setSelectedClassTypes] = useState<string[]>(
     initialValues?.selectedClassTypes ?? [],
   );
+  const [businessKey, setBusinessKey] = useState(initialValues?.businessKey ?? '');
+
+  useEffect(() => {
+    if (initialValues?.businessKey !== undefined) {
+      setBusinessKey(initialValues.businessKey);
+    }
+  }, [initialValues?.businessKey]);
+
+  const generateBusinessKey = () => {
+    const monthYear = new Intl.DateTimeFormat('id-ID', { month: 'short', year: '2-digit' })
+      .format(new Date())
+      .replace(/[^a-zA-Z0-9]/g, '')
+      .toUpperCase();
+    const rand = Math.random().toString(36).substring(2, 6).toUpperCase();
+    const generated = `PKG-${monthYear}-${rand}`;
+    setBusinessKey(generated);
+    onDirty();
+  };
 
   const availableClassTypes = isMultiBranch
     ? classTypes.filter((classType) =>
@@ -699,7 +717,7 @@ function PackageCreateForm({
           branchIds,
           branchId,
           classTypeIds: selectedClassTypes,
-          businessKey: String(data.get('businessKey')),
+          businessKey: String(data.get('businessKey') || businessKey),
           name: String(data.get('name')),
           sessionCount: Number(data.get('sessionCount')),
           durationDays: Number(data.get('durationDays')),
@@ -830,14 +848,33 @@ function PackageCreateForm({
         </label>
       </fieldset>
       <div className="grid gap-4 sm:grid-cols-2">
-        <TextInput
-          name="businessKey"
-          label="Business key"
-          placeholder="Contoh: PKG-10X-GROUP"
-          defaultValue={initialValues?.businessKey ?? ''}
-          maxLength={32}
-          required
-        />
+        <div>
+          <div className="flex items-center justify-between mb-1">
+            <label htmlFor="input-businessKey" className="text-sm font-semibold text-dd-ink">
+              Business key
+            </label>
+            <button
+              type="button"
+              onClick={generateBusinessKey}
+              className="inline-flex items-center gap-1 text-xs font-semibold text-dd-forest hover:text-dd-forest/80 cursor-pointer"
+            >
+              <Sparkles className="size-3" />
+              <span>Generate Otomatis</span>
+            </button>
+          </div>
+          <TextInput
+            id="input-businessKey"
+            name="businessKey"
+            placeholder="Contoh: PKG-10X-GROUP"
+            value={businessKey}
+            onChange={(e) => {
+              setBusinessKey(e.target.value);
+              onDirty();
+            }}
+            maxLength={32}
+            required
+          />
+        </div>
         <TextInput
           name="name"
           label="Nama paket"

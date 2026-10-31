@@ -576,7 +576,7 @@ export class PaymentReviewService {
     key: string,
     correlationId: string,
   ) {
-    this.access.review(principal, true);
+    this.access.review(principal, true, true);
     if (!key)
       throw new ApiProblem('VALIDATION_ERROR', HttpStatus.BAD_REQUEST);
     const allowedReasons =
@@ -617,9 +617,18 @@ export class PaymentReviewService {
             include: { paymentProof: true, package: true, branch: true },
           });
           if (!purchase) throw new ApiProblem('RESOURCE_NOT_FOUND', HttpStatus.NOT_FOUND);
-          this.access.scope(principal, purchase.branchId, ['payment:decide', 'purchase:decide']);
+
+          // Poin 3: Pembayaran langsung di kasir (CASH, CARD/EDC, MANUAL_STAFF).
+          // Staf cabang (Admin/Manager) dengan wewenang purchase:record berwenang mengonfirmasi
+          // penerimaan pembayaran kasir langsung di cabangnya.
+          const isDirectPayment = ['CASH', 'CARD', 'MANUAL_STAFF'].includes(purchase.paymentMethod ?? '');
+          if (isDirectPayment && principal.capabilities.includes('purchase:record')) {
+            this.access.scope(principal, purchase.branchId, ['purchase:record', 'payment:decide', 'purchase:decide']);
+          } else {
+            this.access.scope(principal, purchase.branchId, ['payment:decide', 'purchase:decide']);
+          }
+
           // Super Owner dan Superadmin memiliki wewenang penuh untuk menyetujui transaksi apa pun (God Mode).
-          // Staf cabang biasa tanpa wewenang super tetap mengikuti aturan Maker-Checker (Pemisahan Tugas).
           const isSuper = principal.roles.some((r) =>
             r.role === 'SUPER_OWNER',
           );
@@ -627,7 +636,9 @@ export class PaymentReviewService {
           if (!isSuper && purchase.userId === principal.userId) {
             throw new ApiProblem('SEPARATION_OF_DUTIES_VIOLATION', HttpStatus.FORBIDDEN);
           }
-          if (!isSuper && purchase.recordedById === principal.userId) {
+          // Pemisahan tugas berlaku ketat untuk transaksi online/transfer non-kasir.
+          // Untuk kasir langsung (CASH/CARD/MANUAL_STAFF), staf kasir yang melayani boleh langsung memverifikasi transaksi.
+          if (!isSuper && !isDirectPayment && purchase.recordedById === principal.userId) {
             throw new ApiProblem('SEPARATION_OF_DUTIES_VIOLATION', HttpStatus.FORBIDDEN);
           }
           if (purchase.status !== 'PENDING' && purchase.status !== 'WAITING_VERIFICATION')
@@ -649,9 +660,9 @@ export class PaymentReviewService {
 
           let customerPackage = null;
           if (decision === 'APPROVED') {
-            const existingPkg = await tx.paketPelanggan.findUnique({
+            const existingPkg = tx.paketPelanggan?.findUnique ? await tx.paketPelanggan.findUnique({
               where: { purchaseId: purchase.id },
-            });
+            }) : null;
             if (existingPkg) {
               customerPackage = existingPkg;
             } else {
