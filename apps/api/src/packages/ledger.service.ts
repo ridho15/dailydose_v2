@@ -998,18 +998,18 @@ export class LedgerService {
           let finalValidUntil: Date;
           let addedDays: number;
           if (targetExpiryDate) {
-            // Target date harus lebih besar dari batas tanggal saat ini
-            if (targetExpiryDate.getTime() <= from) {
-              throw problem('INVALID_EXPIRY_DATE', HttpStatus.UNPROCESSABLE_ENTITY, 'newValidUntil');
-            }
+            // Super Admin & Admin bebas menentukan tanggal berlaku berapapun tanpa batasan
             finalValidUntil = targetExpiryDate;
-            addedDays = Math.max(1, Math.ceil((finalValidUntil.getTime() - from) / DAY));
+            const diffDays = Math.round((finalValidUntil.getTime() - pkg.validUntil.getTime()) / DAY);
+            const newStatus = finalValidUntil > now ? 'ACTIVE' : 'EXPIRED';
+            data = { validUntil: finalValidUntil, status: newStatus };
+            note = `Ubah masa berlaku ke ${finalValidUntil.toISOString().slice(0, 10)} (${diffDays >= 0 ? '+' : ''}${diffDays} hari)`;
           } else {
             addedDays = body.days!;
             finalValidUntil = new Date(from + addedDays * DAY);
+            data = { validUntil: finalValidUntil, status: 'ACTIVE' };
+            note = `Perpanjang masa berlaku ${addedDays} hari (hingga ${finalValidUntil.toISOString().slice(0, 10)})`;
           }
-          data = { validUntil: finalValidUntil, status: 'ACTIVE' };
-          note = `Perpanjang masa berlaku ${addedDays} hari (hingga ${finalValidUntil.toISOString().slice(0, 10)})`;
         } else if (action === 'freeze') {
           if (pkg.status !== 'ACTIVE' || pkg.validUntil <= now)
             throw problem('PACKAGE_NOT_ACTIVE', HttpStatus.CONFLICT);

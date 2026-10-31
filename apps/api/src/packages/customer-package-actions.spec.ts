@@ -148,16 +148,15 @@ describe('extend', () => {
     expect(applied[0]!.data.status).toBe('ACTIVE');
   });
 
-  it('refuses newValidUntil date that is earlier than current expiry or today (no-happy path)', async () => {
+  it('allows staff/admin to set any date freely without restriction', async () => {
     const row = pkgRow();
-    const { service } = setup(row);
-    const pastDate = new Date(row.validUntil.getTime() - 5 * DAY);
-    await expect(
-      service.manageCustomerPackage(manager, packageId, 'extend', {
-        ...reason,
-        newValidUntil: pastDate.toISOString(),
-      }),
-    ).rejects.toMatchObject({ code: 'INVALID_EXPIRY_DATE' });
+    const { service, applied } = setup(row);
+    const customDate = new Date(row.validUntil.getTime() - 5 * DAY);
+    await service.manageCustomerPackage(manager, packageId, 'extend', {
+      ...reason,
+      newValidUntil: customDate.toISOString(),
+    });
+    expect(applied[0]!.data.validUntil.getTime()).toBe(customDate.getTime());
   });
 
   it('counts from today for an already expired package and reactivates it', async () => {

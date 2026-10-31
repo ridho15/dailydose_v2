@@ -414,10 +414,9 @@ export function CustomerSessionDetailView({ id }: { id: string }) {
             </div>
 
             <DateInput
-              label="Pilih tanggal berakhir baru"
+              label="Pilih tanggal berakhir baru (bebas tanggal berapapun)"
               data-testid="input-extend-date"
               value={targetDate}
-              min={new Date(Math.max(new Date(history.balance.expiryAt).getTime(), Date.now()) + 86400000).toISOString().slice(0, 10)}
               onChange={(event) => {
                 setTargetDate(event.target.value);
                 setExtendMode('date');
@@ -448,12 +447,17 @@ export function CustomerSessionDetailView({ id }: { id: string }) {
               </div>
             </div>
 
-            {targetDate && (
-              <div className="rounded-dd-sm bg-emerald-50 border border-emerald-200 p-2 text-xs text-emerald-800">
-                Paket akan diperpanjang hingga: <strong>{targetDate}</strong> (
-                +{Math.max(1, Math.ceil((new Date(targetDate).getTime() - Math.max(new Date(history.balance.expiryAt).getTime(), Date.now())) / 86400000))} hari)
-              </div>
-            )}
+            {targetDate && (() => {
+              const currentExpiry = new Date(history.balance.expiryAt).getTime();
+              const selectedTime = new Date(targetDate).getTime();
+              const diffDays = Math.round((selectedTime - currentExpiry) / 86400000);
+              return (
+                <div className="rounded-dd-sm bg-emerald-50 border border-emerald-200 p-2 text-xs text-emerald-800">
+                  Paket akan diset hingga: <strong>{targetDate}</strong> (
+                  {diffDays > 0 ? `+${diffDays} hari` : diffDays < 0 ? `${diffDays} hari` : 'sama dengan tanggal saat ini'} dari masa berlaku saat ini)
+                </div>
+              );
+            })()}
           </div>
         )}
       </ReasonDialog>

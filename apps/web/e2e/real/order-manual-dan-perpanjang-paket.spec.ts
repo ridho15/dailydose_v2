@@ -90,24 +90,29 @@ test.describe('QA UAT & No-Happy Path: Order Paket Manual & Perpanjangan Pilihan
     });
 
     // =========================================================================
-    // 4. NO-HAPPY PATH: BATAS MINIMAL TANGGAL & VALIDASI FORM
+    // 4. VERIFIKASI TANPA BATAS TANGGAL: ADMIN BEBAS PILIH TANGGAL BERAPAPUN
     // =========================================================================
-    // Verifikasi atribut min pada DateInput mencegah tanggal di masa lalu / sebelum expiry
+    // Pastikan tidak ada batasan atribut min pada DateInput
     const minDateAttr = await dateInput.getAttribute('min');
-    expect(minDateAttr).toBeTruthy();
+    expect(minDateAttr).toBeNull();
 
-    // Coba isi alasan kurang dari 3 karakter (No-Happy Path)
-    const reasonTextarea = page.locator('textarea').first();
-    await reasonTextarea.fill('ok'); // Kurang dari 3 karakter
-    const confirmBtn = page.getByRole('button', { name: /perpanjang/i }).last();
-    // Tombol konfirmasi harus disabled atau form menolak
-    const isDisabled = await confirmBtn.isDisabled();
-    expect(isDisabled).toBe(true);
+    // Super Admin bebas mengisi tanggal berapapun (misal custom date di masa depan/lampau)
+    await dateInput.fill('2028-12-31');
+    await page.waitForTimeout(500);
 
-    // Screenshot 3: No-Happy Path - Validasi Alasan & Batas Min Tanggal
+    // Verifikasi kalkulasi teks dinamis menampilkan tanggal yang dipilih
+    await expect(page.locator('text=2028-12-31')).toBeVisible();
+
+    // Screenshot 4: Tanggal Bebas Tanpa Batasan Min
     await page.screenshot({
-      path: `${ARTIFACT_DIR}/qa_extend_03_no_happy_path_validasi_alasan.png`,
+      path: `${ARTIFACT_DIR}/qa_extend_04_bebas_pilih_tanggal_tanpa_batas.png`,
       fullPage: false,
     });
+
+    // Validasi alasan tetap aktif (minimal 3 karakter)
+    const reasonTextarea = page.locator('textarea').first();
+    await reasonTextarea.fill('ok');
+    const confirmBtn = page.getByRole('button', { name: /perpanjang/i }).last();
+    expect(await confirmBtn.isDisabled()).toBe(true);
   });
 });
