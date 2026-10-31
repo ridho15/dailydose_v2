@@ -91,7 +91,7 @@ export function SharedPackageMembersDialog({
       try {
         const res = await apiFetch<{
           items: Array<{ id: string; label?: string; description?: string }>;
-        }>(`/lookups/customers?${new URLSearchParams({ q, limit: '8' }).toString()}`);
+        }>(`/lookups/customers?${new URLSearchParams({ q, limit: '8', includeWithoutPackage: 'true' }).toString()}`);
         if (!cancelled) {
           setSearchResults(res.items ?? []);
         }

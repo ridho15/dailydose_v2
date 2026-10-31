@@ -9,7 +9,10 @@ const failure = (status: number, body: unknown) => ({
 });
 
 describe('promotionFailure', () => {
-  it('names the overlap, stale version and expired cases in Indonesian', async () => {
+  it('names the overlap, stale version, expired and resource exists cases in Indonesian', async () => {
+    await expect(
+      promotionFailure(failure(409, { error: { code: 'RESOURCE_EXISTS' } }), 'x'),
+    ).resolves.toMatch(/sudah digunakan oleh paket lain/);
     await expect(
       promotionFailure(failure(409, { error: { code: 'PROMOTION_OVERLAP' } }), 'x'),
     ).resolves.toMatch(/promo aktif pada paket ini di periode yang sama/);

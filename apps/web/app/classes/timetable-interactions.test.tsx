@@ -278,4 +278,45 @@ describe('timetable: peserta kelas', () => {
       expect.any(String),
     );
   });
+
+  it('menampilkan petunjuk draf dan tidak mengizinkan penambahan member jika status kelas DRAFT', async () => {
+    const bookings = bookingClient();
+    render(
+      <ClassSlotView
+        client={classClient([kelas({ id: 'slot-draft', status: 'DRAFT', bookedCount: 0 })])}
+        bookingClient={bookings}
+        branchOverride={branch}
+        capabilitiesOverride={kapabilitas}
+      />,
+    );
+    const user = userEvent.setup();
+    await user.click(
+      await within(kalender()).findByRole('button', { name: /Private Group, Asrida/ }),
+    );
+    const panel = await screen.findByRole('dialog', { name: 'Private Group' });
+
+    expect(within(panel).getByText('Kelas masih berstatus Draf')).toBeVisible();
+    expect(
+      within(panel).getByText(/Publikasikan kelas melalui menu/),
+    ).toBeVisible();
+    expect(within(panel).queryByLabelText('Tambah member ke kelas ini')).toBeNull();
+  });
+
+  it('menampilkan pesan penolakan kontekstual yang jelas jika API mengembalikan INVALID_STATE_TRANSITION', async () => {
+    const bookings = bookingClient();
+    bookings.create = vi.fn().mockRejectedValue({
+      status: 409,
+      data: { code: 'INVALID_STATE_TRANSITION' },
+    });
+    const { user, panel } = await bukaPanel(bookings);
+
+    await user.type(within(panel).getByLabelText('Tambah member ke kelas ini'), 'Ayu');
+    await user.click(await within(panel).findByRole('button', { name: /Ayu Lestari/ }));
+
+    expect(
+      await within(panel).findByText(
+        'Status kelas atau booking saat ini tidak mengizinkan tindakan tersebut. Pastikan kelas sudah dipublikasikan.',
+      ),
+    ).toBeVisible();
+  });
 });

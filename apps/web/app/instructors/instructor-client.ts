@@ -119,6 +119,9 @@ export const instructorClient = {
     phoneE164?: string;
     password?: string;
     branchIds?: string[];
+    bankName?: string;
+    accountNumber?: string;
+    accountHolder?: string;
   }) {
     const createdUser = await post<{ id: string; status: string }>('/users', {
       email: input.email.trim().toLowerCase(),
@@ -132,17 +135,24 @@ export const instructorClient = {
       })),
     });
 
-    // If phone number is specified, update user profile
-    if (input.phoneE164?.trim()) {
+    // If phone number or bank info specified, update instructor profile
+    if (input.phoneE164?.trim() || input.bankName?.trim() || input.accountNumber?.trim()) {
       try {
-        await patch(`/users/${encodeURIComponent(createdUser.id)}/profile`, {
+        await patch(`/instructors/${encodeURIComponent(createdUser.id)}/profile`, {
           displayName: input.displayName.trim(),
-          phoneE164: input.phoneE164.trim(),
+          email: input.email.trim().toLowerCase(),
+          phoneE164: input.phoneE164?.trim() || null,
+          branchIds: input.branchIds ?? [],
+          bankInfo: {
+            bankName: input.bankName?.trim() || null,
+            accountNumber: input.accountNumber?.trim() || null,
+            accountHolder: input.accountHolder?.trim() || input.displayName.trim(),
+          },
           expectedVersion: 1,
-          reason: 'Setup profil instruktur awal',
+          reason: 'Setup profil awal dan rekening honor instruktur',
         });
       } catch {
-        // profile creation was optional, ignore if fails
+        // profile update was optional, ignore if fails
       }
     }
 

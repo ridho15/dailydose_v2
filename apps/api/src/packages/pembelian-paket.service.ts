@@ -66,6 +66,102 @@ export class CustomerOrderService {
         }
       : null;
 
+    const timelineItems: Array<{
+      id: string;
+      type: string;
+      occurredAt: Date;
+      reasonCode: string | null;
+      derived: boolean;
+    }> = [
+      {
+        id: `${order.id}:created`,
+        type: 'ORDER_CREATED',
+        occurredAt: order.createdAt,
+        reasonCode: null,
+        derived: false,
+      },
+    ];
+
+    if (order.paymentExpiresAt) {
+      timelineItems.push({
+        id: `${order.id}:deadline`,
+        type: 'PAYMENT_DEADLINE_SET',
+        occurredAt: order.paymentExpiresAt,
+        reasonCode: null,
+        derived: false,
+      });
+    }
+
+    if (proof) {
+      timelineItems.push({
+        id: `${order.id}:proof-submitted`,
+        type: 'PROOF_SUBMITTED',
+        occurredAt: proof.uploadedAt ?? order.createdAt,
+        reasonCode: null,
+        derived: false,
+      });
+      timelineItems.push({
+        id: `${order.id}:proof-scanned`,
+        type: 'PROOF_SCAN_COMPLETED',
+        occurredAt: proof.uploadedAt ?? order.createdAt,
+        reasonCode: null,
+        derived: false,
+      });
+    }
+
+    if (order.status === 'WAITING_CORRECTION' || order.status === 'ACTION_REQUIRED') {
+      timelineItems.push({
+        id: `${order.id}:action-required`,
+        type: 'ACTION_REQUIRED',
+        occurredAt: order.verifiedAt ?? order.updatedAt ?? order.createdAt,
+        reasonCode: order.rejectionReason ?? null,
+        derived: false,
+      });
+    }
+
+    if (order.status === 'PAID') {
+      timelineItems.push({
+        id: `${order.id}:approved`,
+        type: 'PAYMENT_APPROVED',
+        occurredAt: order.verifiedAt ?? order.createdAt,
+        reasonCode: null,
+        derived: false,
+      });
+    } else if (order.status === 'REJECTED') {
+      timelineItems.push({
+        id: `${order.id}:rejected`,
+        type: 'PAYMENT_REJECTED',
+        occurredAt: order.verifiedAt ?? order.updatedAt ?? order.createdAt,
+        reasonCode: order.rejectionReason ?? null,
+        derived: false,
+      });
+    } else if (order.status === 'CANCELLED') {
+      timelineItems.push({
+        id: `${order.id}:expired`,
+        type: 'ORDER_EXPIRED',
+        occurredAt: order.paymentExpiresAt ?? order.updatedAt ?? order.createdAt,
+        reasonCode: null,
+        derived: false,
+      });
+    }
+
+    if (customerPkg) {
+      timelineItems.push({
+        id: `${order.id}:activated`,
+        type: 'PACKAGE_ACTIVATED',
+        occurredAt: customerPkg.validFrom ?? order.verifiedAt ?? order.createdAt,
+        reasonCode: null,
+        derived: false,
+      });
+    }
+
+    const timeline = {
+      items: timelineItems.sort(
+        (a, b) => new Date(a.occurredAt).getTime() - new Date(b.occurredAt).getTime(),
+      ),
+      page: { hasMore: false, nextCursor: null },
+    };
+
     return {
       id: order.id,
       invoiceNumber: order.invoiceNumber,
@@ -125,6 +221,7 @@ export class CustomerOrderService {
           }
         : null,
       decisionReasonCode: order.rejectionReason ?? null,
+      timeline,
       timelineComplete: true,
       version: 1,
       activation: customerPkg

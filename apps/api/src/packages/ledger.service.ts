@@ -92,7 +92,13 @@ export class LedgerService {
         ? !scope.excluded.includes(requestedBranchId)
         : scope.included.includes(requestedBranchId);
       if (!allowed) throw new ApiProblem('RESOURCE_NOT_FOUND', HttpStatus.NOT_FOUND);
-      return { purchase: { is: { branchId: requestedBranchId } } };
+      return {
+        OR: [
+          { purchase: { is: { branchId: requestedBranchId } } },
+          { package: { isMultiBranch: true } },
+          { package: { branchId: requestedBranchId } },
+        ],
+      };
     }
     if (scope.all) {
       return scope.excluded.length > 0

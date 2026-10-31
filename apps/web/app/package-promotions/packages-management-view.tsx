@@ -591,11 +591,15 @@ export function PackagesManagementView() {
                 message: `${created.name} berhasil ditambahkan.`,
               });
               router.push(`/workspace/packages/${created.id}`);
-            } catch {
+            } catch (error) {
+              const message = await promotionFailure(
+                error,
+                'Gagal membuat paket. Periksa kelengkapan data, koneksi, atau wewenang akun lalu coba kembali.',
+              );
               feedback.showAlert({
                 tone: 'danger',
                 title: isDuplicate ? 'Duplikasi paket belum berhasil' : 'Paket belum dibuat',
-                message: 'Periksa periode, class type, dan data harga lalu coba kembali.',
+                message,
               });
             } finally {
               setBusy(false);
@@ -831,6 +835,7 @@ function PackageCreateForm({
           label="Business key"
           placeholder="Contoh: PKG-10X-GROUP"
           defaultValue={initialValues?.businessKey ?? ''}
+          maxLength={32}
           required
         />
         <TextInput

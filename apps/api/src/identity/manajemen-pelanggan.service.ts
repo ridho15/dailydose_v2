@@ -152,7 +152,10 @@ export class CustomerManagementService {
           profile: true,
           customerPackages: {
             where: { status: 'ACTIVE' },
-            include: { package: { select: { name: true } } },
+            include: {
+              package: { select: { name: true, isShareable: true } },
+              sharedMembers: { select: { id: true, userId: true } },
+            },
             orderBy: { createdAt: 'desc' },
           },
           _count: {
@@ -194,6 +197,8 @@ export class CustomerManagementService {
           name: cp.package.name,
           remainingSessions: cp.remainingSessions,
           totalSessions: cp.totalSessions,
+          isShareable: Boolean((cp.package as any)?.isShareable),
+          sharedMemberCount: (cp as any).sharedMembers?.length ?? 0,
         })),
         totalBookings: u._count.bookings,
         _count: {
@@ -230,7 +235,14 @@ export class CustomerManagementService {
         customerPackages: {
           orderBy: { createdAt: 'desc' },
           take: 20,
-          include: { package: true },
+          include: {
+            package: true,
+            sharedMembers: {
+              include: {
+                user: { select: { id: true, displayName: true, email: true, phone: true } },
+              },
+            },
+          },
         },
         purchases: {
           orderBy: { createdAt: 'desc' },
@@ -341,6 +353,14 @@ export class CustomerManagementService {
         activationDate: cp.validFrom,
         expiryAt: cp.validUntil,
         package: cp.package,
+        isShareable: Boolean(cp.package?.isShareable),
+        sharedMembers: ((cp as any).sharedMembers ?? []).map((m: any) => ({
+          id: m.id,
+          userId: m.userId,
+          relationship: m.relationship,
+          displayName: m.user?.displayName,
+          phone: m.user?.phone,
+        })),
       })),
       customerBookings: customer.bookings.map((b) => ({
         id: b.id,

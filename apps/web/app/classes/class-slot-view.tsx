@@ -396,7 +396,8 @@ export function ClassSlotView({
   const canAddToRoster =
     !isInstructor &&
     capabilities.includes('booking:create:assisted') &&
-    Boolean(bookingClient.searchRosterCandidates && bookingClient.create);
+    Boolean(bookingClient.searchRosterCandidates && bookingClient.create) &&
+    (!selectedSlot || ['PUBLISHED', 'CONFIRMED'].includes(selectedSlot.status));
   const canRemoveFromRoster =
     !isInstructor &&
     capabilities.includes('booking:cancel:assisted') &&

@@ -281,6 +281,17 @@ export function CustomerPaymentFlow({
           message="Batas transfer sudah berakhir. Buat pesanan baru untuk memperoleh nominal pembayaran baru."
         />
       )}
+      {order.status === 'REJECTED' && (
+        <AlertBanner
+          tone="danger"
+          title="Pembayaran ditolak"
+          message={
+            order.decisionReasonCode && orderReasonLabels[order.decisionReasonCode]
+              ? `Alasan penolakan: ${orderReasonLabels[order.decisionReasonCode]}. Anda dapat membuat pesanan baru atau menghubungi studio untuk bantuan.`
+              : 'Bukti pembayaran ditolak oleh tim verifikasi. Anda dapat membuat pesanan baru atau menghubungi studio untuk informasi lebih lanjut.'
+          }
+        />
+      )}
       {failure && (
         <AlertBanner
           tone="danger"
@@ -957,6 +968,23 @@ export function CustomerPaymentFlow({
             >
               Buat pesanan baru
             </ButtonLink>
+          )}
+          {order.status === 'REJECTED' && (
+            <>
+              <ButtonLink
+                href={waUrl}
+                variant="secondary"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Hubungi studio via WhatsApp
+              </ButtonLink>
+              <ButtonLink
+                href={`/checkout?package=${encodeURIComponent(order.packageId)}&branch=${encodeURIComponent(order.branchId)}${order.continuationSlotId ? `&slot=${encodeURIComponent(order.continuationSlotId)}` : ''}`}
+              >
+                Buat pesanan baru
+              </ButtonLink>
+            </>
           )}
         </div>
       </div>

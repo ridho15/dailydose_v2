@@ -1153,7 +1153,8 @@ const messages: Record<string, string> = {
   STALE_VERSION: 'Data berubah sejak terakhir dimuat. Muat ulang sebelum melanjutkan.',
   CHECK_IN_TOO_EARLY: 'QR belum aktif. Check-in dibuka 30 menit sebelum kelas.',
   CHECK_IN_WINDOW_CLOSED: 'QR sudah kedaluwarsa karena jadwal kelas telah selesai.',
-  INVALID_STATE_TRANSITION: 'Booking atau kelas tidak berada pada status yang dapat di-check-in.',
+  INVALID_STATE_TRANSITION:
+    'Status kelas atau booking saat ini tidak mengizinkan tindakan tersebut. Pastikan kelas sudah dipublikasikan.',
   PACKAGE_CLASS_TYPE_MISMATCH: 'Paket yang Anda pilih tidak sesuai dengan jenis kelas ini. Silakan pilih kelas dengan tipe yang cocok.',
   PACKAGE_BRANCH_MISMATCH: 'Paket ini hanya berlaku untuk cabang studio tertentu. Silakan pilih jadwal di cabang yang sesuai.',
   PACKAGE_EXHAUSTED: 'Sisa sesi paket Anda sudah habis. Silakan beli paket baru untuk melanjutkan booking.',

@@ -269,6 +269,22 @@ export function TimetableRosterPanel({
       )}
 
       <div className="mt-5 flex flex-wrap items-start gap-7">
+        {slot.status === 'DRAFT' && (
+          <div className="min-w-0 flex-[1_1_320px] rounded-dd-sm border border-amber-200 bg-amber-50/70 p-4 text-sm text-amber-900">
+            <p className="font-semibold text-amber-950">Kelas masih berstatus Draf</p>
+            <p className="mt-1 text-xs text-amber-800 leading-relaxed">
+              Publikasikan kelas melalui menu <strong>Atur kelas</strong> terlebih dahulu agar dapat menambahkan member ke dalam roster.
+            </p>
+          </div>
+        )}
+        {slot.status === 'CANCELLED' && (
+          <div className="min-w-0 flex-[1_1_320px] rounded-dd-sm border border-red-200 bg-red-50/70 p-4 text-sm text-red-900">
+            <p className="font-semibold text-red-950">Kelas telah dibatalkan</p>
+            <p className="mt-1 text-xs text-red-800 leading-relaxed">
+              Tidak dapat menambahkan member pada kelas yang sudah dibatalkan.
+            </p>
+          </div>
+        )}
         {canAdd && (
           <div className="min-w-0 flex-[1_1_320px]">
             <label htmlFor="tt-add" className="mb-2 block text-[15px] font-bold text-dd-ink">

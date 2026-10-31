@@ -35,10 +35,12 @@ import { Feedback, Skeleton, StatusBadge } from '../../ui';
 import { AdminPageHeader } from '../../components/admin/admin-page-header';
 import { KirimQrWhatsApp } from '../../components/kirim-qr-whatsapp';
 import { AssistedSaleDrawer } from '../../purchases/assisted-sale-drawer';
-import { DataTable } from '../../components/admin/admin-ui';
+import { Badge, DataTable } from '../../components/admin/admin-ui';
+import { SharedPackageMembersDialog } from '../../components/shared-package-members-dialog';
 import { statusLabel } from '../../lib/status-labels';
 import { customerStatusLabels, verificationStatusLabels } from '../customers-view';
 import { customerClient, type CustomerDetail, type CustomerDetailDocument } from '../customer-client';
+import { CustomerEditDrawer } from '../customer-edit-drawer';
 import { verificationClient } from '../../api-clients/identity-verification-client';
 
 function CustomerDocumentCard({
@@ -267,6 +269,7 @@ export function CustomerDetailView({ id }: { id: string }) {
   // Edit Profile Drawer & Status Modal State
   const [editDrawerOpen, setEditDrawerOpen] = useState(false);
   const [statusModalOpen, setStatusModalOpen] = useState(false);
+  const [selectedSharePackage, setSelectedSharePackage] = useState<any | null>(null);
 
   const generateRandomPassword = () => {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%';
@@ -871,11 +874,22 @@ export function CustomerDetailView({ id }: { id: string }) {
                             {
                               id: 'name',
                               header: 'Nama Paket',
-                              cell: (cp) => (
-                                <span className="font-semibold text-dd-ink">
-                                  {cp.package?.name ?? 'Paket Pilates'}
-                                </span>
-                              ),
+                              cell: (cp) => {
+                                const shareable = Boolean(cp.isShareable || cp.package?.isShareable);
+                                const memberCount = cp.sharedMembers?.length ?? 0;
+                                return (
+                                  <div className="space-y-1">
+                                    <span className="font-semibold text-dd-ink block">
+                                      {cp.package?.name ?? 'Paket Pilates'}
+                                    </span>
+                                    {shareable && (
+                                      <Badge tone="success">
+                                        Paket Bersama {memberCount > 0 ? `(${memberCount} Anggota)` : '(0 Anggota)'}
+                                      </Badge>
+                                    )}
+                                  </div>
+                                );
+                              },
                             },
                             {
                               id: 'total',
@@ -915,32 +929,73 @@ export function CustomerDetailView({ id }: { id: string }) {
                             {
                               id: 'manage',
                               header: 'Tindakan',
-                              cell: (cp) => (
-                                <ButtonLink size="sm" variant="secondary" href={`/ledger/${cp.id}`}>
-                                  {sessionContext?.hasCapability('customer-package:manage')
-                                    ? 'Kelola'
-                                    : 'Riwayat sesi'}
-                                </ButtonLink>
-                              ),
+                              cell: (cp) => {
+                                const shareable = Boolean(cp.isShareable || cp.package?.isShareable);
+                                const memberCount = cp.sharedMembers?.length ?? 0;
+                                return (
+                                  <div className="flex items-center gap-2">
+                                    {shareable && sessionContext?.hasCapability('customer-package:manage') && (
+                                      <Button
+                                        size="sm"
+                                        variant="secondary"
+                                        data-testid={`btn-manage-share-${cp.id}`}
+                                        onClick={() => setSelectedSharePackage(cp)}
+                                      >
+                                        Anggota Bersama ({memberCount})
+                                      </Button>
+                                    )}
+                                    <ButtonLink size="sm" variant="secondary" href={`/ledger/${cp.id}`}>
+                                      {sessionContext?.hasCapability('customer-package:manage')
+                                        ? 'Kelola'
+                                        : 'Riwayat sesi'}
+                                    </ButtonLink>
+                                  </div>
+                                );
+                              },
                             },
                           ]}
-                          mobileCard={(cp) => (
-                            <div className="space-y-1">
-                              <div className="flex items-center justify-between gap-3">
-                                <strong className="text-dd-ink">{cp.package?.name ?? 'Paket Pilates'}</strong>
-                                <StatusBadge tone="success">
-                                  {statusLabel(cp.status)}
-                                </StatusBadge>
+                          mobileCard={(cp) => {
+                            const shareable = Boolean(cp.isShareable || cp.package?.isShareable);
+                            const memberCount = cp.sharedMembers?.length ?? 0;
+                            return (
+                              <div className="space-y-2">
+                                <div className="flex items-center justify-between gap-3">
+                                  <strong className="text-dd-ink">{cp.package?.name ?? 'Paket Pilates'}</strong>
+                                  <StatusBadge tone="success">
+                                    {statusLabel(cp.status)}
+                                  </StatusBadge>
+                                </div>
+                                {shareable && (
+                                  <Badge tone="success">
+                                    Paket Bersama {memberCount > 0 ? `(${memberCount} Anggota)` : '(0 Anggota)'}
+                                  </Badge>
+                                )}
+                                <p className="text-sm text-dd-muted">
+                                  Sisa {cp.remainingSessions} dari{' '}
+                                  {Math.max((cp as any).totalSessions ?? cp.sessionCountSnapshot ?? cp.package?.sessionCount ?? 0, cp.remainingSessions + (cp.usedSessions ?? 0))} sesi ·{' '}
+                                  {cp.expiryAt
+                                    ? `s.d. ${new Date(cp.expiryAt).toLocaleDateString('id-ID')}`
+                                    : 'Permanen'}
+                                </p>
+                                <div className="flex flex-wrap items-center gap-2 pt-1">
+                                  {shareable && sessionContext?.hasCapability('customer-package:manage') && (
+                                    <Button
+                                      size="sm"
+                                      variant="secondary"
+                                      onClick={() => setSelectedSharePackage(cp)}
+                                    >
+                                      Anggota Bersama ({memberCount})
+                                    </Button>
+                                  )}
+                                  <ButtonLink size="sm" variant="secondary" href={`/ledger/${cp.id}`}>
+                                    {sessionContext?.hasCapability('customer-package:manage')
+                                      ? 'Kelola'
+                                      : 'Riwayat sesi'}
+                                  </ButtonLink>
+                                </div>
                               </div>
-                              <p className="text-sm text-dd-muted">
-                                Sisa {cp.remainingSessions} dari{' '}
-                                {Math.max((cp as any).totalSessions ?? cp.sessionCountSnapshot ?? cp.package?.sessionCount ?? 0, cp.remainingSessions + (cp.usedSessions ?? 0))} sesi ·{' '}
-                                {cp.expiryAt
-                                  ? `s.d. ${new Date(cp.expiryAt).toLocaleDateString('id-ID')}`
-                                  : 'Permanen'}
-                              </p>
-                            </div>
-                          )}
+                            );
+                          }}
                         />
                       )}
 
@@ -1191,126 +1246,19 @@ export function CustomerDetailView({ id }: { id: string }) {
         </div>
       </div>
 
-      {/* Edit Profile Drawer */}
-      <Drawer
+      {/* Unified Edit Profile Drawer */}
+      <CustomerEditDrawer
         open={editDrawerOpen}
         onClose={() => setEditDrawerOpen(false)}
-        title="Edit Profil & Data Demografi"
-        description="Perbarui identitas pribadi, alamat, cabang utama, dan kontak darurat pelanggan."
-        className="max-w-xl"
-      >
-        <form onSubmit={updateProfile} className="space-y-4 py-2">
-          <div className="grid gap-3 sm:grid-cols-2">
-            <TextInput
-              required
-              label="Nama Lengkap"
-              name="displayName"
-              defaultValue={customer.displayName}
-            />
-            <TextInput
-              label="Username (ID Login)"
-              name="username"
-              defaultValue={(customer as any).username ?? ''}
-              placeholder="contoh: budi_santoso"
-              description="Digunakan untuk login member (3-30 karakter)."
-            />
-          </div>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <TextInput
-              type="email"
-              label="Email (Opsional)"
-              name="email"
-              defaultValue={customer.email ?? ''}
-              placeholder="nama@email.com"
-            />
-            <TextInput
-              required
-              label="Nomor WhatsApp / HP"
-              name="phoneE164"
-              defaultValue={customer.phoneE164 ?? ''}
-            />
-          </div>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <SearchSelect
-              label="Studio/Cabang Pilihan"
-              name="preferredBranchId"
-              defaultValue={customer.preferredBranch?.id ?? ''}
-              placeholder="Belum ditentukan"
-              options={(session?.branches ?? []).map((branch) => ({
-                id: branch.id,
-                label: branch.name,
-              }))}
-            />
-          </div>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="grid gap-1.5">
-              <label className="text-xs font-bold text-dd-ink" htmlFor="gender-select">
-                Jenis Kelamin
-              </label>
-              <select
-                id="gender-select"
-                name="genderCode"
-                defaultValue={customer.profile?.gender ?? customer.profile?.genderCode ?? ''}
-                className="w-full rounded-dd-md border border-dd-line bg-white px-3 py-2 text-sm text-dd-ink outline-none focus:border-dd-forest focus:ring-2 focus:ring-dd-forest/15"
-              >
-                <option value="">Pilih Jenis Kelamin</option>
-                <option value="FEMALE">Perempuan</option>
-                <option value="MALE">Laki-laki</option>
-              </select>
-            </div>
-          </div>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <TextInput
-              type="date"
-              label="Tanggal Lahir"
-              name="birthDate"
-              defaultValue={
-                customer.profile?.birthDate
-                  ? new Date(customer.profile.birthDate).toISOString().split('T')[0]
-                  : ''
-              }
-            />
-            <TextInput
-              label="Alamat Domisili"
-              name="address"
-              defaultValue={customer.profile?.address ?? ''}
-              placeholder="Alamat lengkap tempat tinggal"
-            />
-          </div>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <TextInput
-              label="Nama Kontak Darurat"
-              name="emergencyContactName"
-              defaultValue={customer.profile?.emergencyContactName ?? ''}
-              placeholder="Nama keluarga / rekan"
-            />
-            <TextInput
-              label="Nomor Kontak Darurat"
-              name="emergencyContactPhone"
-              defaultValue={customer.profile?.emergencyContactPhone ?? ''}
-              placeholder="08123456789"
-            />
-          </div>
-          <TextInput
-            label="Catatan perubahan (opsional)"
-            name="reason"
-            placeholder="Contoh: Pembaruan data demografi dan kontak"
-          />
-          <div className="flex justify-end gap-2 pt-3 border-t border-dd-line">
-            <Button
-              type="button"
-              variant="secondary"
-              disabled={busy}
-              onClick={() => setEditDrawerOpen(false)}
-            >
-              Batal
-            </Button>
-            <Button type="submit" loading={busy} disabled={!canWrite}>
-              Simpan Perubahan Profil
-            </Button>
-          </div>
-        </form>
-      </Drawer>
+        customer={customer}
+        branches={(session?.branches ?? []).map((b) => ({ id: b.id, name: b.name }))}
+        canWrite={canWrite}
+        onSuccess={async (updatedName?: string) => {
+          setSuccess(`Profil pelanggan ${updatedName || customer.displayName} berhasil diperbarui.`);
+          setEditDrawerOpen(false);
+          await load();
+        }}
+      />
 
       {/* Change Status Modal */}
       <Modal
@@ -1475,6 +1423,18 @@ export function CustomerDetailView({ id }: { id: string }) {
             </div>
           </div>
         </Modal>
+      )}
+      {selectedSharePackage && (
+        <SharedPackageMembersDialog
+          open={Boolean(selectedSharePackage)}
+          onClose={() => setSelectedSharePackage(null)}
+          customerPackageId={selectedSharePackage.id}
+          packageName={selectedSharePackage.package?.name}
+          canManage={Boolean(sessionContext?.hasCapability('customer-package:manage'))}
+          onChanged={() => {
+            void load();
+          }}
+        />
       )}
     </section>
   );

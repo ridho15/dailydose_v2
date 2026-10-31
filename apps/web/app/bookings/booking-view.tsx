@@ -267,7 +267,11 @@ export function BookingView({
   const customerPackages = useMemo(
     () =>
       packages.filter(
-        (item) => (item.customerUserId ?? (item as any).customer?.id) === customerId,
+        (item) =>
+          (item.customerUserId ?? (item as any).customer?.id) === customerId ||
+          (item.isShareable &&
+            Array.isArray(item.sharedMembers) &&
+            item.sharedMembers.some((m: any) => m.userId === customerId)),
       ),
     [customerId, packages],
   );
@@ -962,13 +966,19 @@ export function BookingView({
             value={packageId}
             disabled={busy || !customerId || customerPackages.length === 0}
             placeholder="Pilih paket aktif"
-            options={customerPackages.map((item) => ({
-              id: item.id,
-              label: `${item.packageName ?? item.name ?? 'Paket Aktif'} · ${item.available} sesi tersedia`,
-              description: item.classTypeName
-                ? `${item.classTypeName} · Berlaku s/d ${new Intl.DateTimeFormat('id-ID', { dateStyle: 'medium' }).format(item.expiryAt)}`
-                : `${item.reserved ?? 0} sesi direservasi`,
-            }))}
+            options={customerPackages.map((item) => {
+              const isShared = (item.customerUserId ?? (item as any).customer?.id) !== customerId;
+              const ownerPrefix = isShared
+                ? `[Paket Bersama: ${(item.customer as any)?.displayName ?? (item.customer as any)?.name ?? 'Pemilik'}] `
+                : '';
+              return {
+                id: item.id,
+                label: `${ownerPrefix}${item.packageName ?? item.name ?? 'Paket Aktif'} · ${item.available} sesi tersedia`,
+                description: item.classTypeName
+                  ? `${item.classTypeName} · Berlaku s/d ${new Intl.DateTimeFormat('id-ID', { dateStyle: 'medium' }).format(item.expiryAt)}`
+                  : `${item.reserved ?? 0} sesi direservasi`,
+              };
+            })}
             onChange={(value) => {
               setPackageId(value);
               setSlotId('');

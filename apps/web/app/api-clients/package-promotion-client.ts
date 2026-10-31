@@ -223,6 +223,8 @@ const promotionMessages: Record<string, string> = {
   INVALID_STATE: 'Status promo tidak mengizinkan perubahan ini (mis. sudah diarsipkan).',
   FORBIDDEN: 'Anda tidak memiliki izin mengelola promo paket.',
   RESOURCE_NOT_FOUND: 'Promo atau paket tidak ditemukan.',
+  RESOURCE_EXISTS:
+    'Business Key (kode paket) sudah digunakan oleh paket lain. Silakan gunakan Business Key yang berbeda.',
   CANNOT_DELETE_PACKAGE_WITH_DEPENDENCIES:
     'Paket tidak dapat dihapus karena sudah memiliki riwayat data. Gunakan fitur Nonaktifkan untuk mengarsipkan paket ini.',
 };
@@ -246,7 +248,7 @@ export async function promotionFailure(error: unknown, fallback: string): Promis
     if (issue === 'TOO_LARGE') return 'Nilai diskon terlalu besar (persen maks. 90; nominal harus di bawah harga paket).';
     if (issue === 'BEFORE_START') return 'Tanggal berakhir harus setelah tanggal mulai.';
     if (issue === 'IN_THE_PAST') return 'Tanggal berakhir promo sudah lewat.';
-    return 'Isian promo belum valid. Periksa nama, nilai diskon, dan periode.';
+    return 'Data yang dimasukkan belum valid. Pastikan Business Key, nama paket, jumlah sesi (min. 1), dan harga telah terisi dengan benar.';
   }
   if (issue) return issue;
   if (code && promotionMessages[code]) return promotionMessages[code]!;
