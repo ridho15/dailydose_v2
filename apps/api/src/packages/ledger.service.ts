@@ -948,7 +948,7 @@ export class LedgerService {
     principal: SessionPrincipal,
     id: string,
     action: string | undefined,
-    body: { days?: number; reason?: string; expectedValidUntil?: string },
+    body: { days?: number; newValidUntil?: string; reason?: string; expectedValidUntil?: string },
   ) {
     this.policy.requireCapability(principal.capabilities, 'customer-package:manage');
     if (action !== 'extend' && action !== 'freeze' && action !== 'unfreeze')
@@ -957,9 +957,19 @@ export class LedgerService {
     const reason = typeof body?.reason === 'string' ? body.reason.trim() : '';
     if (reason.length < 3 || reason.length > 500)
       throw problem('VALIDATION_ERROR', HttpStatus.UNPROCESSABLE_ENTITY, 'reason');
-    const days = body?.days;
-    if (action === 'extend' && (!Number.isInteger(days) || days! < 1 || days! > 180))
-      throw problem('VALIDATION_ERROR', HttpStatus.UNPROCESSABLE_ENTITY, 'days');
+    let targetExpiryDate: Date | undefined;
+    if (action === 'extend') {
+      if (body?.newValidUntil) {
+        targetExpiryDate = new Date(body.newValidUntil);
+        if (isNaN(targetExpiryDate.getTime()))
+          throw problem('VALIDATION_ERROR', HttpStatus.UNPROCESSABLE_ENTITY, 'newValidUntil');
+      } else if (body?.days !== undefined) {
+        if (!Number.isInteger(body.days) || body.days < 1 || body.days > 180)
+          throw problem('VALIDATION_ERROR', HttpStatus.UNPROCESSABLE_ENTITY, 'days');
+      } else {
+        throw problem('VALIDATION_ERROR', HttpStatus.UNPROCESSABLE_ENTITY, 'days');
+      }
+    }
     let expectedValidUntil: number | undefined;
     if (body?.expectedValidUntil !== undefined) {
       expectedValidUntil = new Date(body.expectedValidUntil).getTime();
@@ -985,8 +995,21 @@ export class LedgerService {
           if (pkg.remainingSessions <= 0)
             throw problem('NO_REMAINING_SESSIONS', HttpStatus.CONFLICT);
           const from = Math.max(pkg.validUntil.getTime(), now.getTime());
-          data = { validUntil: new Date(from + days! * DAY), status: 'ACTIVE' };
-          note = `Perpanjang masa berlaku ${days} hari`;
+          let finalValidUntil: Date;
+          let addedDays: number;
+          if (targetExpiryDate) {
+            // Target date harus lebih besar dari batas tanggal saat ini
+            if (targetExpiryDate.getTime() <= from) {
+              throw problem('INVALID_EXPIRY_DATE', HttpStatus.UNPROCESSABLE_ENTITY, 'newValidUntil');
+            }
+            finalValidUntil = targetExpiryDate;
+            addedDays = Math.max(1, Math.ceil((finalValidUntil.getTime() - from) / DAY));
+          } else {
+            addedDays = body.days!;
+            finalValidUntil = new Date(from + addedDays * DAY);
+          }
+          data = { validUntil: finalValidUntil, status: 'ACTIVE' };
+          note = `Perpanjang masa berlaku ${addedDays} hari (hingga ${finalValidUntil.toISOString().slice(0, 10)})`;
         } else if (action === 'freeze') {
           if (pkg.status !== 'ACTIVE' || pkg.validUntil <= now)
             throw problem('PACKAGE_NOT_ACTIVE', HttpStatus.CONFLICT);

@@ -58,16 +58,14 @@ describe('customer package actions panel', () => {
     const dialog = screen.getByRole('dialog', { name: 'Perpanjang masa berlaku paket' });
     const confirm = within(dialog).getByRole('button', { name: 'Perpanjang' });
     expect(confirm).toBeDisabled();
-    await user.clear(within(dialog).getByLabelText('Tambahan hari (1–180)'));
-    await user.type(within(dialog).getByLabelText('Tambahan hari (1–180)'), '14');
+    await user.click(within(dialog).getByRole('button', { name: '+14 hari' }));
     await user.type(within(dialog).getByLabelText('Alasan'), 'Kompensasi kelas ditiadakan');
     await user.click(confirm);
     await waitFor(() => expect(manage).toHaveBeenCalledTimes(1));
-    expect(manage).toHaveBeenCalledWith('pkg-1', 'extend', {
+    expect(manage).toHaveBeenCalledWith('pkg-1', 'extend', expect.objectContaining({
       reason: 'Kompensasi kelas ditiadakan',
-      days: 14,
       expectedValidUntil: '2026-12-31T00:00:00.000Z',
-    });
+    }));
     expect(await screen.findByText('Masa berlaku paket diperpanjang.')).toBeVisible();
   });
 

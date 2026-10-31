@@ -21,6 +21,8 @@ import {
   type SearchSelectOption,
 } from '../components/forms';
 import { formatRupiah } from '../lib/formatters';
+import { browserOrderClient, sha256Upload } from '@/api-clients/order-client';
+import { compressImageIfNeeded } from '@/lib/image-compression';
 
 type PackageOption = SearchSelectOption & { priceRp: number };
 const NO_BRANCHES: Array<{ id: string; name: string }> = [];
@@ -57,13 +59,14 @@ export function AssistedSaleDrawer({
   const [method, setMethod] = useState<AssistedPaymentMethod>('CASH');
   const [voucherCode, setVoucherCode] = useState('');
   const [note, setNote] = useState('');
+  const [proofFile, setProofFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState('');
   const [chosenBranchId, setChosenBranchId] = useState('');
   const idempotencyKey = useRef<string | undefined>(undefined);
   const branchKey = branches.map((item) => item.id).join('|');
   const dirty = Boolean(
-    (!customer && customerOption) || packageOption || voucherCode.trim() || note.trim(),
+    (!customer && customerOption) || packageOption || voucherCode.trim() || note.trim() || Boolean(proofFile),
   );
 
   useEffect(() => {
@@ -74,6 +77,7 @@ export function AssistedSaleDrawer({
     setMethod('CASH');
     setVoucherCode('');
     setNote('');
+    setProofFile(null);
     setFailure('');
     idempotencyKey.current = undefined;
   }, [open, customer?.id, customer?.name, branch?.id, branchKey]);
@@ -133,10 +137,31 @@ export function AssistedSaleDrawer({
         },
         idempotencyKey.current,
       );
+      if (proofFile) {
+        try {
+          const compressed = await compressImageIfNeeded(proofFile);
+          const sha256 = await sha256Upload(compressed);
+          await browserOrderClient.uploadProof(
+            purchase as any,
+            compressed,
+            sha256,
+            undefined,
+          );
+        } catch (proofErr: any) {
+          console.error("Gagal melampirkan bukti manual:", proofErr);
+          feedback.showToast({
+            tone: 'warning',
+            title: 'Penjualan dicatat, namun bukti gagal diunggah',
+            message: proofErr.message || 'Anda dapat mengunggah bukti di detail pembayaran.',
+          });
+        }
+      }
       feedback.showToast({
         tone: 'success',
         title: 'Penjualan dicatat',
-        message: 'Menunggu persetujuan penyetuju lain di antrean Pembayaran.',
+        message: proofFile
+          ? 'Penjualan dan bukti pembayaran berhasil disimpan.'
+          : 'Menunggu persetujuan penyetuju lain di antrean Pembayaran.',
       });
       onRecorded?.(purchase);
       onClose();
@@ -245,6 +270,31 @@ export function AssistedSaleDrawer({
           placeholder="Contoh: dibayar tunai di meja resepsionis"
           onChange={(event) => setNote(event.target.value)}
         />
+        <div className="space-y-1.5 rounded-dd-sm border border-dashed border-dd-line bg-dd-surface-muted/40 p-3">
+          <label className="block text-xs font-semibold text-dd-ink">
+            Bukti transfer / struk pembayaran (opsional)
+          </label>
+          <p className="text-xs text-dd-muted">
+            Format: JPG, PNG, WebP, PDF. Otomatis dikompresi agar hemat kuota.
+          </p>
+          <input
+            type="file"
+            data-testid="input-assisted-sale-proof"
+            accept="image/jpeg,image/png,image/webp,application/pdf"
+            disabled={busy}
+            onChange={(e) => {
+              const file = e.target.files?.[0] ?? null;
+              setProofFile(file);
+            }}
+            className="text-xs file:mr-2 file:rounded-dd-sm file:border-0 file:bg-dd-forest/10 file:px-2.5 file:py-1 file:text-xs file:font-semibold file:text-dd-forest hover:file:bg-dd-forest/20 cursor-pointer"
+          />
+          {proofFile && (
+            <p className="text-xs text-emerald-700 font-medium">
+              File dipilih: {proofFile.name} ({(proofFile.size / 1024).toFixed(1)} KB)
+            </p>
+          )}
+        </div>
+
         <Feedback kind="info">
           Penjualan dicatat dengan status menunggu. Pencatat tidak dapat menyetujui penjualannya
           sendiri; persetujuan dilakukan oleh Finance atau Manager di antrean Pembayaran.

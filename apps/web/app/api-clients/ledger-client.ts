@@ -488,7 +488,7 @@ export type CustomerPackageAction = 'extend' | 'freeze' | 'unfreeze';
 export async function manageCustomerPackage(
   id: string,
   action: CustomerPackageAction,
-  input: { reason: string; days?: number; expectedValidUntil?: string },
+  input: { reason: string; days?: number; newValidUntil?: string; expectedValidUntil?: string },
 ) {
   return apiFetch<{ balance: unknown; ledgerEntry: unknown }>(
     `/customer-packages/${encodeURIComponent(id)}/${action}`,

@@ -17,7 +17,7 @@ import { Badge, Pagination, Panel, StatCard } from '../../components/admin/admin
 import { EmptyState, Feedback, Skeleton } from '../../ui';
 import { AdminPageHeader } from '../../components/admin/admin-page-header';
 import { ReasonDialog } from '../../components/admin/reason-dialog';
-import { TextInput } from '../../components/forms';
+import { DateInput, TextInput } from '../../components/forms';
 import { useSessionContext } from '../../session-context';
 import { SharedPackageMembersDialog } from '../../components/shared-package-members-dialog';
 
@@ -53,6 +53,8 @@ export function CustomerSessionDetailView({ id }: { id: string }) {
   const canManagePackage = Boolean(sessionContext?.hasCapability('customer-package:manage'));
   const [action, setAction] = useState<CustomerPackageAction | null>(null);
   const [days, setDays] = useState('30');
+  const [targetDate, setTargetDate] = useState('');
+  const [extendMode, setExtendMode] = useState<'date' | 'days'>('date');
   const [acting, setActing] = useState(false);
   const [actionError, setActionError] = useState('');
   const [notice, setNotice] = useState('');
@@ -77,11 +79,18 @@ export function CustomerSessionDetailView({ id }: { id: string }) {
     setActing(true);
     setActionError('');
     try {
-      await manageCustomerPackage(id, action, {
+      const payload: { reason: string; days?: number; newValidUntil?: string; expectedValidUntil?: string } = {
         reason,
-        days: action === 'extend' ? Number(days) : undefined,
         expectedValidUntil: history.balance.expiryAt.toISOString(),
-      });
+      };
+      if (action === 'extend') {
+        if (extendMode === 'date' && targetDate) {
+          payload.newValidUntil = new Date(`${targetDate}T23:59:59.999Z`).toISOString();
+        } else {
+          payload.days = Number(days);
+        }
+      }
+      await manageCustomerPackage(id, action, payload);
       setAction(null);
       setNotice(
         action === 'extend'
@@ -192,7 +201,18 @@ export function CustomerSessionDetailView({ id }: { id: string }) {
         {canManagePackage && (
           <div className="mt-4 flex flex-wrap gap-2" aria-label="Kelola paket">
             {balance.status !== 'FROZEN' && balance.ledgerBalance > 0 && (
-              <Button variant="secondary" onClick={() => setAction('extend')}>
+              <Button
+                variant="secondary"
+                data-testid="btn-open-extend-dialog"
+                onClick={() => {
+                  const base = Math.max(new Date(balance.expiryAt).getTime(), Date.now());
+                  const defaultNext = new Date(base + 30 * 86400000).toISOString().slice(0, 10);
+                  setTargetDate(defaultNext);
+                  setDays('30');
+                  setExtendMode('date');
+                  setAction('extend');
+                }}
+              >
                 Perpanjang masa berlaku
               </Button>
             )}
@@ -383,14 +403,58 @@ export function CustomerSessionDetailView({ id }: { id: string }) {
         onConfirm={(reason) => void runAction(reason)}
       >
         {action === 'extend' && (
-          <TextInput
-            label="Tambahan hari (1–180)"
-            type="number"
-            min={1}
-            max={180}
-            value={days}
-            onChange={(event) => setDays(event.target.value)}
-          />
+          <div className="space-y-4">
+            <div>
+              <span className="block text-xs font-semibold text-dd-ink mb-1">
+                Tanggal Berakhir Saat Ini:
+              </span>
+              <div className="text-xs font-mono text-dd-muted bg-dd-surface-muted p-2 rounded border border-dd-line">
+                {formatDate(history.balance.expiryAt)} ({history.balance.status === 'EXPIRED' ? 'Sudah Kedaluwarsa' : 'Masih Aktif'})
+              </div>
+            </div>
+
+            <DateInput
+              label="Pilih tanggal berakhir baru"
+              data-testid="input-extend-date"
+              value={targetDate}
+              min={new Date(Math.max(new Date(history.balance.expiryAt).getTime(), Date.now()) + 86400000).toISOString().slice(0, 10)}
+              onChange={(event) => {
+                setTargetDate(event.target.value);
+                setExtendMode('date');
+              }}
+            />
+
+            <div>
+              <span className="block text-xs font-semibold text-dd-muted mb-1.5">
+                Tombol Cepat Tambahan Hari:
+              </span>
+              <div className="flex flex-wrap gap-1.5">
+                {[14, 30, 60, 90].map((d) => (
+                  <button
+                    key={d}
+                    type="button"
+                    onClick={() => {
+                      const base = Math.max(new Date(history.balance.expiryAt).getTime(), Date.now());
+                      const next = new Date(base + d * 86400000).toISOString().slice(0, 10);
+                      setTargetDate(next);
+                      setDays(String(d));
+                      setExtendMode('date');
+                    }}
+                    className="rounded-dd-sm border border-dd-line bg-white px-2.5 py-1 text-xs font-semibold text-dd-ink hover:border-dd-forest hover:bg-dd-forest/5 transition"
+                  >
+                    +{d} hari
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {targetDate && (
+              <div className="rounded-dd-sm bg-emerald-50 border border-emerald-200 p-2 text-xs text-emerald-800">
+                Paket akan diperpanjang hingga: <strong>{targetDate}</strong> (
+                +{Math.max(1, Math.ceil((new Date(targetDate).getTime() - Math.max(new Date(history.balance.expiryAt).getTime(), Date.now())) / 86400000))} hari)
+              </div>
+            )}
+          </div>
         )}
       </ReasonDialog>
 
