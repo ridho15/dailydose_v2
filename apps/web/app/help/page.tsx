@@ -3,7 +3,7 @@ import { Suspense } from 'react';
 import { HelpView } from './help-view';
 
 export const metadata: Metadata = {
-  title: 'Pusat Bantuan & Panduan Terpusat | Daily Dose Pilates',
+  title: 'Pusat Bantuan & Panduan Terpusat',
   description:
     'Panduan resmi penggunaan aplikasi Daily Dose Pilates untuk Pelanggan/Member, Admin Meja Depan, dan Super Owner. Mencakup alur pemesanan, presensi QR, verifikasi pembayaran, angka batas sistem, dan kontak eskalasi cabang.',
 };

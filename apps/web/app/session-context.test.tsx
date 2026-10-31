@@ -90,7 +90,7 @@ describe('capability-aware session shell', () => {
     );
     expect(screen.getByRole('status', { name: 'Memuat sesi' })).toBeInTheDocument();
     expect(await screen.findByText('Admin Jakarta')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /^(Paket & Sesi|Sesi Pelanggan)/ })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Member & Paket' })).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Evaluasi kuota H-24' })).not.toBeInTheDocument();
     const branchSelect = screen.getByRole('combobox', { name: 'Cabang aktif' });
     expect(branchSelect).toHaveValue('');
@@ -163,15 +163,15 @@ describe('capability-aware session shell', () => {
   it('disables the branch selector on pages that cover every branch and keeps it on branch pages', async () => {
     const session: WebSession = {
       ...adminSession,
-      capabilities: ['user:read', 'ledger:read', 'booking:read', 'customer:read'],
+      capabilities: ['user:read', 'ledger:read', 'booking:read', 'customer:read', 'voucher:read'],
     };
     const client: SessionClient = { me: vi.fn().mockResolvedValue(session), logout: vi.fn() };
 
-    navigation.pathname = '/customers';
+    navigation.pathname = '/workspace/vouchers';
     const view = render(
       <SessionProvider client={client}>
         <ApplicationShell>
-          <div>Data pelanggan</div>
+          <div>Voucher</div>
         </ApplicationShell>
       </SessionProvider>,
     );
@@ -203,7 +203,7 @@ describe('capability-aware session shell', () => {
     const breadcrumb = await screen.findByRole('navigation', { name: 'Breadcrumb' });
     // Bilah atas mengikuti mockup: "Daily Dose <halaman>", tanpa nama kelompok menu.
     expect(breadcrumb).toHaveTextContent('Daily Dose');
-    expect(within(breadcrumb).getByRole('link', { name: 'Daftar member' })).toHaveAttribute(
+    expect(within(breadcrumb).getByRole('link', { name: 'Member & Paket' })).toHaveAttribute(
       'href',
       '/customers',
     );

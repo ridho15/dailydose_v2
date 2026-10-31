@@ -51,10 +51,10 @@ describe('frontend page registry', () => {
   it('declares a branch scope for every page', () => {
     for (const item of frontendPages) expect(['topbar', 'global']).toContain(item.branchScope);
     // Halaman lintas cabang yang tidak boleh mengikuti pemilih topbar.
-    for (const href of ['/workspace/vouchers', '/customers', '/operations', '/health']) {
+    for (const href of ['/workspace/vouchers', '/operations', '/health']) {
       expect(page(href).branchScope).toBe('global');
     }
-    for (const href of ['/workspace/bookings', '/workspace/payments', '/workspace/classes']) {
+    for (const href of ['/workspace/bookings', '/workspace/payments', '/workspace/classes', '/customers']) {
       expect(page(href).branchScope).toBe('topbar');
     }
   });

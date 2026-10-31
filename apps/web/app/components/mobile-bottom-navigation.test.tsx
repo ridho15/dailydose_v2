@@ -88,9 +88,9 @@ describe('MobileBottomNavigation (front desk / admin - Fase 5)', () => {
     roles = ['ADMIN'];
   });
 
-  it('renders the 4 core studio tabs plus Menu button for admin', () => {
+  it('renders the 5 core studio tabs plus Menu button for admin', () => {
     render(<MobileBottomNavigation customerOnly={false} />);
-    expect(tabs()).toEqual(['Hari Ini', 'Kalender', 'Booking', 'Kasir & Kas']);
+    expect(tabs()).toEqual(['Hari Ini', 'Kalender', 'Booking', 'Member', 'Kasir']);
     expect(screen.getByRole('button', { name: 'Buka semua menu navigasi' })).toBeVisible();
   });
 

@@ -40,8 +40,11 @@ export class PaymentProofService {
     if (!branch?.active) throw new ApiProblem('RESOURCE_NOT_FOUND', HttpStatus.NOT_FOUND);
 
     if (input.orderId) {
+      const isStaff =
+        principal.roles.some((r) => ['ADMIN', 'SUPER_OWNER', 'OWNER', 'MANAGER', 'FINANCE'].includes(r.role as any)) ||
+        principal.capabilities.some((c) => ['payment:review', 'payment:decide', 'purchase:review', 'purchase:decide'].includes(c));
       const order = await this.db.pembelian.findFirst({
-        where: { id: input.orderId, userId: principal.userId },
+        where: isStaff ? { id: input.orderId } : { id: input.orderId, userId: principal.userId },
       });
       if (!order) throw new ApiProblem('RESOURCE_NOT_FOUND', HttpStatus.NOT_FOUND);
     }
@@ -90,9 +93,11 @@ export class PaymentProofService {
   ) {
     const targetPurchaseId = input.purchaseId ?? input.orderId;
     if (targetPurchaseId) {
-      // Hanya pemilik pesanan yang boleh melampirkan/mengganti bukti bayarnya.
+      const isStaff =
+        principal.roles.some((r) => ['ADMIN', 'SUPER_OWNER', 'OWNER', 'MANAGER', 'FINANCE'].includes(r.role as any)) ||
+        principal.capabilities.some((c) => ['payment:review', 'payment:decide', 'purchase:review', 'purchase:decide'].includes(c));
       const purchase = await this.db.pembelian.findFirst({
-        where: { id: targetPurchaseId, userId: principal.userId },
+        where: isStaff ? { id: targetPurchaseId } : { id: targetPurchaseId, userId: principal.userId },
       });
       if (!purchase) throw new ApiProblem('RESOURCE_NOT_FOUND', HttpStatus.NOT_FOUND);
       await this.db.buktiPembayaran.upsert({
@@ -103,15 +108,22 @@ export class PaymentProofService {
           fileUrl: `/uploads/payment-proofs/${id}`,
           bankName: input.bankName ?? null,
           accountHolder: input.accountHolder ?? null,
-          notes: 'Uploaded by customer',
+          notes: isStaff ? 'Uploaded manually by staff' : 'Uploaded by customer',
         },
         update: {
           fileUrl: `/uploads/payment-proofs/${id}`,
           bankName: input.bankName ?? undefined,
           accountHolder: input.accountHolder ?? undefined,
+          notes: isStaff ? 'Uploaded manually by staff' : 'Uploaded by customer',
           uploadedAt: new Date(),
         },
       });
+      if (isStaff && ['AWAITING_PAYMENT', 'ACTION_REQUIRED'].includes(purchase.status)) {
+        await this.db.pembelian.update({
+          where: { id: purchase.id },
+          data: { status: 'PENDING' },
+        });
+      }
     }
 
     this.auditService.record({

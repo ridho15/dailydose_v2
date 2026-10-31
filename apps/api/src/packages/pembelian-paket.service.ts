@@ -514,7 +514,12 @@ export class CustomerOrderService {
     const order = await this.db.pembelian.findUnique({
       where: { id: orderId },
     });
-    if (!order || order.userId !== principal.userId)
+    const isOwner = order?.userId === principal.userId;
+    const isStaff =
+      principal.roles.some((r) => ['ADMIN', 'SUPER_OWNER', 'OWNER', 'MANAGER', 'FINANCE'].includes(r.role as any)) ||
+      principal.capabilities.some((c) => ['payment:review', 'payment:decide', 'purchase:review', 'purchase:decide'].includes(c));
+
+    if (!order || (!isOwner && !isStaff))
       throw new ApiProblem('RESOURCE_NOT_FOUND', HttpStatus.NOT_FOUND);
 
     const proofId = input.paymentProofId ?? randomUUID();

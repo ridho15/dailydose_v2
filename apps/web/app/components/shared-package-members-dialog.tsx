@@ -142,9 +142,7 @@ export function SharedPackageMembersDialog({
           message: `${member.displayName} tidak akan dapat lagi menggunakan sisa sesi dari paket ini.`,
           confirmLabel: 'Hapus anggota',
         })
-      : typeof window !== 'undefined'
-        ? window.confirm(`Hapus ${member.displayName} dari anggota bersama?`)
-        : true;
+      : false;
     if (!accepted) return;
 
     setBusy(true);

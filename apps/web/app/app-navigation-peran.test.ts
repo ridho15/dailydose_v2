@@ -7,7 +7,7 @@ describe('badgePeran', () => {
     expect(badgePeran(['ADMIN', 'OWNER'], false)).toBe('Owner');
     expect(badgePeran(['MANAGER'], false)).toBe('Manager');
     expect(badgePeran(['FINANCE'], false)).toBe('Finance');
-    expect(badgePeran(['ADMIN'], false)).toBe('Staf');
+    expect(badgePeran(['ADMIN'], false)).toBe('Admin Cabang');
     expect(badgePeran(['INSTRUCTOR'], true)).toBe('Instruktur');
   });
 

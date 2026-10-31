@@ -498,13 +498,17 @@ export class BookingsService {
       | 'CONTACT_STUDIO'
       | null = null;
 
+    const isStaff =
+      principal.roles.some((r) => ['ADMIN', 'SUPER_OWNER', 'OWNER', 'MANAGER'].includes(r.role as any)) ||
+      principal.capabilities.includes('booking:create:assisted');
+
     if (!['PUBLISHED', 'CONFIRMED'].includes(slot.status)) {
       canBook = false;
       reasonCode = 'SLOT_UNAVAILABLE';
       requiredAction = 'CONTACT_STUDIO';
-    } else if (slot.startAt <= now || now >= cutoffAt) {
+    } else if (isStaff ? slot.endAt <= now : (slot.startAt <= now || now >= cutoffAt)) {
       canBook = false;
-      reasonCode = 'BOOKING_CUTOFF_PASSED';
+      reasonCode = isStaff ? 'SLOT_UNAVAILABLE' : 'BOOKING_CUTOFF_PASSED';
       requiredAction = 'CONTACT_STUDIO';
     } else if (terisi(slot) >= slot.capacity) {
       canBook = false;
@@ -881,7 +885,18 @@ export class BookingsService {
         ) {
           throw new ApiProblem('PURCHASE_NOT_PAID', HttpStatus.CONFLICT);
         }
-        if (customerPackage.status !== 'ACTIVE' || customerPackage.validUntil <= new Date())
+        const now = new Date();
+        const slotPast = slot.endAt <= now;
+        const isPrivilegedStaff =
+          principal.roles?.some((r) =>
+            ['SUPER_OWNER', 'ADMIN', 'OWNER', 'MANAGER'].includes(r.role as any),
+          ) || principal.capabilities?.includes('class-slot:manage');
+
+        // Untuk backdated booking oleh Admin/Super Owner, paket cukup valid saat jadwal kelas berlangsung
+        const packageExpired = isPrivilegedStaff && slotPast
+          ? customerPackage.validUntil <= slot.startAt
+          : customerPackage.validUntil <= now;
+        if (customerPackage.status !== 'ACTIVE' || packageExpired)
           throw new ApiProblem('INSUFFICIENT_AVAILABLE_SESSIONS', HttpStatus.CONFLICT);
 
         // Validasi kecocokan cabang & jenis kelas paket (Integritas Aturan Bisnis)
@@ -908,12 +923,17 @@ export class BookingsService {
         if (!['PUBLISHED', 'CONFIRMED'].includes(slot.status))
           throw new ApiProblem('INVALID_STATE_TRANSITION', HttpStatus.CONFLICT);
 
-        const now = new Date();
-        if (slot.startAt <= now)
-          throw new ApiProblem('BOOKING_CUTOFF_PASSED', HttpStatus.CONFLICT);
-        const effectiveCutoffHours = slot.bookingCutoffHours ?? policy.cutoffHours;
-        const cutoffAt = new Date(slot.startAt.getTime() - effectiveCutoffHours * 3_600_000);
-        if (now >= cutoffAt) throw new ApiProblem('BOOKING_CUTOFF_PASSED', HttpStatus.CONFLICT);
+        if (customerFlow) {
+          if (slot.startAt <= now)
+            throw new ApiProblem('BOOKING_CUTOFF_PASSED', HttpStatus.CONFLICT);
+          const effectiveCutoffHours = slot.bookingCutoffHours ?? policy.cutoffHours;
+          const cutoffAt = new Date(slot.startAt.getTime() - effectiveCutoffHours * 3_600_000);
+          if (now >= cutoffAt) throw new ApiProblem('BOOKING_CUTOFF_PASSED', HttpStatus.CONFLICT);
+        } else {
+          // Staf biasa diblokir jika kelas sudah selesai; Admin / Super Owner diizinkan backdated booking
+          if (slotPast && !isPrivilegedStaff)
+            throw new ApiProblem('CLASS_ALREADY_FINISHED', HttpStatus.CONFLICT);
+        }
 
         const duplicate = await tx.pemesananKelas.findFirst({
           where: {
@@ -988,10 +1008,13 @@ export class BookingsService {
         // Pemotongan sesi ke SessionLedger & PaketPelanggan dieksekusi saat kelas COMPLETED dan customer hadir.
 
         // Tambah bookedCount disinkronkan dengan kuota efektif aktual (mencegah overcapacity 5/4, 6/4)
+        // Bila kelas ini jadwal masa lalu (endAt <= now) dan masih PUBLISHED, otomatis konfirmasi agar presensi & completion dapat dilakukan staf
+        const shouldAutoConfirm = slotPast && slot.status === 'PUBLISHED';
         await tx.slotKelas.update({
           where: { id: slot.id },
           data: {
             bookedCount: effectiveBooked + 1,
+            ...(shouldAutoConfirm ? { status: 'CONFIRMED' } : {}),
           },
         });
 
@@ -1001,11 +1024,16 @@ export class BookingsService {
             actorId: principal.userId,
             branchId: slot.branchId,
             correlationId: _correlationId,
-            action: 'booking.created_by_staff',
+            action: slotPast ? 'booking.backdated_by_staff' : 'booking.created_by_staff',
             objectType: 'Booking',
             objectId: booking.id,
             targetUserId: customerUserId,
-            afterMasked: { bookingNumber, classSlotId: slot.id, customerPackageId: customerPackage.id },
+            afterMasked: {
+              bookingNumber,
+              classSlotId: slot.id,
+              customerPackageId: customerPackage.id,
+              backdated: slotPast,
+            },
           });
 
         return {
@@ -1074,7 +1102,13 @@ export class BookingsService {
         }
 
         const now = new Date();
-        if (slot.endAt <= now) {
+        const slotPast = slot.endAt <= now;
+        const isPrivilegedStaff =
+          principal.roles?.some((r) =>
+            ['SUPER_OWNER', 'ADMIN', 'OWNER', 'MANAGER'].includes(r.role as any),
+          ) || principal.capabilities?.includes('class-slot:manage');
+
+        if (slotPast && !isPrivilegedStaff) {
           throw new ApiProblem('CLASS_ALREADY_ENDED', HttpStatus.CONFLICT);
         }
 
@@ -1193,10 +1227,12 @@ export class BookingsService {
         });
 
         // 5. Update Kuota Terisi
+        const shouldAutoConfirm = slotPast && slot.status === 'PUBLISHED';
         await tx.slotKelas.update({
           where: { id: slot.id },
           data: {
             bookedCount: activeBookingsOnSlot + 1,
+            ...(shouldAutoConfirm ? { status: 'CONFIRMED' } : {}),
           },
         });
 
@@ -1205,11 +1241,16 @@ export class BookingsService {
           actorId: principal.userId,
           branchId: slot.branchId,
           correlationId: _correlationId,
-          action: 'booking.created_by_staff_walkin',
+          action: slotPast ? 'booking.backdated_by_staff_walkin' : 'booking.created_by_staff_walkin',
           objectType: 'Booking',
           objectId: booking.id,
           targetUserId: customer.id,
-          afterMasked: { bookingNumber, classSlotId: slot.id, customerPackageId: customerPackage.id },
+          afterMasked: {
+            bookingNumber,
+            classSlotId: slot.id,
+            customerPackageId: customerPackage.id,
+            backdated: slotPast,
+          },
         });
 
         return {

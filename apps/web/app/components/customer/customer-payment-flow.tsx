@@ -28,6 +28,7 @@ import {
 } from '@/api-clients/order-client';
 import { formatPaymentCode, orderReasonLabels, orderStatusLabels } from '@/lib/order-presenters';
 import { Button, ButtonLink } from '../actions';
+import { compressImageIfNeeded } from '@/lib/image-compression';
 import { AlertBanner, useAppFeedback } from '../app-feedback';
 import { formatRupiah } from '../../lib/formatters';
 
@@ -723,10 +724,11 @@ export function CustomerPaymentFlow({
                     setFailure(undefined);
                     setBusy(true);
                     try {
-                      const sha256 = await sha256Upload(file);
+                      const fileToUpload = await compressImageIfNeeded(file);
+                      const sha256 = await sha256Upload(fileToUpload);
                       const updated = await browserOrderClient.uploadProof(
                         order,
-                        file,
+                        fileToUpload,
                         sha256,
                         uploadSession,
                         setUploadSession,

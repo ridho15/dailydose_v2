@@ -39,9 +39,9 @@ describe('ScopeChip', () => {
   });
 
   it('describes limited staff as assigned branches on global pages', () => {
-    context = session(['customer:read']);
+    context = session(['voucher:read']);
     render(
-      <PageMetaProvider value={page('/customers')}>
+      <PageMetaProvider value={page('/workspace/vouchers')}>
         <ScopeChip />
       </PageMetaProvider>,
     );

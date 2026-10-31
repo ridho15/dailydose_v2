@@ -162,6 +162,11 @@ export function BookingView({
   const [failure, setFailure] = useState<string>();
   const createDirty = Boolean(customerId || packageId || slotId);
   const [checkInIssues, setCheckInIssues] = useState<Record<string, CheckInIssue>>({});
+  const [qrModalData, setQrModalData] = useState<{
+    booking: CustomerBookingRecord;
+    issue: CheckInIssue;
+  } | null>(null);
+  const [qrCopied, setQrCopied] = useState(false);
   const intentKey = useRef(newIntentKey());
   const decisionKey = useRef(newIntentKey());
   const lastFilterSignature = useRef(
@@ -520,6 +525,7 @@ export function BookingView({
       if (!client.issueCheckIn) return;
       const issue = await client.issueCheckIn(booking.id, booking.version, crypto.randomUUID());
       setCheckInIssues((current) => ({ ...current, [booking.id]: issue }));
+      setQrModalData({ booking, issue });
       setMessage(
         issue.idempotentReplay
           ? 'Pass QR sebelumnya ditemukan kembali.'
@@ -798,6 +804,77 @@ export function BookingView({
             </option>
           ))}
         </SelectInput>
+      </Modal>
+      <Modal
+        open={Boolean(qrModalData)}
+        title="QR Pass & Kirim WhatsApp"
+        description={`QR Pass untuk ${qrModalData?.booking.customer?.displayName ?? 'Peserta'} pada kelas ${qrModalData?.booking.classSlot?.classType.name ?? ''}.`}
+        onClose={() => {
+          setQrModalData(null);
+          setQrCopied(false);
+        }}
+        footer={
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => {
+                setQrModalData(null);
+                setQrCopied(false);
+              }}
+            >
+              Tutup
+            </Button>
+            {qrModalData?.issue.passUrl && (
+              <Button
+                type="button"
+                variant="secondary"
+                data-testid="btn-copy-qr-link"
+                onClick={() => {
+                  void navigator.clipboard.writeText(qrModalData.issue.passUrl ?? '');
+                  setQrCopied(true);
+                  setTimeout(() => setQrCopied(false), 2000);
+                }}
+              >
+                {qrCopied ? 'Tersalin!' : 'Salin Link Pass'}
+              </Button>
+            )}
+            {(() => {
+              const waLink =
+                qrModalData?.issue.whatsappUrl ||
+                (qrModalData?.issue.passUrl
+                  ? `https://wa.me/?text=${encodeURIComponent(
+                      `Halo ${qrModalData.booking.customer?.displayName ?? ''}, berikut adalah link QR Pass Check-in untuk kelas Pilates Anda di Daily Dose:\n\n${qrModalData.issue.passUrl}\n\nTunjukkan QR ini kepada staf di meja resepsionis saat tiba di studio. Sampai jumpa di kelas!`
+                    )}`
+                  : null);
+              return waLink ? (
+                <a
+                  href={waLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  data-testid="btn-open-wa"
+                  className="inline-flex min-h-11 items-center justify-center rounded-dd-md bg-[#25D366] hover:bg-[#20ba5a] px-4 text-xs font-bold text-white no-underline shadow-sm transition"
+                >
+                  Kirim via WhatsApp ↗
+                </a>
+              ) : null;
+            })()}
+          </div>
+        }
+      >
+        {qrModalData && (
+          <div className="space-y-4 text-sm">
+            <div className="rounded-dd-md border border-dd-line bg-dd-surface-muted p-3">
+              <p className="text-xs text-dd-muted">Link Pass Check-in:</p>
+              <p className="font-mono text-xs text-dd-ink break-all select-all mt-1">
+                {qrModalData.issue.passUrl ?? 'Belum tersedia'}
+              </p>
+            </div>
+            <p className="text-xs text-dd-muted leading-relaxed">
+              Klik tombol <strong>Kirim via WhatsApp ↗</strong> di bawah untuk langsung membuka chat WhatsApp dengan pesan berisi QR Pass ke peserta. Anda juga dapat menyalin tautan pass secara langsung.
+            </p>
+          </div>
+        )}
       </Modal>
       <Drawer
         open={createOpen && canCreate && Boolean(branchId)}
@@ -1327,15 +1404,29 @@ export function BookingView({
                         Lihat detail
                       </Link>
                       {booking.status === 'BOOKED' && canManageAttendance && branchId && (
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          size="sm"
-                          disabled={busy}
-                          onClick={() => void issueCheckIn(booking)}
-                        >
-                          Buat/Kirim QR
-                        </Button>
+                        issue ? (
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            size="sm"
+                            data-testid="btn-wa-qr"
+                            className="!text-[#166534] !border-[#22c55e]/50 hover:!bg-[#f0fdf4]"
+                            onClick={() => setQrModalData({ booking, issue })}
+                          >
+                            Kirim WA ↗
+                          </Button>
+                        ) : (
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            size="sm"
+                            disabled={busy}
+                            data-testid="btn-issue-qr"
+                            onClick={() => void issueCheckIn(booking)}
+                          >
+                            Buat/Kirim QR
+                          </Button>
+                        )
                       )}
                       {menuItems.length > 0 && (
                         <TableActionMenu
@@ -1349,7 +1440,9 @@ export function BookingView({
                 },
               },
             ]}
-            mobileCard={(booking) => (
+            mobileCard={(booking) => {
+            const issue = checkInIssues[booking.id];
+            return (
               <div className="grid gap-3">
                 <div className="flex items-start justify-between gap-3">
                   <div>
@@ -1403,15 +1496,29 @@ export function BookingView({
                     Lihat detail
                   </Link>
                   {booking.status === 'BOOKED' && canManageAttendance && branchId && (
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      size="sm"
-                      disabled={busy}
-                      onClick={() => void issueCheckIn(booking)}
-                    >
-                      Buat/Kirim QR
-                    </Button>
+                    issue ? (
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        data-testid="mobile-btn-wa-qr"
+                        className="!text-[#166534] !border-[#22c55e]/50 hover:!bg-[#f0fdf4]"
+                        onClick={() => setQrModalData({ booking, issue })}
+                      >
+                        Kirim WA ↗
+                      </Button>
+                    ) : (
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        disabled={busy}
+                        data-testid="mobile-btn-issue-qr"
+                        onClick={() => void issueCheckIn(booking)}
+                      >
+                        Buat/Kirim QR
+                      </Button>
+                    )
                   )}
                   {booking.status === 'BOOKED' && canCancelBookings && client.cancelAsStaff && (
                     <TableActionMenu
@@ -1429,7 +1536,8 @@ export function BookingView({
                   )}
                 </div>
               </div>
-            )}
+            );
+          }}
           />
           <Pagination
             hasPrevious={page > 1 || cursorHistory.length > 0}

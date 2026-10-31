@@ -1,6 +1,8 @@
 'use client';
 
-import { ArrowLeft, CheckCircle2, Clock, Eye, Filter, RefreshCw } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, Clock, Eye, Filter, RefreshCw, UploadCloud } from 'lucide-react';
+import { browserOrderClient, sha256Upload } from '@/api-clients/order-client';
+import { compressImageIfNeeded } from '@/lib/image-compression';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
@@ -139,6 +141,10 @@ export function PaymentReviewDetailView({
   const [previewLoading, setPreviewLoading] = useState(false);
   /** Gambar bukti benar-benar tampil di layar; persetujuan hanya boleh setelah itu. */
   const [proofImageShown, setProofImageShown] = useState(false);
+  const [manualFile, setManualFile] = useState<File | null>(null);
+  const [manualUploading, setManualUploading] = useState(false);
+  const [manualUploadError, setManualUploadError] = useState('');
+  const [manualUploadSuccess, setManualUploadSuccess] = useState('');
   const isImagePreview = previewType.startsWith('image/');
   const [usageLoading, setUsageLoading] = useState(false);
   const [usageCursor, setUsageCursor] = useState<string>();
@@ -196,6 +202,33 @@ export function PaymentReviewDetailView({
     },
     [previewUrl],
   );
+
+  const handleManualUpload = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!manualFile || !detail?.purchase) return;
+    setManualUploading(true);
+    setManualUploadError('');
+    setManualUploadSuccess('');
+    try {
+      const compressed = await compressImageIfNeeded(manualFile);
+      const sha256 = await sha256Upload(compressed);
+      await browserOrderClient.uploadProof(
+        detail.purchase as any,
+        compressed,
+        sha256,
+        undefined,
+      );
+      setManualFile(null);
+      setManualUploadSuccess('Bukti transfer manual berhasil diunggah.');
+      feedback?.showToast({ tone: 'success', title: 'Bukti transfer manual berhasil diunggah', message: 'Status pesanan diperbarui.' });
+      await load();
+    } catch (err: any) {
+      setManualUploadError(err.message || 'Gagal mengunggah bukti manual.');
+      feedback?.showToast({ tone: 'danger', title: 'Gagal mengunggah bukti manual', message: err.message });
+    } finally {
+      setManualUploading(false);
+    }
+  };
 
   const loadPreview = useCallback(async () => {
     const proof = detail?.purchase.paymentProof;
@@ -617,6 +650,58 @@ export function PaymentReviewDetailView({
                       : 'Preview tersedia setelah pemeriksaan file selesai dan berstatus bersih.'}
                   </div>
                 )}
+
+                {/* Form Upload Bukti Manual oleh Staf / Admin */}
+                <div className="mt-4 rounded-dd-lg border border-dashed border-dd-line bg-dd-surface-muted/60 p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-dd-forest">
+                        Upload Bukti Manual oleh Staf / Admin
+                      </h4>
+                      <p className="mt-0.5 text-xs text-dd-muted">
+                        Unggah struk transfer bank atau foto bukti pembayaran manual pelanggan.
+                      </p>
+                    </div>
+                  </div>
+                  {manualUploadSuccess && (
+                    <div className="mt-2 text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 p-2 rounded">
+                      {manualUploadSuccess}
+                    </div>
+                  )}
+                  {manualUploadError && (
+                    <div className="mt-2 text-xs font-semibold text-rose-600 bg-rose-50 border border-rose-200 p-2 rounded">
+                      {manualUploadError}
+                    </div>
+                  )}
+                  <form onSubmit={handleManualUpload} className="mt-3 flex flex-wrap items-center gap-2">
+                    <input
+                      type="file"
+                      data-testid="manual-proof-input"
+                      accept="image/jpeg,image/png,image/webp,application/pdf"
+                      disabled={manualUploading}
+                      onChange={(e) => {
+                        const selected = e.target.files?.[0];
+                        if (selected) {
+                          setManualFile(selected);
+                          setManualUploadError('');
+                        }
+                      }}
+                      className="text-xs file:mr-2 file:rounded-dd-sm file:border-0 file:bg-dd-forest/10 file:px-2.5 file:py-1 file:text-xs file:font-semibold file:text-dd-forest hover:file:bg-dd-forest/20 cursor-pointer"
+                    />
+                    {manualFile && (
+                      <Button
+                        type="submit"
+                        variant="primary"
+                        size="sm"
+                        data-testid="btn-submit-manual-proof"
+                        disabled={manualUploading}
+                        leadingIcon={<UploadCloud className="size-4" aria-hidden="true" />}
+                      >
+                        {manualUploading ? 'Mengunggah…' : 'Simpan Bukti Manual'}
+                      </Button>
+                    )}
+                  </form>
+                </div>
               </div>
             </Panel>
 

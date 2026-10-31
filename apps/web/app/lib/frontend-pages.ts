@@ -632,6 +632,7 @@ export function shortcutPagesFor(
   const readable = frontendPages.filter(
     (page) =>
       page.href !== '/workspace' &&
+      page.href !== '/help' &&
       !page.isDormant &&
       !page.capabilities.includes('customer:self') &&
       canReadPage([...session.capabilities], page),
