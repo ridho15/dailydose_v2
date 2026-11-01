@@ -7,6 +7,7 @@ import { optionalReason } from '../foundation/reason';
 import type { SessionPrincipal } from '../identity/identity.service';
 import { ApiProblem, newId } from '../identity/security';
 import { PackageAccessService } from './package-access.service';
+import { maksTemanPaket } from './bawa-teman';
 
 const PAGE_SIZE = 20;
 
@@ -58,6 +59,25 @@ function packageView(pkg: any) {
       },
     ],
   };
+}
+
+/** `bawaTeman` dari form paket: true/false mengubah, selain itu dibiarkan. */
+function bacaBawaTeman(body: any): boolean | undefined {
+  if (body?.bawaTeman === true || body?.bawaTeman === 'true') return true;
+  if (body?.bawaTeman === false || body?.bawaTeman === 'false') return false;
+  return undefined;
+}
+
+/** Menyimpan centang "boleh bawa teman" (satu teman per kelas) di tabel terpisah. */
+async function simpanBawaTeman(tx: any, packageId: string, bawaTeman: boolean | undefined, actorId: string) {
+  if (bawaTeman === undefined || typeof tx.paketBawaTeman?.upsert !== 'function') return;
+  if (bawaTeman)
+    await tx.paketBawaTeman.upsert({
+      where: { packageId },
+      create: { packageId, maksTeman: 1, updatedById: actorId },
+      update: { updatedById: actorId },
+    });
+  else await tx.paketBawaTeman.deleteMany({ where: { packageId } });
 }
 
 @Injectable()
@@ -150,10 +170,13 @@ export class PackageCatalogService {
     });
     const livePackageIds = new Set(live.map((item) => item.packageId));
 
+    const teman = await maksTemanPaket(this.db, pageItems.map((item) => item.id));
+
     return {
       items: pageItems.map((item) => ({
         ...packageView(item),
         livePromotion: livePackageIds.has(item.id),
+        bawaTeman: (teman.get(item.id) ?? 0) > 0,
       })),
       summary: {
         ACTIVE: activeCount,
@@ -227,6 +250,9 @@ export class PackageCatalogService {
           },
         });
 
+        const bawaTeman = bacaBawaTeman(input);
+        await simpanBawaTeman(tx, created.id, bawaTeman, principal.userId);
+
         this.auditService.record({
           action: 'PACKAGE_CREATED',
           resourceType: 'Package',
@@ -237,7 +263,7 @@ export class PackageCatalogService {
 
         return {
           status: HttpStatus.CREATED,
-          body: packageView(created) as unknown as Prisma.InputJsonValue,
+          body: { ...packageView(created), bawaTeman: bawaTeman === true } as unknown as Prisma.InputJsonValue,
         };
       },
     );
@@ -294,6 +320,11 @@ export class PackageCatalogService {
           include: { classType: true, branch: true },
         });
 
+        const bawaTeman = bacaBawaTeman(body);
+        await simpanBawaTeman(tx, id, bawaTeman, principal.userId);
+        const temanSekarang =
+          bawaTeman ?? ((await maksTemanPaket(tx, [id])).get(id) ?? 0) > 0;
+
         this.auditService.record({
           action: 'PACKAGE_UPDATED',
           resourceType: 'Package',
@@ -304,7 +335,7 @@ export class PackageCatalogService {
 
         return {
           status: HttpStatus.OK,
-          body: packageView(updated) as unknown as Prisma.InputJsonValue,
+          body: { ...packageView(updated), bawaTeman: temanSekarang } as unknown as Prisma.InputJsonValue,
         };
       },
     );

@@ -6,6 +6,7 @@ import {
 } from '../bookings/pembatalan-terlambat';
 import { AdjustRequestStatus, Prisma, SessionMutationType } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service';
+import { maksTemanPaket } from './bawa-teman';
 import { AuditService } from '../foundation/audit.service';
 import type { SessionPrincipal } from '../identity/identity.service';
 import { PolicyService } from '../identity/policy.service';
@@ -212,10 +213,13 @@ export class LedgerService {
     const movementOf = (id: string, type: SessionMutationType) =>
       movements.find((m) => m.customerPackageId === id && m.type === type)?._sum.amount ?? 0;
 
+    const temanPaket = await maksTemanPaket(this.db, pageRows.map((row) => row.packageId));
     const items = pageRows.map((row) => {
       const reserved = row.bookings.length;
       return {
         ...this.balanceView(row, reserved),
+        /** Kursi teman yang boleh ditambahkan per kelas (paket "bawa teman"); 0 bila tidak. */
+        maksTeman: temanPaket.get(row.packageId) ?? 0,
         sessionCountSnapshot: row.totalSessions,
         usage: {
           initialSessions: row.totalSessions,

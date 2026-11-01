@@ -10,6 +10,8 @@ export interface BookingCommand {
   customerPackageId: string;
   customerUserId?: string;
   source: 'SELF' | 'ADMIN_ASSISTED';
+  /** Kursi teman (paket "bawa teman"): nama temannya, opsional. */
+  namaTeman?: string;
 }
 
 export interface BookingSlotSummary {
@@ -82,6 +84,8 @@ export interface CustomerPackageBalance {
   expiryAt: Date;
   packageName?: string;
   name?: string;
+  /** Kursi teman yang boleh ditambahkan per kelas (paket "bawa teman"); 0 bila tidak. */
+  maksTeman?: number;
 }
 
 /** Pengajuan pembatalan booking setelah batas H-24, menunggu Manager/Owner. */
@@ -205,6 +209,9 @@ export type CustomerBookingRecord = Omit<
   customer?: { id: string; displayName: string; phoneMasked: string | null };
   createdBy?: { id: string; displayName: string };
   sessionBalance?: { ledgerBalance: number; reserved: number; available: number };
+  /** Kursi teman: booking atas nama member ini, yang datang temannya. */
+  kursiTeman?: boolean;
+  namaTeman?: string | null;
   reschedules?: Array<{
     id: string;
     status: string;

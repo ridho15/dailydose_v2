@@ -11,6 +11,7 @@ import type { SessionPrincipal } from '../identity/identity.service';
 import { PolicyService } from '../identity/policy.service';
 import { ApiProblem, ENTITY_ID_REGEX } from '../identity/security';
 import { paketBerlakuDi } from './cabang-paket';
+import { bookingTeman, maksTemanPaket } from '../packages/bawa-teman';
 
 export type BookingCancellationReasonCode =
   | 'PERSONAL_UNAVAILABLE'
@@ -23,6 +24,8 @@ export type BookingCommand = {
   customerPackageId: string;
   customerUserId?: string;
   source: 'SELF' | 'ADMIN_ASSISTED';
+  /** Nama teman untuk kursi teman (paket "bawa teman"), opsional. */
+  namaTeman?: string;
 };
 
 export type CancelBookingCommand = {
@@ -733,10 +736,18 @@ export class BookingsService {
     const hasNext = pageNumber ? pageNumber < totalPages : items.length > limit;
     const pageItems = pageNumber ? items : (items.length > limit ? items.slice(0, limit) : items);
     const nextCursor = hasNext ? (pageItems[pageItems.length - 1]?.id ?? null) : null;
-    const reserved = await this.reservedByPackage(pageItems.map((b: any) => b.customerPackageId));
+    const [reserved, teman] = await Promise.all([
+      this.reservedByPackage(pageItems.map((b: any) => b.customerPackageId)),
+      bookingTeman(this.db, pageItems.map((b: any) => b.id)),
+    ]);
 
     return {
-      items: pageItems.map((b) => this.bookingView(b, reserved)),
+      items: pageItems.map((b) => ({
+        ...this.bookingView(b, reserved),
+        // Kursi teman dari paket "bawa teman": booking atas nama member, yang datang temannya.
+        kursiTeman: teman.has(b.id),
+        namaTeman: teman.get(b.id) ?? null,
+      })),
       page: query.page != null
         ? {
             hasMore: hasNext,
@@ -891,14 +902,23 @@ export class BookingsService {
         const cutoffAt = new Date(slot.startAt.getTime() - policy.cutoffHours * 3_600_000);
         if (now >= cutoffAt) throw new ApiProblem('BOOKING_CUTOFF_PASSED', HttpStatus.CONFLICT);
 
-        const duplicate = await tx.pemesananKelas.findFirst({
+        // Satu member satu kursi per kelas, kecuali paketnya "bawa teman": staf boleh menambah kursi
+        // untuk temannya (bukan member) sebanyak yang diizinkan paket, memakai sesi paket yang sama.
+        const sudahDiKelas = await tx.pemesananKelas.count({
           where: {
             userId: customerUserId,
             classSlotId: slot.id,
             status: { in: ['BOOKED', 'ATTENDED'] },
           },
         });
-        if (duplicate) throw new ApiProblem('DUPLICATE_ACTIVE_BOOKING', HttpStatus.CONFLICT);
+        let kursiTeman = false;
+        if (sudahDiKelas > 0) {
+          const maks = customerFlow
+            ? 0
+            : ((await maksTemanPaket(tx, [customerPackage.packageId])).get(customerPackage.packageId) ?? 0);
+          if (sudahDiKelas > maks) throw new ApiProblem('DUPLICATE_ACTIVE_BOOKING', HttpStatus.CONFLICT);
+          kursiTeman = true;
+        }
 
         // Pencegahan booking ganda lintas kelas dengan jadwal bertabrakan (Overlapping Schedule)
         const scheduleConflict = await tx.pemesananKelas.findFirst({
@@ -960,6 +980,15 @@ export class BookingsService {
           },
         });
 
+        if (kursiTeman)
+          await tx.bookingTeman.create({
+            data: {
+              bookingId: booking.id,
+              packageId: customerPackage.packageId,
+              namaTeman: input.namaTeman?.trim().slice(0, 128) || null,
+            },
+          });
+
         // Catatan: Sesi TIDAK dipotong saat booking (Rule #1).
         // Pemotongan sesi ke SessionLedger & PaketPelanggan dieksekusi saat kelas COMPLETED dan customer hadir.
 
@@ -981,7 +1010,12 @@ export class BookingsService {
             objectType: 'Booking',
             objectId: booking.id,
             targetUserId: customerUserId,
-            afterMasked: { bookingNumber, classSlotId: slot.id, customerPackageId: customerPackage.id },
+            afterMasked: {
+              bookingNumber,
+              classSlotId: slot.id,
+              customerPackageId: customerPackage.id,
+              ...(kursiTeman ? { kursiTeman: true } : {}),
+            },
           });
 
         return {

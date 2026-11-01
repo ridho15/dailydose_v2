@@ -1234,3 +1234,26 @@ model KapasitasKelasCabang {
   @@unique([branchId, classTypeId])
   @@map("kapasitas_kelas_cabang")
 }
+
+/// Paket yang boleh membawa teman: pemilik paket boleh menempati kursi tambahan di kelas yang sama
+/// untuk temannya (bukan member), maksimal `maksTeman` kursi per kelas. Tanpa relasi Prisma.
+model PaketBawaTeman {
+  packageId   String   @id @db.Char(36)
+  maksTeman   Int      @default(1)
+  updatedById String?  @db.Char(36)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("paket_bawa_teman")
+}
+
+/// Booking kursi teman: booking ini milik member pemilik paket, tetapi yang datang temannya.
+/// Tanpa relasi Prisma; tabel lama tidak berubah.
+model BookingTeman {
+  bookingId  String   @id @db.Char(36)
+  packageId  String   @db.Char(36)
+  namaTeman  String?  @db.VarChar(128)
+  createdAt  DateTime @default(now())
+
+  @@map("booking_teman")
+}
