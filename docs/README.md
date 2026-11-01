@@ -48,7 +48,7 @@ Bila dokumen lain di folder ini bertentangan dengan keempat dokumen di atas, kee
 ## 🔒 13 Keputusan Bisnis yang Sudah Dikunci (Locked Decisions)
 
 Setiap pengembangan fitur, audit, dan pengujian wajib tunduk pada 13 Keputusan Bisnis Mutlak berikut:
-1. **Sesi Terpotong saat Selesai & Hadir**: Sesi pelanggan tidak dipotong saat booking, melainkan saat status kelas berubah menjadi `COMPLETED` dan pelanggan hadir. Presensi pelanggan dilakukan via Link Mandiri, presensi instruktur via QR Scanner.
+1. **Sesi Terpotong saat Selesai & Hadir**: Sesi pelanggan tidak dipotong saat booking, melainkan saat status kelas berubah menjadi `COMPLETED` dan pelanggan hadir. Presensi pelanggan dan instruktur dilakukan dengan **staf memindai QR** di halaman Check-in (dikonfirmasi pemilik, 1 November 2026).
 2. **Customer Self-Booking**: Pelanggan melakukan booking mandiri dari jadwal kelas (*timetable*); booking manual via Admin hanya untuk *rare cases*.
 3. **Expiry Basis**: Masa berlaku paket berbasis tanggal (*validUntil*); sisa sesi hangus otomatis saat tanggal kedaluwarsa tiba.
 4. **Cutoff Auto-Cancel H-24**: Kelas otomatis dibatalkan sistem jika peserta kurang dari kuota minimum pada jendela H-24 jam sebelum kelas dimulai, sesi dikembalikan utuh via mutasi `REFUND_AUTOCANCEL`.

@@ -103,9 +103,12 @@ Aturan kerahasiaan per peran ada di [Rules.md](./Rules.md#2-kerahasiaan-data-keu
   fee bawaan Rp150.000 per jam.
 - **Modal per sesi** diatur per cabang × tipe kelas (atau "semua tipe kelas") di Data Master > Modal per
   Sesi, dengan tanggal mulai berlaku.
-- **Laba bulanan = omzet − (sesi paket terjual × modal per sesi) − pengeluaran.**
-  Contoh pemilik: paket Group 20 sesi Rp4.000.000 di Untar, modal Rp50.000 per sesi, maka modal
-  Rp1.000.000 dan laba Rp3.000.000 (sebelum pengeluaran).
+- **Laba bulanan = omzet − modal sesi − pengeluaran.** Modal sesi mengikuti **pemakaian**: setiap
+  sesi member yang terpakai (hadir atau tidak hadir) di kelas yang selesai bulan itu × modal per sesi
+  tipe kelas di cabang kelas. Sesi yang hangus karena paket kedaluwarsa tidak punya modal.
+  Contoh pemilik: paket Group 20 sesi Rp4.000.000 di Untar, modal Rp50.000 per sesi; bila 20 sesi
+  terpakai sebelum paket habis, modalnya Rp1.000.000 (tersebar di bulan pemakaiannya) dan laba
+  Rp3.000.000 sebelum pengeluaran.
 - Payroll instruktur (yang dibayar) ditampilkan terpisah dan **tidak mengurangi laba**.
 - **Jurnal kas**: admin mencatat pengeluaran cabang; pengeluaran bisa ditandai "Dibayar oleh" Super Owner
   (uang pribadi, diganti saat settlement).
@@ -116,8 +119,8 @@ Aturan kerahasiaan per peran ada di [Rules.md](./Rules.md#2-kerahasiaan-data-keu
   yang sama. Berkas diolah Converter dan Checksum BCA sebelum diunggah.
 
 ### 3.9 Laporan
-- Beranda Owner: omzet, modal sesi, payroll (dibayar), pengeluaran, laba; total dan per cabang; tiga
-  bulan terakhir.
+- Beranda Owner: omzet, modal sesi (sesi terpakai), payroll (dibayar), pengeluaran, laba; total dan
+  per cabang; tiga bulan terakhir.
 - Laporan keuangan menurut rentang tanggal; tidak ada tutup buku.
 
 ## 4. Kebutuhan non-fungsional
@@ -131,19 +134,26 @@ Aturan kerahasiaan per peran ada di [Rules.md](./Rules.md#2-kerahasiaan-data-keu
 1. **Database existing tidak boleh diubah.** Fitur baru memakai tabel baru tanpa relasi Prisma.
 2. Fee instruktur hanya dari Data Master; admin tidak boleh tahu soal keuangan.
 3. Honor dibayar hanya untuk kelas yang sudah di-scan QR instruktur.
-4. Laba memakai modal per sesi (sesi dibeli), bukan honor instruktur.
+4. Laba = omzet − modal sesi − pengeluaran. Modal sesi mengikuti pemakaian sesi sebelum paket
+   kedaluwarsa, bukan honor instruktur.
 5. Admin hanya boleh melihat omzet cabangnya sendiri; instruktur hanya fee dirinya sendiri.
 6. Pembatalan kurang dari H-24 perlu persetujuan Manager atau Owner.
 7. Paket tertentu boleh membawa teman; member juga bisa booking kursi teman sendiri.
-8. Login foto: menunggu gambar baru dari pemilik (lihat HANDOFF).
+8. Kursi teman memotong 1 sesi paket pemiliknya.
+9. Batas pembatalan H-24 jam (pembatalan staf kurang dari itu perlu persetujuan; member mengikuti
+   batas yang sama).
+10. Presensi member dilakukan dengan **staf memindai QR member**.
+11. Login foto: menunggu gambar baru dari pemilik (lihat HANDOFF).
 
 ## 6. Perlu konfirmasi (asumsi saat membangun)
-| # | Asumsi | Dipakai di |
+
+Sudah dikonfirmasi pemilik pada 1 November 2026 (dipindah ke bagian 5): laba dikurangi pengeluaran,
+kursi teman memotong 1 sesi, modal sesi mengikuti pemakaian, batas pembatalan H-24, presensi member
+lewat scan QR oleh staf.
+
+| # | Asumsi yang masih berlaku | Dipakai di |
 | :--- | :--- | :--- |
-| 1 | Laba juga dikurangi pengeluaran cabang (contoh pemilik tidak menyebut pengeluaran). | Beranda Owner, settlement, laporan |
-| 2 | Modal sesi dihitung di bulan paket **lunas**, penuh, walau sesinya dipakai bulan berikutnya. | `modal-sesi.service.ts` |
-| 3 | Kursi teman memotong 1 sesi paket pemiliknya (bukan gratis). | Booking |
-| 4 | Fee dihitung per jam (dibulatkan, minimal 1 jam). Kelas 1 jam = 1 sesi. | `instructor-fee-calculator.ts` |
-| 5 | Batas pembatalan mandiri member mengikuti `booking.cutoffHours` di konfigurasi server; teks staf menyebut H-24. | Booking |
-| 6 | Kapasitas dari Data Master menang atas jumlah bed ruangan. | `slot-kelas.service.ts` |
-| 7 | Dokumen lama (`docs/README.md`, 13 keputusan bisnis) menyebut presensi member lewat link mandiri; sistem saat ini memakai scan QR oleh staf. | Check-in |
+| 1 | Fee dihitung per jam (dibulatkan, minimal 1 jam). Kelas 1 jam = 1 sesi. | `instructor-fee-calculator.ts` |
+| 2 | Kapasitas dari Data Master menang atas jumlah bed ruangan. | `slot-kelas.service.ts` |
+| 3 | Sesi "tidak hadir" (NO_SHOW) ikut dihitung modal karena sesinya tetap terpotong. | `modal-sesi.service.ts` |
+| 4 | Modal sesi memakai tarif cabang dan tipe kelas **kelas yang dihadiri**, bukan cabang tempat paket dibeli. | `modal-sesi.service.ts` |

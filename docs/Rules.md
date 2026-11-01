@@ -44,10 +44,14 @@ Aturan teknis yang menyertainya:
 1. Fee instruktur hanya dari Data Master (per instruktur × cabang × tipe kelas, berlaku mulai tanggal).
 2. Honor dibayar dan dihitung **hanya** dari kelas yang presensi instrukturnya tercatat (scan QR atau
    verifikasi).
-3. Laba = omzet − (sesi paket terjual × modal per sesi) − pengeluaran. Payroll tidak mengurangi laba.
+3. Laba = omzet − modal sesi − pengeluaran. Modal sesi = sesi member yang terpakai (hadir/tidak hadir)
+   di kelas selesai bulan itu × modal per sesi; sesi hangus tidak punya modal. Payroll tidak mengurangi
+   laba.
 4. Sesi member dipotong saat kelas selesai dan member hadir, bukan saat booking.
-5. Pembatalan staf kurang dari H-24 menjadi pengajuan yang diputus Manager, Owner, atau Super Owner.
+5. Batas pembatalan H-24 jam. Pembatalan staf kurang dari H-24 menjadi pengajuan yang diputus
+   Manager, Owner, atau Super Owner. `BOOKING_CANCELLATION_CUTOFF_HOURS` di produksi harus 24.
 6. Satu member satu kursi per kelas, kecuali paket "bawa teman" (1 kursi teman, memakai 1 sesi).
+   Presensi member dan instruktur dilakukan dengan staf memindai QR.
 7. Kapasitas kelas dari Data Master > Kuota & Kapasitas berlaku untuk kelas baru dan kelas mendatang.
 8. Paket berlaku di cabang paket atau cabang tempat dibeli.
 9. Perubahan penting (keuangan, rekening, porsi, pembatalan, koreksi) dicatat di `audit_log`;

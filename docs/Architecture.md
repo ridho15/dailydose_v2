@@ -109,9 +109,13 @@ dengan mock lama tetap berjalan.
 
 ### 5.2 Laba
 - `ringkasan-keuangan.service.ts` (`ringkasanBulanan`): omzet dari pembelian `PAID` menurut `paidAt`,
-  modal dari `hitungModalSesi` (sesi paket × modal yang berlaku pada tanggal lunas; tipe kelas cabang
-  lebih dulu, lalu "semua tipe kelas"), pengeluaran dari `other_cost`. `profitRp = omset − modal −
-  pengeluaran`. Payroll ikut dihitung sebagai informasi.
+  modal dari `hitungModalSesi` (`modal-sesi.service.ts`), pengeluaran dari `other_cost`.
+  `profitRp = omset − modal − pengeluaran`. Payroll ikut dihitung sebagai informasi.
+- `hitungModalSesi(db, { branchIds, fromDate, untilExclusive })`: booking berstatus `ATTENDED` atau
+  `NO_SHOW` di kelas `COMPLETED` yang mulai dalam rentang; tiap booking = 1 sesi × tarif `modal_sesi`
+  cabang dan tipe kelas kelas itu yang berlaku pada tanggal kelas (tipe kelas lebih dulu, lalu "semua
+  tipe kelas"). Sesi tanpa tarif dihitung Rp0 dan dilaporkan (`sesiTanpaModal`). Kursi teman
+  dihitung seperti sesi biasa.
 - Settlement Super Owner (`settlement-owner.service.ts`) membagi `profitRp` per cabang menurut porsi,
   ditambah reimburse.
 - `finance.service.ts` (`profitReport`, `ownerBranchPerformance`) dan `dashboard.service.ts` memakai

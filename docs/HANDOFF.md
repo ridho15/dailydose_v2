@@ -43,7 +43,8 @@ Serah terima pekerjaan per **1 November 2026**, branch `perbaikan_arsitektur`. B
 ### Keuangan
 - Fee instruktur hanya dari Data Master; bagian "Fee per sesi" di detail instruktur; kolom fee dihapus
   dari timetable.
-- Modal per sesi (Data Master > Modal per Sesi); laba = omzet − modal sesi − pengeluaran.
+- Modal per sesi (Data Master > Modal per Sesi); laba = omzet − modal sesi − pengeluaran, modal
+  mengikuti pemakaian sesi (dikonfirmasi pemilik 1 November).
 - Beranda Owner, jurnal kas, pengeluaran "Dibayar oleh", settlement Super Owner, koreksi jam instruktur.
 - Transfer honor: Excel KlikBCA Multi Payroll + rekening instruktur.
 - Kapasitas Data Master > Kuota & Kapasitas kini benar-benar tersimpan dan diterapkan.
@@ -64,13 +65,16 @@ Riwayat lengkap: `git log --author=Claude --since=2026-10-20 --oneline`.
    `ulasan_instruktur`, `porsi_owner_cabang`, `pembayar_pengeluaran`, `rekening_instruktur`,
    `modal_sesi`, `kapasitas_kelas_cabang`, `paket_bawa_teman`, `booking_teman`, ditambah dari developer:
    `paket_pelanggan_anggota` dan kolom `paket.is_shareable` (lihat 5.1). Cek dulu dengan `SHOW TABLES`.
-3. Deploy lewat GitHub Actions "Deploy production" dari `perbaikan_arsitektur`.
-4. Google Cloud Console: Authorized JavaScript origins memuat `https://v2.dailydosepilates.com`, consent
+3. Pastikan `.env.production` memuat `BOOKING_CANCELLATION_CUTOFF_HOURS=24` (batas pembatalan H-24
+   yang diputuskan pemilik).
+4. Deploy lewat GitHub Actions "Deploy production" dari `perbaikan_arsitektur`.
+5. Google Cloud Console: Authorized JavaScript origins memuat `https://v2.dailydosepilates.com`, consent
    screen berstatus In production.
-5. Setelah deploy, Super Owner mengisi:
+6. Setelah deploy, Super Owner mengisi:
    - Data Master > Kuota & Kapasitas: simpan ulang kapasitas tiap cabang (isian lama tidak pernah
      tersimpan). Contoh: Untar Group 10.
    - Data Master > Modal per Sesi untuk semua cabang dan tipe kelas (kosong berarti modal Rp0).
+     Modal juga berlaku untuk kelas lama hasil migrasi V1 bila tanggal mulai berlakunya diisi mundur.
    - Fee per sesi semua instruktur (kosong berarti bawaan Rp150.000 per jam).
    - Rekening instruktur bila memakai Excel KlikBCA.
    - Paket mana yang dicentang "Boleh bawa teman".
@@ -96,7 +100,7 @@ Status: menunggu hasil dari developer.
 | Item | Status |
 | :--- | :--- |
 | Foto halaman login diganti ("gambar 2"), tanpa melar | Menunggu gambar dari pemilik |
-| Aplikasi Flutter pembungkus web (APK/iOS) | Pernah dibuat di sesi sebelumnya, tetapi **tidak ada di repo** (Flutter lama dihapus di commit `c0ded091`). Perlu dicek di mana sumbernya atau dibuat ulang. |
+| Aplikasi Flutter pembungkus web (APK/iOS) | **Tidak ada** (pemilik konfirmasi 1 November). Sumber yang pernah dibuat di sesi sebelumnya tidak tersimpan; Flutter lama dihapus di commit `c0ded091`. Buat ulang bila dibutuhkan. |
 | Kualitas data hasil migrasi V1 | Booking "Hadir" palsu dari kunci H-24 V1, kapasitas kelas, dan penghitung terisi sudah ditangani skrip. Jalankan `pnpm prisma:cek-jadwal` setelah migrasi; keputusan perbaikan kapasitas massal belum diambil. |
 | Panduan staf (PDF) | Panduan Admin/Instruktur dibuat 28 Okt; belum memuat fitur setelahnya (modal sesi, transfer honor, bawa teman). PDF terpisah untuk bawa teman sudah dibuat di luar repo. |
 | Excel KlikBCA | Kolom sesuai template, terbaca Excel/LibreOffice, tetapi **belum diuji di Converter BCA asli**. Uji sekali dengan nominal kecil. |
@@ -107,25 +111,25 @@ Status: menunggu hasil dari developer.
 Fitur Duet/Family mengubah tabel lama `paket`, bertentangan dengan aturan pemilik
 ([Rules.md](./Rules.md#1-database)). Perlu konfirmasi pemilik, atau pindahkan flag ke tabel terpisah.
 
-### 5.2 Test yang sudah gagal sebelum digabung
-- API: `src/packages/finance.service.spec.ts`, "denies finance writes without finance:manage".
-- Web typecheck: `app/components/shared-package-members-dialog.test.tsx` baris 32 (`activeBookings`
-  tidak ada di tipe customer).
+### 5.2 Test
 - `src/app.module.spec.ts` gagal di lingkungan tanpa konfigurasi lengkap; bukan bug.
-
-Dua yang pertama berasal dari commit developer dan perlu diperbaiki di sana.
+- Web typecheck: `app/components/shared-package-members-dialog.test.tsx` baris 32 (`activeBookings`
+  tidak ada di tipe customer) berasal dari commit developer; perlu diperbaiki di sana.
+- Test API "denies finance writes without finance:manage" yang sempat gagal sudah lulus lagi per 1 November.
 
 ### 5.3 Dokumen lama yang tidak lagi sesuai
-`docs/README.md` (13 keputusan bisnis) dan beberapa dokumen di `docs/` ditulis sebelum perubahan
-Oktober. Contoh: presensi member disebut lewat link mandiri, sedangkan sistem sekarang memakai scan QR
-oleh staf. Bila bertentangan, PRD/Rules/HANDOFF ini lebih baru; konfirmasi ke pemilik bila ragu.
+Beberapa dokumen di `docs/` ditulis sebelum perubahan Oktober. Keputusan nomor 1 di `docs/README.md`
+sudah diperbarui (presensi member lewat scan QR oleh staf, dikonfirmasi pemilik). Bila dokumen lain
+bertentangan, PRD/Rules/HANDOFF ini lebih baru; konfirmasi ke pemilik bila ragu.
 
 ## 6. Pertanyaan terbuka untuk pemilik
-Daftar lengkap di [PRD.md](./PRD.md#6-perlu-konfirmasi-asumsi-saat-membangun). Yang paling berdampak:
-1. Apakah laba dikurangi pengeluaran cabang (saat ini ya)?
-2. Apakah kursi teman memotong sesi (saat ini ya, 1 sesi)?
-3. Modal sesi dihitung di bulan paket lunas (saat ini) atau mengikuti pemakaian sesi?
-4. Batas pembatalan mandiri member: berapa jam di konfigurasi produksi (`booking.cutoffHours`)?
+Jawaban pemilik 1 November 2026: laba dikurangi pengeluaran (ya), kursi teman memotong 1 sesi (ya),
+modal sesi mengikuti pemakaian sesi sebelum paket kedaluwarsa (sudah diterapkan di kode), batas
+pembatalan H-24, aplikasi Flutter tidak ada, presensi member lewat scan QR oleh staf.
+
+Masih terbuka:
+1. `ALTER TABLE paket ADD COLUMN is_shareable` dari developer (lihat 5.1).
+2. Asumsi kecil di [PRD.md](./PRD.md#6-perlu-konfirmasi-asumsi-saat-membangun) bagian 6.
 
 ## 7. Kontak dan akses
 - Repo: `ridho15/dailydose_v2`, branch `perbaikan_arsitektur`.
