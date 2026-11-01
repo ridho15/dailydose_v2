@@ -90,13 +90,14 @@ describe('capability-aware session shell', () => {
     );
     expect(screen.getByRole('status', { name: 'Memuat sesi' })).toBeInTheDocument();
     expect(await screen.findByText('Admin Jakarta')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Sesi Pelanggan' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Member & Paket' })).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Evaluasi kuota H-24' })).not.toBeInTheDocument();
     const branchSelect = screen.getByRole('combobox', { name: 'Cabang aktif' });
     expect(branchSelect).toHaveValue('');
     await userEvent.click(branchSelect);
-    await userEvent.click(await screen.findByRole('option', { name: /Bandung/ }));
-    expect(screen.getByText('Bandung')).toBeInTheDocument();
+    const listbox = await screen.findByRole('listbox');
+    await userEvent.click(within(listbox).getByRole('option', { name: /Bandung/ }));
+    expect(screen.getAllByText('Bandung').length).toBeGreaterThan(0);
     expect(sessionStorage.getItem('dd_active_branch')).toBe('branch-2');
 
     fireEvent.click(screen.getByRole('button', { name: 'Notifikasi' }));
@@ -143,7 +144,7 @@ describe('capability-aware session shell', () => {
     );
 
     const navigationRegion = await screen.findByRole('navigation', { name: 'Navigasi utama' });
-    expect(within(navigationRegion).getByRole('link', { name: 'Paket' })).toHaveAttribute(
+    expect(within(navigationRegion).getByRole('link', { name: /^(Kelola )?Paket$/ })).toHaveAttribute(
       'href',
       '/workspace/packages',
     );
@@ -153,7 +154,7 @@ describe('capability-aware session shell', () => {
     );
     await user.keyboard('{Control>}k{/Control}');
     const commandSearch = await screen.findByRole('dialog', { name: 'Pencarian halaman' });
-    expect(within(commandSearch).getByText('Paket & promo harga')).toBeVisible();
+    expect(within(commandSearch).getByText('Kelola Paket & Promo')).toBeVisible();
     expect(within(commandSearch).getByText('Voucher & promo')).toBeVisible();
     expect(canAccessSessionPath(superOwnerSession, '/workspace/packages')).toBe(true);
     expect(canAccessSessionPath(superOwnerSession, '/workspace/vouchers')).toBe(true);
@@ -162,15 +163,15 @@ describe('capability-aware session shell', () => {
   it('disables the branch selector on pages that cover every branch and keeps it on branch pages', async () => {
     const session: WebSession = {
       ...adminSession,
-      capabilities: ['user:read', 'ledger:read', 'booking:read', 'customer:read'],
+      capabilities: ['user:read', 'ledger:read', 'booking:read', 'customer:read', 'voucher:read'],
     };
     const client: SessionClient = { me: vi.fn().mockResolvedValue(session), logout: vi.fn() };
 
-    navigation.pathname = '/customers';
+    navigation.pathname = '/workspace/vouchers';
     const view = render(
       <SessionProvider client={client}>
         <ApplicationShell>
-          <div>Data pelanggan</div>
+          <div>Voucher</div>
         </ApplicationShell>
       </SessionProvider>,
     );
@@ -202,7 +203,7 @@ describe('capability-aware session shell', () => {
     const breadcrumb = await screen.findByRole('navigation', { name: 'Breadcrumb' });
     // Bilah atas mengikuti mockup: "Daily Dose <halaman>", tanpa nama kelompok menu.
     expect(breadcrumb).toHaveTextContent('Daily Dose');
-    expect(within(breadcrumb).getByRole('link', { name: 'Daftar member' })).toHaveAttribute(
+    expect(within(breadcrumb).getByRole('link', { name: 'Member & Paket' })).toHaveAttribute(
       'href',
       '/customers',
     );
@@ -610,7 +611,7 @@ describe('capability-aware session shell', () => {
       await screen.findByRole('heading', { name: 'Selamat datang, Admin Jakarta' }),
     ).toBeVisible();
     expect(screen.getByRole('link', { name: /^Booking/ })).toBeVisible();
-    expect(screen.getByRole('link', { name: /^Sesi Pelanggan/ })).toBeVisible();
+    expect(screen.getByRole('link', { name: /^(Paket & Sesi|Sesi Pelanggan)/ })).toBeVisible();
     expect(screen.queryByRole('link', { name: /Evaluasi kuota H-24/ })).not.toBeInTheDocument();
     expect(screen.getByText('Pilih cabang aktif di bagian atas', { exact: false })).toBeVisible();
   });

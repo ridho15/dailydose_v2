@@ -15,6 +15,14 @@ export interface CustomerSummary {
   emailVerified: boolean;
   mustChangePassword: boolean;
   activePackageCount: number;
+  activePackages?: Array<{
+    id: string;
+    name: string;
+    remainingSessions: number;
+    totalSessions: number;
+    isShareable?: boolean;
+    sharedMemberCount?: number;
+  }>;
   purchasedSessions: number;
   updatedAt: string;
   preferredBranch: { id: string; code: string; name: string } | null;
@@ -57,7 +65,15 @@ export interface CustomerDetailPackage {
   usedSessions: number;
   activationDate?: string | null;
   expiryAt?: string | null;
-  package?: { name: string; sessionCount?: number };
+  package?: { id?: string; name: string; sessionCount?: number; isShareable?: boolean };
+  isShareable?: boolean;
+  sharedMembers?: Array<{
+    id: string;
+    userId: string;
+    relationship?: string;
+    displayName?: string;
+    phone?: string;
+  }>;
 }
 
 export interface CustomerDetailBooking {

@@ -25,7 +25,7 @@ import { Modal, useAppFeedback } from '../app-feedback';
 import { RadioCard } from '../forms';
 import { formatTimezone } from '@/lib/system-dictionary';
 
-const visiblePaths = new Set(['/', '/classes', '/packages', '/locations', '/contact', '/terms', '/privacy', '/guide']);
+const visiblePaths = new Set(['/', '/classes', '/packages', '/locations', '/contact', '/terms', '/privacy', '/guide', '/help']);
 const hiddenPathPrefixes = [
   '/sign-in',
   '/register',
@@ -146,7 +146,7 @@ export function PublicExperience({ children }: { children: ReactNode }) {
     () =>
       Boolean(
         config?.fallbackWhatsappE164 ||
-        config?.branches.some((branch) => branch.supportWhatsappE164),
+        config?.branches?.some((branch) => branch.supportWhatsappE164),
       ),
     [config],
   );

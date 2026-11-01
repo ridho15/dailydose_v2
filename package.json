@@ -31,6 +31,7 @@
     "test:integration:api:keep": "node --env-file=.env tools/api-integration.mjs --keep",
     "test:integration:api:cleanup": "node --env-file=.env tools/api-integration.mjs cleanup",
     "test:integration:harness": "node --test tools/native-mysql-harness.test.mjs",
+    "help:screenshots": "pnpm --filter @dailydose/web help:screenshots",
     "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build",
     "db:generate": "cd apps/api && node --env-file=../../.env node_modules/prisma/build/index.js generate --config prisma.config.ts",
     "db:migrate": "cd apps/api && node --env-file=../../.env node_modules/prisma/build/index.js migrate deploy --config prisma.config.ts",

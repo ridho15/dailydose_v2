@@ -317,6 +317,7 @@ model User {
   requestedAdjustments  SessionAdjustRequest[] @relation("AdjustRequester")
   approvedAdjustments   SessionAdjustRequest[] @relation("AdjustApprover")
   instructorAvailabilities InstructorAvailability[]
+  sharedPackages        PaketPelangganAnggota[]
 
   @@index([role, status])
   @@map("user")
@@ -395,6 +396,7 @@ model Paket {
   description  String?       @db.Text
   status       PackageStatus @default(ACTIVE)
   isMultiBranch Boolean      @default(false) @map("is_multi_branch")
+  isShareable  Boolean       @default(false) @map("is_shareable")
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
 
@@ -418,6 +420,7 @@ model Pembelian {
   voucherId        String?        @db.Char(36)
   subtotalRp       Int
   discountRp       Int            @default(0)
+  uniqueCode       Int?
   totalAmountRp    Int
   status           PurchaseStatus @default(PENDING)
   paymentMethod    PaymentMethod  @default(BANK_TRANSFER)
@@ -509,6 +512,7 @@ model PaketPelanggan {
   bookings       PemesananKelas[]
   ledgers        SessionLedger[]
   adjustRequests SessionAdjustRequest[]
+  sharedMembers  PaketPelangganAnggota[]
 
   @@index([userId, status, validUntil])
   @@map("paket_pelanggan")
@@ -567,6 +571,7 @@ model SlotKelas {
   capacity           Int
   bookedCount        Int             @default(0)
   minQuota           Int?
+  bookingCutoffHours Int?
   status             ClassSlotStatus @default(PUBLISHED)
   notes              String?         @db.Text
   cancellationReason String?         @db.Text
@@ -1256,4 +1261,23 @@ model BookingTeman {
   createdAt  DateTime @default(now())
 
   @@map("booking_teman")
+}
+
+/// Anggota bersama yang diizinkan menggunakan sesi dari Paket Pelanggan (Family / Shared / Duet Package).
+model PaketPelangganAnggota {
+  id                String         @id @default(uuid()) @db.Char(36)
+  customerPackageId String         @map("customer_package_id") @db.Char(36)
+  userId            String         @map("user_id") @db.Char(36)
+  relationship      String?        @db.VarChar(32)
+  addedById         String         @map("added_by_id") @db.Char(36)
+  addedByRole       String         @default("ADMIN") @map("added_by_role") @db.VarChar(20)
+  createdAt         DateTime       @default(now()) @map("created_at")
+
+  customerPackage   PaketPelanggan @relation(fields: [customerPackageId], references: [id], onDelete: Cascade)
+  user              User           @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@unique([customerPackageId, userId])
+  @@index([userId])
+  @@index([customerPackageId])
+  @@map("paket_pelanggan_anggota")
 }

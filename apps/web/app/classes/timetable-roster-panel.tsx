@@ -47,7 +47,9 @@ export function pilihCalon(
   timeZone: string,
 ): Calon {
   const milik = packages.filter(
-    (item) => (item.customerUserId ?? item.customer?.id) === customer.id,
+    (item) =>
+      (item.customerUserId ?? item.customer?.id) === customer.id ||
+      item.sharedWithUserIds?.includes(customer.id),
   );
   const cocokTipeSemua = milik.filter(
     (item) => !item.classTypeId || item.classTypeId === slot.classTypeId,
@@ -291,6 +293,22 @@ export function TimetableRosterPanel({
       )}
 
       <div className="mt-5 flex flex-wrap items-start gap-7">
+        {slot.status === 'DRAFT' && (
+          <div className="min-w-0 flex-[1_1_320px] rounded-dd-sm border border-amber-200 bg-amber-50/70 p-4 text-sm text-amber-900">
+            <p className="font-semibold text-amber-950">Kelas masih berstatus Draf</p>
+            <p className="mt-1 text-xs text-amber-800 leading-relaxed">
+              Publikasikan kelas melalui menu <strong>Atur kelas</strong> terlebih dahulu agar dapat menambahkan member ke dalam roster.
+            </p>
+          </div>
+        )}
+        {slot.status === 'CANCELLED' && (
+          <div className="min-w-0 flex-[1_1_320px] rounded-dd-sm border border-red-200 bg-red-50/70 p-4 text-sm text-red-900">
+            <p className="font-semibold text-red-950">Kelas telah dibatalkan</p>
+            <p className="mt-1 text-xs text-red-800 leading-relaxed">
+              Tidak dapat menambahkan member pada kelas yang sudah dibatalkan.
+            </p>
+          </div>
+        )}
         {canAdd && (
           <div className="min-w-0 flex-[1_1_320px]">
             <label htmlFor="tt-add" className="mb-2 block text-[15px] font-bold text-dd-ink">
@@ -349,6 +367,12 @@ export function TimetableRosterPanel({
                             {calon.teman ? 'Kursi teman · ' : ''}
                             {calon.paket?.packageName ?? calon.paket?.name ?? 'Paket aktif'} · sisa{' '}
                             {calon.paket?.available}
+                            {calon.paket?.customer?.id &&
+                              calon.paket.customer.id !== calon.customer.id && (
+                                <span className="block text-xs font-semibold text-dd-forest/80">
+                                  Milik {calon.paket.customer.displayName} (Paket Bersama)
+                                </span>
+                              )}
                           </span>
                         </span>
                         <span className="shrink-0 rounded-[6px] bg-dd-forest px-3 py-1.5 text-sm font-bold text-white">
@@ -409,6 +433,12 @@ export function TimetableRosterPanel({
                     {booking.sessionBalance && (
                       <span className="block text-sm text-dd-muted">
                         Sisa {booking.sessionBalance.available} sesi
+                        {(booking as any).package?.owner &&
+                          (booking as any).package.owner.id !== booking.customerUserId && (
+                            <span className="block text-xs text-dd-forest">
+                              Paket {(booking as any).package.name} (milik {(booking as any).package.owner.displayName})
+                            </span>
+                          )}
                       </span>
                     )}
                   </span>

@@ -50,9 +50,14 @@ export function verificationStatusWhere(status: VerificationStatus): Prisma.User
   return filterStatusSelfie(status);
 }
 
-function normalizePhone(value: string): string {
+export function normalizePhone(value: string): string {
   const compact = value.replace(/[\s().-]/gu, '');
-  const normalized = compact.startsWith('0') ? `+62${compact.slice(1)}` : compact;
+  let normalized = compact;
+  if (compact.startsWith('0')) {
+    normalized = `+62${compact.slice(1)}`;
+  } else if (compact.startsWith('62')) {
+    normalized = `+${compact}`;
+  }
   if (!/^\+[1-9]\d{7,14}$/u.test(normalized))
     throw new ApiProblem('VALIDATION_ERROR', HttpStatus.UNPROCESSABLE_ENTITY);
   return normalized;
@@ -150,7 +155,14 @@ export class CustomerManagementService {
         where,
         include: {
           profile: true,
-          customerPackages: { where: { status: 'ACTIVE' } },
+          customerPackages: {
+            where: { status: 'ACTIVE' },
+            include: {
+              package: { select: { name: true, isShareable: true } },
+              sharedMembers: { select: { id: true, userId: true } },
+            },
+            orderBy: { createdAt: 'desc' },
+          },
           _count: {
             select: {
               customerPackages: true,
@@ -185,6 +197,14 @@ export class CustomerManagementService {
         preferredBranchId: u.preferredBranchId,
         verificationStatus: customerVerificationStatus(u.profile),
         activePackageCount: u.customerPackages.length,
+        activePackages: u.customerPackages.map((cp) => ({
+          id: cp.id,
+          name: cp.package.name,
+          remainingSessions: cp.remainingSessions,
+          totalSessions: cp.totalSessions,
+          isShareable: Boolean((cp.package as any)?.isShareable),
+          sharedMemberCount: (cp as any).sharedMembers?.length ?? 0,
+        })),
         totalBookings: u._count.bookings,
         _count: {
           purchases: u._count.purchases,
@@ -220,7 +240,14 @@ export class CustomerManagementService {
         customerPackages: {
           orderBy: { createdAt: 'desc' },
           take: 20,
-          include: { package: true },
+          include: {
+            package: true,
+            sharedMembers: {
+              include: {
+                user: { select: { id: true, displayName: true, email: true, phone: true } },
+              },
+            },
+          },
         },
         purchases: {
           orderBy: { createdAt: 'desc' },
@@ -295,6 +322,7 @@ export class CustomerManagementService {
     return {
       id: customer.id,
       displayName: customer.displayName,
+      username: customer.username,
       email: visible ? customer.email : maskContactEmail(customer.email),
       phoneE164: visible ? customer.phone : maskContactPhone(customer.phone),
       contactMasked: !visible,
@@ -330,6 +358,14 @@ export class CustomerManagementService {
         activationDate: cp.validFrom,
         expiryAt: cp.validUntil,
         package: cp.package,
+        isShareable: Boolean(cp.package?.isShareable),
+        sharedMembers: ((cp as any).sharedMembers ?? []).map((m: any) => ({
+          id: m.id,
+          userId: m.userId,
+          relationship: m.relationship,
+          displayName: m.user?.displayName,
+          phone: m.user?.phone,
+        })),
       })),
       customerBookings: customer.bookings.map((b) => ({
         id: b.id,
@@ -512,6 +548,7 @@ export class CustomerManagementService {
     input: {
       displayName: string;
       email?: string | null;
+      username?: string | null;
       phoneE164?: string | null;
       preferredBranchId?: string | null;
       profile?: {
@@ -561,10 +598,32 @@ export class CustomerManagementService {
         }
       }
 
+      let cleanUsername: string | null | undefined = undefined;
+      if (input.username !== undefined) {
+        const rawUsername = input.username?.trim().toLowerCase();
+        if (rawUsername) {
+          if (!/^[a-z0-9_.-]{3,30}$/.test(rawUsername)) {
+            throw new ApiProblem('VALIDATION_ERROR', HttpStatus.UNPROCESSABLE_ENTITY);
+          }
+          if (rawUsername !== user.username) {
+            const existing = await tx.user.findFirst({ where: { username: rawUsername, id: { not: id } } });
+            if (existing) {
+              throw new ApiProblem('IDENTITY_CONFLICT', HttpStatus.CONFLICT, false, [
+                { field: 'username', issue: 'Username sudah digunakan pengguna lain.' },
+              ]);
+            }
+          }
+          cleanUsername = rawUsername;
+        } else {
+          cleanUsername = null;
+        }
+      }
+
       const updated = await tx.user.update({
         where: { id },
         data: {
           displayName,
+          ...(cleanUsername !== undefined ? { username: cleanUsername } : {}),
           ...(email !== undefined ? { email } : {}),
           ...(phone !== undefined ? { phone } : {}),
           ...(input.preferredBranchId !== undefined ? { preferredBranchId: input.preferredBranchId } : {}),

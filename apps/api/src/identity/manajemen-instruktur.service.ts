@@ -1,10 +1,11 @@
+import { randomUUID } from 'node:crypto';
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service';
 import type { SessionPrincipal } from './identity.service';
 import { PolicyService } from './policy.service';
 import { ApiProblem } from './security';
-import { buildPhoneSearchVariants } from './manajemen-pelanggan.service';
+import { buildPhoneSearchVariants, normalizePhone } from './manajemen-pelanggan.service';
 import {
   calculateSlotFee,
   periodRange,
@@ -182,10 +183,12 @@ export class InstructorManagementService {
         email: true,
         phone: true,
         status: true,
+        profile: true,
         instructorAssignments: {
           where: { active: true, ...visibleBranches },
           select: {
             id: true,
+            branchId: true,
             branch: { select: { id: true, code: true, name: true } },
             active: true,
             createdAt: true,
@@ -220,6 +223,31 @@ export class InstructorManagementService {
     const honor = byInstructor.get(id);
     const sortedFees = sortFeesNewestFirst(fees);
 
+    let bankInfo = {
+      bankName: '',
+      accountNumber: '',
+      accountHolder: '',
+    };
+    let instructorNotes = '';
+    const rawNotes = (instructor as any).profile?.notes;
+    if (rawNotes) {
+      try {
+        if (typeof rawNotes === 'string' && rawNotes.startsWith('{')) {
+          const parsed = JSON.parse(rawNotes);
+          bankInfo = {
+            bankName: parsed.bankName ?? '',
+            accountNumber: parsed.accountNumber ?? '',
+            accountHolder: parsed.accountHolder ?? '',
+          };
+          instructorNotes = parsed.notes ?? '';
+        } else {
+          instructorNotes = rawNotes;
+        }
+      } catch {
+        instructorNotes = rawNotes;
+      }
+    }
+
     return {
       id: instructor.id,
       displayName: instructor.displayName,
@@ -227,6 +255,27 @@ export class InstructorManagementService {
       phoneE164: instructor.phone,
       status: instructor.status,
       version: 1,
+      profile: (instructor as any).profile
+        ? {
+            address: (instructor as any).profile.address ?? null,
+            gender: (instructor as any).profile.gender ?? null,
+            birthDate: (instructor as any).profile.birthDate
+              ? (instructor as any).profile.birthDate.toISOString().split('T')[0]
+              : null,
+            emergencyContactName: (instructor as any).profile.emergencyContactName ?? null,
+            emergencyContactPhone: (instructor as any).profile.emergencyContactPhone ?? null,
+            bankInfo,
+            notes: instructorNotes,
+          }
+        : {
+            address: null,
+            gender: null,
+            birthDate: null,
+            emergencyContactName: null,
+            emergencyContactPhone: null,
+            bankInfo,
+            notes: instructorNotes,
+          },
       assignments: instructor.instructorAssignments.map((a) => ({
         id: a.id,
         branch: a.branch,
@@ -263,6 +312,152 @@ export class InstructorManagementService {
         completedWithoutCheckIn: honor?.unverifiedClassCount ?? 0,
         completedWithoutFee: honor?.unconfiguredFeeClassCount ?? 0,
       },
+    };
+  }
+
+  async updateProfile(
+    principal: SessionPrincipal,
+    id: string,
+    input: {
+      displayName: string;
+      email?: string | null;
+      phoneE164?: string | null;
+      branchIds?: string[];
+      bankInfo?: {
+        bankName?: string | null;
+        accountNumber?: string | null;
+        accountHolder?: string | null;
+      };
+      notes?: string | null;
+      address?: string | null;
+      gender?: string | null;
+      birthDate?: string | null;
+      emergencyContactName?: string | null;
+      emergencyContactPhone?: string | null;
+      expectedVersion?: number;
+      reason?: string;
+    },
+    _correlationId = 'unknown',
+  ) {
+    this.policy.requireAnyCapability(principal.capabilities, ['user:admin', 'assignment:manage', 'master:manage']);
+
+    const displayName = input.displayName?.trim();
+    if (!displayName || displayName.length < 2)
+      throw new ApiProblem('VALIDATION_ERROR', HttpStatus.UNPROCESSABLE_ENTITY);
+
+    const user = await this.db.user.findFirst({
+      where: { id, role: 'INSTRUCTOR' },
+      include: { profile: true },
+    });
+    if (!user) throw new ApiProblem('NOT_FOUND', HttpStatus.NOT_FOUND);
+
+    let cleanEmail: string | undefined = undefined;
+    if (input.email !== undefined) {
+      const trimmed = input.email?.trim().toLowerCase();
+      if (trimmed) {
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(trimmed)) {
+          throw new ApiProblem('VALIDATION_ERROR', HttpStatus.UNPROCESSABLE_ENTITY);
+        }
+        if (trimmed !== user.email) {
+          const existing = await this.db.user.findFirst({
+            where: { email: trimmed, NOT: { id } },
+            select: { id: true },
+          });
+          if (existing) {
+            throw new ApiProblem('IDENTITY_CONFLICT', HttpStatus.CONFLICT, false, [
+              { field: 'email', issue: 'Alamat email sudah digunakan oleh pengguna lain.' },
+            ]);
+          }
+        }
+        cleanEmail = trimmed;
+      }
+    }
+
+    let cleanPhone: string | null | undefined = undefined;
+    if (input.phoneE164 !== undefined) {
+      cleanPhone = input.phoneE164?.trim() ? normalizePhone(input.phoneE164) : null;
+    }
+
+    let existingNotesObj: any = {};
+    try {
+      if (user.profile?.notes?.startsWith('{')) {
+        existingNotesObj = JSON.parse(user.profile.notes);
+      } else if (user.profile?.notes) {
+        existingNotesObj = { notes: user.profile.notes };
+      }
+    } catch {}
+
+    const updatedNotesObj = {
+      ...existingNotesObj,
+      ...(input.notes !== undefined ? { notes: input.notes } : {}),
+      ...(input.bankInfo
+        ? {
+            bankName: input.bankInfo.bankName ?? existingNotesObj.bankName ?? '',
+            accountNumber: input.bankInfo.accountNumber ?? existingNotesObj.accountNumber ?? '',
+            accountHolder: input.bankInfo.accountHolder ?? existingNotesObj.accountHolder ?? '',
+          }
+        : {}),
+    };
+    const finalNotes = JSON.stringify(updatedNotesObj);
+
+    await this.db.user.update({
+      where: { id },
+      data: {
+        displayName,
+        ...(cleanEmail !== undefined ? { email: cleanEmail } : {}),
+        ...(cleanPhone !== undefined ? { phone: cleanPhone } : {}),
+      },
+    });
+
+    if (this.db.profilPengguna?.upsert) {
+      await this.db.profilPengguna.upsert({
+        where: { userId: id },
+        create: {
+          id: randomUUID(),
+          userId: id,
+          fullName: displayName,
+          notes: finalNotes,
+          address: input.address ?? null,
+          gender: input.gender ?? null,
+          birthDate: input.birthDate ? new Date(input.birthDate) : null,
+          emergencyContactName: input.emergencyContactName ?? null,
+          emergencyContactPhone: input.emergencyContactPhone ?? null,
+        },
+        update: {
+          fullName: displayName,
+          notes: finalNotes,
+          ...(input.address !== undefined ? { address: input.address } : {}),
+          ...(input.gender !== undefined ? { gender: input.gender } : {}),
+          ...(input.birthDate !== undefined ? { birthDate: input.birthDate ? new Date(input.birthDate) : null } : {}),
+          ...(input.emergencyContactName !== undefined ? { emergencyContactName: input.emergencyContactName } : {}),
+          ...(input.emergencyContactPhone !== undefined ? { emergencyContactPhone: input.emergencyContactPhone } : {}),
+        },
+      });
+    }
+
+    if (Array.isArray(input.branchIds) && this.db.penugasanInstruktur?.updateMany) {
+      await this.db.penugasanInstruktur.updateMany({
+        where: {
+          coachId: id,
+          branchId: { notIn: input.branchIds },
+          active: true,
+        },
+        data: { active: false },
+      });
+      for (const bId of input.branchIds) {
+        await this.db.penugasanInstruktur.upsert({
+          where: { coachId_branchId: { coachId: id, branchId: bId } },
+          create: { id: randomUUID(), coachId: id, branchId: bId, active: true },
+          update: { active: true },
+        });
+      }
+    }
+
+    return {
+      id,
+      displayName,
+      status: user.status,
+      version: (user as any).version ? (user as any).version + 1 : 1,
     };
   }
 }

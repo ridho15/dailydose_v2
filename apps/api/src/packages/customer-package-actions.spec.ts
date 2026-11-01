@@ -135,6 +135,30 @@ describe('extend', () => {
     );
   });
 
+  it('extends package by explicit newValidUntil date', async () => {
+    const row = pkgRow();
+    const { service, applied } = setup(row);
+    const targetDate = new Date(row.validUntil.getTime() + 45 * DAY);
+    await service.manageCustomerPackage(manager, packageId, 'extend', {
+      ...reason,
+      newValidUntil: targetDate.toISOString(),
+      expectedValidUntil: row.validUntil.toISOString(),
+    });
+    expect(applied[0]!.data.validUntil.getTime()).toBe(targetDate.getTime());
+    expect(applied[0]!.data.status).toBe('ACTIVE');
+  });
+
+  it('allows staff/admin to set any date freely without restriction', async () => {
+    const row = pkgRow();
+    const { service, applied } = setup(row);
+    const customDate = new Date(row.validUntil.getTime() - 5 * DAY);
+    await service.manageCustomerPackage(manager, packageId, 'extend', {
+      ...reason,
+      newValidUntil: customDate.toISOString(),
+    });
+    expect(applied[0]!.data.validUntil.getTime()).toBe(customDate.getTime());
+  });
+
   it('counts from today for an already expired package and reactivates it', async () => {
     const { service, applied } = setup(
       pkgRow({ status: 'EXPIRED', validUntil: new Date(Date.now() - 10 * DAY) }),

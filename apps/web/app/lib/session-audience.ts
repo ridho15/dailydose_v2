@@ -16,6 +16,7 @@ export function isPublicExperiencePath(pathname: string) {
       '/reset-password',
       '/check-in-pass',
       '/guide',
+      '/help',
       '/terms',
       '/privacy',
     ].includes(pathname) ||

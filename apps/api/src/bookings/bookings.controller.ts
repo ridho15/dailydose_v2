@@ -17,6 +17,7 @@ import {
   BookingsService,
   type BookingCommand,
   type CancelBookingCommand,
+  type WalkInCommand,
 } from './pemesanan-kelas.service';
 import { ReschedulesService } from './ubah-jadwal.service';
 import { PembatalanTerlambatService } from './pembatalan-terlambat.service';
@@ -50,7 +51,7 @@ export class BookingsController {
   ajukanPembatalan(
     @Req() request: AuthenticatedRequest,
     @Param('id') id: string,
-    @Body() body: { reason?: string },
+    @Body() body: { reason?: string; isMedical?: boolean; releaseSeat?: boolean },
   ) {
     return this.pembatalan.ajukan(request.principal, id, body ?? {});
   }
@@ -137,6 +138,23 @@ export class BookingsController {
     const result = await this.bookings.cancel(
       request.principal,
       id,
+      body,
+      key,
+      request.correlationId ?? 'unknown',
+    );
+    response.status(result.status);
+    response.setHeader('Idempotency-Replayed', String(result.replay));
+    return { ...(result.body as object), idempotentReplay: result.replay };
+  }
+  @Post('walk-in')
+  async walkIn(
+    @Req() request: AuthenticatedRequest,
+    @Headers('idempotency-key') key: string,
+    @Body() body: WalkInCommand,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const result = await this.bookings.walkIn(
+      request.principal,
       body,
       key,
       request.correlationId ?? 'unknown',

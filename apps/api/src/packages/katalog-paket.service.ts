@@ -36,6 +36,7 @@ function packageView(pkg: any) {
     branchId: pkg.branchId ?? null,
     branch: pkg.branch ?? null,
     isMultiBranch: Boolean(pkg.isMultiBranch),
+    isShareable: Boolean(pkg.isShareable),
     effectiveState: pkg.status === 'ACTIVE' ? 'LIVE' : pkg.status,
     effectiveFrom: pkg.createdAt,
     effectiveUntil: null,
@@ -239,6 +240,7 @@ export class PackageCatalogService {
             classTypeId: input.classTypeId ?? input.classTypeIds?.[0] ?? null,
             branchId,
             isMultiBranch,
+            isShareable: Boolean(input.isShareable === true || input.isShareable === 'true'),
             priceRp,
             sessionCount,
             validityDays,
@@ -314,6 +316,9 @@ export class PackageCatalogService {
                   ? Number(body.durationDays)
                   : undefined,
             classTypeId: body.classTypeId !== undefined ? body.classTypeId : undefined,
+            ...(body.isShareable !== undefined
+              ? { isShareable: Boolean(body.isShareable === true || body.isShareable === 'true') }
+              : {}),
             ...(isMultiBranch !== undefined ? { isMultiBranch } : {}),
             ...(branchId !== undefined ? { branchId } : {}),
           },

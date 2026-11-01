@@ -39,7 +39,7 @@ export class IdentityReviewQueryService {
   ) {}
 
   async list(principal: SessionPrincipal, filters: IdentityReviewFilters = {}) {
-    this.policy.requireGlobalCapability(principal, 'identity-verification:read');
+    this.policy.requireCapability(principal.capabilities, 'identity-verification:read');
 
     if ((this.db as any)?.dokumenVerifikasiIdentitas?.findMany) {
       const mockDocs = await (this.db as any).dokumenVerifikasiIdentitas.findMany();
@@ -83,6 +83,16 @@ export class IdentityReviewQueryService {
     const page = Math.max(Number(filters.page ?? 1), 1);
     const skip = filters.cursor ? 1 : (page - 1) * limit;
     const andConditions: any[] = [{ role: 'CUSTOMER' }];
+    const isGlobal = principal.capabilities.includes('branch:all');
+    if (!isGlobal && principal.branchIds?.length) {
+      andConditions.push({
+        OR: [
+          { preferredBranchId: { in: principal.branchIds } },
+          { bookings: { some: { branchId: { in: principal.branchIds } } } },
+          { purchases: { some: { branchId: { in: principal.branchIds } } } },
+        ],
+      });
+    }
 
     if (filters.customerUserId) {
       andConditions.push({ id: filters.customerUserId });
@@ -282,7 +292,7 @@ export class IdentityReviewQueryService {
   }
 
   async getByUser(principal: SessionPrincipal, userId: string) {
-    this.policy.requireGlobalCapability(principal, 'identity-verification:read');
+    this.policy.requireCapability(principal.capabilities, 'identity-verification:read');
     const user = await this.db.user.findUnique({
       where: { id: userId },
       include: { profile: true },

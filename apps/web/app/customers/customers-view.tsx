@@ -12,6 +12,7 @@ import { customerClient, type CustomerSummary } from './customer-client';
 import { ADMIN_PAGE_SIZE, pageOffset } from '../lib/pagination';
 import { statusLabel } from '../lib/status-labels';
 import { AssistedSaleDrawer } from '../purchases/assisted-sale-drawer';
+import { CustomerEditDrawer } from './customer-edit-drawer';
 import { setSessionHint } from '../api-clients/session-client';
 import { Edit3, Eye, EyeOff, KeyRound, LogIn, RefreshCw, ShoppingCart } from 'lucide-react';
 
@@ -62,6 +63,7 @@ export function CustomersView() {
     session?.roles?.includes('SUPER_OWNER') ||
     session?.globalCapabilities?.includes('customer:impersonate'),
   );
+  const activeBranchId = sessionContext?.activeBranchId;
   const saleBranch = sessionContext?.activeBranch ?? (session?.branches?.[0] ? { id: session.branches[0].id, name: session.branches[0].name } : null);
   const saleBranches = (session?.branches ?? []).map((item) => ({ id: item.id, name: item.name }));
 
@@ -105,6 +107,7 @@ export function CustomersView() {
           q: q || undefined,
           status: status || undefined,
           verificationStatus: verificationStatus || undefined,
+          preferredBranchId: activeBranchId || undefined,
           page: String(page),
           pageSize: String(ADMIN_PAGE_SIZE),
         });
@@ -128,7 +131,11 @@ export function CustomersView() {
     return () => {
       cancelled = true;
     };
-  }, [page, q, status, verificationStatus, refreshIndex]);
+  }, [page, q, status, verificationStatus, refreshIndex, activeBranchId]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [activeBranchId]);
 
   const reset = () => {
     setPage(1);
@@ -352,8 +359,33 @@ export function CustomersView() {
           },
           {
             id: 'packages',
-            header: 'Paket',
-            cell: (item) => `${item.activePackageCount} paket aktif · ${item._count?.purchases ?? 0} order`,
+            header: 'Paket & Sisa Sesi',
+            cell: (item) => {
+              if (item.activePackages && item.activePackages.length > 0) {
+                return (
+                  <div className="space-y-1">
+                    {item.activePackages.map((pkg) => (
+                      <div key={pkg.id} className="text-xs leading-snug flex items-center gap-1.5 flex-wrap">
+                        <span className="font-semibold text-dd-ink">{pkg.name}</span>
+                        <span className="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 font-bold text-emerald-700 text-[11px] border border-emerald-200">
+                          Sisa {pkg.remainingSessions}/{pkg.totalSessions} sesi
+                        </span>
+                        {pkg.isShareable && (
+                          <span className="inline-flex items-center rounded-full bg-purple-50 px-1.5 py-0.5 font-semibold text-purple-700 text-[10px] border border-purple-200">
+                            Family/Duet {pkg.sharedMemberCount ? `(${pkg.sharedMemberCount})` : ""}
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                );
+              }
+              return (
+                <span className="text-xs text-dd-muted">
+                  {item.activePackageCount > 0 ? `${item.activePackageCount} paket aktif` : 'Belum ada paket'}
+                </span>
+              );
+            },
           },
           {
             id: 'activity',
@@ -438,10 +470,33 @@ export function CustomersView() {
                 {customerStatusLabels[item.status] ?? statusLabel(item.status)}
               </StatusBadge>
             </div>
+            {item.activePackages && item.activePackages.length > 0 ? (
+              <div className="rounded-dd-sm bg-emerald-50/70 border border-emerald-200/80 p-2 text-xs space-y-1">
+                {item.activePackages.map((pkg) => (
+                  <div key={pkg.id} className="flex justify-between items-center text-dd-ink flex-wrap gap-1">
+                    <span className="truncate font-semibold flex items-center gap-1">
+                      {pkg.name}
+                      {pkg.isShareable && (
+                        <span className="text-[10px] text-purple-700 bg-purple-100/80 px-1 rounded font-normal">
+                          Family/Duet {pkg.sharedMemberCount ? `(${pkg.sharedMemberCount})` : ""}
+                        </span>
+                      )}
+                    </span>
+                    <span className="text-emerald-800 font-bold shrink-0 bg-emerald-100/90 rounded px-1.5 py-0.5 text-[11px]">
+                      Sisa {pkg.remainingSessions}/{pkg.totalSessions} sesi
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-dd-muted">
+                {item.activePackageCount > 0 ? `${item.activePackageCount} paket aktif` : 'Belum ada paket aktif'}
+              </p>
+            )}
             <p className="text-xs text-dd-muted">
               {verificationStatusLabels[item.verificationStatus] ??
                 statusLabel(item.verificationStatus)}{' '}
-              · {item.activePackageCount} paket aktif · {item._count?.purchases ?? 0} order ·{' '}
+              · {item._count?.purchases ?? 0} order ·{' '}
               {item._count?.customerBookings ?? 0} booking
             </p>
             <div className="flex flex-wrap items-center gap-1.5 pt-1">
@@ -536,94 +591,24 @@ export function CustomersView() {
         />
       )}
 
-      {/* Quick Edit Customer Modal */}
+      {/* Unified Edit Customer Drawer */}
       {selectedForEdit && (
-        <Modal
+        <CustomerEditDrawer
           open={Boolean(selectedForEdit)}
-          title={`Edit Cepat: ${selectedForEdit.displayName}`}
-          description="Perbarui informasi kontak dan cabang pilihan member."
           onClose={() => setSelectedForEdit(null)}
-        >
-          <form
-            className="space-y-4 py-2"
-            onSubmit={async (e) => {
-              e.preventDefault();
-              const formData = new FormData(e.currentTarget);
-              setQuickBusy(true);
-              setQuickError('');
-              try {
-                await customerClient.updateProfile(
-                  selectedForEdit.id,
-                  {
-                    displayName: String(formData.get('displayName')),
-                    email: formData.get('email') ? String(formData.get('email')) : null,
-                    phoneE164: String(formData.get('phoneE164')),
-                    preferredBranchId: formData.get('preferredBranchId') ? String(formData.get('preferredBranchId')) : null,
-                    expectedVersion: selectedForEdit.version,
-                    reason: 'Pembaruan cepat dari tabel pelanggan',
-                  },
-                  { idempotencyKey: crypto.randomUUID() },
-                );
-                feedback?.showToast({
-                  tone: 'success',
-                  title: 'Data pelanggan diperbarui',
-                  message: `Profil ${formData.get('displayName')} berhasil disimpan.`,
-                });
-                setSelectedForEdit(null);
-                setRefreshIndex((prev) => prev + 1);
-              } catch (cause: any) {
-                setQuickError(cause?.message || 'Gagal memperbarui profil pelanggan.');
-              } finally {
-                setQuickBusy(false);
-              }
-            }}
-          >
-            {quickError && <Feedback kind="error">{quickError}</Feedback>}
-            <TextInput
-              required
-              label="Nama Lengkap"
-              name="displayName"
-              defaultValue={selectedForEdit.displayName}
-            />
-            <div className="grid gap-3 sm:grid-cols-2">
-              <TextInput
-                required
-                label="Nomor WhatsApp / Telepon"
-                name="phoneE164"
-                defaultValue={selectedForEdit.phoneE164 ?? ''}
-              />
-              <TextInput
-                label="Email (opsional)"
-                name="email"
-                type="email"
-                defaultValue={selectedForEdit.email ?? ''}
-              />
-            </div>
-            <SearchSelect
-              label="Studio/Cabang Pilihan"
-              name="preferredBranchId"
-              defaultValue={selectedForEdit.preferredBranch?.id ?? ''}
-              placeholder="Pilih studio"
-              options={(session?.branches ?? []).map((branch) => ({
-                id: branch.id,
-                label: branch.name,
-              }))}
-            />
-            <div className="flex justify-end gap-2 pt-3 border-t border-dd-line">
-              <Button
-                type="button"
-                variant="secondary"
-                disabled={quickBusy}
-                onClick={() => setSelectedForEdit(null)}
-              >
-                Batal
-              </Button>
-              <Button type="submit" loading={quickBusy}>
-                Simpan Perubahan
-              </Button>
-            </div>
-          </form>
-        </Modal>
+          customer={selectedForEdit as any}
+          branches={(session?.branches ?? []).map((b) => ({ id: b.id, name: b.name }))}
+          canWrite={canWrite}
+          onSuccess={(updatedName) => {
+            feedback?.showToast({
+              tone: 'success',
+              title: 'Data pelanggan diperbarui',
+              message: `Profil ${updatedName || selectedForEdit.displayName} berhasil disimpan.`,
+            });
+            setSelectedForEdit(null);
+            setRefreshIndex((prev) => prev + 1);
+          }}
+        />
       )}
 
       {/* Quick Reset Password Modal */}

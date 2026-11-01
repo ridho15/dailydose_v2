@@ -58,6 +58,7 @@ export function ProfileDialog({
   onClose(): void;
   onSubmit(input: {
     displayName: string;
+    email?: string | null;
     username?: string | null;
     phoneE164: string | null;
   }): Promise<void>;
@@ -66,8 +67,8 @@ export function ProfileDialog({
   return (
     <Modal
       open={open}
-      title="Edit Profil Staf"
-      description="Perbarui informasi identitas staf studio."
+      title="Edit Profil Pengguna"
+      description="Perbarui informasi identitas dan akun staf atau pengguna studio."
       busy={submitting}
       dirty={guard.dirty}
       onDirtyClose={guard.confirmDiscard}
@@ -96,8 +97,10 @@ export function ProfileDialog({
           event.preventDefault();
           const data = new FormData(event.currentTarget);
           const rawUsername = String(data.get('username') ?? '').trim();
+          const rawEmail = String(data.get('email') ?? '').trim();
           void onSubmit({
             displayName: String(data.get('displayName')),
+            email: rawEmail ? rawEmail.toLowerCase() : null,
             username: rawUsername ? rawUsername.toLowerCase() : null,
             phoneE164: String(data.get('phoneE164')).trim() || null,
           });
@@ -110,6 +113,14 @@ export function ProfileDialog({
             defaultValue={user.username ?? ''}
             placeholder="contoh: budi_santoso"
             description="Gunakan huruf kecil, angka, _, ., atau - (3-30 karakter). Digunakan untuk login."
+          />
+          <TextInput
+            label="Alamat Email"
+            name="email"
+            type="email"
+            defaultValue={user.email ?? ''}
+            placeholder="nama@email.com"
+            description="Email akun untuk autentikasi dan notifikasi sistem."
           />
           <TextInput
             label="Nama Tampilan"

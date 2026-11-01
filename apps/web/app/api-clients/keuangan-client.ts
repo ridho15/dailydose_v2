@@ -30,12 +30,15 @@ export interface RingkasanBulanan {
 
 export interface BarisJurnal {
   id: string;
+  costId?: string | null;
   tanggal: string;
   arah: 'MASUK' | 'KELUAR';
   keterangan: string;
   kategori: string;
   amountRp: number;
   dicatatOleh: string | null;
+  createdById?: string | null;
+  createdAt?: string | null;
   branchId: string;
   /** Pengeluaran yang dibayar uang pribadi Super Owner. */
   dibayarOleh?: string | null;
@@ -193,6 +196,15 @@ export interface KeuanganClient {
     reason: string;
     evidence: File;
   }): Promise<KoreksiJam>;
+  koreksiPengeluaran?(
+    id: string,
+    input: {
+      categoryCode?: string;
+      description?: string;
+      amountRp?: number;
+    },
+  ): Promise<unknown>;
+  hapusPengeluaran?(id: string, reason?: string): Promise<unknown>;
 }
 
 export const browserKeuanganClient: KeuanganClient = {
@@ -278,6 +290,20 @@ export const browserKeuanganClient: KeuanganClient = {
       body: JSON.stringify(input),
       idempotent: true,
       label: 'Mencatat pengeluaran…',
+    });
+  },
+  koreksiPengeluaran(id, input) {
+    return apiFetch(`/other-costs/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(input),
+      label: 'Mengoreksi pengeluaran…',
+    });
+  },
+  hapusPengeluaran(id, reason = 'Koreksi salah ketik dalam batas toleransi') {
+    return apiFetch(`/other-costs/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+      body: JSON.stringify({ reason }),
+      label: 'Membatalkan pengeluaran…',
     });
   },
   daftarKoreksiJam(branchId) {

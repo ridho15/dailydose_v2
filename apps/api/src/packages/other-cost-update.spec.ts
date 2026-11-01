@@ -200,3 +200,82 @@ describe('other costs are audited permanently', () => {
     );
   });
 });
+
+describe('Grace Period 15 Menit Pengeluaran Kas', () => {
+  const staffId = id(200);
+  const staffKasir = {
+    sessionId: 's',
+    userId: staffId,
+    roles: [{ role: 'ADMIN', branchId: branchA }] as never,
+    capabilities: ['expense:create'],
+    branchIds: [branchA],
+  };
+
+  it('staf kasir (expense:create) dapat mengoreksi pengeluarannya sendiri dalam jendela toleransi 15 menit', async () => {
+    const { service, db, audit } = setup();
+    const rowBaru = {
+      id: costId,
+      branchId: branchA,
+      category: 'SUPPLIES',
+      description: 'Beli galon air',
+      amountRp: 500_000,
+      createdById: staffId,
+      createdAt: new Date(),
+    };
+    db.otherCost.findUnique.mockResolvedValue(rowBaru);
+
+    await service.updateOtherCost(staffKasir, costId, { amountRp: 50_000 });
+    expect(db.otherCost.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: costId },
+        data: expect.objectContaining({ amountRp: 50_000 }),
+      }),
+    );
+    expect(audit.catat).toHaveBeenCalledWith(
+      null,
+      expect.objectContaining({ action: 'finance.other_cost_corrected_grace_period' }),
+    );
+  });
+
+  it('staf kasir dapat membatalkan pengeluarannya sendiri dalam jendela toleransi 15 menit', async () => {
+    const { service, db, audit } = setup();
+    const rowBaru = {
+      id: costId,
+      branchId: branchA,
+      category: 'SUPPLIES',
+      description: 'Beli galon air',
+      amountRp: 50_000,
+      createdById: staffId,
+      createdAt: new Date(),
+    };
+    db.otherCost.findUnique.mockResolvedValue(rowBaru);
+
+    await service.deleteOtherCost(staffKasir, costId);
+    expect(db.otherCost.delete).toHaveBeenCalledWith({ where: { id: costId } });
+    expect(audit.catat).toHaveBeenCalledWith(
+      null,
+      expect.objectContaining({ action: 'finance.other_cost_deleted_grace_period' }),
+    );
+  });
+
+  it('menolak koreksi staf kasir jika sudah lewat dari 15 menit (harus lewat finance:manage)', async () => {
+    const { service, db } = setup();
+    const rowKedaluwarsa = {
+      id: costId,
+      branchId: branchA,
+      category: 'SUPPLIES',
+      description: 'Beli galon air',
+      amountRp: 50_000,
+      createdById: staffId,
+      createdAt: new Date(Date.now() - 20 * 60 * 1000),
+    };
+    db.otherCost.findUnique.mockResolvedValue(rowKedaluwarsa);
+
+    await expect(
+      service.updateOtherCost(staffKasir, costId, { amountRp: 60_000 }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    await expect(
+      service.deleteOtherCost(staffKasir, costId),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  });
+});

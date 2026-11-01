@@ -214,6 +214,96 @@ describe('BookingsService.customerOptions', () => {
     expect(result.eligibility.requiredAction).toBe('CONTACT_STUDIO');
   });
 
+  it('allows staff/admin to book even when slot is within cutoffHours (walk-in booking)', async () => {
+    const mockDb = {
+      slotKelas: {
+        findUnique: jest.fn().mockResolvedValue({
+          ...baseSlot,
+          startAt: slotPastCutoffDate,
+          endAt: new Date(Date.now() + 60 * 60 * 1000), // endAt 1 hour in future
+        }),
+      },
+      paketPelanggan: {
+        findMany: jest.fn().mockResolvedValue([matchingPackage]),
+      },
+      pemesananKelas: {
+        count: jest.fn().mockResolvedValue(0),
+      },
+    };
+
+    const mockConfig = {
+      value: {
+        booking: { enabled: true, cutoffHours: 2 },
+      },
+    };
+
+    const service = new BookingsService(
+      mockDb as any,
+      {} as any,
+      {} as any,
+      mockConfig as any,
+    );
+
+    const staffPrincipal = {
+      userId: "u-staff-1",
+      roles: [{ role: "ADMIN", branchId: "b1" }],
+      capabilities: ["booking:create:assisted"],
+    };
+
+    const result = await service.customerOptions(
+      staffPrincipal as any,
+      "f1000000-0000-4000-8000-000000060001",
+    );
+
+    expect(result.eligibility.canBook).toBe(true);
+    expect(result.eligibility.reasonCode).toBeNull();
+  });
+
+  it('rejects staff/admin when slot endAt has already ended (no-happy path)', async () => {
+    const mockDb = {
+      slotKelas: {
+        findUnique: jest.fn().mockResolvedValue({
+          ...baseSlot,
+          startAt: new Date(Date.now() - 2 * 60 * 60 * 1000),
+          endAt: new Date(Date.now() - 60 * 60 * 1000), // endAt in the past
+        }),
+      },
+      paketPelanggan: {
+        findMany: jest.fn().mockResolvedValue([matchingPackage]),
+      },
+      pemesananKelas: {
+        count: jest.fn().mockResolvedValue(0),
+      },
+    };
+
+    const mockConfig = {
+      value: {
+        booking: { enabled: true, cutoffHours: 2 },
+      },
+    };
+
+    const service = new BookingsService(
+      mockDb as any,
+      {} as any,
+      {} as any,
+      mockConfig as any,
+    );
+
+    const staffPrincipal = {
+      userId: "u-staff-1",
+      roles: [{ role: "ADMIN", branchId: "b1" }],
+      capabilities: ["booking:create:assisted"],
+    };
+
+    const result = await service.customerOptions(
+      staffPrincipal as any,
+      "f1000000-0000-4000-8000-000000060001",
+    );
+
+    expect(result.eligibility.canBook).toBe(false);
+    expect(result.eligibility.reasonCode).toBe("SLOT_UNAVAILABLE");
+  });
+
   it('sets SLOT_FULL when bookedCount reaches capacity', async () => {
     const mockDb = {
       slotKelas: {

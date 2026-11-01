@@ -158,6 +158,7 @@ export interface IdentityClient {
     id: string,
     input: {
       displayName: string;
+      email?: string | null;
       username?: string | null;
       phoneE164: string | null;
       expectedVersion?: number;

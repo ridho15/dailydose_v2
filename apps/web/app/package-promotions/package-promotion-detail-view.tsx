@@ -196,6 +196,14 @@ export function PackagePromotionDetailView({ id }: { id: string }) {
                   .join(', ') || '—'
               }
             />
+            <PackageInfo
+              label="Tipe Penggunaan"
+              value={
+                pkg.isShareable
+                  ? 'Bisa Dipakai Bersama (Family / Duet)'
+                  : 'Individu (Single User)'
+              }
+            />
           </dl>
           <p className="mt-4 text-xs leading-5 text-dd-muted">
             Business key adalah identitas global. Ketersediaan paket ditentukan oleh cakupan
@@ -871,6 +879,7 @@ function PackageLifecycleEditor({
                     : await browserPackagePromotionClient.updatePackage(pkg.id, {
                         expectedVersion: pkg.version,
                         name: String(data.get('name')),
+                        isShareable: data.get('isShareable') === 'on',
                         ...(canEditCommercialInPlace
                           ? {
                               sessionCount: Number(data.get('sessionCount')),
@@ -935,6 +944,20 @@ function PackageLifecycleEditor({
               disabled
             />
             <TextInput label="Business key" value={pkg.businessKey} disabled />
+            <label className="flex items-start gap-2 text-sm cursor-pointer border border-dd-line rounded-dd-md p-3">
+              <input
+                type="checkbox"
+                name="isShareable"
+                defaultChecked={pkg.isShareable}
+                className="mt-0.5 accent-dd-forest cursor-pointer size-4 shrink-0 rounded"
+              />
+              <div>
+                <span className="font-semibold text-dd-forest">Bisa Dipakai Bersama (Family / Duet Package)</span>
+                <p className="text-xs text-dd-muted">
+                  Izinkan pemilik paket untuk mendaftarkan anggota keluarga atau rekan untuk menggunakan kuota sesi paket.
+                </p>
+              </div>
+            </label>
             {canEditCommercialInPlace && (
               <>
                 <TextInput

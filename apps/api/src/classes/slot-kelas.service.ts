@@ -1,6 +1,7 @@
 import { HITUNG_TERISI, terisi } from './terisi';
 import { requireReason } from '../foundation/reason';
-import { HttpStatus, Injectable, Optional } from '@nestjs/common';
+import { HttpStatus, Injectable, Logger, Optional } from '@nestjs/common';
+import { WhatsAppGatewayService } from '../notifications/whatsapp-gateway.service';
 import { ClassSlotStatus, Prisma, SessionMutationType } from '@prisma/client';
 import { createHash } from 'node:crypto';
 import { PrismaService } from '../database/prisma.service';
@@ -30,7 +31,7 @@ const STATUS_ALLOWED: Record<
   readonly ClassSlotStatus[]
 > = {
   assign: [ClassSlotStatus.DRAFT, ClassSlotStatus.PUBLISHED, ClassSlotStatus.CONFIRMED],
-  update: [ClassSlotStatus.DRAFT],
+  update: [ClassSlotStatus.DRAFT, ClassSlotStatus.PUBLISHED, ClassSlotStatus.CONFIRMED],
   publish: [ClassSlotStatus.DRAFT],
   cancel: [ClassSlotStatus.DRAFT, ClassSlotStatus.PUBLISHED, ClassSlotStatus.CONFIRMED],
   complete: [ClassSlotStatus.CONFIRMED],
@@ -99,12 +100,15 @@ export function classCompletionControlHash(
 
 @Injectable()
 export class ClassSlotService {
+  private readonly logger = new Logger(ClassSlotService.name);
+
   constructor(
     private readonly db: PrismaService,
     private readonly policy: PolicyService,
     private readonly idempotency: IdempotencyService,
     private readonly config: RuntimeConfigService,
     @Optional() private readonly audit?: AuditService,
+    @Optional() private readonly whatsapp?: WhatsAppGatewayService,
   ) {}
 
   /** Jejak audit permanen untuk perubahan kelas; ikut transaksi sehingga batal bersama perubahannya. */
@@ -172,6 +176,7 @@ export class ClassSlotService {
       capacity: slot.capacity,
       bookedCount: terisi(slot),
       minimumQuota: slot.classType?.minimumQuota ?? 1,
+      bookingCutoffHours: slot.bookingCutoffHours ?? null,
       status: slot.status,
       cancellationReasonCode: slot.cancellationReason ?? null,
       cancellationReason: slot.cancellationReason ?? null,
@@ -347,6 +352,8 @@ export class ClassSlotService {
       instructorUserId?: string;
       startAt: string;
       endAt: string;
+      capacity?: number;
+      bookingCutoffHours?: number | null;
     },
     key: string,
     _correlationId: string,
@@ -445,6 +452,7 @@ export class ClassSlotService {
             startAt,
             endAt,
             capacity: effectiveCapacity,
+            bookingCutoffHours: input.bookingCutoffHours !== undefined && input.bookingCutoffHours !== null ? Number(input.bookingCutoffHours) : null,
             bookedCount: 0,
             status: ClassSlotStatus.DRAFT,
           },
@@ -539,6 +547,8 @@ export class ClassSlotService {
       instructorUserId?: string | null;
       startAt: string;
       endAt: string;
+      capacity?: number;
+      bookingCutoffHours?: number | null;
       expectedVersion?: number;
       reason?: string;
     },
@@ -549,11 +559,11 @@ export class ClassSlotService {
     this.validateKey(key);
     if (!UUID.test(id) || !UUID.test(input.classTypeId))
       throw new ApiProblem('VALIDATION_ERROR', HttpStatus.BAD_REQUEST);
-    if (input.studioId != null && !UUID.test(input.studioId))
+    if (input.studioId != null && input.studioId !== '' && !UUID.test(input.studioId))
       throw new ApiProblem('VALIDATION_ERROR', HttpStatus.BAD_REQUEST);
     if (input.roomId != null && input.roomId !== '' && !UUID.test(input.roomId))
       throw new ApiProblem('VALIDATION_ERROR', HttpStatus.BAD_REQUEST);
-    if (input.instructorUserId != null && !UUID.test(input.instructorUserId))
+    if (input.instructorUserId != null && input.instructorUserId !== '' && !UUID.test(input.instructorUserId))
       throw new ApiProblem('VALIDATION_ERROR', HttpStatus.BAD_REQUEST);
     const expectedVersion = this.optionalVersion(input.expectedVersion);
 
@@ -568,12 +578,28 @@ export class ClassSlotService {
       input,
       HttpStatus.OK,
       async (tx) => {
-        const slot = await tx.slotKelas.findUnique({ where: { id } });
+        const slot = await tx.slotKelas.findUnique({
+          where: { id },
+          include: { bookings: { where: { status: 'BOOKED' }, select: { id: true } } },
+        });
         if (!slot) throw new ApiProblem('RESOURCE_NOT_FOUND', HttpStatus.NOT_FOUND);
         this.scope(principal, slot.branchId, 'class-slot:manage');
         this.assertClaimable(slot, expectedVersion, STATUS_ALLOWED.update);
 
-        const targetStudioId = input.studioId !== undefined ? input.studioId : slot.studioId;
+        if (
+          (slot.status === ClassSlotStatus.PUBLISHED || slot.status === ClassSlotStatus.CONFIRMED) &&
+          (slot.bookedCount > 0 || (slot.bookings && slot.bookings.length > 0))
+        ) {
+          throw new ApiProblem('CLASS_SLOT_HAS_BOOKINGS', HttpStatus.CONFLICT, false, [
+            {
+              field: 'classSlotId',
+              issue: 'Tipe kelas atau jadwal tidak dapat diubah karena sudah ada peserta yang memesan.',
+            },
+          ]);
+        }
+
+        const targetStudioId =
+          input.studioId !== undefined && input.studioId !== '' ? input.studioId : slot.studioId;
         const targetRoomId = input.roomId !== undefined ? (input.roomId || null) : slot.roomId;
         if (targetStudioId && targetStudioId !== slot.studioId && tx.studio?.findUnique) {
           const studioBaru = await tx.studio.findUnique({ where: { id: targetStudioId } });
@@ -595,15 +621,46 @@ export class ClassSlotService {
           : null;
         if ((tx as any).jenisKelas && !classType) throw new ApiProblem('RESOURCE_NOT_FOUND', HttpStatus.NOT_FOUND);
 
-        const defaultCap = classType?.defaultCapacity ?? 8;
-        const diatur = await kapasitasCabang(tx, slot.branchId, input.classTypeId);
-        const effectiveCapacity =
-          diatur ??
-          (room && room.capacityBed > 0 ? Math.min(defaultCap, room.capacityBed) : defaultCap);
+        let effectiveCapacity: number;
+        if (input.capacity !== undefined && input.capacity !== null && (input.capacity as any) !== "") {
+          const customCap = Number(input.capacity);
+          if (!Number.isInteger(customCap) || customCap < 1) {
+            throw new ApiProblem("VALIDATION_ERROR", HttpStatus.BAD_REQUEST, false, [
+              { field: "capacity", issue: "CAPACITY_MUST_BE_POSITIVE_INTEGER" },
+            ]);
+          }
+          const currentBooked = terisi(slot);
+          if (customCap < currentBooked) {
+            throw new ApiProblem("CAPACITY_BELOW_BOOKED_COUNT", HttpStatus.CONFLICT, false, [
+              { field: "capacity", issue: `Kapasitas baru (${customCap}) tidak boleh di bawah jumlah peserta yang sudah booking (${currentBooked}).` },
+            ]);
+          }
+          if (room && room.capacityBed > 0 && customCap > room.capacityBed) {
+            throw new ApiProblem("CAPACITY_EXCEEDS_ROOM_LIMIT", HttpStatus.BAD_REQUEST, false, [
+              { field: "capacity", issue: `EXCEEDS_ROOM_CAPACITY_BED_${room.capacityBed}` },
+            ]);
+          }
+          effectiveCapacity = customCap;
+        } else {
+          const defaultCap = classType?.defaultCapacity ?? 8;
+          const diatur = await kapasitasCabang(tx, slot.branchId, input.classTypeId);
+          effectiveCapacity =
+            diatur ??
+            (room && room.capacityBed > 0 ? Math.min(defaultCap, room.capacityBed) : defaultCap);
+        }
+
+        const targetCutoffHours =
+          input.bookingCutoffHours !== undefined
+            ? (input.bookingCutoffHours !== null && (input.bookingCutoffHours as any) !== ""
+                ? Number(input.bookingCutoffHours)
+                : null)
+            : slot.bookingCutoffHours;
 
         // Instruktur yang tidak dikirim tetap dipertahankan; hanya `null` eksplisit yang mengosongkannya.
         const targetInstructorId =
-          input.instructorUserId !== undefined ? input.instructorUserId : slot.instructorId;
+          input.instructorUserId !== undefined
+            ? (input.instructorUserId || null)
+            : slot.instructorId;
         const updateCollisionConditions: Prisma.SlotKelasWhereInput[] = [];
         if (targetRoomId) {
           updateCollisionConditions.push({ studioId: targetStudioId, roomId: targetRoomId });
@@ -635,6 +692,7 @@ export class ClassSlotService {
           studioId: targetStudioId,
           roomId: targetRoomId,
           capacity: effectiveCapacity,
+          bookingCutoffHours: targetCutoffHours,
           startAt,
           endAt,
           notes: input.reason ?? slot.notes,
@@ -723,7 +781,18 @@ export class ClassSlotService {
     const note =
       input.reasonCode === 'OTHER_REVIEW_REQUIRED' ? requireReason(input.note, 'note') : input.note?.trim() || undefined;
 
-    return this.execute(
+    let notificationPayload: {
+      slotId: string;
+      className: string;
+      branchName: string;
+      timezone: string;
+      startAt?: Date;
+      instructorPhone?: string | null;
+      instructorName?: string | null;
+      attendees: Array<{ phone?: string | null; name: string; bookingId: string }>;
+    } | null = null;
+
+    const result = await this.execute(
       principal,
       `class-slot:cancel:${id}`,
       key,
@@ -732,12 +801,35 @@ export class ClassSlotService {
       async (tx) => {
         const slot = await tx.slotKelas.findUnique({
           where: { id },
-          include: { bookings: { where: { status: 'BOOKED' } } },
+          include: {
+            bookings: {
+              where: { status: 'BOOKED' },
+              include: { user: true },
+            },
+            classType: true,
+            branch: true,
+            instructor: true,
+          },
         });
         if (!slot) throw new ApiProblem('RESOURCE_NOT_FOUND', HttpStatus.NOT_FOUND);
         this.scope(principal, slot.branchId, 'class-slot:manage');
         // Kelas selesai/batal tidak boleh "dibatalkan" lagi: riwayat kehadiran dan ledger harus utuh.
         this.assertClaimable(slot, expectedVersion, STATUS_ALLOWED.cancel);
+
+        notificationPayload = {
+          slotId: slot.id,
+          className: (slot as any).classType?.name || 'Pilates',
+          branchName: (slot as any).branch?.name || 'Daily Dose',
+          timezone: (slot as any).branch?.timezone || 'Asia/Jakarta',
+          startAt: slot.startAt,
+          instructorPhone: (slot as any).instructor?.phone,
+          instructorName: (slot as any).instructor?.displayName,
+          attendees: ((slot as any).bookings || []).map((b: any) => ({
+            bookingId: b.id,
+            phone: b.user?.phone,
+            name: b.user?.displayName || 'Member',
+          })),
+        };
 
         await this.claim(tx, id, expectedVersion, STATUS_ALLOWED.cancel, {
           status: ClassSlotStatus.CANCELLED,
@@ -782,6 +874,90 @@ export class ClassSlotService {
         return this.viewOf(tx, id);
       },
     );
+
+    if (this.whatsapp && notificationPayload) {
+      await this.dispatchCancellationBroadcast(notificationPayload, input.reasonCode, note).catch((err) => {
+        this.logger.warn(`Gagal kirim notifikasi pembatalan manual WA: ${err?.message || err}`);
+      });
+    }
+
+    return result;
+  }
+
+  private async dispatchCancellationBroadcast(
+    payload: {
+      slotId: string;
+      className: string;
+      branchName: string;
+      timezone: string;
+      startAt?: Date;
+      instructorPhone?: string | null;
+      instructorName?: string | null;
+      attendees: Array<{ phone?: string | null; name: string; bookingId: string }>;
+    },
+    reasonCode: ClassSlotCancellationReason,
+    note?: string,
+  ) {
+    if (!this.whatsapp) return;
+
+    const classDateStr = payload.startAt
+      ? new Intl.DateTimeFormat('id-ID', {
+          dateStyle: 'full',
+          timeStyle: 'short',
+          timeZone: payload.timezone,
+        }).format(payload.startAt)
+      : '';
+
+    const reasonLabelMap: Record<ClassSlotCancellationReason, string> = {
+      STUDIO_UNAVAILABLE: 'Studio tidak dapat digunakan / pemeliharaan',
+      INSTRUCTOR_UNAVAILABLE: 'Instruktur berhalangan hadir',
+      SAFETY_ISSUE: 'Kendala teknis / keselamatan',
+      OTHER_REVIEW_REQUIRED: 'Alasan operasional studio',
+    };
+
+    const reasonText = reasonLabelMap[reasonCode]
+      ? (note ? `${reasonLabelMap[reasonCode]} (${note})` : reasonLabelMap[reasonCode])
+      : (note ? `${reasonCode}: ${note}` : reasonCode);
+
+    for (const attendee of payload.attendees) {
+      if (attendee.phone) {
+        const message =
+          `Halo ${attendee.name},\n\n` +
+          `Kami menginformasikan bahwa kelas Pilates *${payload.className}* di cabang *${payload.branchName}* ` +
+          `pada *${classDateStr}* dibatalkan oleh pihak studio (${reasonText}).\n\n` +
+          `Kuota sesi Anda tetap aman dan dapat langsung Anda gunakan kembali untuk memilih jadwal kelas lainnya.\n\n` +
+          `Mohon maaf atas ketidaknyamanan ini.\n_Daily Dose Pilates_`;
+
+        await this.whatsapp.sendMessage({
+          to: attendee.phone,
+          text: message,
+          recipientType: 'CUSTOMER',
+          reminderType: 'CLASS_CANCELLED_MANUAL',
+          payload: { slotId: payload.slotId, bookingId: attendee.bookingId, reason: reasonCode },
+        }).catch((err) => {
+          this.logger.warn(`Gagal kirim WA ke ${attendee.phone}: ${err?.message || err}`);
+        });
+      }
+    }
+
+    if (payload.instructorPhone) {
+      const coachName = payload.instructorName || 'Coach';
+      const instructorMsg =
+        `Halo Coach ${coachName},\n\n` +
+        `Kelas *${payload.className}* di cabang *${payload.branchName}* pada *${classDateStr}* ` +
+        `telah dibatalkan oleh pihak studio (${reasonText}).\n\n` +
+        `Jadwal mengajar Anda telah dibebaskan. Terima kasih.\n_Daily Dose Pilates_`;
+
+      await this.whatsapp.sendMessage({
+        to: payload.instructorPhone,
+        text: instructorMsg,
+        recipientType: 'INSTRUCTOR',
+        reminderType: 'CLASS_CANCELLED_MANUAL_INSTRUCTOR',
+        payload: { slotId: payload.slotId, reason: reasonCode },
+      }).catch((err) => {
+        this.logger.warn(`Gagal kirim WA ke instruktur: ${err?.message || err}`);
+      });
+    }
   }
 
   async complete(

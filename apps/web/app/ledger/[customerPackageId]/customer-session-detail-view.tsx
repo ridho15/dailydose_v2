@@ -17,8 +17,9 @@ import { Badge, Pagination, Panel, StatCard } from '../../components/admin/admin
 import { EmptyState, Feedback, Skeleton } from '../../ui';
 import { AdminPageHeader } from '../../components/admin/admin-page-header';
 import { ReasonDialog } from '../../components/admin/reason-dialog';
-import { TextInput } from '../../components/forms';
+import { DateInput, TextInput } from '../../components/forms';
 import { useSessionContext } from '../../session-context';
+import { SharedPackageMembersDialog } from '../../components/shared-package-members-dialog';
 
 const ledgerLabels: Record<string, string> = {
   PURCHASE: 'Aktivasi paket',
@@ -52,9 +53,12 @@ export function CustomerSessionDetailView({ id }: { id: string }) {
   const canManagePackage = Boolean(sessionContext?.hasCapability('customer-package:manage'));
   const [action, setAction] = useState<CustomerPackageAction | null>(null);
   const [days, setDays] = useState('30');
+  const [targetDate, setTargetDate] = useState('');
+  const [extendMode, setExtendMode] = useState<'date' | 'days'>('date');
   const [acting, setActing] = useState(false);
   const [actionError, setActionError] = useState('');
   const [notice, setNotice] = useState('');
+  const [manageMembersOpen, setManageMembersOpen] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -75,11 +79,18 @@ export function CustomerSessionDetailView({ id }: { id: string }) {
     setActing(true);
     setActionError('');
     try {
-      await manageCustomerPackage(id, action, {
+      const payload: { reason: string; days?: number; newValidUntil?: string; expectedValidUntil?: string } = {
         reason,
-        days: action === 'extend' ? Number(days) : undefined,
         expectedValidUntil: history.balance.expiryAt.toISOString(),
-      });
+      };
+      if (action === 'extend') {
+        if (extendMode === 'date' && targetDate) {
+          payload.newValidUntil = new Date(`${targetDate}T23:59:59.999Z`).toISOString();
+        } else {
+          payload.days = Number(days);
+        }
+      }
+      await manageCustomerPackage(id, action, payload);
       setAction(null);
       setNotice(
         action === 'extend'
@@ -190,7 +201,18 @@ export function CustomerSessionDetailView({ id }: { id: string }) {
         {canManagePackage && (
           <div className="mt-4 flex flex-wrap gap-2" aria-label="Kelola paket">
             {balance.status !== 'FROZEN' && balance.ledgerBalance > 0 && (
-              <Button variant="secondary" onClick={() => setAction('extend')}>
+              <Button
+                variant="secondary"
+                data-testid="btn-open-extend-dialog"
+                onClick={() => {
+                  const base = Math.max(new Date(balance.expiryAt).getTime(), Date.now());
+                  const defaultNext = new Date(base + 30 * 86400000).toISOString().slice(0, 10);
+                  setTargetDate(defaultNext);
+                  setDays('30');
+                  setExtendMode('date');
+                  setAction('extend');
+                }}
+              >
                 Perpanjang masa berlaku
               </Button>
             )}
@@ -204,6 +226,11 @@ export function CustomerSessionDetailView({ id }: { id: string }) {
                 Buka kembali paket
               </Button>
             )}
+            {balance.isShareable && (
+              <Button variant="secondary" onClick={() => setManageMembersOpen(true)}>
+                Kelola Anggota Bersama ({balance.sharedMembers?.length ?? 0})
+              </Button>
+            )}
           </div>
         )}
         {balance.customer?.id && (
@@ -212,6 +239,89 @@ export function CustomerSessionDetailView({ id }: { id: string }) {
           </ButtonLink>
         )}
       </Panel>
+      {balance.isShareable && (
+        <Panel className="p-5 sm:p-6" data-testid="shared-utilization-panel">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-lg font-bold text-dd-ink">Transparansi Riwayat Pemakaian Paket Bersama</h2>
+                <Badge tone="success">Paket Bersama</Badge>
+              </div>
+              <p className="mt-1 text-sm text-dd-muted">
+                Rincian transparansi utilisasi sesi antara pemilik utama dan seluruh anggota bersama terdaftar.
+              </p>
+            </div>
+            {canManagePackage && (
+              <Button variant="secondary" size="sm" onClick={() => setManageMembersOpen(true)}>
+                Kelola Anggota ({balance.sharedMembers?.length ?? 0}/4)
+              </Button>
+            )}
+          </div>
+
+          {history.sharedUtilization && history.sharedUtilization.length > 0 ? (
+            <div className="mt-4 overflow-x-auto">
+              <table className="w-full text-left text-sm" data-testid="table-shared-utilization">
+                <thead className="border-b border-dd-line text-xs font-semibold uppercase text-dd-muted">
+                  <tr>
+                    <th className="pb-2.5">Anggota</th>
+                    <th className="pb-2.5">Peran / Hubungan</th>
+                    <th className="pb-2.5 text-center">Sesi Terpakai</th>
+                    <th className="pb-2.5 text-center">Booking Aktif</th>
+                    <th className="pb-2.5 text-center">Total Pemakaian</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-dd-line/60">
+                  {history.sharedUtilization.map((u) => (
+                    <tr key={u.userId} className="hover:bg-dd-surface-muted/30">
+                      <td className="py-2.5">
+                        <strong className="block text-dd-ink font-semibold">{u.displayName}</strong>
+                        {u.phoneMasked && <span className="text-xs text-dd-muted">{u.phoneMasked}</span>}
+                      </td>
+                      <td className="py-2.5">
+                        <Badge tone={u.role === 'OWNER' ? 'success' : 'neutral'}>
+                          {u.relationship}
+                        </Badge>
+                      </td>
+                      <td className="py-2.5 text-center font-semibold text-dd-forest">
+                        {u.attendedSessions} sesi
+                      </td>
+                      <td className="py-2.5 text-center font-semibold text-dd-ink">
+                        {u.activeBookings} booking
+                      </td>
+                      <td className="py-2.5 text-center font-semibold text-dd-ink">
+                        {u.totalBookings} kali
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <div className="rounded-dd-sm border border-dd-line bg-dd-surface-muted/20 p-3">
+                <span className="text-xs font-bold text-dd-muted uppercase">Pemilik Utama</span>
+                <p className="text-sm font-semibold text-dd-ink">{balance.customer?.displayName}</p>
+                <p className="text-xs text-dd-muted">{balance.customer?.phoneMasked}</p>
+              </div>
+              {(balance.sharedMembers ?? []).map((m) => (
+                <div key={m.id} className="rounded-dd-sm border border-dd-line bg-white p-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-dd-forest uppercase">Anggota Terdaftar</span>
+                    <Badge tone="neutral">{m.relationship || 'FAMILY'}</Badge>
+                  </div>
+                  <p className="text-sm font-semibold text-dd-ink mt-0.5">{m.displayName}</p>
+                  <p className="text-xs text-dd-muted">{m.phoneMasked}</p>
+                  {m.attendedSessions !== undefined && (
+                    <p className="mt-1 text-xs text-dd-forest">
+                      {m.attendedSessions} sesi terpakai · {m.activeBookings ?? 0} booking aktif
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </Panel>
+      )}
       <Panel className="overflow-hidden">
         <div className="border-b border-dd-line px-5 py-4">
           <h2 className="font-semibold text-dd-ink">Reservation aktif</h2>
@@ -238,6 +348,16 @@ export function CustomerSessionDetailView({ id }: { id: string }) {
                       ? formatDate(reservation.startsAt, true)
                       : 'Jadwal tidak tersedia'}
                   </p>
+                  {reservation.bookedByUser && (
+                    <div className="mt-1.5 flex items-center gap-1.5">
+                      <span className="text-xs font-semibold text-dd-forest">
+                        Dipesan oleh: {reservation.bookedByUser.displayName}
+                      </span>
+                      <Badge tone={reservation.bookedByUser.isOwner ? 'success' : 'neutral'}>
+                        {reservation.bookedByUser.isOwner ? 'Pemilik' : 'Anggota Bersama'}
+                      </Badge>
+                    </div>
+                  )}
                 </div>
                 {reservation.bookingId ? (
                   <ButtonLink variant="ghost" href={`/bookings/${reservation.bookingId}`}>
@@ -283,6 +403,16 @@ export function CustomerSessionDetailView({ id }: { id: string }) {
                       ? ` · saldo setelah transaksi ${entry.balanceAfter}`
                       : ''}
                   </p>
+                  {entry.usedByUser && (
+                    <div className="mt-1.5 flex items-center gap-1.5">
+                      <span className="text-xs font-semibold text-dd-forest">
+                        Digunakan oleh: {entry.usedByUser.displayName}
+                      </span>
+                      <Badge tone={entry.usedByUser.isOwner ? 'success' : 'neutral'}>
+                        {entry.usedByUser.isOwner ? 'Pemilik' : 'Anggota Bersama'}
+                      </Badge>
+                    </div>
+                  )}
                 </div>
                 <div className="flex items-center gap-2">
                   <strong className={entry.quantity >= 0 ? 'text-dd-success' : 'text-dd-danger'}>
@@ -338,16 +468,75 @@ export function CustomerSessionDetailView({ id }: { id: string }) {
         onConfirm={(reason) => void runAction(reason)}
       >
         {action === 'extend' && (
-          <TextInput
-            label="Tambahan hari (1–180)"
-            type="number"
-            min={1}
-            max={180}
-            value={days}
-            onChange={(event) => setDays(event.target.value)}
-          />
+          <div className="space-y-4">
+            <div>
+              <span className="block text-xs font-semibold text-dd-ink mb-1">
+                Tanggal Berakhir Saat Ini:
+              </span>
+              <div className="text-xs font-mono text-dd-muted bg-dd-surface-muted p-2 rounded border border-dd-line">
+                {formatDate(history.balance.expiryAt)} ({history.balance.status === 'EXPIRED' ? 'Sudah Kedaluwarsa' : 'Masih Aktif'})
+              </div>
+            </div>
+
+            <DateInput
+              label="Pilih tanggal berakhir baru (bebas tanggal berapapun)"
+              data-testid="input-extend-date"
+              value={targetDate}
+              onChange={(event) => {
+                setTargetDate(event.target.value);
+                setExtendMode('date');
+              }}
+            />
+
+            <div>
+              <span className="block text-xs font-semibold text-dd-muted mb-1.5">
+                Tombol Cepat Tambahan Hari:
+              </span>
+              <div className="flex flex-wrap gap-1.5">
+                {[14, 30, 60, 90].map((d) => (
+                  <button
+                    key={d}
+                    type="button"
+                    onClick={() => {
+                      const base = Math.max(new Date(history.balance.expiryAt).getTime(), Date.now());
+                      const next = new Date(base + d * 86400000).toISOString().slice(0, 10);
+                      setTargetDate(next);
+                      setDays(String(d));
+                      setExtendMode('date');
+                    }}
+                    className="rounded-dd-sm border border-dd-line bg-white px-2.5 py-1 text-xs font-semibold text-dd-ink hover:border-dd-forest hover:bg-dd-forest/5 transition"
+                  >
+                    +{d} hari
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {targetDate && (() => {
+              const currentExpiry = new Date(history.balance.expiryAt).getTime();
+              const selectedTime = new Date(targetDate).getTime();
+              const diffDays = Math.round((selectedTime - currentExpiry) / 86400000);
+              return (
+                <div className="rounded-dd-sm bg-emerald-50 border border-emerald-200 p-2 text-xs text-emerald-800">
+                  Paket akan diset hingga: <strong>{targetDate}</strong> (
+                  {diffDays > 0 ? `+${diffDays} hari` : diffDays < 0 ? `${diffDays} hari` : 'sama dengan tanggal saat ini'} dari masa berlaku saat ini)
+                </div>
+              );
+            })()}
+          </div>
         )}
       </ReasonDialog>
+
+      {manageMembersOpen && (
+        <SharedPackageMembersDialog
+          open={manageMembersOpen}
+          onClose={() => setManageMembersOpen(false)}
+          customerPackageId={id}
+          packageName={balance.packageName}
+          canManage={canManagePackage}
+          onChanged={() => void load()}
+        />
+      )}
     </section>
   );
 }

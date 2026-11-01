@@ -5,6 +5,32 @@ import type { ClassSlot } from './class-slot-client';
 
 export type { ClassSlot };
 
+export interface WalkInCommand {
+  branchId: string;
+  classSlotId: string;
+  customerUserId: string;
+  packageId: string;
+  paymentMethod: 'CASH' | 'CARD' | 'QRIS' | 'BANK_TRANSFER' | 'MANUAL_STAFF';
+  paymentNote?: string;
+}
+
+export interface WalkInResult {
+  booking: Booking;
+  purchase: {
+    id: string;
+    invoiceNumber: string;
+    status: string;
+    totalAmountRp: number;
+    paymentMethod: string;
+  };
+  customerPackage: {
+    id: string;
+    totalSessions: number;
+    remainingSessions: number;
+    validUntil: string;
+  };
+}
+
 export interface BookingCommand {
   classSlotId: string;
   customerPackageId: string;
@@ -86,6 +112,19 @@ export interface CustomerPackageBalance {
   name?: string;
   /** Kursi teman yang boleh ditambahkan per kelas (paket "bawa teman"); 0 bila tidak. */
   maksTeman?: number;
+  isShareable?: boolean;
+  sharedWithUserIds?: string[];
+  sharedMembers?: Array<{
+    id: string;
+    userId: string;
+    relationship?: string;
+    displayName?: string;
+    phoneMasked?: string | null;
+    email?: string;
+    addedById?: string | null;
+    addedByRole?: string;
+    createdAt?: string;
+  }>;
 }
 
 /** Pengajuan pembatalan booking setelah batas H-24, menunggu Manager/Owner. */
@@ -422,6 +461,9 @@ export function normalizePackageBalance(item: any): CustomerPackageBalance {
     available: item.available ?? item.remainingSessions ?? 0,
     reserved: item.reserved ?? 0,
     expiryAt: Number.isFinite(expiryAt.getTime()) ? expiryAt : new Date(0),
+    isShareable: Boolean(item.isShareable),
+    sharedWithUserIds: item.sharedWithUserIds ?? [],
+    sharedMembers: item.sharedMembers ?? [],
   };
 }
 
@@ -507,8 +549,12 @@ export interface BookingClient {
     supportAction: string | null;
     cutoffAt: string;
   }>;
-  /** Pengajuan pembatalan setelah batas H-24 (disetujui Manager/Owner). */
-  ajukanPembatalanTerlambat?(bookingId: string, reason: string): Promise<PengajuanPembatalan>;
+  /** Pengajuan pembatalan setelah batas H-24 (disetujui Manager/Owner, mendukung izin medis & pelepasan kursi langsung). */
+  ajukanPembatalanTerlambat?(
+    bookingId: string,
+    reason: string,
+    options?: { isMedical?: boolean; releaseSeat?: boolean },
+  ): Promise<PengajuanPembatalan>;
   pembatalanTertunda?(classSlotId: string): Promise<PengajuanPembatalan[]>;
   putuskanPembatalan?(
     requestId: string,
@@ -520,6 +566,7 @@ export interface BookingClient {
     customerId: string,
     branchId?: string,
   ): Promise<CustomerPackageBalance[]>;
+  walkIn?(input: WalkInCommand, idempotencyKey: string): Promise<WalkInResult>;
 }
 
 export const browserBookingClient: BookingClient = {
@@ -866,10 +913,18 @@ export const browserBookingClient: BookingClient = {
     );
     if (!response.ok) throw { response };
   },
-  ajukanPembatalanTerlambat(bookingId, reason) {
+  ajukanPembatalanTerlambat(bookingId, reason, options) {
     return apiFetch<PengajuanPembatalan>(
       `/bookings/${encodeURIComponent(bookingId)}/late-cancellation`,
-      { method: 'POST', body: JSON.stringify({ reason }), label: 'Mengirim pengajuan pembatalan…' },
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          reason,
+          isMedical: options?.isMedical,
+          releaseSeat: options?.releaseSeat,
+        }),
+        label: options?.isMedical ? 'Mengirim izin medis…' : 'Mengirim pengajuan pembatalan…',
+      },
     );
   },
   async pembatalanTertunda(classSlotId) {
@@ -1042,6 +1097,22 @@ export const browserBookingClient: BookingClient = {
     if (!response.ok) throw { response };
     return response.json() as Promise<InstructorCheckInIssue>;
   },
+  async walkIn(input, idempotencyKey) {
+    const result = await apiFetch<any>('/bookings/walk-in', {
+      method: 'POST',
+      idempotent: true,
+      headers: idempotencyKey ? { 'idempotency-key': idempotencyKey } : undefined,
+      body: JSON.stringify(input),
+      label: 'Mendaftarkan walk-in…',
+    });
+    return {
+      ...result,
+      booking: {
+        ...result.booking,
+        createdAt: new Date(result.booking.createdAt),
+      },
+    };
+  },
   async consumeInstructorCheckIn(token, idempotencyKey, location) {
     const response = await foregroundFetch(
       '/api/v1/check-ins/instructors',
@@ -1069,6 +1140,7 @@ const messages: Record<string, string> = {
   PACKAGE_PAYMENT_PENDING: 'Pembelian paket ini belum disetujui atau belum lunas. Sesi baru dapat digunakan setelah pembayaran disahkan.',
   BOOKING_CUTOFF_PASSED: 'Waktu pemesanan kelas ini sudah ditutup.',
   CLASS_CAPACITY_FULL: 'Kapasitas kelas sudah penuh.',
+  CLASS_ALREADY_ENDED: 'Kelas ini sudah selesai dan tidak dapat menerima walk-in baru.',
   INSUFFICIENT_AVAILABLE_SESSIONS: 'Saldo sesi pelanggan tidak mencukupi.',
   DUPLICATE_ACTIVE_BOOKING: 'Pelanggan sudah memiliki booking aktif untuk kelas ini.',
   RESOURCE_NOT_FOUND: 'Data tidak tersedia dalam cabang yang dipilih.',
@@ -1088,7 +1160,8 @@ const messages: Record<string, string> = {
   STALE_VERSION: 'Data berubah sejak terakhir dimuat. Muat ulang sebelum melanjutkan.',
   CHECK_IN_TOO_EARLY: 'QR belum aktif. Check-in dibuka 30 menit sebelum kelas.',
   CHECK_IN_WINDOW_CLOSED: 'QR sudah kedaluwarsa karena jadwal kelas telah selesai.',
-  INVALID_STATE_TRANSITION: 'Booking atau kelas tidak berada pada status yang dapat di-check-in.',
+  INVALID_STATE_TRANSITION:
+    'Status kelas atau booking saat ini tidak mengizinkan tindakan tersebut. Pastikan kelas sudah dipublikasikan.',
   PACKAGE_CLASS_TYPE_MISMATCH: 'Paket yang Anda pilih tidak sesuai dengan jenis kelas ini. Silakan pilih kelas dengan tipe yang cocok.',
   PACKAGE_BRANCH_MISMATCH: 'Paket ini hanya berlaku untuk cabang studio tertentu. Silakan pilih jadwal di cabang yang sesuai.',
   PACKAGE_EXHAUSTED: 'Sisa sesi paket Anda sudah habis. Silakan beli paket baru untuk melanjutkan booking.',

@@ -28,6 +28,7 @@ import {
 } from '@/api-clients/order-client';
 import { formatPaymentCode, orderReasonLabels, orderStatusLabels } from '@/lib/order-presenters';
 import { Button, ButtonLink } from '../actions';
+import { compressImageIfNeeded } from '@/lib/image-compression';
 import { AlertBanner, useAppFeedback } from '../app-feedback';
 import { formatRupiah } from '../../lib/formatters';
 
@@ -278,6 +279,17 @@ export function CustomerPaymentFlow({
           tone="danger"
           title="Pesanan kedaluwarsa"
           message="Batas transfer sudah berakhir. Buat pesanan baru untuk memperoleh nominal pembayaran baru."
+        />
+      )}
+      {order.status === 'REJECTED' && (
+        <AlertBanner
+          tone="danger"
+          title="Pembayaran ditolak"
+          message={
+            order.decisionReasonCode && orderReasonLabels[order.decisionReasonCode]
+              ? `Alasan penolakan: ${orderReasonLabels[order.decisionReasonCode]}. Anda dapat membuat pesanan baru atau menghubungi studio untuk bantuan.`
+              : 'Bukti pembayaran ditolak oleh tim verifikasi. Anda dapat membuat pesanan baru atau menghubungi studio untuk informasi lebih lanjut.'
+          }
         />
       )}
       {failure && (
@@ -723,10 +735,11 @@ export function CustomerPaymentFlow({
                     setFailure(undefined);
                     setBusy(true);
                     try {
-                      const sha256 = await sha256Upload(file);
+                      const fileToUpload = await compressImageIfNeeded(file);
+                      const sha256 = await sha256Upload(fileToUpload);
                       const updated = await browserOrderClient.uploadProof(
                         order,
-                        file,
+                        fileToUpload,
                         sha256,
                         uploadSession,
                         setUploadSession,
@@ -955,6 +968,23 @@ export function CustomerPaymentFlow({
             >
               Buat pesanan baru
             </ButtonLink>
+          )}
+          {order.status === 'REJECTED' && (
+            <>
+              <ButtonLink
+                href={waUrl}
+                variant="secondary"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Hubungi studio via WhatsApp
+              </ButtonLink>
+              <ButtonLink
+                href={`/checkout?package=${encodeURIComponent(order.packageId)}&branch=${encodeURIComponent(order.branchId)}${order.continuationSlotId ? `&slot=${encodeURIComponent(order.continuationSlotId)}` : ''}`}
+              >
+                Buat pesanan baru
+              </ButtonLink>
+            </>
           )}
         </div>
       </div>

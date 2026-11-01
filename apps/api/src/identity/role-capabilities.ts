@@ -115,7 +115,6 @@ export const ROLE_CAPABILITIES: Record<ApplicationRole, readonly string[]> = {
     'class-slot:read',
   ],
   ADMIN: [
-    'automation:read',
     'branch:operate',
     'user:read',
     // Baca-saja: dibutuhkan form jadwal untuk memilih instruktur cabang (dibatasi cakupan cabang).
@@ -180,6 +179,9 @@ export const ROLE_CAPABILITIES: Record<ApplicationRole, readonly string[]> = {
     'instructor:hours:adjust',
     'instructor-review:read',
     'booking:late-cancel:decide',
+    // Delegasi verifikasi dokumen KYC pelanggan cabang ke Manager (Fase 4)
+    'identity-verification:read',
+    'identity-verification:decide',
   ],
   OWNER: [
     'automation:read',

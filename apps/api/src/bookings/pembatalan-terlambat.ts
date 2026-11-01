@@ -48,27 +48,34 @@ export async function jalankanPembatalanTerlambat(
     include: { attendance: true, classSlot: { select: { branchId: true } } },
   });
   if (!booking) throw new ApiProblem('RESOURCE_NOT_FOUND', HttpStatus.NOT_FOUND);
-  if (booking.status === 'CANCELLED')
+  const isMedical = pengajuan.reason.startsWith('[IZIN MEDIS]');
+  const isAlreadyCancelledForMedical = booking.status === 'CANCELLED' && isMedical;
+  if (booking.status === 'CANCELLED' && !isAlreadyCancelledForMedical)
     throw new ApiProblem('BOOKING_NOT_ACTIVE', HttpStatus.CONFLICT);
-  // Dihitung saat diputuskan: bila kelasnya keburu selesai, sesinya sudah terpotong sejak itu.
-  const sesiKembali = await sesiTerpotong(tx, booking);
 
-  await tx.pemesananKelas.update({
-    where: { id: booking.id },
-    data: {
-      status: 'CANCELLED',
-      cancelledAt: now,
-      cancellationReason: `Pembatalan H-24 disetujui: ${pengajuan.reason}`.slice(0, 1000),
-      cancelledById: actorId,
-    },
-  });
-  // Booking yang batal tidak boleh tetap tercatat hadir.
-  if (booking.attendance)
-    await tx.kehadiranPelanggan.delete({ where: { id: booking.attendance.id } });
-  await tx.slotKelas.update({
-    where: { id: booking.classSlotId },
-    data: { bookedCount: { decrement: 1 } },
-  });
+  // Dihitung saat diputuskan: bila izin medis atau kelas keburu selesai, sesinya dikembalikan.
+  const sesiKembali = (isAlreadyCancelledForMedical || isMedical)
+    ? (pengajuan.sessionCount > 0 ? pengajuan.sessionCount : 1)
+    : await sesiTerpotong(tx, booking);
+
+  if (!isAlreadyCancelledForMedical) {
+    await tx.pemesananKelas.update({
+      where: { id: booking.id },
+      data: {
+        status: 'CANCELLED',
+        cancelledAt: now,
+        cancellationReason: `Pembatalan H-24 disetujui: ${pengajuan.reason}`.slice(0, 1000),
+        cancelledById: actorId,
+      },
+    });
+    // Booking yang batal tidak boleh tetap tercatat hadir.
+    if (booking.attendance)
+      await tx.kehadiranPelanggan.delete({ where: { id: booking.attendance.id } });
+    await tx.slotKelas.update({
+      where: { id: booking.classSlotId },
+      data: { bookedCount: { decrement: 1 } },
+    });
+  }
 
   let resultingBalance: number | null = null;
   if (sesiKembali > 0) {

@@ -162,6 +162,20 @@ export const frontendPages: FrontendPageDefinition[] = [
     roleRelevance: ['SUPER_OWNER', 'OWNER', 'MANAGER'],
   },
   {
+    href: '/help',
+    label: 'Pusat Panduan & Bantuan',
+    shortLabel: 'Panduan',
+    description: 'Panduan lengkap dan resmi untuk Pelanggan, Admin Cabang, dan Super Owner.',
+    group: 'Operasional Studio',
+    capabilities: [],
+    priority: 8,
+    branchScope: 'topbar',
+    accent: 'brand',
+    icon: 'book-open',
+    roleRelevance: ['SUPER_OWNER', 'OWNER', 'MANAGER', 'ADMIN', 'FINANCE', 'INSTRUCTOR'],
+    hideFromNav: true,
+  },
+  {
     href: '/workspace/guide',
     label: 'Panduan Operasional Staf',
     shortLabel: 'SOP Studio',
@@ -196,7 +210,7 @@ export const frontendPages: FrontendPageDefinition[] = [
   {
     href: '/customers',
     label: 'Data Pelanggan',
-    shortLabel: 'Daftar member',
+    shortLabel: 'Member & Paket',
     description: 'Profil pelanggan terpadu, keamanan akun, order, paket, booking, dan timeline.',
     group: 'Member & Pelanggan',
     capabilities: ['customer:read'],
@@ -206,16 +220,16 @@ export const frontendPages: FrontendPageDefinition[] = [
       'customer:security:manage',
     ],
     priority: 10,
-    branchScope: 'global',
+    branchScope: 'topbar',
     accent: 'brand',
     icon: 'users',
     roleRelevance: ['SUPER_OWNER', 'MANAGER', 'ADMIN'],
   },
   {
     href: '/ledger',
-    label: 'Sesi Pelanggan',
-    shortLabel: 'Sesi Pelanggan',
-    description: 'Informasi sisa kuota latihan, sesi terpakai, dan riwayat kehadiran member.',
+    label: 'Paket & Sesi Pelanggan',
+    shortLabel: 'Paket & Sesi',
+    description: 'Kelola sisa kuota latihan, masa berlaku paket, pembekuan sesi, dan riwayat kehadiran.',
     group: 'Member & Pelanggan',
     capabilities: ['ledger:read'],
     priority: 11,
@@ -274,8 +288,8 @@ export const frontendPages: FrontendPageDefinition[] = [
   },
   {
     href: '/workspace/packages',
-    label: 'Paket & promo harga',
-    shortLabel: 'Paket',
+    label: 'Kelola Paket & Promo',
+    shortLabel: 'Kelola Paket',
     description: 'Kelola harga normal, promo aktif, dan histori harga paket.',
     group: 'Penjualan & Keuangan',
     capabilities: ['package-promotion:read'],
@@ -574,6 +588,21 @@ export const frontendPageGroups: FrontendPageGroup[] = [
   'Pengaturan & Sistem',
 ];
 
+/**
+ * 4 Menu inti untuk staf meja depan (Front Desk / Admin Cabang):
+ * 1. Hari Ini & Presensi (/workspace)
+ * 2. Kalender Kelas (/workspace/classes)
+ * 3. Member & Booking (/workspace/bookings)
+ * 4. Kasir & Pengeluaran (/workspace/kas)
+ */
+export const MENU_FRONT_DESK = [
+  '/workspace',
+  '/workspace/classes',
+  '/workspace/bookings',
+  '/customers',
+  '/workspace/kas',
+] as const;
+
 /** Halaman registry yang paling spesifik untuk sebuah path (detail `/x/[id]` memakai halaman `/x`). */
 export function pageForPath(pathname: string): FrontendPageDefinition | undefined {
   return [...frontendPages]
@@ -603,6 +632,7 @@ export function shortcutPagesFor(
   const readable = frontendPages.filter(
     (page) =>
       page.href !== '/workspace' &&
+      page.href !== '/help' &&
       !page.isDormant &&
       !page.capabilities.includes('customer:self') &&
       canReadPage([...session.capabilities], page),

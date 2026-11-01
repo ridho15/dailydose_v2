@@ -5,19 +5,19 @@ import { prisma } from './db-helper';
 export const STAFF_ACCOUNTS = {
   admin: {
     email: process.env.E2E_ADMIN_EMAIL ?? 'admin@ddose.com',
-    password: process.env.E2E_ADMIN_PASSWORD ?? 'Admin123!',
+    password: process.env.E2E_ADMIN_PASSWORD ?? 'ridho123',
   },
   superOwner: {
-    email: process.env.E2E_SUPER_OWNER_EMAIL ?? 'superowner@dailydose.test',
-    password: process.env.E2E_SUPER_OWNER_PASSWORD ?? 'SuperOwner123!',
+    email: process.env.E2E_SUPER_OWNER_EMAIL ?? 'ralamzah@gmail.com',
+    password: process.env.E2E_SUPER_OWNER_PASSWORD ?? 'ridho123',
   },
   coachSarah: {
     email: process.env.E2E_COACH_EMAIL ?? 'coach.sarah@dailydose.test',
-    password: process.env.E2E_COACH_PASSWORD ?? 'Instructor123!',
+    password: process.env.E2E_COACH_PASSWORD ?? 'ridho123',
   },
   otherInstructor: {
     email: process.env.E2E_OTHER_INSTRUCTOR_EMAIL ?? 'instdevi@ddose.com',
-    password: process.env.E2E_OTHER_INSTRUCTOR_PASSWORD ?? 'Instructor123!',
+    password: process.env.E2E_OTHER_INSTRUCTOR_PASSWORD ?? 'ridho123',
   },
 } as const;
 
@@ -25,9 +25,9 @@ export type Account = { email: string; password: string };
 
 export async function loginAs(page: Page, account: Account) {
   await page.goto('/sign-in');
-  await page.getByLabel('Email', { exact: true }).fill(account.email);
-  await page.getByLabel('Password').fill(account.password);
-  await page.getByRole('button', { name: /masuk dengan email/i }).click();
+  await page.locator('input[name="email"]').fill(account.email);
+  await page.locator('input[name="password"]').fill(account.password);
+  await page.getByRole('button', { name: /masuk ke akun|masuk dengan email/i }).click();
   await page.waitForURL((url) => !url.pathname.includes('/sign-in'), { timeout: 20_000 });
 }
 

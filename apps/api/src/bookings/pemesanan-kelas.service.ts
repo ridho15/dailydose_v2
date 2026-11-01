@@ -1,7 +1,7 @@
 import { HITUNG_TERISI, STATUS_MENEMPATI_KURSI, terisi } from '../classes/terisi';
 import { HttpStatus, Injectable, Optional } from '@nestjs/common';
 import { AuditService } from '../foundation/audit.service';
-import { Prisma, type BookingStatus } from '@prisma/client';
+import { Prisma, type BookingStatus, SessionMutationType, PaymentMethod } from '@prisma/client';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { RuntimeConfigService } from '../configuration/runtime-config.service';
 import { PrismaService } from '../database/prisma.service';
@@ -18,6 +18,15 @@ export type BookingCancellationReasonCode =
   | 'CUSTOMER_SCHEDULE_CONFLICT'
   | 'WRONG_CLASS_SELECTED'
   | 'OTHER';
+
+export type WalkInCommand = {
+  branchId: string;
+  classSlotId: string;
+  customerUserId: string;
+  packageId: string;
+  paymentMethod: keyof typeof PaymentMethod;
+  paymentNote?: string;
+};
 
 export type BookingCommand = {
   classSlotId: string;
@@ -199,6 +208,13 @@ export class BookingsService {
         ? {
             id: pkg.id,
             name: pkg.name,
+            isShareable: Boolean(pkg.isShareable),
+            owner: booking.customerPackage?.user
+              ? {
+                  id: booking.customerPackage.user.id,
+                  displayName: booking.customerPackage.user.displayName,
+                }
+              : undefined,
           }
         : undefined,
       // Saldo paket pelanggan pada saat dibaca; hanya diisi oleh daftar dan detail booking.
@@ -419,17 +435,30 @@ export class BookingsService {
     if (!slot) throw new ApiProblem('RESOURCE_NOT_FOUND', HttpStatus.NOT_FOUND);
 
     const now = new Date();
-    const cutoffHours = this.config.value?.booking?.cutoffHours ?? 2;
+    const cutoffHours = slot.bookingCutoffHours ?? this.config.value?.booking?.cutoffHours ?? 2;
     const cutoffAt = new Date(slot.startAt.getTime() - cutoffHours * 3_600_000);
 
-    // Ambil paket aktif pelanggan yang sesuai dengan cabang dan jenis kelas
+    // Ambil paket aktif pelanggan (milik sendiri atau paket bersama/duet di mana pelanggan terdaftar)
+    // yang sesuai dengan cabang dan jenis kelas
     const packages = await this.db.paketPelanggan.findMany({
       where: {
-        userId: principal.userId,
         status: 'ACTIVE',
         remainingSessions: { gt: 0 },
         validUntil: { gt: now },
-        OR: [{ purchaseId: null }, { purchase: { status: 'PAID' } }],
+        AND: [
+          {
+            OR: [
+              { userId: principal.userId },
+              {
+                package: { isShareable: true },
+                sharedMembers: { some: { userId: principal.userId } },
+              },
+            ],
+          },
+          {
+            OR: [{ purchaseId: null }, { purchase: { status: 'PAID' } }],
+          },
+        ],
         // Cabang diperiksa di bawah (cabang paket atau cabang pembelian), tidak di query ini.
         package: { OR: [{ classTypeId: null }, { classTypeId: slot.classTypeId }] },
       },
@@ -485,13 +514,17 @@ export class BookingsService {
       | 'CONTACT_STUDIO'
       | null = null;
 
+    const isStaff =
+      principal.roles.some((r) => ['ADMIN', 'SUPER_OWNER', 'OWNER', 'MANAGER'].includes(r.role as any)) ||
+      principal.capabilities.includes('booking:create:assisted');
+
     if (!['PUBLISHED', 'CONFIRMED'].includes(slot.status)) {
       canBook = false;
       reasonCode = 'SLOT_UNAVAILABLE';
       requiredAction = 'CONTACT_STUDIO';
-    } else if (slot.startAt <= now || now >= cutoffAt) {
+    } else if (isStaff ? slot.endAt <= now : (slot.startAt <= now || now >= cutoffAt)) {
       canBook = false;
-      reasonCode = 'BOOKING_CUTOFF_PASSED';
+      reasonCode = isStaff ? 'SLOT_UNAVAILABLE' : 'BOOKING_CUTOFF_PASSED';
       requiredAction = 'CONTACT_STUDIO';
     } else if (terisi(slot) >= slot.capacity) {
       canBook = false;
@@ -723,7 +756,7 @@ export class BookingsService {
           },
         },
         customerPackage: {
-          include: { package: true },
+          include: { package: true, user: true },
         },
         attendance: true,
         checkInTokens: { take: 1, orderBy: { createdAt: 'desc' } },
@@ -792,7 +825,7 @@ export class BookingsService {
           },
         },
         customerPackage: {
-          include: { package: true },
+          include: { package: true, user: true },
         },
         attendance: true,
         checkInTokens: { take: 1, orderBy: { createdAt: 'desc' } },
@@ -854,14 +887,21 @@ export class BookingsService {
         const [customerPackage, customer] = await Promise.all([
           tx.paketPelanggan.findUnique({
             where: { id: input.customerPackageId },
-            include: { package: true, purchase: true },
+            include: { package: true, purchase: true, sharedMembers: true },
           }),
           tx.user.findUnique({ where: { id: customerUserId } }),
         ]);
 
         if (!customerPackage || !customer || customer.status !== 'ACTIVE')
           throw new ApiProblem('RESOURCE_NOT_FOUND', HttpStatus.NOT_FOUND);
-        if (customerPackage.userId !== customerUserId)
+
+        const isOwner = customerPackage.userId === customerUserId;
+        const isAuthorizedSharedMember =
+          !isOwner &&
+          Boolean(customerPackage.package?.isShareable) &&
+          customerPackage.sharedMembers?.some((sm) => sm.userId === customerUserId);
+
+        if (!isOwner && !isAuthorizedSharedMember)
           throw new ApiProblem('RESOURCE_NOT_FOUND', HttpStatus.NOT_FOUND);
         if (
           (customerPackage.purchase && customerPackage.purchase.status !== 'PAID') ||
@@ -869,7 +909,18 @@ export class BookingsService {
         ) {
           throw new ApiProblem('PURCHASE_NOT_PAID', HttpStatus.CONFLICT);
         }
-        if (customerPackage.status !== 'ACTIVE' || customerPackage.validUntil <= new Date())
+        const now = new Date();
+        const slotPast = slot.endAt <= now;
+        const isPrivilegedStaff =
+          principal.roles?.some((r) =>
+            ['SUPER_OWNER', 'ADMIN', 'OWNER', 'MANAGER'].includes(r.role as any),
+          ) || principal.capabilities?.includes('class-slot:manage');
+
+        // Untuk backdated booking oleh Admin/Super Owner, paket cukup valid saat jadwal kelas berlangsung
+        const packageExpired = isPrivilegedStaff && slotPast
+          ? customerPackage.validUntil <= slot.startAt
+          : customerPackage.validUntil <= now;
+        if (customerPackage.status !== 'ACTIVE' || packageExpired)
           throw new ApiProblem('INSUFFICIENT_AVAILABLE_SESSIONS', HttpStatus.CONFLICT);
 
         // Validasi kecocokan cabang & jenis kelas paket (Integritas Aturan Bisnis)
@@ -896,11 +947,17 @@ export class BookingsService {
         if (!['PUBLISHED', 'CONFIRMED'].includes(slot.status))
           throw new ApiProblem('INVALID_STATE_TRANSITION', HttpStatus.CONFLICT);
 
-        const now = new Date();
-        if (slot.startAt <= now)
-          throw new ApiProblem('BOOKING_CUTOFF_PASSED', HttpStatus.CONFLICT);
-        const cutoffAt = new Date(slot.startAt.getTime() - policy.cutoffHours * 3_600_000);
-        if (now >= cutoffAt) throw new ApiProblem('BOOKING_CUTOFF_PASSED', HttpStatus.CONFLICT);
+        if (customerFlow) {
+          if (slot.startAt <= now)
+            throw new ApiProblem('BOOKING_CUTOFF_PASSED', HttpStatus.CONFLICT);
+          const effectiveCutoffHours = slot.bookingCutoffHours ?? policy.cutoffHours;
+          const cutoffAt = new Date(slot.startAt.getTime() - effectiveCutoffHours * 3_600_000);
+          if (now >= cutoffAt) throw new ApiProblem('BOOKING_CUTOFF_PASSED', HttpStatus.CONFLICT);
+        } else {
+          // Staf biasa diblokir jika kelas sudah selesai; Admin / Super Owner diizinkan backdated booking
+          if (slotPast && !isPrivilegedStaff)
+            throw new ApiProblem('CLASS_ALREADY_FINISHED', HttpStatus.CONFLICT);
+        }
 
         // Satu member satu kursi per kelas, kecuali paketnya "bawa teman": staf boleh menambah kursi
         // untuk temannya (bukan member) sebanyak yang diizinkan paket, memakai sesi paket yang sama.
@@ -993,10 +1050,13 @@ export class BookingsService {
         // Pemotongan sesi ke SessionLedger & PaketPelanggan dieksekusi saat kelas COMPLETED dan customer hadir.
 
         // Tambah bookedCount disinkronkan dengan kuota efektif aktual (mencegah overcapacity 5/4, 6/4)
+        // Bila kelas ini jadwal masa lalu (endAt <= now) dan masih PUBLISHED, otomatis konfirmasi agar presensi & completion dapat dilakukan staf
+        const shouldAutoConfirm = slotPast && slot.status === 'PUBLISHED';
         await tx.slotKelas.update({
           where: { id: slot.id },
           data: {
             bookedCount: effectiveBooked + 1,
+            ...(shouldAutoConfirm ? { status: 'CONFIRMED' } : {}),
           },
         });
 
@@ -1006,7 +1066,7 @@ export class BookingsService {
             actorId: principal.userId,
             branchId: slot.branchId,
             correlationId: _correlationId,
-            action: 'booking.created_by_staff',
+            action: slotPast ? 'booking.backdated_by_staff' : 'booking.created_by_staff',
             objectType: 'Booking',
             objectId: booking.id,
             targetUserId: customerUserId,
@@ -1015,12 +1075,245 @@ export class BookingsService {
               classSlotId: slot.id,
               customerPackageId: customerPackage.id,
               ...(kursiTeman ? { kursiTeman: true } : {}),
+              backdated: slotPast,
             },
           });
 
         return {
           status: HttpStatus.CREATED,
           body: this.bookingView(booking) as unknown as Prisma.InputJsonValue,
+        };
+      },
+    );
+  }
+  /**
+   * Alur Cepat Walk-In & Booking Kasir (One-Stop Walk-In Flow):
+   * Mencatat pembayaran kasir studio (CASH/CARD/QRIS) yang langsung masuk antrean verifikasi Manager,
+   * sekaligus memberikan Instant Reserve Sesi Pertama (Confirmed Seat) agar member walk-in tidak
+   * terhalang masuk kelas yang segera berlangsung di studio.
+   */
+  async walkIn(
+    principal: SessionPrincipal,
+    input: WalkInCommand,
+    key: string,
+    _correlationId: string,
+  ) {
+    if (
+      !key ||
+      !UUID.test(input.branchId) ||
+      !UUID.test(input.classSlotId) ||
+      !UUID.test(input.customerUserId) ||
+      !UUID.test(input.packageId)
+    ) {
+      throw new ApiProblem('VALIDATION_ERROR', HttpStatus.BAD_REQUEST);
+    }
+
+    this.policy.requireCapability(principal.capabilities, 'booking:create:assisted');
+    this.requireBranch(principal, input.branchId, 'booking:create:assisted');
+
+    const paymentMethod = (input.paymentMethod || 'CASH') as PaymentMethod;
+    if (!Object.values(PaymentMethod).includes(paymentMethod)) {
+      throw new ApiProblem('VALIDATION_ERROR', HttpStatus.BAD_REQUEST);
+    }
+
+    return this.idempotency.execute(
+      {
+        scope: `walk-in:${input.branchId}:${input.classSlotId}:${input.customerUserId}`,
+        key,
+        payload: input,
+        ttlMs: 86_400_000,
+        leaseMs: 30_000,
+      },
+      async (tx) => {
+        const customer = await tx.user.findUnique({
+          where: { id: input.customerUserId },
+        });
+        if (!customer || customer.role !== 'CUSTOMER' || customer.status !== 'ACTIVE') {
+          throw new ApiProblem('RESOURCE_NOT_FOUND', HttpStatus.NOT_FOUND);
+        }
+
+        const slot = await tx.slotKelas.findUnique({
+          where: { id: input.classSlotId },
+          include: { branch: true, classType: true, instructor: true, studio: true },
+        });
+        if (!slot || slot.branchId !== input.branchId) {
+          throw new ApiProblem('RESOURCE_NOT_FOUND', HttpStatus.NOT_FOUND);
+        }
+
+        if (!['PUBLISHED', 'CONFIRMED'].includes(slot.status)) {
+          throw new ApiProblem('INVALID_STATE_TRANSITION', HttpStatus.CONFLICT);
+        }
+
+        const now = new Date();
+        const slotPast = slot.endAt <= now;
+        const isPrivilegedStaff =
+          principal.roles?.some((r) =>
+            ['SUPER_OWNER', 'ADMIN', 'OWNER', 'MANAGER'].includes(r.role as any),
+          ) || principal.capabilities?.includes('class-slot:manage');
+
+        if (slotPast && !isPrivilegedStaff) {
+          throw new ApiProblem('CLASS_ALREADY_ENDED', HttpStatus.CONFLICT);
+        }
+
+        const duplicate = await tx.pemesananKelas.findFirst({
+          where: {
+            userId: customer.id,
+            classSlotId: slot.id,
+            status: { in: ['BOOKED', 'ATTENDED'] },
+          },
+        });
+        if (duplicate) {
+          throw new ApiProblem('DUPLICATE_ACTIVE_BOOKING', HttpStatus.CONFLICT);
+        }
+
+        const activeBookingsOnSlot =
+          typeof tx.pemesananKelas?.count === 'function'
+            ? await tx.pemesananKelas.count({
+                where: {
+                  classSlotId: slot.id,
+                  status: { in: [...STATUS_MENEMPATI_KURSI] },
+                },
+              })
+            : (slot.bookedCount ?? 0);
+        if (activeBookingsOnSlot >= slot.capacity) {
+          throw new ApiProblem('CLASS_CAPACITY_FULL', HttpStatus.CONFLICT);
+        }
+
+        const pkg = await tx.paket.findUnique({
+          where: { id: input.packageId },
+        });
+        if (!pkg || pkg.status !== 'ACTIVE') {
+          throw new ApiProblem('RESOURCE_NOT_FOUND', HttpStatus.NOT_FOUND);
+        }
+        if (pkg.branchId && pkg.branchId !== input.branchId) {
+          throw new ApiProblem('PACKAGE_BRANCH_MISMATCH', HttpStatus.UNPROCESSABLE_ENTITY);
+        }
+        if (pkg.classTypeId && pkg.classTypeId !== slot.classTypeId) {
+          throw new ApiProblem('PACKAGE_CLASS_TYPE_MISMATCH', HttpStatus.UNPROCESSABLE_ENTITY);
+        }
+
+        // 1. Catat Pembelian Kasir (Status PENDING untuk antrean Maker-Checker Manager)
+        const invoiceNumber = `INV-${Date.now().toString(36).toUpperCase()}-${randomBytes(3).toString('hex').toUpperCase()}`;
+        const note = input.paymentNote?.trim() || 'Walk-in kasir meja depan (Instant Reserve)';
+        const order = await tx.pembelian.create({
+          data: {
+            id: randomUUID(),
+            invoiceNumber,
+            userId: customer.id,
+            branchId: input.branchId,
+            packageId: pkg.id,
+            subtotalRp: pkg.priceRp,
+            discountRp: 0,
+            totalAmountRp: pkg.priceRp,
+            status: 'PENDING',
+            paymentMethod,
+            paymentExpiresAt: null,
+            recordedById: principal.userId,
+            recordNote: note,
+          },
+        });
+
+        // 2. Buat Paket Pelanggan Aktif (Instant Reserve Sesi Pertama)
+        const durationDays = pkg.validityDays || 30;
+        const validUntil = new Date(now.getTime() + durationDays * 86_400_000);
+        const customerPackage = await tx.paketPelanggan.create({
+          data: {
+            id: randomUUID(),
+            userId: customer.id,
+            packageId: pkg.id,
+            purchaseId: order.id,
+            totalSessions: pkg.sessionCount,
+            remainingSessions: pkg.sessionCount,
+            usedSessions: 0,
+            validFrom: now,
+            validUntil,
+            status: 'ACTIVE',
+          },
+        });
+
+        // 3. Catat Saldo Awal ke SessionLedger
+        await tx.sessionLedger.create({
+          data: {
+            id: randomUUID(),
+            customerPackageId: customerPackage.id,
+            type: SessionMutationType.PURCHASE,
+            amount: pkg.sessionCount,
+            balanceAfter: pkg.sessionCount,
+            referenceId: order.id,
+            notes: `Saldo awal walk-in kasir meja depan #${invoiceNumber}`,
+            createdById: principal.userId,
+          },
+        });
+
+        // 4. Daftarkan Booking Peserta ke Kelas Hari Ini (Confirmed Seat / BOOKED)
+        const bookingNumber = `BK-${Date.now().toString(36).toUpperCase()}-${randomBytes(3).toString('hex').toUpperCase()}`;
+        const booking = await tx.pemesananKelas.create({
+          data: {
+            id: randomUUID(),
+            bookingNumber,
+            classSlotId: slot.id,
+            branchId: slot.branchId,
+            userId: customer.id,
+            customerPackageId: customerPackage.id,
+            status: 'BOOKED',
+            source: 'ADMIN_ASSISTED',
+          },
+          include: {
+            user: true,
+            classSlot: {
+              include: { branch: true, classType: true, instructor: true, studio: true },
+            },
+            customerPackage: { include: { package: true } },
+            attendance: true,
+            checkInTokens: true,
+          },
+        });
+
+        // 5. Update Kuota Terisi
+        const shouldAutoConfirm = slotPast && slot.status === 'PUBLISHED';
+        await tx.slotKelas.update({
+          where: { id: slot.id },
+          data: {
+            bookedCount: activeBookingsOnSlot + 1,
+            ...(shouldAutoConfirm ? { status: 'CONFIRMED' } : {}),
+          },
+        });
+
+        // 6. Audit Log
+        await this.audit?.catat(tx, {
+          actorId: principal.userId,
+          branchId: slot.branchId,
+          correlationId: _correlationId,
+          action: slotPast ? 'booking.backdated_by_staff_walkin' : 'booking.created_by_staff_walkin',
+          objectType: 'Booking',
+          objectId: booking.id,
+          targetUserId: customer.id,
+          afterMasked: {
+            bookingNumber,
+            classSlotId: slot.id,
+            customerPackageId: customerPackage.id,
+            backdated: slotPast,
+          },
+        });
+
+        return {
+          status: HttpStatus.CREATED,
+          body: {
+            booking: this.bookingView(booking),
+            purchase: {
+              id: order.id,
+              invoiceNumber: order.invoiceNumber,
+              status: order.status,
+              totalAmountRp: order.totalAmountRp,
+              paymentMethod: order.paymentMethod,
+            },
+            customerPackage: {
+              id: customerPackage.id,
+              totalSessions: customerPackage.totalSessions,
+              remainingSessions: customerPackage.remainingSessions,
+              validUntil: customerPackage.validUntil.toISOString(),
+            },
+          } as unknown as Prisma.InputJsonValue,
         };
       },
     );

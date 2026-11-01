@@ -53,7 +53,7 @@ export class PembatalanTerlambatService {
   async ajukan(
     principal: SessionPrincipal,
     bookingId: string,
-    input: { reason?: unknown },
+    input: { reason?: unknown; isMedical?: boolean; releaseSeat?: boolean },
     now = new Date(),
   ): Promise<PengajuanPembatalan> {
     this.policy.requireCapability(principal.capabilities, 'booking:cancel:assisted');
@@ -65,7 +65,7 @@ export class PembatalanTerlambatService {
       async (tx) => {
         const booking = await tx.pemesananKelas.findUnique({
           where: { id: bookingId },
-          include: { classSlot: { select: { branchId: true, startAt: true } } },
+          include: { attendance: true, classSlot: { select: { branchId: true, startAt: true } } },
         });
         if (
           !booking ||
@@ -83,13 +83,35 @@ export class PembatalanTerlambatService {
         });
         if (ada) throw new ApiProblem('LATE_CANCELLATION_ALREADY_PENDING', HttpStatus.CONFLICT);
 
+        const isMedical = Boolean(input?.isMedical || input?.releaseSeat);
+
+        // Bila izin medis / pelepasan kursi diminta: langsung batalkan booking & kurangi bookedCount agar kursi terbuka bagi yang lain
+        if (isMedical) {
+          if (booking.attendance) {
+            await tx.kehadiranPelanggan.delete({ where: { id: booking.attendance.id } });
+          }
+          await tx.pemesananKelas.update({
+            where: { id: bookingId },
+            data: {
+              status: 'CANCELLED',
+              cancelledAt: now,
+              cancellationReason: `Izin sakit (surat dokter): ${reason}`.slice(0, 1000),
+              cancelledById: principal.userId,
+            },
+          });
+          await tx.slotKelas.update({
+            where: { id: booking.classSlotId },
+            data: { bookedCount: { decrement: 1 } },
+          });
+        }
+
         return tx.sessionAdjustRequest.create({
           data: {
             customerPackageId: booking.customerPackageId,
             bookingId,
             requestedById: principal.userId,
-            sessionCount: await sesiTerpotong(tx, booking),
-            reason,
+            sessionCount: isMedical ? 1 : await sesiTerpotong(tx, booking),
+            reason: (isMedical ? `[IZIN MEDIS] ${reason}` : reason).slice(0, 500),
             reasonCode: KODE_PEMBATALAN_TERLAMBAT,
           },
           include: { requestedBy: { select: { displayName: true } } },

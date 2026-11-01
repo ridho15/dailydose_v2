@@ -45,6 +45,8 @@ export function InstructorsView() {
     email: '',
     phoneE164: '',
     branchIds: [] as string[],
+    bankName: '',
+    accountNumber: '',
   });
 
   const generateRandomPassword = () => {
@@ -107,8 +109,13 @@ export function InstructorsView() {
     setBusy(true);
     try {
       await instructorClient.create({
-        ...form,
-        password: password.trim() || undefined,
+        displayName: form.displayName,
+        email: form.email,
+        phoneE164: form.phoneE164,
+        branchIds: form.branchIds,
+        ...(form.bankName.trim() ? { bankName: form.bankName.trim() } : {}),
+        ...(form.accountNumber.trim() ? { accountNumber: form.accountNumber.trim() } : {}),
+        ...(password.trim() ? { password: password.trim() } : {}),
       });
       feedback.showToast({
         tone: 'success',
@@ -119,7 +126,7 @@ export function InstructorsView() {
       setCreateOpen(false);
       setPassword('');
       setShowPassword(false);
-      setForm({ displayName: '', email: '', phoneE164: '', branchIds: [] });
+      setForm({ displayName: '', email: '', phoneE164: '', branchIds: [], bankName: '', accountNumber: '' });
       reset();
       await load();
     } catch (err: unknown) {
@@ -446,6 +453,28 @@ export function InstructorsView() {
                   </label>
                 );
               })}
+            </div>
+          </div>
+          <div className="grid gap-2 border-t border-dd-line pt-3">
+            <label className="text-[13px] font-bold text-dd-muted">
+              Rekening Payroll & Pembayaran Honor (Opsional)
+            </label>
+            <p className="text-xs text-dd-muted">
+              Data rekening bank untuk memproses pencairan honor instruktur.
+            </p>
+            <div className="grid gap-3 sm:grid-cols-2 pt-1">
+              <TextInput
+                label="Nama Bank"
+                placeholder="contoh: BCA, Mandiri, BRI, BNI"
+                value={form.bankName}
+                onChange={(e) => setForm((prev) => ({ ...prev, bankName: e.target.value }))}
+              />
+              <TextInput
+                label="Nomor Rekening"
+                placeholder="contoh: 1234567890"
+                value={form.accountNumber}
+                onChange={(e) => setForm((prev) => ({ ...prev, accountNumber: e.target.value }))}
+              />
             </div>
           </div>
         </form>

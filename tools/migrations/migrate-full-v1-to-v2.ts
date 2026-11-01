@@ -598,6 +598,8 @@ async function main() {
     if (op.deleted_at) status = PurchaseStatus.CANCELLED;
 
     const amount = Number(op.harga) || 0;
+    const uniqueCode = amount >= 1000 && amount % 1000 > 0 ? amount % 1000 : null;
+    const subtotalRp = uniqueCode ? amount - uniqueCode : amount;
 
     purchasesToInsert.push({
       id: pUuid,
@@ -606,8 +608,9 @@ async function main() {
       branchId: bId,
       packageId: pkgUuid,
       voucherId: null,
-      subtotalRp: amount,
+      subtotalRp,
       discountRp: 0,
+      uniqueCode,
       totalAmountRp: amount,
       status,
       paymentMethod: PaymentMethod.BANK_TRANSFER,

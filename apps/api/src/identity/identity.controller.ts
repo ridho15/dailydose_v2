@@ -611,6 +611,7 @@ export class IdentityController {
     @Body()
     body: {
       displayName: string;
+      email?: string | null;
       username?: string | null;
       phoneE164?: string | null;
       expectedVersion: number;

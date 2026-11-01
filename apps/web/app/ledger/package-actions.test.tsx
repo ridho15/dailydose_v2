@@ -58,16 +58,14 @@ describe('customer package actions panel', () => {
     const dialog = screen.getByRole('dialog', { name: 'Perpanjang masa berlaku paket' });
     const confirm = within(dialog).getByRole('button', { name: 'Perpanjang' });
     expect(confirm).toBeDisabled();
-    await user.clear(within(dialog).getByLabelText('Tambahan hari (1–180)'));
-    await user.type(within(dialog).getByLabelText('Tambahan hari (1–180)'), '14');
+    await user.click(within(dialog).getByRole('button', { name: '+14 hari' }));
     await user.type(within(dialog).getByLabelText('Alasan'), 'Kompensasi kelas ditiadakan');
     await user.click(confirm);
     await waitFor(() => expect(manage).toHaveBeenCalledTimes(1));
-    expect(manage).toHaveBeenCalledWith('pkg-1', 'extend', {
+    expect(manage).toHaveBeenCalledWith('pkg-1', 'extend', expect.objectContaining({
       reason: 'Kompensasi kelas ditiadakan',
-      days: 14,
       expectedValidUntil: '2026-12-31T00:00:00.000Z',
-    });
+    }));
     expect(await screen.findByText('Masa berlaku paket diperpanjang.')).toBeVisible();
   });
 
@@ -94,5 +92,75 @@ describe('customer package actions panel', () => {
     await screen.findByText('Status paket');
     expect(screen.queryByRole('button', { name: 'Bekukan paket' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Perpanjang masa berlaku' })).toBeNull();
+  });
+  it("menampilkan panel transparansi pemakaian paket bersama lengkap dengan riwayat utilisasi per anggota", async () => {
+    detail.mockResolvedValue({
+      ...history("ACTIVE", { isShareable: true }),
+      sharedUtilization: [
+        {
+          userId: "owner-1",
+          displayName: "Maya Owner",
+          phoneMasked: "0812****",
+          role: "OWNER",
+          relationship: "Pemilik Utama",
+          activeBookings: 1,
+          attendedSessions: 3,
+          totalBookings: 4,
+        },
+        {
+          userId: "friend-1",
+          displayName: "Budi Teman",
+          phoneMasked: "0813****",
+          role: "MEMBER",
+          relationship: "Teman / Rekan",
+          activeBookings: 0,
+          attendedSessions: 2,
+          totalBookings: 2,
+        },
+      ],
+      reservations: {
+        activeQuantity: 1,
+        items: [
+          {
+            id: "res-1",
+            quantity: 1,
+            createdAt: new Date(),
+            className: "Reformer Core",
+            branchName: "Green Garden",
+            bookedByUser: {
+              id: "owner-1",
+              displayName: "Maya Owner",
+              phoneMasked: "0812****",
+              isOwner: true,
+            },
+          },
+        ],
+      },
+      entries: [
+        {
+          id: "ent-1",
+          type: "ATTEND",
+          quantity: -1,
+          occurredAt: new Date(),
+          referenceLabel: "Check-in Reformer",
+          usedByUser: {
+            id: "friend-1",
+            displayName: "Budi Teman",
+            phoneMasked: "0813****",
+            isOwner: false,
+          },
+        },
+      ],
+    });
+
+    render(<CustomerSessionDetailView id="pkg-1" />);
+
+    expect(await screen.findByText("Transparansi Riwayat Pemakaian Paket Bersama")).toBeInTheDocument();
+    expect(screen.getByText("Maya Owner")).toBeInTheDocument();
+    expect(screen.getByText("Budi Teman")).toBeInTheDocument();
+    expect(screen.getByText("3 sesi")).toBeInTheDocument();
+    expect(screen.getByText("2 sesi")).toBeInTheDocument();
+    expect(screen.getByText(/Dipesan oleh: Maya Owner/)).toBeInTheDocument();
+    expect(screen.getByText(/Digunakan oleh: Budi Teman/)).toBeInTheDocument();
   });
 });

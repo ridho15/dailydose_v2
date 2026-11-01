@@ -330,4 +330,17 @@ describe('FrontDeskTodayView', () => {
     ).toBeVisible();
     expect(c.dashboardClient.overview).not.toHaveBeenCalled();
   });
+
+  it('opens Walk-In drawer when clicking the primary "+ Member Baru Walk-In (Ikut Kelas)" button', async () => {
+    const user = userEvent.setup();
+    const c = clients();
+    renderDesk(c);
+    const walkInBtn = await screen.findByRole('button', { name: /Member Baru Walk-In/i });
+    expect(walkInBtn).toBeVisible();
+
+    await user.click(walkInBtn);
+
+    expect(await screen.findByText('Alur Cepat Walk-In & Booking Kasir')).toBeInTheDocument();
+    expect(screen.getByText('Pilih Status Member')).toBeInTheDocument();
+  });
 });

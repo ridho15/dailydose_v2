@@ -69,6 +69,19 @@ export interface InstructorDetail {
     activeFrom: string;
     activeUntil: string | null;
   }>;
+  profile?: {
+    address: string | null;
+    gender: string | null;
+    birthDate: string | null;
+    emergencyContactName: string | null;
+    emergencyContactPhone: string | null;
+    bankInfo: {
+      bankName: string;
+      accountNumber: string;
+      accountHolder: string;
+    };
+    notes: string;
+  } | null;
   instructedClassSlots: Array<{
     id: string;
     startAt: string;
@@ -106,6 +119,9 @@ export const instructorClient = {
     phoneE164?: string;
     password?: string;
     branchIds?: string[];
+    bankName?: string;
+    accountNumber?: string;
+    accountHolder?: string;
   }) {
     const createdUser = await post<{ id: string; status: string }>('/users', {
       email: input.email.trim().toLowerCase(),
@@ -119,17 +135,24 @@ export const instructorClient = {
       })),
     });
 
-    // If phone number is specified, update user profile
-    if (input.phoneE164?.trim()) {
+    // If phone number or bank info specified, update instructor profile
+    if (input.phoneE164?.trim() || input.bankName?.trim() || input.accountNumber?.trim()) {
       try {
-        await patch(`/users/${encodeURIComponent(createdUser.id)}/profile`, {
+        await patch(`/instructors/${encodeURIComponent(createdUser.id)}/profile`, {
           displayName: input.displayName.trim(),
-          phoneE164: input.phoneE164.trim(),
+          email: input.email.trim().toLowerCase(),
+          phoneE164: input.phoneE164?.trim() || null,
+          branchIds: input.branchIds ?? [],
+          bankInfo: {
+            bankName: input.bankName?.trim() || null,
+            accountNumber: input.accountNumber?.trim() || null,
+            accountHolder: input.accountHolder?.trim() || input.displayName.trim(),
+          },
           expectedVersion: 1,
-          reason: 'Setup profil instruktur awal',
+          reason: 'Setup profil awal dan rekening honor instruktur',
         });
       } catch {
-        // profile creation was optional, ignore if fails
+        // profile update was optional, ignore if fails
       }
     }
 
@@ -154,10 +177,30 @@ export const instructorClient = {
   },
   updateProfile(
     id: string,
-    input: { displayName: string; phoneE164?: string | null; expectedVersion?: number; reason?: string },
+    input: {
+      displayName: string;
+      email?: string | null;
+      phoneE164?: string | null;
+      branchIds?: string[];
+      bankInfo?: {
+        bankName?: string | null;
+        accountNumber?: string | null;
+        accountHolder?: string | null;
+      };
+      notes?: string | null;
+      address?: string | null;
+      gender?: string | null;
+      birthDate?: string | null;
+      emergencyContactName?: string | null;
+      emergencyContactPhone?: string | null;
+      expectedVersion?: number;
+      reason?: string;
+    },
   ) {
-    return patch<Record<string, unknown>>(`/users/${encodeURIComponent(id)}/profile`, {
+    return patch<Record<string, unknown>>(`/instructors/${encodeURIComponent(id)}/profile`, {
+      ...input,
       displayName: input.displayName.trim(),
+      email: input.email ? input.email.trim() : null,
       phoneE164: input.phoneE164 ? input.phoneE164.trim() : null,
       expectedVersion: input.expectedVersion ?? 1,
       reason: input.reason ?? 'Pembaruan profil instruktur',

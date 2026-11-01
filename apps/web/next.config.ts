@@ -1,5 +1,6 @@
 import type { NextConfig } from 'next';
 const config: NextConfig = {
+  allowedDevOrigins: ['127.0.0.1', 'localhost'],
   distDir: process.env.NEXT_DIST_DIR ?? '.next',
   typescript: {
     tsconfigPath: process.env.NEXT_TYPESCRIPT_CONFIG ?? 'tsconfig.json',
@@ -38,6 +39,20 @@ const config: NextConfig = {
       {
         source: '/api/v1/:path*',
         destination: `${process.env.API_BASE_URL ?? 'http://127.0.0.1:32121'}/api/v1/:path*`,
+      },
+    ];
+  },
+  async redirects() {
+    return [
+      {
+        source: '/guide',
+        destination: '/help?role=customer',
+        permanent: true,
+      },
+      {
+        source: '/workspace/guide',
+        destination: '/help?role=admin',
+        permanent: true,
       },
     ];
   },

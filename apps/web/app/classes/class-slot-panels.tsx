@@ -85,6 +85,25 @@ export function CreatePanel({
     'Pilih tanggal dan waktu. Kuota dan kapasitas kelas akan disesuaikan otomatis berdasarkan tipe kelas yang dipilih.',
   );
   const [studioId, setStudioId] = useState(template?.studioId ?? '');
+  const [startTime, setStartTime] = useState(template?.startTime ?? '');
+  const [endTime, setEndTime] = useState(template?.endTime ?? '');
+
+  useEffect(() => {
+    if (template?.startTime) setStartTime(template.startTime);
+    if (template?.endTime) setEndTime(template.endTime);
+  }, [template?.startTime, template?.endTime]);
+
+  const tambahMenit = (menit: number) => {
+    if (!startTime) return;
+    const [h, m] = startTime.split(':').map(Number);
+    if (isNaN(h!) || isNaN(m!)) return;
+    const totalMenit = h! * 60 + m! + menit;
+    const jamBaru = Math.floor(totalMenit / 60) % 24;
+    const menitBaru = totalMenit % 60;
+    const pad = (n: number) => String(n).padStart(2, '0');
+    setEndTime(`${pad(jamBaru)}:${pad(menitBaru)}`);
+    onDirty?.();
+  };
 
   const activeBranchTimezone =
     branches?.find((b) => b.id === selectedBranchId)?.timezone ?? timezone;
@@ -99,6 +118,13 @@ export function CreatePanel({
   const branchInstructors = instructors.filter(
     (item) => !item.branchId || item.branchId === selectedBranchId,
   );
+
+  // Auto-select studio bila cabang hanya punya 1 studio aktif
+  useEffect(() => {
+    if (!studioId && branchStudios.length === 1 && branchStudios[0]) {
+      setStudioId(branchStudios[0].id);
+    }
+  }, [studioId, branchStudios]);
 
   const rooms = branchStudios.find((studio) => studio.id === studioId)?.rooms ?? [];
 
@@ -205,19 +231,54 @@ export function CreatePanel({
         label="Instruktur"
         name="instructorUserId"
         defaultValue={template?.instructorUserId ?? ''}
-        placeholder="Tetapkan nanti"
+        placeholder="Tetapkan nanti (Dapat disimpan sebagai Draft)"
         options={branchInstructors.map((item) => ({ id: item.id, label: item.displayName }))}
       />
       <div className="grid gap-3 sm:grid-cols-3">
         <DateInput label="Tanggal" name="date" defaultValue={template?.date} required />
-        <TextInput label="Mulai" name="startTime" type="time" defaultValue={template?.startTime} required />
         <TextInput
-          label="Selesai eksklusif"
-          name="endTime"
+          label="Mulai"
+          name="startTime"
           type="time"
-          defaultValue={template?.endTime}
+          value={startTime}
+          onChange={(e) => {
+            setStartTime(e.target.value);
+            onDirty?.();
+          }}
           required
         />
+        <div>
+          <TextInput
+            label="Selesai eksklusif"
+            name="endTime"
+            type="time"
+            value={endTime}
+            onChange={(e) => {
+              setEndTime(e.target.value);
+              onDirty?.();
+            }}
+            required
+          />
+          {startTime && (
+            <div className="mt-1 flex items-center gap-1.5 text-xs text-dd-muted">
+              <span>Durasi cepat:</span>
+              <button
+                type="button"
+                onClick={() => tambahMenit(50)}
+                className="rounded-dd-sm border border-dd-line bg-dd-surface px-2 py-0.5 font-semibold text-dd-ink hover:border-dd-forest cursor-pointer"
+              >
+                +50 mnt
+              </button>
+              <button
+                type="button"
+                onClick={() => tambahMenit(60)}
+                className="rounded-dd-sm border border-dd-line bg-dd-surface px-2 py-0.5 font-semibold text-dd-ink hover:border-dd-forest cursor-pointer"
+              >
+                +60 mnt
+              </button>
+            </div>
+          )}
+        </div>
       </div>
       <Feedback kind="info">
         Timezone: {activeBranchTimezone}. {summary}
@@ -291,6 +352,8 @@ export function DetailPanel({
     instructorUserId?: string | null;
     startAt: Date;
     endAt: Date;
+    capacity?: number;
+    bookingCutoffHours?: number | null;
     reason?: string;
   }): Promise<void>;
   onPublish(): Promise<void>;
@@ -361,6 +424,13 @@ export function DetailPanel({
               capacity={slot.capacity}
               minimum={slot.minimumQuota}
             />
+          </InfoItem>
+          <InfoItem label="Batas Booking (Cutoff)" className="col-span-full">
+            <span className="font-semibold text-dd-ink text-sm">
+              {slot.bookingCutoffHours != null
+                ? `${slot.bookingCutoffHours} jam sebelum kelas (H-${Math.round(slot.bookingCutoffHours / 24) || 1})`
+                : "Mengikuti konfigurasi default (Master Kuota / 24 Jam)"}
+            </span>
           </InfoItem>
           {cancelReasonLabel && isClosed && (
             <InfoItem label="Alasan pembatalan" className="col-span-full">
@@ -445,9 +515,55 @@ export function DetailPanel({
         <DetailSection
           id="class-instructor-title"
           title="Instruktur kelas"
-          description="Instruktur dapat diganti selama kelas belum berjalan. Peserta yang sudah memesan akan melihat instruktur yang baru."
+          description="Instruktur dapat diganti selama kelas belum berjalan. Tipe kelas dan jadwal dapat diubah jika belum ada peserta yang memesan."
         >
           {assignRow}
+          {(isPublished || isConfirmed) && (slot.bookedCount ?? 0) === 0 ? (
+            <ActionRow
+              title="Jadwal dan tipe kelas"
+              description="Ubah waktu, tipe kelas, studio, atau ruangan sebelum ada peserta yang memesan. Kapasitas dihitung ulang dari konfigurasi."
+            >
+              <div>
+                <Button
+                  variant="secondary"
+                  className="w-full sm:w-auto"
+                  disabled={busy}
+                  onClick={() => setEditOpen((current) => !current)}
+                >
+                  {editOpen ? 'Tutup edit' : 'Edit kelas'}
+                </Button>
+              </div>
+              {editOpen && (
+                <DraftEditForm
+                  slot={slot}
+                  classTypes={classTypes}
+                  instructors={instructors}
+                  studios={studios}
+                  busy={busy}
+                  onSubmit={async (input) => {
+                    await onUpdate(input);
+                    setEditOpen(false);
+                  }}
+                />
+              )}
+            </ActionRow>
+          ) : (isPublished || isConfirmed) && (slot.bookedCount ?? 0) > 0 ? (
+            <ActionRow
+              title="Jadwal dan tipe kelas"
+              description={`${slot.bookedCount} peserta sudah memesan kelas ini. Tipe kelas dan jadwal terkunci untuk melindungi jadwal peserta.`}
+            >
+              <div>
+                <Button
+                  variant="secondary"
+                  className="w-full sm:w-auto opacity-60"
+                  disabled
+                  title="Jadwal dan tipe kelas terkunci karena sudah ada peserta yang booking"
+                >
+                  Edit kelas (Terkunci)
+                </Button>
+              </div>
+            </ActionRow>
+          ) : null}
         </DetailSection>
       )}
 
@@ -648,7 +764,7 @@ export function DetailPanel({
           title="Batalkan kelas"
           description={
             slot.bookedCount > 0
-              ? `Kelas ini punya ${slot.bookedCount} peserta aktif. Reservasi sesi mereka dilepas dan pembatalan dicatat dalam audit. Tindakan ini tidak dapat diurungkan.`
+              ? `Kelas ini punya ${slot.bookedCount} peserta aktif. Reservasi sesi mereka dilepas, notifikasi otomatis dikirim via WhatsApp ke seluruh peserta & instruktur, dan pembatalan dicatat dalam audit. Tindakan ini tidak dapat diurungkan.`
               : 'Belum ada peserta aktif. Pembatalan dicatat dalam audit dan tidak dapat diurungkan.'
           }
         >
@@ -745,6 +861,8 @@ function DraftEditForm({
     instructorUserId?: string | null;
     startAt: Date;
     endAt: Date;
+    capacity?: number;
+    bookingCutoffHours?: number | null;
     reason?: string;
   }): Promise<void>;
 }) {
@@ -803,13 +921,24 @@ function DraftEditForm({
           }
           if (endAt <= startAt) throw new Error('INVALID_RANGE');
           setFailure('');
+          const rawCap = String(data.get('capacity') ?? '').trim();
+          const parsedCap = rawCap ? Number(rawCap) : undefined;
+          if (parsedCap !== undefined && (parsedCap < (slot.bookedCount ?? 0) || parsedCap < 1)) {
+            setFailure(`Kapasitas tidak boleh kurang dari jumlah peserta terdaftar (${slot.bookedCount ?? 0}).`);
+            return;
+          }
+          const rawCutoff = String(data.get('bookingCutoffHours') ?? '').trim();
+          const parsedCutoff = rawCutoff === 'default' || rawCutoff === '' ? null : Number(rawCutoff);
+
           void onSubmit({
-            classTypeId: String(data.get('classTypeId')),
+            classTypeId: String(data.get('classTypeId') || slot.classTypeId),
             studioId: selectedStudioId || undefined,
             roomId: selectedRoomId || null,
-            instructorUserId: String(data.get('instructorUserId')) || null,
+            instructorUserId: String(data.get('instructorUserId') ?? '').trim() || null,
             startAt,
             endAt,
+            capacity: parsedCap,
+            bookingCutoffHours: parsedCutoff,
             reason: String(data.get('reason') ?? '').trim() || undefined,
           });
         } catch {
@@ -871,6 +1000,30 @@ function DraftEditForm({
         <DateInput label="Tanggal" name="date" defaultValue={start.date} required />
         <TextInput label="Mulai" name="startTime" type="time" defaultValue={start.time} required />
         <TextInput label="Selesai" name="endTime" type="time" defaultValue={end.time} required />
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <TextInput
+          label="Kapasitas Slot (Peserta)"
+          name="capacity"
+          type="number"
+          min={slot.bookedCount ?? 1}
+          max={99}
+          defaultValue={String(slot.capacity)}
+          description={`Minimal ${slot.bookedCount ?? 0} peserta (jumlah saat ini).`}
+        />
+        <SelectInput
+          label="Batas Booking Terakhir (Cutoff)"
+          name="bookingCutoffHours"
+          defaultValue={slot.bookingCutoffHours != null ? String(slot.bookingCutoffHours) : "default"}
+          description="Batas waktu terakhir member dapat booking kelas ini."
+        >
+          <option value="default">Default Sistem / Kuota Cabang (H-1)</option>
+          <option value="2">2 Jam Sebelum Kelas (Last-minute)</option>
+          <option value="12">12 Jam Sebelum Kelas</option>
+          <option value="24">24 Jam Sebelum Kelas (H-1)</option>
+          <option value="48">48 Jam Sebelum Kelas (H-2)</option>
+          <option value="72">72 Jam Sebelum Kelas (H-3)</option>
+        </SelectInput>
       </div>
       <TextInput
         label="Alasan perubahan (opsional)"

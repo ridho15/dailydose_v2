@@ -301,6 +301,7 @@ describe('customer checkout with a package promotion', () => {
       voucher: { findFirst: jest.fn().mockResolvedValue(null), update: jest.fn() },
       buktiPembayaran: { upsert: jest.fn() },
       pembelian: {
+        findMany: jest.fn().mockResolvedValue([]),
         create: jest.fn().mockImplementation(async ({ data }) => {
           created.push(data);
           return { ...data, createdAt: new Date(), package: pkg, branch: { paymentAccounts: [] }, voucher: null };
@@ -363,18 +364,22 @@ describe('customer checkout with a package promotion', () => {
       'k-12345678',
       'c',
     );
-    expect(created[0]).toMatchObject({
+    const firstCreated = created[0]!;
+    expect(firstCreated).toMatchObject({
       subtotalRp: 1_000_000,
       discountRp: 100_000,
-      totalAmountRp: 900_000,
+      uniqueCode: expect.any(Number),
       promotionId: promoId,
       promotionName: 'Promo Akhir Tahun',
       promotionDiscountRp: 100_000,
     });
+    expect(firstCreated.totalAmountRp).toBe(900_000 + firstCreated.uniqueCode);
     expect((result as any).body).toMatchObject({
       promotion: { id: promoId, discountRp: 100_000 },
       promotionalPriceRp: 900_000,
-      payableAmountRp: 900_000,
+      priceAfterDiscountRp: 900_000,
+      paymentUniqueCode: firstCreated.uniqueCode,
+      payableAmountRp: 900_000 + firstCreated.uniqueCode,
     });
   });
 

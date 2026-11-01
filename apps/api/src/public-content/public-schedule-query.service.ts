@@ -14,10 +14,11 @@ export class PublicScheduleQueryService {
   ) {}
 
   /** Slot dapat di-booking bila fitur aktif, masih ada tempat, dan belum melewati batas cutoff. */
-  private canBook(startAt: Date, available: number, now: Date): boolean {
-    const { enabled, cutoffHours } = this.config.value.booking;
-    if (!enabled || cutoffHours === null || available < 1) return false;
-    return now < new Date(startAt.getTime() - cutoffHours * 3_600_000);
+  private canBook(startAt: Date, available: number, now: Date, slotCutoffHours?: number | null): boolean {
+    const { enabled, cutoffHours: globalCutoff } = this.config.value.booking;
+    const effectiveCutoff = slotCutoffHours ?? globalCutoff;
+    if (!enabled || effectiveCutoff === null || available < 1) return false;
+    return now < new Date(startAt.getTime() - effectiveCutoff * 3_600_000);
   }
 
   async list(input: { branchId?: string; from?: string; until?: string }) {
@@ -71,6 +72,7 @@ export class PublicScheduleQueryService {
             status: true,
             capacity: true,
             bookedCount: true,
+            bookingCutoffHours: true,
             ...HITUNG_TERISI,
             classType: { select: { id: true, code: true, name: true } },
             instructor: { select: { displayName: true } },
@@ -90,7 +92,7 @@ export class PublicScheduleQueryService {
           timezone: branch?.timezone ?? 'Asia/Jakarta',
           branch,
           available,
-          canBook: this.canBook(slot.startAt, available, now),
+          canBook: this.canBook(slot.startAt, available, now, slot.bookingCutoffHours),
         };
       }),
       range: { from, until },

@@ -78,6 +78,7 @@ const routeCapabilities: Array<[string, string[]]> = [
   ['/workspace/payroll', ['attendance:self']],
   ['/operations', ['operations:read']],
   ['/bookings', ['booking:self:read']],
+  ['/help', []],
   ['/workspace/guide', []],
 ];
 

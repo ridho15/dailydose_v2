@@ -202,6 +202,30 @@ describe('customer payment proof preview', () => {
       expect.stringContaining('wa.me'),
     );
   });
+
+  it('renders rejection alert banner and actionable recovery buttons when order is REJECTED', () => {
+    const rejectedOrder: CustomerOrder = {
+      ...order,
+      status: 'REJECTED',
+      decisionReasonCode: 'AMOUNT_MISMATCH',
+    };
+
+    render(
+      <AppFeedbackProvider>
+        <CustomerPaymentFlow order={rejectedOrder} onUpdated={vi.fn()} />
+      </AppFeedbackProvider>,
+    );
+
+    // Alert Banner should show rejection title and reason
+    expect(screen.getByText('Pembayaran ditolak')).toBeVisible();
+    expect(screen.getByText(/Nominal transfer tidak sesuai/)).toBeVisible();
+
+    // Recovery action buttons should be available (no dead end)
+    expect(screen.getByRole('link', { name: 'Buat pesanan baru' })).toBeVisible();
+    expect(
+      screen.getByRole('link', { name: 'Hubungi studio via WhatsApp' }),
+    ).toBeVisible();
+  });
 });
 
 

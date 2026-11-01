@@ -66,6 +66,102 @@ export class CustomerOrderService {
         }
       : null;
 
+    const timelineItems: Array<{
+      id: string;
+      type: string;
+      occurredAt: Date;
+      reasonCode: string | null;
+      derived: boolean;
+    }> = [
+      {
+        id: `${order.id}:created`,
+        type: 'ORDER_CREATED',
+        occurredAt: order.createdAt,
+        reasonCode: null,
+        derived: false,
+      },
+    ];
+
+    if (order.paymentExpiresAt) {
+      timelineItems.push({
+        id: `${order.id}:deadline`,
+        type: 'PAYMENT_DEADLINE_SET',
+        occurredAt: order.paymentExpiresAt,
+        reasonCode: null,
+        derived: false,
+      });
+    }
+
+    if (proof) {
+      timelineItems.push({
+        id: `${order.id}:proof-submitted`,
+        type: 'PROOF_SUBMITTED',
+        occurredAt: proof.uploadedAt ?? order.createdAt,
+        reasonCode: null,
+        derived: false,
+      });
+      timelineItems.push({
+        id: `${order.id}:proof-scanned`,
+        type: 'PROOF_SCAN_COMPLETED',
+        occurredAt: proof.uploadedAt ?? order.createdAt,
+        reasonCode: null,
+        derived: false,
+      });
+    }
+
+    if (order.status === 'WAITING_CORRECTION' || order.status === 'ACTION_REQUIRED') {
+      timelineItems.push({
+        id: `${order.id}:action-required`,
+        type: 'ACTION_REQUIRED',
+        occurredAt: order.verifiedAt ?? order.updatedAt ?? order.createdAt,
+        reasonCode: order.rejectionReason ?? null,
+        derived: false,
+      });
+    }
+
+    if (order.status === 'PAID') {
+      timelineItems.push({
+        id: `${order.id}:approved`,
+        type: 'PAYMENT_APPROVED',
+        occurredAt: order.verifiedAt ?? order.createdAt,
+        reasonCode: null,
+        derived: false,
+      });
+    } else if (order.status === 'REJECTED') {
+      timelineItems.push({
+        id: `${order.id}:rejected`,
+        type: 'PAYMENT_REJECTED',
+        occurredAt: order.verifiedAt ?? order.updatedAt ?? order.createdAt,
+        reasonCode: order.rejectionReason ?? null,
+        derived: false,
+      });
+    } else if (order.status === 'CANCELLED') {
+      timelineItems.push({
+        id: `${order.id}:expired`,
+        type: 'ORDER_EXPIRED',
+        occurredAt: order.paymentExpiresAt ?? order.updatedAt ?? order.createdAt,
+        reasonCode: null,
+        derived: false,
+      });
+    }
+
+    if (customerPkg) {
+      timelineItems.push({
+        id: `${order.id}:activated`,
+        type: 'PACKAGE_ACTIVATED',
+        occurredAt: customerPkg.validFrom ?? order.verifiedAt ?? order.createdAt,
+        reasonCode: null,
+        derived: false,
+      });
+    }
+
+    const timeline = {
+      items: timelineItems.sort(
+        (a, b) => new Date(a.occurredAt).getTime() - new Date(b.occurredAt).getTime(),
+      ),
+      page: { hasMore: false, nextCursor: null },
+    };
+
     return {
       id: order.id,
       invoiceNumber: order.invoiceNumber,
@@ -95,8 +191,8 @@ export class CustomerOrderService {
           }
         : null,
       promotionalPriceRp: order.subtotalRp - (order.promotionDiscountRp ?? 0),
-      priceAfterDiscountRp: order.totalAmountRp,
-      paymentUniqueCode: 0,
+      priceAfterDiscountRp: Math.max(0, order.subtotalRp - order.discountRp),
+      paymentUniqueCode: order.uniqueCode ?? 0,
       payableAmountRp: order.totalAmountRp,
       totalAmountRp: order.totalAmountRp,
       sessionCount: pkg?.sessionCount ?? 1,
@@ -125,6 +221,7 @@ export class CustomerOrderService {
           }
         : null,
       decisionReasonCode: order.rejectionReason ?? null,
+      timeline,
       timelineComplete: true,
       version: 1,
       activation: customerPkg
@@ -245,7 +342,7 @@ export class CustomerOrderService {
         if (!branch || !branch.active)
           throw new ApiProblem('RESOURCE_NOT_FOUND', HttpStatus.NOT_FOUND);
 
-        const { voucher, discountRp, subtotalRp, totalAmountRp, promotion } = await this.priceOrder(
+        const { voucher, discountRp, subtotalRp, totalAmountRp: baseAmountRp, promotion } = await this.priceOrder(
           tx,
           pkg,
           input.voucherCode,
@@ -266,6 +363,39 @@ export class CustomerOrderService {
         const invoiceNumber = newInvoiceNumber();
         const paymentExpiresAt = new Date(Date.now() + 24 * 3_600_000);
 
+        let uniqueCode: number | null = null;
+        let totalAmountRp = baseAmountRp;
+
+        if (baseAmountRp > 0) {
+          const existingPending = tx.pembelian?.findMany
+            ? await tx.pembelian.findMany({
+                where: {
+                  branchId: input.branchId,
+                  status: { in: ['PENDING', 'WAITING_VERIFICATION'] },
+                  paymentExpiresAt: { gt: new Date() },
+                  uniqueCode: { not: null },
+                },
+                select: { uniqueCode: true },
+              })
+            : [];
+          const usedCodes = new Set(
+            existingPending
+              .map((p) => p.uniqueCode)
+              .filter((c): c is number => typeof c === 'number'),
+          );
+
+          let candidate = Math.floor(Math.random() * 900) + 100;
+          for (let i = 0; i < 900; i++) {
+            const code = ((candidate - 100 + i) % 900) + 100;
+            if (!usedCodes.has(code)) {
+              candidate = code;
+              break;
+            }
+          }
+          uniqueCode = candidate;
+          totalAmountRp = baseAmountRp + uniqueCode;
+        }
+
         const order = await tx.pembelian.create({
           data: {
             id: randomUUID(),
@@ -276,6 +406,7 @@ export class CustomerOrderService {
             voucherId: voucher?.id ?? null,
             subtotalRp,
             discountRp,
+            uniqueCode,
             totalAmountRp,
             status: 'PENDING',
             paymentExpiresAt,
@@ -480,7 +611,12 @@ export class CustomerOrderService {
     const order = await this.db.pembelian.findUnique({
       where: { id: orderId },
     });
-    if (!order || order.userId !== principal.userId)
+    const isOwner = order?.userId === principal.userId;
+    const isStaff =
+      principal.roles.some((r) => ['ADMIN', 'SUPER_OWNER', 'OWNER', 'MANAGER', 'FINANCE'].includes(r.role as any)) ||
+      principal.capabilities.some((c) => ['payment:review', 'payment:decide', 'purchase:review', 'purchase:decide'].includes(c));
+
+    if (!order || (!isOwner && !isStaff))
       throw new ApiProblem('RESOURCE_NOT_FOUND', HttpStatus.NOT_FOUND);
 
     const proofId = input.paymentProofId ?? randomUUID();

@@ -396,7 +396,8 @@ export function ClassSlotView({
   const canAddToRoster =
     !isInstructor &&
     capabilities.includes('booking:create:assisted') &&
-    Boolean(bookingClient.searchRosterCandidates && bookingClient.create);
+    Boolean(bookingClient.searchRosterCandidates && bookingClient.create) &&
+    (!selectedSlot || ['PUBLISHED', 'CONFIRMED'].includes(selectedSlot.status));
   const canRemoveFromRoster =
     !isInstructor &&
     capabilities.includes('booking:cancel:assisted') &&
@@ -926,9 +927,19 @@ export function ClassSlotView({
             classTypes={classTypes}
             instructors={instructors}
             studios={studios}
-            canManage={canOperate}
+            canManage={
+              canManage &&
+              (canViewAllBranches ||
+                Boolean(branch && branch.id === panel.slot.branchId) ||
+                branches.some((b) => b.id === panel.slot.branchId))
+            }
             canComplete={canCompleteClass}
-            canManageAttendance={canOperateAttendance}
+            canManageAttendance={
+              canManageAttendance &&
+              (canViewAllBranches ||
+                Boolean(branch && branch.id === panel.slot.branchId) ||
+                branches.some((b) => b.id === panel.slot.branchId))
+            }
             canReadBookings={canReadBookings}
             canVerifyInstructor={canOperateAttendance && Boolean(client.verifyInstructorAttendance)}
             bookingClient={bookingClient}
@@ -975,13 +986,19 @@ export function ClassSlotView({
                 tone: 'warning',
                 title: 'Simpan perubahan kelas?',
                 message:
-                  'Jadwal draft dan konfigurasi kapasitas akan dihitung ulang. Perubahan dicatat dalam audit.',
+                  'Jadwal dan konfigurasi kapasitas akan dihitung ulang. Perubahan dicatat dalam audit.',
                 confirmLabel: 'Simpan perubahan',
               });
               if (accepted)
                 await run(
-                  () => client.update(panel.slot.id, input),
-                  'Draft kelas berhasil diperbarui.',
+                  () =>
+                    client.update(panel.slot.id, {
+                      ...input,
+                      ...(panel.slot.status !== 'DRAFT'
+                        ? { expectedVersion: panel.slot.version }
+                        : {}),
+                    }),
+                  'Perubahan kelas berhasil disimpan.',
                 );
             }}
             onPublish={async () => {
@@ -1001,7 +1018,10 @@ export function ClassSlotView({
               const accepted = await feedback.confirm({
                 tone: 'danger',
                 title: 'Batalkan kelas?',
-                message: 'Reservasi aktif akan dilepaskan dan tindakan dicatat dalam audit.',
+                message:
+                  panel.slot.bookedCount > 0
+                    ? `Kelas memiliki ${panel.slot.bookedCount} peserta aktif. Kuota sesi peserta akan dipulihkan dan notifikasi WhatsApp otomatis dikirim ke peserta & instruktur.`
+                    : 'Reservasi aktif akan dilepaskan dan tindakan dicatat dalam audit.',
                 confirmLabel: 'Batalkan kelas',
               });
               if (accepted)

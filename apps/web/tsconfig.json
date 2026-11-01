@@ -30,11 +30,12 @@
     "**/*.ts",
     "**/*.tsx",
     ".next-dev/types/**/*.ts",
+    ".next-docs/types/**/*.ts",
     ".next-playwright-runs/verify/types/**/*.ts",
     ".next-playwright/types/**/*.ts",
     ".next/types/**/*.ts",
     "next-env.d.ts",
-    ".next-docs/types/**/*.ts"
+    ".next-help/types/**/*.ts"
   ],
   "exclude": [
     "node_modules"
