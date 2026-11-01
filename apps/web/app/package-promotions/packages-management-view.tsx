@@ -942,7 +942,7 @@ function PackageCreateForm({
           <span className="block font-semibold text-dd-ink">Boleh bawa teman</span>
           <span className="block text-dd-muted">
             Pemilik paket boleh menambah 1 kursi untuk temannya (bukan member) di kelas yang sama.
-            Kursi teman memakai 1 sesi paket ini. Hanya admin yang bisa menambahkannya dari roster.
+            Kursi teman memakai 1 sesi paket ini. Bisa ditambahkan admin dari roster atau oleh member sendiri saat booking.
           </span>
         </span>
       </label>
@@ -1195,7 +1195,7 @@ function EditPackageModal({
             <span className="block font-semibold text-dd-ink">Boleh bawa teman</span>
             <span className="block text-dd-muted">
               Pemilik paket boleh menambah 1 kursi untuk temannya (bukan member) di kelas yang sama.
-              Kursi teman memakai 1 sesi paket ini. Hanya admin yang bisa menambahkannya dari roster.
+              Kursi teman memakai 1 sesi paket ini. Bisa ditambahkan admin dari roster atau oleh member sendiri saat booking.
             </span>
           </span>
         </label>
