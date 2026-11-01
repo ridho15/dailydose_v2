@@ -7,6 +7,16 @@ Direktori ini berisi seluruh dokumen acuan arsitektur, spesifikasi bisnis, pandu
 
 ## 📑 Indeks Dokumen Resmi (Authoritative Index)
 
+### 0. Mulai dari sini (November 2026)
+| Dokumen | Deskripsi & Kegunaan |
+| :--- | :--- |
+| [**HANDOFF.md**](./HANDOFF.md) | Status terkini, checklist deploy, pekerjaan terbuka, masalah yang diketahui. |
+| [**PRD.md**](./PRD.md) | Kebutuhan produk, keputusan pemilik, dan asumsi yang perlu dikonfirmasi. |
+| [**Architecture.md**](./Architecture.md) | Struktur monorepo, modul, data, alur domain, deploy, testing. |
+| [**Rules.md**](./Rules.md) | Aturan wajib: database, kerahasiaan keuangan, aturan bisnis, git, komunikasi. |
+
+Bila dokumen lain di folder ini bertentangan dengan keempat dokumen di atas, keempat dokumen ini lebih baru.
+
 ### 1. Kredensial & Pengujian
 | Dokumen | Deskripsi & Kegunaan |
 | :--- | :--- |
