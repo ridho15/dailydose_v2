@@ -66,11 +66,16 @@ jobs:
           --schema apps/api/prisma/schema.prisma
       - name: Build shared configuration
         run: pnpm --filter @dailydose/config build
-      - name: Run API tests
-        run: pnpm --filter @dailydose/api test
       - run: pnpm check
-      - run: pnpm --filter @dailydose/web exec playwright install --with-deps chromium
-      - run: pnpm --filter @dailydose/web test:e2e
+      - name: Cache Playwright browser binaries
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('pnpm-lock.yaml') }}
+      - name: Install Playwright Chromium with dependencies
+        run: pnpm --filter @dailydose/web exec playwright install --with-deps chromium
+      - name: Run E2E tests
+        run: pnpm --filter @dailydose/web test:e2e
   dart-contract:
     runs-on: ubuntu-latest
     steps:

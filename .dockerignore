@@ -1,4 +1,5 @@
 .git
+.github
 .env
 .env.*
 !.env.example
@@ -12,10 +13,13 @@ node_modules
 coverage
 apps/web/test-results
 apps/web/playwright-report
+apps/web/playwright-evidence
+apps/web/playwright-report-real
 .dart_tool
 apps/mobile
 packages/api-client-dart
 docs
+*.md
 tools
 scratch
 infra

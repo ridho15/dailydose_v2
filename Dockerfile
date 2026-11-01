@@ -28,24 +28,28 @@ RUN --mount=type=cache,id=dailydose-pnpm-store,target=/pnpm/store \
 COPY apps/api/prisma ./apps/api/prisma
 RUN pnpm --filter @dailydose/api exec prisma generate --schema prisma/schema.prisma
 
-# Copy remaining project source code
-COPY . .
-
 ARG NEXT_PUBLIC_GOOGLE_CLIENT_ID=""
 ARG API_BASE_URL="http://127.0.0.1:32121"
+ARG TURBO_CONCURRENCY=1
 ENV NEXT_PUBLIC_GOOGLE_CLIENT_ID=$NEXT_PUBLIC_GOOGLE_CLIENT_ID
 ENV NEXT_PUBLIC_AUTH_SYNTHETIC_ENABLED=false
 ENV API_BASE_URL=$API_BASE_URL
 ENV NODE_OPTIONS="--max-old-space-size=2048"
+ENV NEXT_TELEMETRY_DISABLED=1
 
-# Satu tugas build sekaligus (API lalu web) menekan puncak pemakaian RAM dan CPU di server bersama; waktu build
-# bertambah sedikit, tetapi layanan lain di server tidak ikut tersendat.
-RUN pnpm exec turbo run build --concurrency=1 \
+# Copy remaining project source code
+COPY . .
+
+# Concurrency build dapat diatur via build-arg (default 1 untuk menekan RAM di server bersama, atau 2+ di CI).
+# Cache turbo dan .next/cache disimpan pada BuildKit cache mount agar build berikutnya incremental tanpa memperbesar image.
+RUN --mount=type=cache,id=dailydose-turbo-cache-v2,target=/app/.turbo \
+    --mount=type=cache,id=dailydose-next-cache-v2,target=/app/apps/web/.next/cache \
+    pnpm exec turbo run build --concurrency=${TURBO_CONCURRENCY:-1} \
     && install -d apps/web/.next/standalone/apps/web/.next/static \
     && install -d apps/web/.next/standalone/apps/web/public \
     && cp -a apps/web/.next/static/. apps/web/.next/standalone/apps/web/.next/static/ \
     && cp -a apps/web/public/. apps/web/.next/standalone/apps/web/public/ \
-    && rm -rf .turbo apps/web/.next/cache /root/.local/share/pnpm/store /pnpm/store \
+    && rm -rf /root/.local/share/pnpm/store /pnpm/store \
     && chmod +x docker-entrypoint.sh
 
 # Buang paket yang tidak terjangkau dari API (alat uji, paket khusus web) sebelum disalin ke image runtime.
@@ -80,4 +84,3 @@ USER dailydose
 EXPOSE 32120
 
 CMD ["/app/docker-entrypoint.sh"]
-
