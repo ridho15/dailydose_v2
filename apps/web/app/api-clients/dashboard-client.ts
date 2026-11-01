@@ -48,7 +48,7 @@ export interface ProfitBreakdownDetails {
   discountRp: number;
   netRevenueRp: number;
   instructorCostRp: number;
-  /** Sesi terjual x modal per sesi; dasar laba. */
+  /** Sesi terpakai x modal per sesi; dasar laba. */
   modalSesiRp?: number;
   grossProfitRp: number;
   grossMarginPercent: number;

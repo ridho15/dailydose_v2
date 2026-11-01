@@ -44,7 +44,7 @@ const cabang = (
   koreksiPayrollRp: 0,
   pengeluaranRp,
   modalSesiRp,
-  sesiTerjual: 40,
+  sesiTerpakai: 40,
   sesiTanpaModal: 0,
   profitRp: omsetRp - modalSesiRp - pengeluaranRp,
   targetRp,
@@ -66,7 +66,7 @@ const ringkasan = (): RingkasanBulanan => {
       koreksiPayrollRp: 200_000,
       pengeluaranRp: 8_000_000,
       modalSesiRp: 13_000_000,
-      sesiTerjual: 80,
+      sesiTerpakai: 80,
       sesiTanpaModal: 0,
       profitRp: 24_000_000,
       targetRp: 50_000_000,
@@ -113,21 +113,21 @@ describe('OwnerHome', () => {
     expect(screen.getByText(/termasuk koreksi jam Rp 200.000/)).toBeVisible();
     const modal = screen.getByText('Modal sesi', { selector: 'p' }).parentElement!;
     expect(within(modal).getByText('Rp 13.000.000')).toBeVisible();
-    expect(within(modal).getByText('80 sesi terjual x modal per sesi')).toBeVisible();
+    expect(within(modal).getByText('80 sesi terpakai x modal per sesi')).toBeVisible();
     expect(screen.getByText(/Tidak mengurangi laba/)).toBeVisible();
     expect(
       screen.getByRole('heading', { name: 'Keuangan, 1 sampai 31 Oktober 2026' }),
     ).toBeVisible();
   });
 
-  it('memperingatkan sesi terjual yang belum punya modal per sesi', async () => {
+  it('memperingatkan sesi terpakai yang belum punya modal per sesi', async () => {
     const r = ringkasan();
     r.total.sesiTanpaModal = 12;
     render(
       <OwnerHome now={NOW} client={client(r)} queueClient={queue} ownerReportClient={ownerReport} />,
     );
     expect(
-      await screen.findByText(/12 sesi terjual belum punya modal per sesi dan dihitung Rp0/),
+      await screen.findByText(/12 sesi terpakai belum punya modal per sesi dan dihitung Rp0/),
     ).toBeVisible();
   });
 

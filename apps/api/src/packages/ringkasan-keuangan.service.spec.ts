@@ -55,26 +55,37 @@ function setup() {
               },
             ]
           : [
-              {
-                branchId: 'gg',
-                totalAmountRp: 1_850_000,
-                paidAt: new Date('2026-10-21T02:00:00Z'),
-                package: { sessionCount: 10, classTypeId: 'grp' },
-              },
-              {
-                branchId: 'gg',
-                totalAmountRp: 1_000_000,
-                paidAt: new Date('2026-10-22T02:00:00Z'),
-                package: { sessionCount: 5, classTypeId: 'pvt' },
-              },
-              {
-                branchId: 'mk',
-                totalAmountRp: 500_000,
-                paidAt: new Date('2026-10-22T02:00:00Z'),
-                package: { sessionCount: 4, classTypeId: 'grp' },
-              },
+              { branchId: 'gg', totalAmountRp: 1_850_000 },
+              { branchId: 'gg', totalAmountRp: 1_000_000 },
+              { branchId: 'mk', totalAmountRp: 500_000 },
             ],
       ),
+    },
+    // Sesi terpakai bulan ini: GG 10 Group + 5 Private, MK 4 Group.
+    pemesananKelas: {
+      findMany: jest.fn(async () => [
+        ...Array.from({ length: 10 }, () => ({
+          classSlot: {
+            branchId: 'gg',
+            classTypeId: 'grp',
+            startAt: new Date('2026-10-21T02:00:00Z'),
+          },
+        })),
+        ...Array.from({ length: 5 }, () => ({
+          classSlot: {
+            branchId: 'gg',
+            classTypeId: 'pvt',
+            startAt: new Date('2026-10-22T02:00:00Z'),
+          },
+        })),
+        ...Array.from({ length: 4 }, () => ({
+          classSlot: {
+            branchId: 'mk',
+            classTypeId: 'grp',
+            startAt: new Date('2026-10-22T02:00:00Z'),
+          },
+        })),
+      ]),
     },
     // Modal per sesi: Group GG Rp50.000; tipe lain di GG Rp80.000; Muara Karang belum diatur.
     modalSesi: {
@@ -161,7 +172,7 @@ describe('RingkasanKeuanganService.ringkasanBulanan', () => {
       pengeluaranRp: 5_450_000,
       // 10 sesi Group x 50.000 + 5 sesi Private x 80.000 (tarif semua tipe kelas GG).
       modalSesiRp: 500_000 + 400_000,
-      sesiTerjual: 15,
+      sesiTerpakai: 15,
       sesiTanpaModal: 0,
       profitRp: 2_850_000 - 900_000 - 5_450_000,
       targetRp: 100_000_000,
@@ -172,7 +183,11 @@ describe('RingkasanKeuanganService.ringkasanBulanan', () => {
     const mk = hasil.cabang.find((c) => c.branchId === 'mk')!;
     expect(mk.targetRp).toBeNull();
     // Muara Karang belum punya modal sesi: dihitung Rp0 dan dilaporkan.
-    expect(mk).toMatchObject({ modalSesiRp: 0, sesiTanpaModal: 4, profitRp: 500_000 - mk.pengeluaranRp });
+    expect(mk).toMatchObject({
+      modalSesiRp: 0,
+      sesiTanpaModal: 4,
+      profitRp: 500_000 - mk.pengeluaranRp,
+    });
     expect(hasil.tarifBelumDipasang).toBe(1);
 
     expect(hasil.total.omsetRp).toBe(3_350_000);

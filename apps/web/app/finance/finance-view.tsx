@@ -451,9 +451,9 @@ export function FinanceView({
                   tone="success"
                 />
                 <StatCard
-                  label="Modal Sesi Terjual"
+                  label="Modal Sesi Terpakai"
                   value={formatRupiah(profitData.modalSesiRp ?? 0)}
-                  helper={`${profitData.sesiTerjual ?? 0} sesi x modal per sesi`}
+                  helper={`${profitData.sesiTerpakai ?? 0} sesi x modal per sesi`}
                   tone="neutral"
                 />
                 <StatCard
@@ -484,7 +484,7 @@ export function FinanceView({
                       <span className="font-semibold">{formatRupiah(profitData.omsetRp)}</span>
                     </div>
                     <div className="flex justify-between pt-2 text-dd-warning">
-                      <span>(-) Modal Sesi ({profitData.sesiTerjual ?? 0} sesi terjual x modal per sesi):</span>
+                      <span>(-) Modal Sesi ({profitData.sesiTerpakai ?? 0} sesi terpakai x modal per sesi):</span>
                       <span className="font-semibold">
                         - {formatRupiah(profitData.modalSesiRp ?? 0)}
                       </span>

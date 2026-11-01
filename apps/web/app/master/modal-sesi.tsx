@@ -29,10 +29,11 @@ const tanggal = (iso: string) =>
   }).format(new Date(`${iso}T00:00:00Z`));
 
 /**
- * Modal per sesi untuk menghitung laba: sesi paket yang dibeli member x modal per sesi tipe
- * kelasnya di cabang itu. Contoh: paket Group 20 sesi Rp4.000.000 di Untar, modal Group Untar
- * Rp50.000, berarti modal Rp1.000.000 dan laba Rp3.000.000 (sebelum pengeluaran). Berbeda dari
- * fee instruktur, yang dibayar per kelas yang di-scan QR.
+ * Modal per sesi untuk menghitung laba: setiap sesi member yang terpakai di kelas selesai dikali
+ * modal per sesi tipe kelasnya di cabang itu, pada bulan kelasnya. Contoh: paket Group 20 sesi
+ * Rp4.000.000 di Untar, modal Group Untar Rp50.000; bila 20 sesi terpakai sebelum paket habis,
+ * modalnya Rp1.000.000 dan laba Rp3.000.000 (sebelum pengeluaran). Berbeda dari fee instruktur,
+ * yang dibayar per kelas yang di-scan QR.
  */
 export function ModalSesiSection({
   branches,
@@ -117,10 +118,12 @@ export function ModalSesiSection({
             Modal per sesi
           </h2>
           <p className="m-0 mt-1 max-w-[70ch] text-[15px] text-dd-muted">
-            Dipakai untuk laba bulanan: sesi paket yang dibeli member dikali modal per sesi tipe
-            kelasnya di cabang itu. Contoh: paket Group 20 sesi Rp4.000.000, modal Rp50.000 per
-            sesi, maka modal Rp1.000.000 dan laba Rp3.000.000. Fee instruktur (yang dibayar per
-            kelas ter-scan QR) diatur terpisah di detail instruktur.
+            Dipakai untuk laba bulanan: setiap sesi member yang terpakai (hadir atau tidak hadir)
+            dikali modal per sesi tipe kelasnya di cabang itu, pada bulan kelasnya. Contoh: paket
+            Group 20 sesi Rp4.000.000, modal Rp50.000 per sesi; bila 20 sesi terpakai sebelum
+            paket habis, modalnya Rp1.000.000 dan laba Rp3.000.000. Sesi yang hangus tidak punya
+            modal. Fee instruktur (yang dibayar per kelas ter-scan QR) diatur terpisah di detail
+            instruktur.
           </p>
         </div>
         {canEdit && (
@@ -268,7 +271,7 @@ function FormModal({
     <Modal
       open={open}
       title="Atur modal per sesi"
-      description="Berlaku untuk paket yang lunas mulai tanggal yang dipilih; paket sebelumnya tetap memakai modal lama."
+      description="Berlaku untuk kelas mulai tanggal yang dipilih; kelas sebelumnya tetap memakai modal lama."
       busy={sibuk}
       onClose={onClose}
     >

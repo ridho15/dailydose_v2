@@ -7,9 +7,9 @@ export interface AngkaCabang {
   payrollRp: number;
   koreksiPayrollRp: number;
   pengeluaranRp: number;
-  /** Sesi paket yang dibeli x modal per sesi; dasar laba. */
+  /** Sesi terpakai x modal per sesi; dasar laba. */
   modalSesiRp: number;
-  sesiTerjual: number;
+  sesiTerpakai: number;
   /** Sesi tanpa modal per sesi yang cocok (dihitung Rp0). */
   sesiTanpaModal: number;
   profitRp: number;

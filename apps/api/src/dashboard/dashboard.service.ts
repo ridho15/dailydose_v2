@@ -299,8 +299,12 @@ export class DashboardService {
     // Tarif honor belum diisi sama sekali padahal ada kelas selesai: biaya instruktur tampil Rp 0 dan laba = omzet.
     const instructorFeeMissing = completedSlots.length > 0 && fees.length === 0;
 
-    // Laba memakai modal sesi (sesi paket yang dibeli x modal per sesi), bukan honor instruktur.
-    const modal = await hitungModalSesi(this.db, purchases);
+    // Laba memakai modal sesi (sesi terpakai x modal per sesi), bukan honor instruktur.
+    const modal = await hitungModalSesi(this.db, {
+      branchIds: params.branchIds,
+      fromDate: new Date(`${params.from}T00:00:00.000Z`),
+      untilExclusive: new Date(Date.parse(`${params.until}T00:00:00.000Z`) + 86_400_000),
+    });
     let totalGross = 0;
     let totalRevenue = 0;
     const branchMap = new Map<string, { gross: number; revenue: number }>();
@@ -312,7 +316,7 @@ export class DashboardService {
 
     let curDate = params.from;
     while (curDate <= params.until) {
-      trendMap.set(curDate, { revenue: 0, instructorFee: 0, modal: 0 });
+      trendMap.set(curDate, { revenue: 0, instructorFee: 0, modal: modal.perHari.get(curDate) ?? 0 });
       curDate = dateShift(curDate, 1);
     }
 
@@ -321,7 +325,7 @@ export class DashboardService {
     const payMethodMap = new Map<string, { method: string; count: number; totalRp: number }>();
     const classTypeMap = new Map<string, { classTypeId: string; classTypeName: string; count: number; totalRp: number }>();
 
-    for (const [i, p] of purchases.entries()) {
+    for (const p of purchases) {
       totalGross += p.subtotalRp;
       totalRevenue += p.totalAmountRp;
 
@@ -335,7 +339,6 @@ export class DashboardService {
       const tEntry = trendMap.get(dKey);
       if (tEntry) {
         tEntry.revenue += p.totalAmountRp;
-        tEntry.modal += modal.perPembelian[i] ?? 0;
       }
 
       // Breakdown by package

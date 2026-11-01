@@ -7,10 +7,13 @@ import { ApiProblem } from '../identity/security';
 /**
  * Modal per sesi untuk profit.
  *
- * Profit bulanan = omzet paket yang lunas − modal sesi − pengeluaran. Modal sesi = jumlah sesi
- * paket yang dibeli × modal per sesi tipe kelas paket itu di cabang pembelian, memakai tarif yang
- * berlaku pada tanggal lunas. Contoh: paket Group 20 sesi Rp4.000.000 di Untar, modal Group Untar
- * Rp50.000 → modal Rp1.000.000, profit Rp3.000.000.
+ * Profit bulanan = omzet paket yang lunas − modal sesi − pengeluaran. Modal sesi mengikuti
+ * **pemakaian**: setiap sesi member yang terpakai (hadir atau tidak hadir) di kelas yang selesai
+ * dalam rentang, dikali modal per sesi tipe kelas itu di cabang kelas, memakai tarif yang berlaku
+ * pada tanggal kelas. Sesi yang hangus karena paket kedaluwarsa tidak punya modal.
+ *
+ * Contoh pemilik: paket Group 20 sesi Rp4.000.000 di Untar, modal Group Untar Rp50.000. Bila ke-20
+ * sesi dipakai sebelum paket habis, modal totalnya Rp1.000.000 (tersebar di bulan pemakaiannya).
  *
  * Ini terpisah dari fee instruktur: fee adalah yang dibayar ke instruktur per kelas yang di-scan
  * QR (payroll), sedangkan modal sesi hanya dipakai untuk menghitung profit.
@@ -36,28 +39,25 @@ type BarisTarif = {
   createdAt: Date;
 };
 
-export type PembelianModal = {
-  branchId: string;
-  paidAt: Date | null;
-  createdAt?: Date;
-  package: { sessionCount: number; classTypeId: string | null } | null;
-};
+/** Status booking yang memakai sesi paket: hadir, atau tidak hadir (sesi tetap terpotong). */
+export const STATUS_SESI_TERPAKAI = ['ATTENDED', 'NO_SHOW'] as const;
 
 export interface HasilModal {
   totalRp: number;
   perCabang: Map<string, number>;
-  /** Sesi yang terjual dalam rentang. */
+  /** Sesi member yang terpakai dalam rentang. */
   sesi: number;
+  sesiPerCabang: Map<string, number>;
   /** Sesi tanpa tarif modal yang cocok; dihitung Rp0 sampai tarifnya diatur. */
   sesiTanpaModal: number;
   sesiTanpaModalPerCabang: Map<string, number>;
-  /** Modal per pembelian, urut sama dengan masukan (untuk tren harian). */
-  perPembelian: number[];
+  /** Modal per tanggal kelas (`YYYY-MM-DD`, UTC), untuk tren harian. */
+  perHari: Map<string, number>;
 }
 
 /**
- * Tarif yang berlaku untuk satu pembelian: tipe kelas paket di cabang itu lebih dulu, lalu tarif
- * "semua tipe kelas" cabang itu. Versi terbaru yang sudah berlaku pada tanggal lunas.
+ * Tarif yang berlaku untuk satu sesi: tipe kelas di cabang itu lebih dulu, lalu tarif "semua tipe
+ * kelas" cabang itu. Versi terbaru yang sudah berlaku pada tanggal kelas.
  */
 export function tarifUntuk(
   tarif: readonly BarisTarif[],
@@ -76,55 +76,59 @@ export function tarifUntuk(
   );
 }
 
-/** Modal sesi dari daftar pembelian lunas. Dipakai Beranda Owner dan laporan profit. */
+type SesiTerpakai = { classSlot: { branchId: string; classTypeId: string; startAt: Date } };
+
+/**
+ * Modal dari sesi yang terpakai di kelas selesai dalam rentang. `branchIds` null berarti semua
+ * cabang. Dipakai Beranda Owner, settlement, laporan laba, performa cabang, dan dashboard.
+ */
 export async function hitungModalSesi(
   db: PrismaService,
-  pembelian: readonly PembelianModal[],
+  params: { branchIds: string[] | null; fromDate: Date; untilExclusive: Date },
 ): Promise<HasilModal> {
   const hasil: HasilModal = {
     totalRp: 0,
     perCabang: new Map(),
     sesi: 0,
+    sesiPerCabang: new Map(),
     sesiTanpaModal: 0,
     sesiTanpaModalPerCabang: new Map(),
-    perPembelian: pembelian.map(() => 0),
+    perHari: new Map(),
   };
-  if (!pembelian.length || typeof db.modalSesi?.findMany !== 'function') {
-    for (const p of pembelian) {
-      const n = p.package?.sessionCount ?? 0;
-      hasil.sesi += n;
-      hasil.sesiTanpaModal += n;
-      hasil.sesiTanpaModalPerCabang.set(
-        p.branchId,
-        (hasil.sesiTanpaModalPerCabang.get(p.branchId) ?? 0) + n,
-      );
-    }
-    return hasil;
-  }
-  const tarif: BarisTarif[] = await db.modalSesi.findMany({
-    where: { branchId: { in: [...new Set(pembelian.map((p) => p.branchId))] } },
+  if (typeof db.pemesananKelas?.findMany !== 'function') return hasil;
+  const sesi: SesiTerpakai[] = await db.pemesananKelas.findMany({
+    where: {
+      status: { in: [...STATUS_SESI_TERPAKAI] },
+      classSlot: {
+        status: 'COMPLETED',
+        startAt: { gte: params.fromDate, lt: params.untilExclusive },
+        ...(params.branchIds ? { branchId: { in: params.branchIds } } : {}),
+      },
+    },
+    select: { classSlot: { select: { branchId: true, classTypeId: true, startAt: true } } },
   });
-  for (const [i, p] of pembelian.entries()) {
-    const n = p.package?.sessionCount ?? 0;
-    if (n <= 0) continue;
-    hasil.sesi += n;
-    const t = tarifUntuk(tarif, {
-      branchId: p.branchId,
-      classTypeId: p.package?.classTypeId ?? null,
-      pada: p.paidAt ?? p.createdAt ?? new Date(),
-    });
+  if (!sesi.length) return hasil;
+  const tarif: BarisTarif[] =
+    typeof db.modalSesi?.findMany === 'function'
+      ? await db.modalSesi.findMany({
+          where: { branchId: { in: [...new Set(sesi.map((x) => x.classSlot.branchId))] } },
+        })
+      : [];
+  const tambah = (peta: Map<string, number>, kunci: string, n: number) =>
+    peta.set(kunci, (peta.get(kunci) ?? 0) + n);
+
+  for (const { classSlot: k } of sesi) {
+    hasil.sesi += 1;
+    tambah(hasil.sesiPerCabang, k.branchId, 1);
+    const t = tarifUntuk(tarif, { branchId: k.branchId, classTypeId: k.classTypeId, pada: k.startAt });
     if (!t) {
-      hasil.sesiTanpaModal += n;
-      hasil.sesiTanpaModalPerCabang.set(
-        p.branchId,
-        (hasil.sesiTanpaModalPerCabang.get(p.branchId) ?? 0) + n,
-      );
+      hasil.sesiTanpaModal += 1;
+      tambah(hasil.sesiTanpaModalPerCabang, k.branchId, 1);
       continue;
     }
-    const rp = n * t.modalPerSesiRp;
-    hasil.perPembelian[i] = rp;
-    hasil.totalRp += rp;
-    hasil.perCabang.set(p.branchId, (hasil.perCabang.get(p.branchId) ?? 0) + rp);
+    hasil.totalRp += t.modalPerSesiRp;
+    tambah(hasil.perCabang, k.branchId, t.modalPerSesiRp);
+    tambah(hasil.perHari, k.startAt.toISOString().slice(0, 10), t.modalPerSesiRp);
   }
   return hasil;
 }

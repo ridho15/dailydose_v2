@@ -58,37 +58,75 @@ describe('tarifUntuk', () => {
   });
 });
 
-describe('hitungModalSesi', () => {
-  it('contoh pemilik: paket Group 20 sesi Rp4 juta di Untar, modal Rp50.000 → modal Rp1 juta', async () => {
+describe('hitungModalSesi (mengikuti pemakaian sesi)', () => {
+  const sesi = (branchId: string, classTypeId: string, tanggal: string) => ({
+    classSlot: { branchId, classTypeId, startAt: new Date(`${tanggal}T02:00:00Z`) },
+  });
+  const rentang = {
+    branchIds: null,
+    fromDate: new Date('2026-10-01T00:00:00Z'),
+    untilExclusive: new Date('2026-11-01T00:00:00Z'),
+  };
+
+  it('contoh pemilik: 20 sesi Group Untar terpakai x Rp50.000 = Rp1 juta', async () => {
     const db = {
+      pemesananKelas: {
+        findMany: jest.fn(async () =>
+          Array.from({ length: 20 }, () => sesi('untar', 'grp', '2026-10-10')),
+        ),
+      },
       modalSesi: {
         findMany: jest.fn(async () => [tarif('b', 'untar', 'grp', 50_000, '2026-01-01')]),
       },
     };
-    const hasil = await hitungModalSesi(db as never, [
-      {
-        branchId: 'untar',
-        paidAt: new Date('2026-10-20'),
-        package: { sessionCount: 20, classTypeId: 'grp' },
-      },
-    ]);
+    const hasil = await hitungModalSesi(db as never, rentang);
     expect(hasil.totalRp).toBe(1_000_000);
     expect(4_000_000 - hasil.totalRp).toBe(3_000_000);
     expect(hasil.sesi).toBe(20);
-    expect(hasil.perPembelian).toEqual([1_000_000]);
+    expect(hasil.perHari.get('2026-10-10')).toBe(1_000_000);
   });
 
-  it('sesi tanpa tarif dihitung Rp0 dan dilaporkan per cabang', async () => {
-    const db = { modalSesi: { findMany: jest.fn(async () => []) } };
-    const hasil = await hitungModalSesi(db as never, [
-      {
-        branchId: 'pik',
-        paidAt: new Date('2026-10-20'),
-        package: { sessionCount: 8, classTypeId: 'grp' },
+  it('hanya sesi hadir/tidak hadir di kelas selesai dalam rentang yang dihitung', async () => {
+    const db = {
+      pemesananKelas: { findMany: jest.fn(async () => []) },
+      modalSesi: { findMany: jest.fn(async () => []) },
+    };
+    await hitungModalSesi(db as never, { ...rentang, branchIds: ['untar'] });
+    expect(db.pemesananKelas.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          status: { in: ['ATTENDED', 'NO_SHOW'] },
+          classSlot: {
+            status: 'COMPLETED',
+            startAt: { gte: rentang.fromDate, lt: rentang.untilExclusive },
+            branchId: { in: ['untar'] },
+          },
+        },
+      }),
+    );
+  });
+
+  it('memakai tarif yang berlaku pada tanggal kelas; sesi tanpa tarif dihitung Rp0', async () => {
+    const db = {
+      pemesananKelas: {
+        findMany: jest.fn(async () => [
+          sesi('untar', 'grp', '2026-10-05'),
+          sesi('untar', 'grp', '2026-10-20'),
+          sesi('pik', 'grp', '2026-10-20'),
+        ]),
       },
-    ]);
-    expect(hasil).toMatchObject({ totalRp: 0, sesi: 8, sesiTanpaModal: 8 });
-    expect(hasil.sesiTanpaModalPerCabang.get('pik')).toBe(8);
+      modalSesi: {
+        findMany: jest.fn(async () => [
+          tarif('a', 'untar', 'grp', 45_000, '2026-01-01'),
+          tarif('b', 'untar', 'grp', 50_000, '2026-10-15'),
+        ]),
+      },
+    };
+    const hasil = await hitungModalSesi(db as never, rentang);
+    expect(hasil.totalRp).toBe(95_000);
+    expect(hasil).toMatchObject({ sesi: 3, sesiTanpaModal: 1 });
+    expect(hasil.sesiTanpaModalPerCabang.get('pik')).toBe(1);
+    expect(hasil.sesiPerCabang.get('untar')).toBe(2);
   });
 });
 

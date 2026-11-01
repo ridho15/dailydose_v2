@@ -102,7 +102,7 @@ function BarisCabang({ c, tebal = false }: { c: Omit<AngkaCabang, 'branchId'>; t
 
 /**
  * Beranda Owner dan Super Owner: yang perlu diputuskan lebih dulu, lalu angka satu bulan.
- * Laba = omzet − modal sesi (sesi paket yang dibeli x modal per sesi) − pengeluaran, total dan per
+ * Laba = omzet − modal sesi (sesi terpakai x modal per sesi) − pengeluaran, total dan per
  * cabang. Payroll instruktur (yang dibayar per kelas ter-scan QR) ditampilkan terpisah.
  */
 export function OwnerHome({
@@ -267,7 +267,7 @@ export function OwnerHome({
           <>
             {(ringkasan.total.sesiTanpaModal ?? 0) > 0 && (
               <Feedback kind="warning">
-                {ringkasan.total.sesiTanpaModal} sesi terjual belum punya modal per sesi dan
+                {ringkasan.total.sesiTanpaModal} sesi terpakai belum punya modal per sesi dan
                 dihitung Rp0, jadi laba terlihat lebih besar. Atur di Master Data, tab Modal per
                 Sesi.
               </Feedback>
@@ -291,7 +291,7 @@ export function OwnerHome({
                   </p>
                 </div>
                 <p className="m-0 mt-6 text-[15px] text-white/85">
-                  Omzet dikurangi modal sesi paket yang terjual dan pengeluaran cabang bulan ini.
+                  Omzet dikurangi modal sesi yang terpakai dan pengeluaran cabang bulan ini.
                 </p>
               </div>
               <div className="grid gap-3">
@@ -310,7 +310,7 @@ export function OwnerHome({
                 <KartuAngka
                   label="Modal sesi"
                   nilai={ringkasan.total.modalSesiRp ?? 0}
-                  catatan={`${ringkasan.total.sesiTerjual ?? 0} sesi terjual x modal per sesi`}
+                  catatan={`${ringkasan.total.sesiTerpakai ?? 0} sesi terpakai x modal per sesi`}
                 />
                 <KartuAngka
                   label="Payroll instruktur (dibayar)"

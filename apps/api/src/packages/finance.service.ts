@@ -337,8 +337,8 @@ export class FinanceService {
   }
 
   /**
-   * 4. Laporan Laba Bersih untuk rentang tanggal: omzet dikurangi modal sesi (sesi paket yang
-   * dibeli x modal per sesi) dan biaya lain. Honor instruktur ditampilkan sebagai informasi.
+   * 4. Laporan Laba Bersih untuk rentang tanggal: omzet dikurangi modal sesi (sesi member yang
+   * terpakai x modal per sesi) dan biaya lain. Honor instruktur ditampilkan sebagai informasi.
    */
   async profitReport(principal: SessionPrincipal, input: FinanceQuery) {
     this.policy.requireCapability(principal.capabilities, 'finance:read');
@@ -349,30 +349,21 @@ export class FinanceService {
     const isGlobal =
       principal.capabilities.includes('branch:all') ||
       principal.roles.some((r) => ['SUPER_OWNER', 'FINANCE'].includes(r.role as string));
-    const branchFilter = input.branchId
-      ? { branchId: input.branchId }
-      : isGlobal
-        ? {}
-        : { branchId: { in: principal.branchIds } };
 
-    const [omsetRes, realtimeRes, otherCostRes, pembelianLunas] = await Promise.all([
+    const [omsetRes, realtimeRes, otherCostRes, modal] = await Promise.all([
       this.omsetReport(principal, scope),
       this.realtimeInstructorCostReport(principal, scope),
       this.otherCostReport(principal, scope),
-      this.db.pembelian.findMany({
-        where: {
-          ...branchFilter,
-          status: 'PAID',
-          paidAt: { gte: range.fromDate, lt: range.untilExclusive },
-        },
-        select: {
-          branchId: true,
-          paidAt: true,
-          package: { select: { sessionCount: true, classTypeId: true } },
-        },
+      hitungModalSesi(this.db, {
+        branchIds: input.branchId
+          ? [input.branchId]
+          : isGlobal
+            ? null
+            : principal.branchIds,
+        fromDate: range.fromDate,
+        untilExclusive: range.untilExclusive,
       }),
     ]);
-    const modal = await hitungModalSesi(this.db, pembelianLunas);
 
     const omsetRp = omsetRes.totalOmsetRp;
     // Honor instruktur (yang dibayar) ditampilkan, tetapi laba memakai modal sesi.
@@ -390,7 +381,7 @@ export class FinanceService {
       omsetRp,
       costRealtimeRp,
       modalSesiRp: modal.totalRp,
-      sesiTerjual: modal.sesi,
+      sesiTerpakai: modal.sesi,
       sesiTanpaModal: modal.sesiTanpaModal,
       grossProfitRp,
       grossMarginPercent: margin(grossProfitRp),
@@ -997,10 +988,13 @@ export class FinanceService {
         status: 'PAID',
         paidAt: { gte: range.fromDate, lt: range.untilExclusive },
       },
-      include: { package: { select: { sessionCount: true, classTypeId: true } } },
     });
     const omsetRp = purchases.reduce((sum, p) => sum + p.totalAmountRp, 0);
-    const modal = await hitungModalSesi(this.db, purchases);
+    const modal = await hitungModalSesi(this.db, {
+      branchIds: [targetBranchId],
+      fromDate: range.fromDate,
+      untilExclusive: range.untilExclusive,
+    });
 
     const otherCosts = await this.db.otherCost.findMany({
       where: {
@@ -1069,7 +1063,7 @@ export class FinanceService {
       unconfiguredClassCount: totalUnconfiguredClassCount,
       instructorFeeMissing,
       modalSesiRp: modal.totalRp,
-      sesiTerjual: modal.sesi,
+      sesiTerpakai: modal.sesi,
       sesiTanpaModal: modal.sesiTanpaModal,
       estimatedProfitRp,
       instructorCount: instructorBreakdown.length,

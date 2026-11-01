@@ -11,8 +11,8 @@ import { hitungModalSesi } from './modal-sesi.service';
 /**
  * Angka keuangan satu bulan untuk Owner, dan jurnal kas sederhana untuk cabang.
  *
- * Omzet adalah pembelian PAID menurut `paidAt`; modal sesi adalah sesi paket yang dibeli dikali
- * modal per sesi tipe kelasnya di cabang itu (`ModalSesi`); pengeluaran adalah biaya lain menurut
+ * Omzet adalah pembelian PAID menurut `paidAt`; modal sesi adalah sesi member yang terpakai di
+ * kelas selesai dikali modal per sesi tipe kelasnya di cabang itu (`hitungModalSesi`); pengeluaran adalah biaya lain menurut
  * tanggal pengeluarannya; laba = omzet − modal sesi − pengeluaran. Payroll (honor kelas yang
  * di-scan QR ditambah koreksi jam) adalah yang dibayar ke instruktur dan ditampilkan terpisah;
  * payroll tidak mengurangi laba karena biaya mengajar sudah diwakili modal sesi.
@@ -29,10 +29,10 @@ export interface AngkaCabang {
   /** Bagian payroll dari koreksi jam; bisa negatif. */
   koreksiPayrollRp: number;
   pengeluaranRp: number;
-  /** Sesi paket yang dibeli x modal per sesi; dasar laba. */
+  /** Sesi terpakai x modal per sesi; dasar laba. */
   modalSesiRp: number;
-  /** Sesi paket yang terjual dalam bulan ini. */
-  sesiTerjual: number;
+  /** Sesi member yang terpakai (hadir/tidak hadir) di kelas selesai bulan ini. */
+  sesiTerpakai: number;
   /** Sesi tanpa tarif modal yang cocok (dihitung Rp0 sampai diatur). */
   sesiTanpaModal: number;
   profitRp: number;
@@ -126,12 +126,7 @@ export class RingkasanKeuanganService {
           status: 'PAID',
           paidAt: { gte: range.fromDate, lt: range.untilExclusive },
         },
-        select: {
-          branchId: true,
-          totalAmountRp: true,
-          paidAt: true,
-          package: { select: { sessionCount: true, classTypeId: true } },
-        },
+        select: { branchId: true, totalAmountRp: true },
       }),
       this.db.otherCost.findMany({
         where: { ...lingkup, ...otherCostInRange(range) },
@@ -160,13 +155,11 @@ export class RingkasanKeuanganService {
       }),
     ]);
 
-    const modal = await hitungModalSesi(
-      this.db,
-      pembelian as Parameters<typeof hitungModalSesi>[1],
-    );
-    const sesiPerCabang = new Map<string, number>();
-    for (const p of pembelian as { branchId: string; package?: { sessionCount: number } | null }[])
-      sesiPerCabang.set(p.branchId, (sesiPerCabang.get(p.branchId) ?? 0) + (p.package?.sessionCount ?? 0));
+    const modal = await hitungModalSesi(this.db, {
+      branchIds: ids,
+      fromDate: range.fromDate,
+      untilExclusive: range.untilExclusive,
+    });
 
     let tarifBelumDipasang = 0;
     const cabang: AngkaCabang[] = cabangList.map((c) => {
@@ -200,7 +193,7 @@ export class RingkasanKeuanganService {
         koreksiPayrollRp,
         pengeluaranRp,
         modalSesiRp: modal.perCabang.get(c.id) ?? 0,
-        sesiTerjual: sesiPerCabang.get(c.id) ?? 0,
+        sesiTerpakai: modal.sesiPerCabang.get(c.id) ?? 0,
         sesiTanpaModal: modal.sesiTanpaModalPerCabang.get(c.id) ?? 0,
         profitRp: omsetRp - (modal.perCabang.get(c.id) ?? 0) - pengeluaranRp,
         targetRp: c.monthlyTargetRp,
@@ -229,7 +222,7 @@ export class RingkasanKeuanganService {
         koreksiPayrollRp: jumlah((c) => c.koreksiPayrollRp),
         pengeluaranRp: jumlah((c) => c.pengeluaranRp),
         modalSesiRp: jumlah((c) => c.modalSesiRp),
-        sesiTerjual: jumlah((c) => c.sesiTerjual),
+        sesiTerpakai: jumlah((c) => c.sesiTerpakai),
         sesiTanpaModal: jumlah((c) => c.sesiTanpaModal),
         profitRp: jumlah((c) => c.profitRp),
         targetRp: adaTarget ? jumlah((c) => c.targetRp ?? 0) : null,

@@ -1,6 +1,6 @@
 import { render as rtlRender, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, onTestFinished, expect, it, vi } from 'vitest';
 import { ClassSlotView } from '@/classes/class-slot-view';
 import type { ClassSlot, ClassSlotClient } from '@/api-clients/class-slot-client';
 import type { BookingClient, BookingPage } from '@/api-clients/booking-client';
@@ -240,8 +240,14 @@ describe('timetable: peserta kelas', () => {
 
   it('tombol X membatalkan peserta setelah konfirmasi dengan alasan', async () => {
     const bookings = bookingClient();
-    // Kelas dua jam lagi: tombol X hanya untuk kelas yang belum dimulai.
-    const mulai = new Date(Date.now() + 2 * 3_600_000);
+    // Jam dinding tetap 08.00 WIB hari ini, kelas 10.00: tombol X hanya untuk kelas yang belum
+    // dimulai. Tanpa ini test gagal bila dijalankan malam hari (kelas jatuh ke minggu berikutnya).
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(jamWib(8));
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
+    const mulai = jamWib(10);
     render(
       <ClassSlotView
         client={classClient([
