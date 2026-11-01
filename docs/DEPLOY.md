@@ -165,6 +165,29 @@ CREATE TABLE `kapasitas_kelas_cabang` (
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 ```
 
+`paket_bawa_teman` dan `booking_teman` (paket yang boleh membawa teman, November 2026):
+
+```sql
+CREATE TABLE `paket_bawa_teman` (
+    `packageId` CHAR(36) NOT NULL,
+    `maksTeman` INTEGER NOT NULL DEFAULT 1,
+    `updatedById` CHAR(36) NULL,
+    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `updatedAt` DATETIME(3) NOT NULL,
+
+    PRIMARY KEY (`packageId`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+CREATE TABLE `booking_teman` (
+    `bookingId` CHAR(36) NOT NULL,
+    `packageId` CHAR(36) NOT NULL,
+    `namaTeman` VARCHAR(128) NULL,
+    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+
+    PRIMARY KEY (`bookingId`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+```
+
 `paket` (kolom `is_shareable` untuk paket bersama / Duet / Family, Oktober 2026) dan `paket_pelanggan_anggota`:
 
 ```sql

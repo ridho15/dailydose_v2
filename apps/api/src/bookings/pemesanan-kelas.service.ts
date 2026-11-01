@@ -11,6 +11,7 @@ import type { SessionPrincipal } from '../identity/identity.service';
 import { PolicyService } from '../identity/policy.service';
 import { ApiProblem, ENTITY_ID_REGEX } from '../identity/security';
 import { paketBerlakuDi } from './cabang-paket';
+import { bookingTeman, maksTemanPaket } from '../packages/bawa-teman';
 
 export type BookingCancellationReasonCode =
   | 'PERSONAL_UNAVAILABLE'
@@ -32,6 +33,8 @@ export type BookingCommand = {
   customerPackageId: string;
   customerUserId?: string;
   source: 'SELF' | 'ADMIN_ASSISTED';
+  /** Nama teman untuk kursi teman (paket "bawa teman"), opsional. */
+  namaTeman?: string;
 };
 
 export type CancelBookingCommand = {
@@ -494,7 +497,17 @@ export class BookingsService {
       }),
     );
 
-    const eligiblePackages = items.filter((item) => item.available > 0);
+    // Sudah terdaftar di kelas ini: yang bisa dipilih hanya paket "bawa teman" yang jatah kursi
+    // temannya belum habis; booking berikutnya adalah kursi untuk temannya.
+    const sudahDiKelas = await this.db.pemesananKelas.count({
+      where: { userId: principal.userId, classSlotId: slot.id, status: { in: ['BOOKED', 'ATTENDED'] } },
+    });
+    const maksTeman =
+      sudahDiKelas > 0 ? await maksTemanPaket(this.db, items.map((item) => item.packageId)) : new Map();
+    const eligiblePackages = items
+      .filter((item) => item.available > 0)
+      .filter((item) => sudahDiKelas === 0 || (maksTeman.get(item.packageId) ?? 0) >= sudahDiKelas)
+      .map((item) => (sudahDiKelas > 0 ? { ...item, kursiTeman: true } : item));
 
     let canBook = true;
     let reasonCode:
@@ -504,6 +517,7 @@ export class BookingsService {
       | 'SLOT_FULL'
       | 'SLOT_UNAVAILABLE'
       | 'BOOKING_CUTOFF_PASSED'
+      | 'ALREADY_BOOKED'
       | null = null;
     let requiredAction:
       | 'COMPLETE_IDENTITY_VERIFICATION'
@@ -527,6 +541,10 @@ export class BookingsService {
       canBook = false;
       reasonCode = 'SLOT_FULL';
       requiredAction = 'CONTACT_STUDIO';
+    } else if (sudahDiKelas > 0 && eligiblePackages.length === 0) {
+      canBook = false;
+      reasonCode = 'ALREADY_BOOKED';
+      requiredAction = null;
     } else if (eligiblePackages.length === 0) {
       canBook = false;
       if (items.length > 0) {
@@ -766,10 +784,18 @@ export class BookingsService {
     const hasNext = pageNumber ? pageNumber < totalPages : items.length > limit;
     const pageItems = pageNumber ? items : (items.length > limit ? items.slice(0, limit) : items);
     const nextCursor = hasNext ? (pageItems[pageItems.length - 1]?.id ?? null) : null;
-    const reserved = await this.reservedByPackage(pageItems.map((b: any) => b.customerPackageId));
+    const [reserved, teman] = await Promise.all([
+      this.reservedByPackage(pageItems.map((b: any) => b.customerPackageId)),
+      bookingTeman(this.db, pageItems.map((b: any) => b.id)),
+    ]);
 
     return {
-      items: pageItems.map((b) => this.bookingView(b, reserved)),
+      items: pageItems.map((b) => ({
+        ...this.bookingView(b, reserved),
+        // Kursi teman dari paket "bawa teman": booking atas nama member, yang datang temannya.
+        kursiTeman: teman.has(b.id),
+        namaTeman: teman.get(b.id) ?? null,
+      })),
       page: query.page != null
         ? {
             hasMore: hasNext,
@@ -948,14 +974,23 @@ export class BookingsService {
             throw new ApiProblem('CLASS_ALREADY_FINISHED', HttpStatus.CONFLICT);
         }
 
-        const duplicate = await tx.pemesananKelas.findFirst({
+        // Satu member satu kursi per kelas, kecuali paketnya "bawa teman": member sendiri atau staf
+        // boleh menambah kursi untuk temannya (bukan member) sebanyak yang diizinkan paket, memakai
+        // sesi paket yang sama.
+        const sudahDiKelas = await tx.pemesananKelas.count({
           where: {
             userId: customerUserId,
             classSlotId: slot.id,
             status: { in: ['BOOKED', 'ATTENDED'] },
           },
         });
-        if (duplicate) throw new ApiProblem('DUPLICATE_ACTIVE_BOOKING', HttpStatus.CONFLICT);
+        let kursiTeman = false;
+        if (sudahDiKelas > 0) {
+          const maks =
+            (await maksTemanPaket(tx, [customerPackage.packageId])).get(customerPackage.packageId) ?? 0;
+          if (sudahDiKelas > maks) throw new ApiProblem('DUPLICATE_ACTIVE_BOOKING', HttpStatus.CONFLICT);
+          kursiTeman = true;
+        }
 
         // Pencegahan booking ganda lintas kelas dengan jadwal bertabrakan (Overlapping Schedule)
         const scheduleConflict = await tx.pemesananKelas.findFirst({
@@ -1017,6 +1052,15 @@ export class BookingsService {
           },
         });
 
+        if (kursiTeman)
+          await tx.bookingTeman.create({
+            data: {
+              bookingId: booking.id,
+              packageId: customerPackage.packageId,
+              namaTeman: input.namaTeman?.trim().slice(0, 128) || null,
+            },
+          });
+
         // Catatan: Sesi TIDAK dipotong saat booking (Rule #1).
         // Pemotongan sesi ke SessionLedger & PaketPelanggan dieksekusi saat kelas COMPLETED dan customer hadir.
 
@@ -1045,6 +1089,7 @@ export class BookingsService {
               bookingNumber,
               classSlotId: slot.id,
               customerPackageId: customerPackage.id,
+              ...(kursiTeman ? { kursiTeman: true } : {}),
               backdated: slotPast,
             },
           });

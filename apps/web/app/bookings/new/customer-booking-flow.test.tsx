@@ -131,6 +131,44 @@ describe('customer self booking flow', () => {
     );
   });
 
+  it('member yang sudah terdaftar bisa booking kursi teman dengan paket bawa teman', async () => {
+    window.history.replaceState({}, '', `?slot=${options.slot.id}`);
+    const client = bookingClient({
+      ...options,
+      packages: [{ ...options.packages[0]!, name: 'Double Trouble Deal', kursiTeman: true }],
+    });
+    render(
+      <AppFeedbackProvider>
+        <CustomerBookingFlow client={client} />
+      </AppFeedbackProvider>,
+    );
+    expect(await screen.findByText(/Kursi untuk teman Anda/)).toBeVisible();
+    await userEvent.click(screen.getByRole('button', { name: 'Lanjutkan ke review booking' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Ya, konfirmasi booking' }));
+    expect(client.create).toHaveBeenCalled();
+  });
+
+  it('menjelaskan bila member sudah terdaftar dan tidak punya paket bawa teman', async () => {
+    window.history.replaceState({}, '', `?slot=${options.slot.id}`);
+    render(
+      <AppFeedbackProvider>
+        <CustomerBookingFlow
+          client={bookingClient({
+            ...options,
+            packages: [],
+            eligibility: {
+              ...options.eligibility,
+              canBook: false,
+              reasonCode: 'ALREADY_BOOKED',
+              requiredAction: null,
+            },
+          })}
+        />
+      </AppFeedbackProvider>,
+    );
+    expect(await screen.findByText('Anda sudah terdaftar di kelas ini', { exact: false })).toBeVisible();
+  });
+
   it('keeps the retry key for one intent and rotates it when the selected package changes', async () => {
     window.history.replaceState({}, '', `?slot=${options.slot.id}`);
     const secondPackage = {

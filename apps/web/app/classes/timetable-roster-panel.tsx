@@ -24,6 +24,8 @@ export interface Calon {
   paket: CustomerPackageBalance | null;
   /** Alasan tidak bisa ditambahkan; null bila bisa. */
   kendala: string | null;
+  /** Member sudah di kelas ini; yang ditambahkan adalah kursi untuk temannya (paket bawa teman). */
+  teman?: boolean;
 }
 
 /** Pencarian baru dikirim setelah dua huruf dan jeda singkat, agar tidak memanggil server per ketukan. */
@@ -87,6 +89,25 @@ export function pilihCalon(
   if (cocokTipeSemua.length > cocokTipe.length)
     return { customer, paket: null, kendala: 'Paketnya berlaku di cabang lain' };
   return { customer, paket: null, kendala: 'Belum punya paket untuk kelas ini' };
+}
+
+/**
+ * Calon hasil pencarian. Member yang belum di kelas memakai paket terbaiknya. Member yang sudah di
+ * kelas hanya muncul lagi bila punya paket "bawa teman" yang masih punya jatah kursi teman di kelas
+ * ini; selain itu ia tidak ditampilkan (satu member satu kursi).
+ */
+export function calonUntuk(
+  customer: BookingCustomer,
+  packages: readonly CustomerPackageBalance[],
+  slot: Pick<ClassSlot, 'classTypeId' | 'startAt' | 'timezone'> & { branchId?: string },
+  kursiMember: ReadonlyMap<string, number>,
+): Calon | null {
+  const kursi = kursiMember.get(customer.id) ?? 0;
+  if (kursi === 0) return pilihCalon(customer, packages, slot, slot.timezone);
+  const paketTeman = packages.filter((item) => (item.maksTeman ?? 0) >= kursi);
+  if (!paketTeman.length) return null;
+  const calon = pilihCalon(customer, paketTeman, slot, slot.timezone);
+  return calon.paket ? { ...calon, teman: true } : null;
 }
 
 export function TimetableRosterPanel({
@@ -160,10 +181,12 @@ export function TimetableRosterPanel({
     };
   }, [client, slot.id]);
 
-  const sudahTerdaftar = useMemo(
-    () => new Set(peserta.map((item) => item.customerUserId)),
-    [peserta],
-  );
+  /** Jumlah kursi yang sudah dipakai tiap member di kelas ini (termasuk kursi temannya). */
+  const kursiMember = useMemo(() => {
+    const peta = new Map<string, number>();
+    for (const item of peserta) peta.set(item.customerUserId, (peta.get(item.customerUserId) ?? 0) + 1);
+    return peta;
+  }, [peserta]);
 
   useEffect(() => {
     const kata = query.trim();
@@ -180,8 +203,8 @@ export function TimetableRosterPanel({
           if (batal) return;
           setHasilCari(
             customers
-              .filter((customer) => !sudahTerdaftar.has(customer.id))
-              .map((customer) => pilihCalon(customer, packages, slot, slot.timezone))
+              .map((customer) => calonUntuk(customer, packages, slot, kursiMember))
+              .filter((calon): calon is Calon => calon !== null)
               .sort((a, b) => Number(Boolean(a.kendala)) - Number(Boolean(b.kendala))),
           );
         })
@@ -196,7 +219,7 @@ export function TimetableRosterPanel({
       batal = true;
       window.clearTimeout(timer);
     };
-  }, [canAdd, client, query, slot, sudahTerdaftar]);
+  }, [canAdd, client, query, slot, kursiMember]);
 
   const hasil = hasilCari;
 
@@ -204,6 +227,7 @@ export function TimetableRosterPanel({
 
   const tambah = async (calon: Calon) => {
     if (!calon.paket || !client.create) return;
+    const niat = `tambah:${calon.customer.id}:${calon.teman ? 'teman' : 'member'}`;
     setBusyId(calon.customer.id);
     setFailure('');
     try {
@@ -214,9 +238,9 @@ export function TimetableRosterPanel({
           customerUserId: calon.customer.id,
           source: 'ADMIN_ASSISTED',
         },
-        kunciNiat(`tambah:${calon.customer.id}`),
+        kunciNiat(niat),
       );
-      intentKeys.current.delete(`tambah:${calon.customer.id}`);
+      intentKeys.current.delete(niat);
       setQuery('');
       await muatPeserta();
       onChanged();
@@ -313,7 +337,7 @@ export function TimetableRosterPanel({
               >
                 {hasil.map((calon, index) => (
                   <li
-                    key={calon.customer.id}
+                    key={`${calon.customer.id}:${calon.teman ? 'teman' : 'member'}`}
                     className={index > 0 ? 'border-t border-dd-line/60' : undefined}
                   >
                     {calon.kendala ? (
@@ -335,9 +359,12 @@ export function TimetableRosterPanel({
                       >
                         <span className="min-w-0">
                           <span className="block text-base font-bold text-dd-ink">
-                            {calon.customer.displayName}
+                            {calon.teman
+                              ? `Teman dari ${calon.customer.displayName}`
+                              : calon.customer.displayName}
                           </span>
                           <span className="block text-sm text-dd-forest">
+                            {calon.teman ? 'Kursi teman · ' : ''}
                             {calon.paket?.packageName ?? calon.paket?.name ?? 'Paket aktif'} · sisa{' '}
                             {calon.paket?.available}
                             {calon.paket?.customer?.id &&
@@ -349,7 +376,11 @@ export function TimetableRosterPanel({
                           </span>
                         </span>
                         <span className="shrink-0 rounded-[6px] bg-dd-forest px-3 py-1.5 text-sm font-bold text-white">
-                          {busyId === calon.customer.id ? 'Menambah…' : 'Tambah'}
+                          {busyId === calon.customer.id
+                            ? 'Menambah…'
+                            : calon.teman
+                              ? 'Tambah teman'
+                              : 'Tambah'}
                         </span>
                       </button>
                     )}
@@ -390,8 +421,15 @@ export function TimetableRosterPanel({
                 >
                   <span className="min-w-0">
                     <span className="block text-base text-dd-ink">
-                      {booking.customer?.displayName ?? 'Member'}
+                      {booking.kursiTeman
+                        ? booking.namaTeman || `Teman dari ${booking.customer?.displayName ?? 'member'}`
+                        : (booking.customer?.displayName ?? 'Member')}
                     </span>
+                    {booking.kursiTeman && booking.namaTeman && (
+                      <span className="block text-sm text-dd-muted">
+                        Teman dari {booking.customer?.displayName ?? 'member'}
+                      </span>
+                    )}
                     {booking.sessionBalance && (
                       <span className="block text-sm text-dd-muted">
                         Sisa {booking.sessionBalance.available} sesi

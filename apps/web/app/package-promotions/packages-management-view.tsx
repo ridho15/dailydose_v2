@@ -40,6 +40,7 @@ export type PackageFormValues = {
   isShareable?: boolean;
   selectedBranches?: string[];
   selectedClassTypes?: string[];
+  bawaTeman?: boolean;
   reason?: string;
 };
 
@@ -193,6 +194,7 @@ export function PackagesManagementView() {
       effectiveFrom: today,
       effectiveUntil,
       isMultiBranch: Boolean(source.isMultiBranch),
+      bawaTeman: Boolean(source.bawaTeman),
       isShareable: Boolean(source.isShareable),
       selectedBranches: branchIds,
       selectedClassTypes: classTypeIds,
@@ -373,6 +375,7 @@ export function PackagesManagementView() {
                     {stateLabels[item.effectiveState ?? 'INACTIVE']}
                   </Badge>
                   {item.livePromotion && <Badge tone="warning">Promo live</Badge>}
+                  {item.bawaTeman && <Badge tone="neutral">Bawa teman</Badge>}
                 </div>
               ),
             },
@@ -724,6 +727,7 @@ function PackageCreateForm({
           priceRp: Number(data.get('priceRp')),
           effectiveFrom: String(data.get('effectiveFrom')),
           effectiveUntil: data.get('effectiveUntil') || null,
+          bawaTeman: data.get('bawaTeman') === 'on',
           reason: String(data.get('reason')),
         });
       }}
@@ -927,6 +931,21 @@ function PackageCreateForm({
           defaultValue={initialValues?.effectiveUntil ?? ''}
         />
       </div>
+      <label className="flex items-start gap-2 rounded-dd-md border border-dd-line p-3 text-sm cursor-pointer">
+        <input
+          type="checkbox"
+          name="bawaTeman"
+          defaultChecked={Boolean(initialValues?.bawaTeman)}
+          className="accent-dd-forest mt-0.5 size-4 cursor-pointer rounded"
+        />
+        <span>
+          <span className="block font-semibold text-dd-ink">Boleh bawa teman</span>
+          <span className="block text-dd-muted">
+            Pemilik paket boleh menambah 1 kursi untuk temannya (bukan member) di kelas yang sama.
+            Kursi teman memakai 1 sesi paket ini. Hanya admin yang bisa menambahkannya dari roster.
+          </span>
+        </span>
+      </label>
       <TextInput
         name="reason"
         label="Alasan"
@@ -1017,6 +1036,7 @@ function EditPackageModal({
           const priceRp = Number(data.get('priceRp'));
           const effectiveUntil = data.get('effectiveUntil') ? String(data.get('effectiveUntil')) : null;
           const reason = String(data.get('reason') || '').trim();
+          const bawaTeman = data.get('bawaTeman') === 'on';
 
           const commercialChanged =
             sessionCount !== pkg.sessionCount ||
@@ -1046,6 +1066,7 @@ function EditPackageModal({
                 priceRp,
                 effectiveFrom: new Date().toISOString().slice(0, 10),
                 effectiveUntil,
+                bawaTeman,
                 isShareable,
                 reason,
               });
@@ -1057,6 +1078,7 @@ function EditPackageModal({
                 ...(canEditCommercialInPlace
                   ? { sessionCount, durationDays, priceRp, effectiveUntil }
                   : {}),
+                bawaTeman,
                 reason,
               });
             }
@@ -1162,6 +1184,21 @@ function EditPackageModal({
           />
         </div>
 
+        <label className="flex items-start gap-2 rounded-dd-md border border-dd-line p-3 text-sm cursor-pointer">
+          <input
+            type="checkbox"
+            name="bawaTeman"
+            defaultChecked={Boolean(pkg.bawaTeman)}
+            className="accent-dd-forest mt-0.5 size-4 cursor-pointer rounded"
+          />
+          <span>
+            <span className="block font-semibold text-dd-ink">Boleh bawa teman</span>
+            <span className="block text-dd-muted">
+              Pemilik paket boleh menambah 1 kursi untuk temannya (bukan member) di kelas yang sama.
+              Kursi teman memakai 1 sesi paket ini. Hanya admin yang bisa menambahkannya dari roster.
+            </span>
+          </span>
+        </label>
         <TextInput
           name="reason"
           label="Alasan perubahan (Audit Log)"

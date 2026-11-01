@@ -64,6 +64,11 @@ const eligibilityCopy = {
     title: 'Waktu booking sudah ditutup',
     description: 'Hubungi studio jika Anda memerlukan bantuan untuk jadwal ini.',
   },
+  ALREADY_BOOKED: {
+    title: 'Anda sudah terdaftar di kelas ini',
+    description:
+      'Booking kedua di kelas yang sama hanya bisa dengan paket yang boleh membawa teman.',
+  },
 } as const;
 
 const createIntent = () => ({ signature: '', key: crypto.randomUUID() });
@@ -464,6 +469,12 @@ export function CustomerBookingFlow({ client = browserBookingClient }: { client?
                   pilih jadwal sesi lain yang masih memiliki kuota tersedia.
                 </p>
               )}
+              {eligibility.reasonCode === 'ALREADY_BOOKED' && (
+                <p>
+                  Satu akun satu kursi per kelas. Untuk mengajak teman, gunakan paket yang boleh
+                  membawa teman (misalnya Double Trouble Deal), atau hubungi studio.
+                </p>
+              )}
               {eligibility.reasonCode === 'BOOKING_CUTOFF_PASSED' && (
                 <p>
                   Batas waktu booking mandiri untuk jadwal ini telah ditutup. Silakan hubungi studio
@@ -604,6 +615,11 @@ export function CustomerBookingFlow({ client = browserBookingClient }: { client?
                               <div className="flex flex-wrap items-center justify-between gap-2">
                                 <strong className="text-base font-semibold text-dd-ink">
                                   {item.name}
+                                  {item.kursiTeman && (
+                                    <span className="block text-sm font-medium text-dd-forest">
+                                      Kursi untuk teman Anda (Anda sudah terdaftar di kelas ini)
+                                    </span>
+                                  )}
                                 </strong>
                                 <span className="inline-flex items-center rounded-full bg-dd-success-soft px-2.5 py-0.5 text-xs font-semibold text-dd-success">
                                   {item.available} sesi tersedia

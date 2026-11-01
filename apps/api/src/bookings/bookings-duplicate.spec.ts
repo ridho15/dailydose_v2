@@ -19,6 +19,7 @@ describe('BookingsService - Anti-Booking Kembar Duplicate Guard (Poin 8)', () =>
   function createService(
     existingBookingStatus?: 'BOOKED' | 'ATTENDED' | 'CANCELLED' | 'SCHEDULE_CONFLICT' | null,
     activeBookingsCount = 0,
+    maksTeman = 0,
   ) {
     const futureDate = new Date(Date.now() + 24 * 3600 * 1000);
     const mockSlot = {
@@ -44,6 +45,7 @@ describe('BookingsService - Anti-Booking Kembar Duplicate Guard (Poin 8)', () =>
       validUntil: new Date(Date.now() + 30 * 24 * 3600 * 1000),
       remainingSessions: 5,
       purchase: { status: 'PAID' },
+      packageId: 'pkg-1',
       package: { id: 'pkg-1', name: 'Pkg 10', branchId, classTypeId: 'ct-1' },
     };
 
@@ -54,6 +56,10 @@ describe('BookingsService - Anti-Booking Kembar Duplicate Guard (Poin 8)', () =>
 
     const tx = {
       $queryRaw: jest.fn(async () => [{ id: slotId }]),
+      paketBawaTeman: {
+        findMany: jest.fn(async () => (maksTeman ? [{ packageId: 'pkg-1', maksTeman }] : [])),
+      },
+      bookingTeman: { create: jest.fn() },
       slotKelas: {
         findUnique: jest.fn(async () => mockSlot),
         update: jest.fn(async () => ({})),
@@ -66,6 +72,11 @@ describe('BookingsService - Anti-Booking Kembar Duplicate Guard (Poin 8)', () =>
       },
       pemesananKelas: {
         count: jest.fn(async ({ where }: any) => {
+          // Booking milik member ini di kelas yang sama (pengecekan duplikat).
+          if (where?.userId && where?.classSlotId === slotId)
+            return existingBookingStatus && ['BOOKED', 'ATTENDED'].includes(existingBookingStatus)
+              ? 1
+              : 0;
           if (where?.classSlotId) return activeBookingsCount;
           return 0;
         }),
@@ -212,6 +223,65 @@ describe('BookingsService - Anti-Booking Kembar Duplicate Guard (Poin 8)', () =>
     ).rejects.toMatchObject({
       code: 'CLASS_CAPACITY_FULL',
       status: HttpStatus.CONFLICT,
+    });
+  });
+
+  describe('paket "bawa teman"', () => {
+    const staf = {
+      sessionId: 's',
+      userId: 'staff-1',
+      roles: [{ role: 'ADMIN', branchId }],
+      capabilities: ['booking:create:assisted', 'booking:read'],
+      branchIds: [branchId],
+    };
+    const tambahLagi = (service: BookingsService, p: unknown, source: 'SELF' | 'ADMIN_ASSISTED') =>
+      service.create(
+        p as any,
+        { classSlotId: slotId, customerPackageId, customerUserId, source, namaTeman: 'Rani' },
+        `idem-${source}-${Math.random()}`,
+        'corr',
+      );
+
+    it('staf boleh memasukkan member yang sama sekali lagi sebagai kursi teman', async () => {
+      const { service, tx } = createService('BOOKED', 1, 1);
+      const result = await tambahLagi(service, staf, 'ADMIN_ASSISTED');
+      expect(result.status).toBe(HttpStatus.CREATED);
+      expect(tx.bookingTeman.create).toHaveBeenCalledWith({
+        data: { bookingId: 'new-bkg-id', packageId: 'pkg-1', namaTeman: 'Rani' },
+      });
+    });
+
+    it('paket tanpa centang bawa teman tetap ditolak ganda', async () => {
+      const { service, tx } = createService('BOOKED', 1, 0);
+      await expect(tambahLagi(service, staf, 'ADMIN_ASSISTED')).rejects.toMatchObject({
+        code: 'DUPLICATE_ACTIVE_BOOKING',
+      });
+      expect(tx.bookingTeman.create).not.toHaveBeenCalled();
+    });
+
+    it('member sendiri juga boleh booking ganda bila memakai paket bawa teman', async () => {
+      const { service, tx } = createService('BOOKED', 1, 1);
+      const result = await service.create(
+        principal as any,
+        { classSlotId: slotId, customerPackageId, source: 'SELF' },
+        'idem-self-teman',
+        'corr',
+      );
+      expect(result.status).toBe(HttpStatus.CREATED);
+      expect(tx.bookingTeman.create).toHaveBeenCalled();
+    });
+
+    it('member dengan paket biasa tetap ditolak booking ganda', async () => {
+      const { service } = createService('BOOKED', 1, 0);
+      await expect(tambahLagi(service, principal, 'SELF')).rejects.toMatchObject({
+        code: 'DUPLICATE_ACTIVE_BOOKING',
+      });
+    });
+
+    it('booking pertama member tidak ditandai sebagai kursi teman', async () => {
+      const { service, tx } = createService(null, 0, 1);
+      await tambahLagi(service, staf, 'ADMIN_ASSISTED');
+      expect(tx.bookingTeman.create).not.toHaveBeenCalled();
     });
   });
 

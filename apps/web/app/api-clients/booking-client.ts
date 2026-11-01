@@ -36,6 +36,8 @@ export interface BookingCommand {
   customerPackageId: string;
   customerUserId?: string;
   source: 'SELF' | 'ADMIN_ASSISTED';
+  /** Kursi teman (paket "bawa teman"): nama temannya, opsional. */
+  namaTeman?: string;
 }
 
 export interface BookingSlotSummary {
@@ -108,6 +110,8 @@ export interface CustomerPackageBalance {
   expiryAt: Date;
   packageName?: string;
   name?: string;
+  /** Kursi teman yang boleh ditambahkan per kelas (paket "bawa teman"); 0 bila tidak. */
+  maksTeman?: number;
   isShareable?: boolean;
   sharedWithUserIds?: string[];
   sharedMembers?: Array<{
@@ -244,6 +248,9 @@ export type CustomerBookingRecord = Omit<
   customer?: { id: string; displayName: string; phoneMasked: string | null };
   createdBy?: { id: string; displayName: string };
   sessionBalance?: { ledgerBalance: number; reserved: number; available: number };
+  /** Kursi teman: booking atas nama member ini, yang datang temannya. */
+  kursiTeman?: boolean;
+  namaTeman?: string | null;
   reschedules?: Array<{
     id: string;
     status: string;
@@ -315,6 +322,8 @@ export type CustomerBookingOptions = {
     available: number;
     projectedAvailable: number;
     expiryAt: Date;
+    /** Anda sudah di kelas ini; booking dengan paket ini adalah kursi untuk teman Anda. */
+    kursiTeman?: boolean;
   }>;
   eligibility: {
     canBook: boolean;
@@ -325,6 +334,7 @@ export type CustomerBookingOptions = {
       | 'SLOT_FULL'
       | 'SLOT_UNAVAILABLE'
       | 'BOOKING_CUTOFF_PASSED'
+      | 'ALREADY_BOOKED'
       | null;
     requiredAction:
       'COMPLETE_IDENTITY_VERIFICATION' | 'BUY_MATCHING_PACKAGE' | 'CONTACT_STUDIO' | null;
