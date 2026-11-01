@@ -75,4 +75,38 @@ describe('UlasanView', () => {
     render(<UlasanView client={{ laporan }} />);
     expect(await screen.findByText(/Belum ada ulasan pada rentang ini/)).toBeInTheDocument();
   });
+
+  it('membatasi daftar ulasan dengan pagination 10 baris per halaman saat data lebih dari 10', async () => {
+    const user = userEvent.setup();
+    const ulasanBanyak = Array.from({ length: 15 }, (_, i) =>
+      baris(`u-${i + 1}`, 'i1', 'Dina', 5, `Catatan ulasan nomor ${i + 1}`),
+    );
+    const laporan = vi.fn().mockResolvedValue({
+      from: '',
+      until: '',
+      instruktur: [
+        {
+          instructorId: 'i1',
+          namaInstruktur: 'Dina',
+          jumlahUlasan: 15,
+          rataRata: 5,
+          sebaran: [0, 0, 0, 0, 15],
+        },
+      ],
+      ulasan: ulasanBanyak,
+    });
+
+    render(<UlasanView client={{ laporan }} now={Date.parse('2026-10-29T00:00:00Z')} />);
+
+    expect(await screen.findByText('Catatan ulasan nomor 1')).toBeVisible();
+    expect(screen.getByText('Catatan ulasan nomor 10')).toBeVisible();
+    expect(screen.queryByText('Catatan ulasan nomor 11')).toBeNull();
+
+    const tombolBerikutnya = screen.getByRole('button', { name: 'Berikutnya' });
+    await user.click(tombolBerikutnya);
+
+    expect(screen.getByText('Catatan ulasan nomor 11')).toBeVisible();
+    expect(screen.getByText('Catatan ulasan nomor 15')).toBeVisible();
+    expect(screen.queryByText('Catatan ulasan nomor 1')).toBeNull();
+  });
 });

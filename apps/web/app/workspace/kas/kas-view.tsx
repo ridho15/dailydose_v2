@@ -13,6 +13,8 @@ import { useSessionContext } from '../../session-context';
 import { Feedback, Skeleton } from '../../ui';
 import { Modal, useOptionalAppFeedback } from '../../components/app-feedback';
 import { Button } from '../../components/actions';
+import { Pagination } from '../../components/admin/admin-ui';
+import { ADMIN_PAGE_SIZE } from '../../lib/pagination';
 import { tigaBulan } from '../owner-home';
 import { SettlementOwnerSection } from './settlement-owner';
 import { TransferHonorSection } from './transfer-honor';
@@ -249,6 +251,7 @@ export function KasView({
   const [periode, setPeriode] = useState(bulan[0]!);
   const [jurnal, setJurnal] = useState<JurnalKas | null>(null);
   const [gagal, setGagal] = useState('');
+  const [page, setPage] = useState(1);
   const feedback = useOptionalAppFeedback();
   const [koreksi, setKoreksi] = useState<{
     id: string;
@@ -336,6 +339,18 @@ export function KasView({
     setJurnal(null);
     return muat();
   }, [muat]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [periode, branchId]);
+
+  const totalRows = jurnal?.rows.length ?? 0;
+  const totalPages = Math.ceil(totalRows / ADMIN_PAGE_SIZE) || 1;
+  const pagedRows = useMemo(() => {
+    if (!jurnal) return [];
+    const start = (page - 1) * ADMIN_PAGE_SIZE;
+    return jurnal.rows.slice(start, start + ADMIN_PAGE_SIZE);
+  }, [jurnal, page]);
 
   const lintasCabang = !branchId;
   const bisaSettlement = Boolean(
@@ -455,7 +470,7 @@ export function KasView({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-dd-line/70">
-                  {jurnal.rows.map((r) => (
+                  {pagedRows.map((r) => (
                     <tr key={r.id} className="align-top">
                       <td className="whitespace-nowrap py-3 pr-4 text-dd-muted">
                         {tanggalPendek(r.tanggal)}
@@ -523,6 +538,21 @@ export function KasView({
                   ))}
                 </tbody>
               </table>
+            </div>
+          )}
+          {totalRows > ADMIN_PAGE_SIZE && (
+            <div className="pt-2">
+              <Pagination
+                currentPage={page}
+                totalPages={totalPages}
+                totalItems={totalRows}
+                pageSize={ADMIN_PAGE_SIZE}
+                hasPrevious={page > 1}
+                hasNext={page < totalPages}
+                onPrevious={() => setPage((p) => Math.max(1, p - 1))}
+                onNext={() => setPage((p) => Math.min(totalPages, p + 1))}
+                onPageChange={(targetPage) => setPage(targetPage)}
+              />
             </div>
           )}
         </>

@@ -16,7 +16,7 @@ import {
 import { EmptyState, Feedback, Skeleton, StatusBadge } from '../ui';
 import { AdminPageHeader } from '../components/admin/admin-page-header';
 import { useActiveBranchState, useSessionContext } from '../session-context';
-import { DateInput, SearchInput, SearchSelect, SelectInput } from '../components/forms';
+import { AsyncSearchSelect, DateInput, SearchInput, SearchSelect, SelectInput } from '../components/forms';
 import { Button, actionClasses } from '../components/actions';
 import { Drawer, Modal, useAppFeedback } from '../components/app-feedback';
 import { ReasonDialog } from '../components/admin/reason-dialog';
@@ -252,17 +252,23 @@ export function BookingView({
   }, [branchId]);
 
   useEffect(() => {
-    if (createOpen && branchId && customers.length === 0) {
+    if (createOpen && branchId && (slots.length === 0 || packages.length === 0)) {
       client
         .discover(branchId)
         .then((discovery) => {
-          setCustomers(discovery.customers);
+          setCustomers((prev) => {
+            const map = new Map(prev.map((c) => [c.id, c]));
+            for (const c of discovery.customers) {
+              if (!map.has(c.id)) map.set(c.id, c);
+            }
+            return Array.from(map.values());
+          });
           setPackages(discovery.packages);
           setSlots(discovery.slots);
         })
         .catch(() => {});
     }
-  }, [createOpen, branchId, customers.length, client]);
+  }, [createOpen, branchId, slots.length, packages.length, client]);
 
   const customerPackages = useMemo(
     () =>
@@ -952,18 +958,47 @@ export function BookingView({
             <strong>{sessionContext?.activeBranch?.name ?? 'aktif'}</strong>. Sistem otomatis
             memastikan sisa sesi member mencukupi dan kapasitas kelas masih tersedia.
           </p>
-          <SearchSelect
+          <AsyncSearchSelect
             label="Pelanggan"
             value={customerId}
-            disabled={busy || customers.length === 0}
-            placeholder="Pilih pelanggan"
-            options={customers.map((customer) => ({
-              id: customer.id,
-              label: customer.displayName,
-              description:
-                customer.phoneMasked ??
-                `${customer.eligiblePackageCount ?? 0} paket dapat digunakan`,
-            }))}
+            disabled={busy || !branchId}
+            placeholder="Cari nama, no. HP, atau email pelanggan"
+            emptyMessage="Pelanggan tidak ditemukan. Pastikan ejaan nama atau nomor HP sesuai."
+            selectedOption={
+              selectedCustomer
+                ? {
+                    id: selectedCustomer.id,
+                    label: selectedCustomer.displayName,
+                    description:
+                      selectedCustomer.phoneMasked ??
+                      `${selectedCustomer.eligiblePackageCount ?? 0} paket dapat digunakan`,
+                  }
+                : undefined
+            }
+            loadOptions={async (query) => {
+              if (!branchId) return [];
+              try {
+                const results = client.searchCustomers
+                  ? await client.searchCustomers(branchId, query)
+                  : customers;
+                if (results && results.length > 0) {
+                  setCustomers((prev) => {
+                    const map = new Map(prev.map((c) => [c.id, c]));
+                    for (const r of results) map.set(r.id, r);
+                    return Array.from(map.values());
+                  });
+                  return results.map((c) => ({
+                    id: c.id,
+                    label: c.displayName,
+                    description:
+                      c.phoneMasked ?? `${c.eligiblePackageCount ?? 0} paket dapat digunakan`,
+                  }));
+                }
+                return [];
+              } catch {
+                return [];
+              }
+            }}
             onChange={async (value) => {
               setCustomerId(value);
               setPackageId('');

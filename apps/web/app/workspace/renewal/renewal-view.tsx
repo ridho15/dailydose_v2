@@ -9,6 +9,8 @@ import {
   type TrendCohort,
 } from '@/api-clients/retention-client';
 import { EmptyState, Feedback, Skeleton } from '../../ui';
+import { Pagination } from '../../components/admin/admin-ui';
+import { ADMIN_PAGE_SIZE } from '../../lib/pagination';
 import { useSessionContext } from '../../session-context';
 
 const rp = (n: number) => `Rp ${n.toLocaleString('id-ID')}`;
@@ -75,6 +77,7 @@ export function RenewalView({
   const [periode, setPeriode] = useState(() => new Date(now).toISOString().slice(0, 7));
   const [kohort, setKohort] = useState<ExpiryCohort | null>(null);
   const [failure, setFailure] = useState('');
+  const [page, setPage] = useState(1);
 
   useEffect(() => {
     client
@@ -98,7 +101,17 @@ export function RenewalView({
     };
   }, [branchId, client, periode]);
 
+  useEffect(() => {
+    setPage(1);
+  }, [periode, branchId]);
+
   const daftar = useMemo(() => (kohort ? urutDaftar(kohort.rows) : []), [kohort]);
+  const totalPages = Math.ceil(daftar.length / ADMIN_PAGE_SIZE) || 1;
+  const pagedDaftar = useMemo(() => {
+    const start = (page - 1) * ADMIN_PAGE_SIZE;
+    return daftar.slice(start, start + ADMIN_PAGE_SIZE);
+  }, [daftar, page]);
+
   const bulanIni = new Date(now).toISOString().slice(0, 7);
   const tigaBulanBelumKembali = tren.reduce((n, t) => n + t.potentialLoss.paidRp, 0);
   const tigaBulanMember = tren.reduce((n, t) => n + t.potentialLoss.customers, 0);
@@ -211,7 +224,7 @@ export function RenewalView({
                 lencana="HOT"
                 tegas
                 ringkas={kohort.segments.hot}
-                belumKembali={belumKembaliPer(kohort.rows, 'HOT')}
+                belumKembali={belumKembaliPer(kohort.rows, 'HOT') }
                 keterangan="Sesi habis lebih cepat dari masa berlaku. Member paling rajin latihan, peluang renewal paling besar. Hubungi duluan."
               />
               <KartuAlasan
@@ -240,7 +253,7 @@ export function RenewalView({
                   </tr>
                 </thead>
                 <tbody>
-                  {daftar.map((r) => {
+                  {pagedDaftar.map((r) => {
                     const wa = nomorWhatsApp(r.phone);
                     const pesan = `Halo ${r.customerName ?? ''}, paket ${r.packageName ?? 'Anda'} di Daily Dose sudah habis. Mau kami bantu perpanjang?`;
                     return (
@@ -310,6 +323,21 @@ export function RenewalView({
                 </tbody>
               </table>
             </div>
+            {daftar.length > ADMIN_PAGE_SIZE && (
+              <div className="pt-2">
+                <Pagination
+                  currentPage={page}
+                  totalPages={totalPages}
+                  totalItems={daftar.length}
+                  pageSize={ADMIN_PAGE_SIZE}
+                  hasPrevious={page > 1}
+                  hasNext={page < totalPages}
+                  onPrevious={() => setPage((p) => Math.max(1, p - 1))}
+                  onNext={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  onPageChange={(targetPage) => setPage(targetPage)}
+                />
+              </div>
+            )}
             <p className="m-0 text-sm text-dd-muted">
               Paket yang dibekukan tidak dihitung karena masa berlakunya masih ditambah saat dibuka.
             </p>

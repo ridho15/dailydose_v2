@@ -549,19 +549,32 @@ export function DetailPanel({
             </ActionRow>
           ) : (isPublished || isConfirmed) && (slot.bookedCount ?? 0) > 0 ? (
             <ActionRow
-              title="Jadwal dan tipe kelas"
-              description={`${slot.bookedCount} peserta sudah memesan kelas ini. Tipe kelas dan jadwal terkunci untuk melindungi jadwal peserta.`}
+              title="Kapasitas & penyesuaian kelas"
+              description={`${slot.bookedCount} peserta sudah memesan kelas ini. Jadwal dan tipe kelas terkunci, namun Anda dapat menyesuaikan kapasitas slot atau batas cutoff.`}
             >
               <div>
                 <Button
                   variant="secondary"
-                  className="w-full sm:w-auto opacity-60"
-                  disabled
-                  title="Jadwal dan tipe kelas terkunci karena sudah ada peserta yang booking"
+                  className="w-full sm:w-auto"
+                  disabled={busy}
+                  onClick={() => setEditOpen((current) => !current)}
                 >
-                  Edit kelas (Terkunci)
+                  {editOpen ? 'Tutup edit' : 'Ubah kapasitas kelas'}
                 </Button>
               </div>
+              {editOpen && (
+                <DraftEditForm
+                  slot={slot}
+                  classTypes={classTypes}
+                  instructors={instructors}
+                  studios={studios}
+                  busy={busy}
+                  onSubmit={async (input) => {
+                    await onUpdate(input);
+                    setEditOpen(false);
+                  }}
+                />
+              )}
             </ActionRow>
           ) : null}
         </DetailSection>
@@ -894,6 +907,7 @@ function DraftEditForm({
   );
   const [selectedRoomId, setSelectedRoomId] = useState(slot.roomId ?? '');
   const rooms = branchStudios.find((studio) => studio.id === selectedStudioId)?.rooms ?? [];
+  const hasBookings = (slot.status === 'PUBLISHED' || slot.status === 'CONFIRMED') && (slot.bookedCount ?? 0) > 0;
 
   return (
     <form
@@ -902,6 +916,30 @@ function DraftEditForm({
       onSubmit={(event) => {
         event.preventDefault();
         const data = new FormData(event.currentTarget);
+        if (hasBookings) {
+          setFailure('');
+          const rawCap = String(data.get('capacity') ?? '').trim();
+          const parsedCap = rawCap ? Number(rawCap) : undefined;
+          if (parsedCap !== undefined && (parsedCap < (slot.bookedCount ?? 0) || parsedCap < 1)) {
+            setFailure(`Kapasitas tidak boleh kurang dari jumlah peserta terdaftar (${slot.bookedCount ?? 0}).`);
+            return;
+          }
+          const rawCutoff = String(data.get('bookingCutoffHours') ?? '').trim();
+          const parsedCutoff = rawCutoff === 'default' || rawCutoff === '' ? null : Number(rawCutoff);
+
+          void onSubmit({
+            classTypeId: slot.classTypeId,
+            studioId: slot.studioId || undefined,
+            roomId: slot.roomId || null,
+            instructorUserId: slot.instructorUserId || null,
+            startAt: slot.startAt,
+            endAt: slot.endAt,
+            capacity: parsedCap,
+            bookingCutoffHours: parsedCutoff,
+            reason: String(data.get('reason') ?? '').trim() || undefined,
+          });
+          return;
+        }
         try {
           const startAt = zonedLocalDateTime(
             String(data.get('date')),
@@ -931,12 +969,12 @@ function DraftEditForm({
           const parsedCutoff = rawCutoff === 'default' || rawCutoff === '' ? null : Number(rawCutoff);
 
           void onSubmit({
-            classTypeId: String(data.get('classTypeId') || slot.classTypeId),
-            studioId: selectedStudioId || undefined,
-            roomId: selectedRoomId || null,
-            instructorUserId: String(data.get('instructorUserId') ?? '').trim() || null,
-            startAt,
-            endAt,
+            classTypeId: hasBookings ? slot.classTypeId : String(data.get('classTypeId') || slot.classTypeId),
+            studioId: hasBookings ? (slot.studioId || undefined) : (selectedStudioId || undefined),
+            roomId: hasBookings ? (slot.roomId || null) : (selectedRoomId || null),
+            instructorUserId: hasBookings ? (slot.instructorUserId || null) : (String(data.get('instructorUserId') ?? '').trim() || null),
+            startAt: hasBookings ? slot.startAt : startAt,
+            endAt: hasBookings ? slot.endAt : endAt,
             capacity: parsedCap,
             bookingCutoffHours: parsedCutoff,
             reason: String(data.get('reason') ?? '').trim() || undefined,
@@ -946,11 +984,17 @@ function DraftEditForm({
         }
       }}
     >
+      {hasBookings && (
+        <Feedback kind="warning">
+          Kelas ini sudah memiliki {slot.bookedCount} peserta yang booking. Jadwal, tipe kelas, dan ruangan dikunci untuk kenyamanan peserta, namun kapasitas tempat/bed dapat disesuaikan (minimal {slot.bookedCount} peserta).
+        </Feedback>
+      )}
       <SearchSelect
         label="Tipe kelas"
         name="classTypeId"
         defaultValue={slot.classTypeId}
         required
+        disabled={hasBookings}
         options={classTypes.map((item) => ({
           id: item.id,
           label: item.name,
@@ -963,6 +1007,7 @@ function DraftEditForm({
             label="Area Studio"
             name="studioId"
             value={selectedStudioId}
+            disabled={hasBookings}
             placeholder="Pilih area studio"
             options={branchStudios.map((item) => ({
               id: item.id,
@@ -978,7 +1023,7 @@ function DraftEditForm({
             label="Ruangan"
             name="roomId"
             value={selectedRoomId}
-            disabled={!selectedStudioId || rooms.length === 0}
+            disabled={hasBookings || !selectedStudioId || rooms.length === 0}
             placeholder={rooms.length ? 'Opsional' : 'Tidak ada ruangan aktif'}
             options={rooms.map((item) => ({
               id: item.id,
@@ -994,12 +1039,13 @@ function DraftEditForm({
         name="instructorUserId"
         defaultValue={slot.instructorUserId ?? ''}
         placeholder="Tetapkan nanti"
+        disabled={hasBookings}
         options={instructors.map((item) => ({ id: item.id, label: item.displayName }))}
       />
       <div className="grid gap-3 sm:grid-cols-3">
-        <DateInput label="Tanggal" name="date" defaultValue={start.date} required />
-        <TextInput label="Mulai" name="startTime" type="time" defaultValue={start.time} required />
-        <TextInput label="Selesai" name="endTime" type="time" defaultValue={end.time} required />
+        <DateInput label="Tanggal" name="date" defaultValue={start.date} disabled={hasBookings} required={!hasBookings} />
+        <TextInput label="Mulai" name="startTime" type="time" defaultValue={start.time} disabled={hasBookings} required={!hasBookings} />
+        <TextInput label="Selesai" name="endTime" type="time" defaultValue={end.time} disabled={hasBookings} required={!hasBookings} />
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
         <TextInput

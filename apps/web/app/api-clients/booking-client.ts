@@ -463,6 +463,13 @@ export function normalizePackageBalance(item: any): CustomerPackageBalance {
 export interface BookingClient {
   discover(branchId: string): Promise<BookingDiscovery>;
   /**
+   * Cari pelanggan di cabang ini (nama, email, atau nomor HP) untuk assisted booking.
+   */
+  searchCustomers?(
+    branchId: string,
+    q?: string,
+  ): Promise<BookingCustomer[]>;
+  /**
    * Cari member di cabang ini lewat server (nama, email, atau nomor WhatsApp) beserta semua paket
    * mereka, termasuk yang sudah habis, supaya layar bisa menyebut alasannya tidak bisa ditambahkan.
    */
@@ -639,7 +646,7 @@ export const browserBookingClient: BookingClient = {
   async discover(branchId) {
     const [customerLookup, packages, published, confirmed] = await Promise.all([
       apiFetch<{ items: Array<{ id: string; label?: string; description?: string; metadata?: { eligiblePackageCount?: number } }> }>(
-        `/lookups/customers?branchId=${encodeURIComponent(branchId)}&limit=50`,
+        `/lookups/customers?branchId=${encodeURIComponent(branchId)}&limit=50&includeWithoutPackage=true`,
         { label: 'Memuat data pelanggan…' },
       ),
       apiFetch<{ items: Array<any> }>(
@@ -690,6 +697,30 @@ export const browserBookingClient: BookingClient = {
         )
         .sort((left, right) => left.startAt.getTime() - right.startAt.getTime()),
     };
+  },
+  async searchCustomers(branchId, q) {
+    const params = new URLSearchParams({
+      branchId,
+      limit: '25',
+      includeWithoutPackage: 'true',
+    });
+    if (q && q.trim()) {
+      params.set('q', q.trim());
+    }
+    const customerLookup = await apiFetch<{
+      items: Array<{
+        id: string;
+        label?: string;
+        description?: string;
+        metadata?: { eligiblePackageCount?: number };
+      }>;
+    }>(`/lookups/customers?${params.toString()}`, { label: 'Mencari data pelanggan…' });
+    return (customerLookup.items ?? []).map((user) => ({
+      id: user.id,
+      displayName: user.label || 'Pelanggan',
+      phoneMasked: user.description,
+      eligiblePackageCount: user.metadata?.eligiblePackageCount,
+    }));
   },
   async searchRosterCandidates(branchId, q) {
     // Member tanpa paket aktif ikut dicari, supaya layar menyebut alasannya alih-alih "tidak ada".

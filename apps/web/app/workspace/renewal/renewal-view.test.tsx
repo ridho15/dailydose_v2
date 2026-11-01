@@ -144,4 +144,35 @@ describe('RenewalView', () => {
     expect(await screen.findByText(/Tidak ada paket yang habis pada Oktober 2026/)).toBeVisible();
     expect(screen.queryByText('Rp 0')).toBeNull();
   });
+
+  it('membatasi daftar dengan pagination 10 baris per halaman saat data lebih dari 10', async () => {
+    const barisBanyak: RetentionRow[] = Array.from({ length: 15 }, (_, i) =>
+      baris({
+        customerPackageId: `pkg-${i + 1}`,
+        customerName: `Member ${String(i + 1).padStart(2, '0')}`,
+        validUntil: `2026-10-${String(i + 1).padStart(2, '0')}T00:00:00Z`,
+      }),
+    );
+    const kohortBanyak: ExpiryCohort = {
+      ...kohort,
+      total: ringkas(15, 22_500_000),
+      rows: barisBanyak,
+    };
+    const user = userEvent.setup();
+    render(<RenewalView client={client(kohortBanyak)} now={NOW} />);
+
+    expect(await screen.findByText('Member 01')).toBeVisible();
+    expect(screen.getByText('Member 10')).toBeVisible();
+    expect(screen.queryByText('Member 11')).toBeNull();
+
+    const navigasi = screen.getByRole('navigation', { name: 'Paginasi data' });
+    expect(navigasi).toBeVisible();
+
+    const tombolBerikutnya = screen.getByRole('button', { name: 'Berikutnya' });
+    await user.click(tombolBerikutnya);
+
+    expect(screen.getByText('Member 11')).toBeVisible();
+    expect(screen.getByText('Member 15')).toBeVisible();
+    expect(screen.queryByText('Member 01')).toBeNull();
+  });
 });

@@ -72,6 +72,7 @@ describe('lookups only serve staff pages that need them', () => {
 describe('FinanceService capability gates', () => {
   const db = {
     cabang: { findUnique: jest.fn().mockResolvedValue({ id: branchA }) },
+    otherCost: { findUnique: jest.fn().mockResolvedValue({ id: "id", branchId: branchA, createdById: "other" }) },
   };
   const service = new FinanceService(db as never, new PolicyService(), { catat: jest.fn() } as never);
   const branchManager = principal(['booking:read'], [{ role: 'MANAGER', branchId: branchA }]);

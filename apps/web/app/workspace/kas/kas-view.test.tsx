@@ -395,4 +395,41 @@ describe('KasView: toleransi 15 menit koreksi & pembatalan pengeluaran', () => {
 
     expect(c.hapusPengeluaran).toHaveBeenCalledWith('1', expect.any(String));
   });
+  it("membatasi baris jurnal kas dengan pagination 10 baris per halaman saat data lebih dari 10", async () => {
+    const user = userEvent.setup();
+    const rowsBanyak = Array.from({ length: 15 }, (_, i) => ({
+      id: `row-${i + 1}`,
+      costId: `cost-${i + 1}`,
+      tanggal: "2026-10-28",
+      keterangan: `Pengeluaran No ${i + 1}`,
+      kategori: "PEMBELIAN_BARANG",
+      arah: "KELUAR" as const,
+      amountRp: 100_000,
+      branchId: "gg",
+      dicatatOleh: "Rina",
+      createdById: "staff-1",
+      createdAt: new Date(NOW - 5 * 60 * 1000).toISOString(),
+    }));
+    const jurnalBanyak = {
+      ...jurnal(),
+      rows: rowsBanyak,
+    };
+    const c = {
+      ...client(),
+      jurnalKas: vi.fn().mockResolvedValue(jurnalBanyak),
+    } as unknown as KeuanganClient;
+
+    render(<KasView now={NOW} client={c} />);
+
+    expect(await screen.findByText("Pengeluaran No 1")).toBeVisible();
+    expect(screen.getByText("Pengeluaran No 10")).toBeVisible();
+    expect(screen.queryByText("Pengeluaran No 11")).toBeNull();
+
+    const tombolBerikutnya = screen.getByRole("button", { name: "Berikutnya" });
+    await user.click(tombolBerikutnya);
+
+    expect(screen.getByText("Pengeluaran No 11")).toBeVisible();
+    expect(screen.getByText("Pengeluaran No 15")).toBeVisible();
+    expect(screen.queryByText("Pengeluaran No 1")).toBeNull();
+  });
 });

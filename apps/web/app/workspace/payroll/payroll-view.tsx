@@ -9,6 +9,8 @@ import {
   type PayrollSaya,
 } from '@/api-clients/payroll-client';
 import { Feedback, Skeleton } from '../../ui';
+import { Pagination } from '../../components/admin/admin-ui';
+import { ADMIN_PAGE_SIZE } from '../../lib/pagination';
 import { tigaBulan } from '../owner-home';
 
 const rp = (n: number) => `${n < 0 ? '−' : ''}Rp ${Math.abs(n).toLocaleString('id-ID')}`;
@@ -80,6 +82,7 @@ export function PayrollView({
   const [period, setPeriod] = useState(bulan[0]!);
   const [data, setData] = useState<PayrollSaya | null>(null);
   const [gagal, setGagal] = useState(false);
+  const [page, setPage] = useState(1);
 
   useEffect(() => {
     let aktif = true;
@@ -94,8 +97,23 @@ export function PayrollView({
     };
   }, [client, period]);
 
+  useEffect(() => {
+    setPage(1);
+  }, [period]);
+
   const belum = data?.kelas.filter((k) => !k.terverifikasi) ?? [];
   const sudah = data?.kelas.filter((k) => k.terverifikasi) ?? [];
+
+  const semuaKelas = useMemo(() => {
+    return [...belum, ...sudah].sort((a, b) => b.mulai.localeCompare(a.mulai));
+  }, [belum, sudah]);
+
+  const totalKelas = semuaKelas.length;
+  const totalPages = Math.ceil(totalKelas / ADMIN_PAGE_SIZE) || 1;
+  const pagedKelas = useMemo(() => {
+    const start = (page - 1) * ADMIN_PAGE_SIZE;
+    return semuaKelas.slice(start, start + ADMIN_PAGE_SIZE);
+  }, [semuaKelas, page]);
 
   return (
     <section aria-labelledby="payroll-title" className="mx-auto max-w-2xl space-y-5 font-sans">
@@ -166,18 +184,33 @@ export function PayrollView({
             <h2 id="riwayat-title" className="m-0 text-lg font-semibold text-dd-ink">
               Riwayat kelas
             </h2>
-            {data.kelas.length === 0 ? (
+            {totalKelas === 0 ? (
               <p className="m-0 text-[15px] text-dd-muted">
                 Belum ada kelas selesai di {namaBulan(data.period)}.
               </p>
             ) : (
-              <ul className="m-0 list-none space-y-2 p-0">
-                {[...belum, ...sudah]
-                  .sort((a, b) => b.mulai.localeCompare(a.mulai))
-                  .map((k) => (
+              <>
+                <ul className="m-0 list-none space-y-2 p-0">
+                  {pagedKelas.map((k) => (
                     <KartuKelas key={k.classSlotId} baris={k} />
                   ))}
-              </ul>
+                </ul>
+                {totalKelas > ADMIN_PAGE_SIZE && (
+                  <div className="pt-2">
+                    <Pagination
+                      currentPage={page}
+                      totalPages={totalPages}
+                      totalItems={totalKelas}
+                      pageSize={ADMIN_PAGE_SIZE}
+                      hasPrevious={page > 1}
+                      hasNext={page < totalPages}
+                      onPrevious={() => setPage((p) => Math.max(1, p - 1))}
+                      onNext={() => setPage((p) => Math.min(totalPages, p + 1))}
+                      onPageChange={(targetPage) => setPage(targetPage)}
+                    />
+                  </div>
+                )}
+              </>
             )}
           </section>
 

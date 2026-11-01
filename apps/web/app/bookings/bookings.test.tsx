@@ -124,6 +124,24 @@ describe('BookingView', () => {
     expect(screen.queryByRole('form', { name: 'Buat booking bantuan' })).not.toBeInTheDocument();
   });
 
+  it('dynamically searches and selects a customer beyond initial 50 list', async () => {
+    const member51 = { id: 'cust-51', displayName: 'Member Ke Lima Puluh Satu', phoneMasked: '0812999951' };
+    const searchCustomers = vi.fn().mockResolvedValue([member51]);
+    const getCustomerPackages = vi.fn().mockResolvedValue([
+      { ...customerPackage, customerUserId: 'cust-51' },
+    ]);
+    const bookingClient = client({ searchCustomers, getCustomerPackages });
+    render(<BookingView client={bookingClient} activeBranchId={branchId} />);
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Buat booking manual' }));
+    const customer = await screen.findByRole('combobox', { name: /Pelanggan/ });
+    await user.type(customer, 'Lima Puluh Satu');
+    const option = await screen.findByRole('option', { name: /Member Ke Lima Puluh Satu/ });
+    await user.click(option);
+    expect(searchCustomers).toHaveBeenCalledWith(branchId, 'Lima Puluh Satu');
+    expect(getCustomerPackages).toHaveBeenCalledWith('cust-51', branchId);
+  });
+
   it('discovers eligible options and creates one assisted booking accessibly', async () => {
     const bookingClient = client();
     const view = render(<BookingView client={bookingClient} activeBranchId={branchId} />);

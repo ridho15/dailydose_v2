@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Star } from 'lucide-react';
 import {
   browserUlasanInstrukturClient,
@@ -9,6 +9,8 @@ import {
 } from '@/api-clients/ulasan-instruktur-client';
 import { useSessionContext } from '../../session-context';
 import { Feedback, Skeleton } from '../../ui';
+import { Pagination } from '../../components/admin/admin-ui';
+import { ADMIN_PAGE_SIZE } from '../../lib/pagination';
 
 const RENTANG = [
   { hari: 30, label: '30 hari' },
@@ -60,6 +62,7 @@ export function UlasanView({
   const [data, setData] = useState<LaporanUlasan | null>(null);
   const [galat, setGalat] = useState('');
   const [pilihan, setPilihan] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
 
   useEffect(() => {
     let batal = false;
@@ -81,7 +84,21 @@ export function UlasanView({
     };
   }, [client, branch?.id, hari, now]);
 
-  const ulasan = data?.ulasan.filter((u) => !pilihan || u.instructorId === pilihan);
+  useEffect(() => {
+    setPage(1);
+  }, [hari, pilihan, branch?.id]);
+
+  const ulasan = useMemo(
+    () => data?.ulasan.filter((u) => !pilihan || u.instructorId === pilihan) ?? [],
+    [data, pilihan],
+  );
+  const totalUlasan = ulasan.length;
+  const totalPages = Math.ceil(totalUlasan / ADMIN_PAGE_SIZE) || 1;
+  const pagedUlasan = useMemo(() => {
+    const start = (page - 1) * ADMIN_PAGE_SIZE;
+    return ulasan.slice(start, start + ADMIN_PAGE_SIZE);
+  }, [ulasan, page]);
+
   const namaPilihan = data?.instruktur.find((i) => i.instructorId === pilihan)?.namaInstruktur;
 
   return (
@@ -210,7 +227,7 @@ export function UlasanView({
               {namaPilihan ? `Ulasan untuk ${namaPilihan}` : 'Ulasan terbaru'}
             </h2>
             <ul className="m-0 grid list-none gap-2 p-0">
-              {ulasan?.map((u) => (
+              {pagedUlasan.map((u) => (
                 <li key={u.id} className="rounded-dd-lg border border-dd-line bg-white p-4">
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                     <Bintang nilai={u.rating} />
@@ -228,6 +245,21 @@ export function UlasanView({
                 </li>
               ))}
             </ul>
+            {totalUlasan > ADMIN_PAGE_SIZE && (
+              <div className="pt-2">
+                <Pagination
+                  currentPage={page}
+                  totalPages={totalPages}
+                  totalItems={totalUlasan}
+                  pageSize={ADMIN_PAGE_SIZE}
+                  hasPrevious={page > 1}
+                  hasNext={page < totalPages}
+                  onPrevious={() => setPage((p) => Math.max(1, p - 1))}
+                  onNext={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  onPageChange={(targetPage) => setPage(targetPage)}
+                />
+              </div>
+            )}
           </section>
         </>
       )}

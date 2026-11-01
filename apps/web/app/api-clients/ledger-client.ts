@@ -531,7 +531,7 @@ export async function listPackageMembers(customerPackageId: string) {
   return apiFetch<{
     customerPackageId: string;
     package: { id: string; name: string; isShareable: boolean };
-    owner: { id: string; displayName: string; phoneMasked: string | null };
+    owner: { id: string; displayName: string; phoneMasked: string | null; activeBookings?: number; attendedSessions?: number };
     remainingSessions: number;
     status: string;
     members: SharedPackageMember[];

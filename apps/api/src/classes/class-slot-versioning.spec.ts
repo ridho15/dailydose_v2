@@ -236,6 +236,64 @@ describe('class slot status guards', () => {
     ).rejects.toMatchObject({ code: 'CLASS_SLOT_HAS_BOOKINGS' });
   });
 
+  it('allows increasing capacity on a published class that already has bookings', async () => {
+    const { service, tx } = build(slotRow({ status: 'PUBLISHED', bookedCount: 2, capacity: 6 }));
+    await service.update(
+      principal,
+      slotId,
+      {
+        classTypeId,
+        startAt: '2026-10-12T21:00:00+07:00',
+        endAt: '2026-10-12T21:50:00+07:00',
+        capacity: 8,
+        expectedVersion: 4,
+      },
+      key,
+      'c',
+    );
+    expect(tx.slotKelas.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ capacity: 8 }) }),
+    );
+  });
+
+  it('refuses to lower capacity below current booked count', async () => {
+    const { service } = build(slotRow({ status: 'PUBLISHED', bookedCount: 4, capacity: 6 }));
+    await expect(
+      service.update(
+        principal,
+        slotId,
+        {
+          classTypeId,
+          startAt: '2026-10-12T21:00:00+07:00',
+          endAt: '2026-10-12T21:50:00+07:00',
+          capacity: 3,
+          expectedVersion: 4,
+        },
+        key,
+        'c',
+      ),
+    ).rejects.toMatchObject({ code: 'CAPACITY_BELOW_BOOKED_COUNT' });
+  });
+
+  it('refuses to change schedule on a published class with bookings even if capacity is sent', async () => {
+    const { service } = build(slotRow({ status: 'PUBLISHED', bookedCount: 2, capacity: 6 }));
+    await expect(
+      service.update(
+        principal,
+        slotId,
+        {
+          classTypeId,
+          startAt: '2026-10-12T22:00:00+07:00',
+          endAt: '2026-10-12T22:50:00+07:00',
+          capacity: 8,
+          expectedVersion: 4,
+        },
+        key,
+        'c',
+      ),
+    ).rejects.toMatchObject({ code: 'CLASS_SLOT_HAS_BOOKINGS' });
+  });
+
   it.each(['COMPLETED', 'CANCELLED'])('never cancels a %s class or touches its bookings', async (status) => {
     const { service, tx } = build(slotRow({ status, bookings: [{ id: 'b1', customerPackageId: 'p1' }] }));
     await expect(

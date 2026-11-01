@@ -586,9 +586,29 @@ export class ClassSlotService {
         this.scope(principal, slot.branchId, 'class-slot:manage');
         this.assertClaimable(slot, expectedVersion, STATUS_ALLOWED.update);
 
+        const targetStudioId =
+          input.studioId !== undefined && input.studioId !== '' ? input.studioId : slot.studioId;
+        const targetRoomId = input.roomId !== undefined ? (input.roomId || null) : slot.roomId;
+
+        const hasBookings = slot.bookedCount > 0 || (slot.bookings && slot.bookings.length > 0);
+        const scheduleOrTypeChanged =
+          input.classTypeId !== slot.classTypeId ||
+          startAt.getTime() !== slot.startAt.getTime() ||
+          endAt.getTime() !== slot.endAt.getTime() ||
+          (targetStudioId && targetStudioId !== slot.studioId) ||
+          (targetRoomId !== undefined && targetRoomId !== slot.roomId);
+
+        const isCapacityAdjustment =
+          input.capacity !== undefined &&
+          input.capacity !== null &&
+          (input.capacity as any) !== '' &&
+          Number(input.capacity) !== slot.capacity &&
+          !scheduleOrTypeChanged;
+
         if (
           (slot.status === ClassSlotStatus.PUBLISHED || slot.status === ClassSlotStatus.CONFIRMED) &&
-          (slot.bookedCount > 0 || (slot.bookings && slot.bookings.length > 0))
+          hasBookings &&
+          !isCapacityAdjustment
         ) {
           throw new ApiProblem('CLASS_SLOT_HAS_BOOKINGS', HttpStatus.CONFLICT, false, [
             {
@@ -597,10 +617,6 @@ export class ClassSlotService {
             },
           ]);
         }
-
-        const targetStudioId =
-          input.studioId !== undefined && input.studioId !== '' ? input.studioId : slot.studioId;
-        const targetRoomId = input.roomId !== undefined ? (input.roomId || null) : slot.roomId;
         if (targetStudioId && targetStudioId !== slot.studioId && tx.studio?.findUnique) {
           const studioBaru = await tx.studio.findUnique({ where: { id: targetStudioId } });
           if (!studioBaru) throw new ApiProblem('RESOURCE_NOT_FOUND', HttpStatus.NOT_FOUND);
