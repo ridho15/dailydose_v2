@@ -322,6 +322,8 @@ export type CustomerBookingOptions = {
     available: number;
     projectedAvailable: number;
     expiryAt: Date;
+    /** Anda sudah di kelas ini; booking dengan paket ini adalah kursi untuk teman Anda. */
+    kursiTeman?: boolean;
   }>;
   eligibility: {
     canBook: boolean;
@@ -332,6 +334,7 @@ export type CustomerBookingOptions = {
       | 'SLOT_FULL'
       | 'SLOT_UNAVAILABLE'
       | 'BOOKING_CUTOFF_PASSED'
+      | 'ALREADY_BOOKED'
       | null;
     requiredAction:
       'COMPLETE_IDENTITY_VERIFICATION' | 'BUY_MATCHING_PACKAGE' | 'CONTACT_STUDIO' | null;

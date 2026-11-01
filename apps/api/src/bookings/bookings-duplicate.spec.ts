@@ -259,8 +259,20 @@ describe('BookingsService - Anti-Booking Kembar Duplicate Guard (Poin 8)', () =>
       expect(tx.bookingTeman.create).not.toHaveBeenCalled();
     });
 
-    it('kursi teman hanya lewat staf, bukan booking mandiri member', async () => {
-      const { service } = createService('BOOKED', 1, 1);
+    it('member sendiri juga boleh booking ganda bila memakai paket bawa teman', async () => {
+      const { service, tx } = createService('BOOKED', 1, 1);
+      const result = await service.create(
+        principal as any,
+        { classSlotId: slotId, customerPackageId, source: 'SELF' },
+        'idem-self-teman',
+        'corr',
+      );
+      expect(result.status).toBe(HttpStatus.CREATED);
+      expect(tx.bookingTeman.create).toHaveBeenCalled();
+    });
+
+    it('member dengan paket biasa tetap ditolak booking ganda', async () => {
+      const { service } = createService('BOOKED', 1, 0);
       await expect(tambahLagi(service, principal, 'SELF')).rejects.toMatchObject({
         code: 'DUPLICATE_ACTIVE_BOOKING',
       });

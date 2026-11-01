@@ -497,7 +497,17 @@ export class BookingsService {
       }),
     );
 
-    const eligiblePackages = items.filter((item) => item.available > 0);
+    // Sudah terdaftar di kelas ini: yang bisa dipilih hanya paket "bawa teman" yang jatah kursi
+    // temannya belum habis; booking berikutnya adalah kursi untuk temannya.
+    const sudahDiKelas = await this.db.pemesananKelas.count({
+      where: { userId: principal.userId, classSlotId: slot.id, status: { in: ['BOOKED', 'ATTENDED'] } },
+    });
+    const maksTeman =
+      sudahDiKelas > 0 ? await maksTemanPaket(this.db, items.map((item) => item.packageId)) : new Map();
+    const eligiblePackages = items
+      .filter((item) => item.available > 0)
+      .filter((item) => sudahDiKelas === 0 || (maksTeman.get(item.packageId) ?? 0) >= sudahDiKelas)
+      .map((item) => (sudahDiKelas > 0 ? { ...item, kursiTeman: true } : item));
 
     let canBook = true;
     let reasonCode:
@@ -507,6 +517,7 @@ export class BookingsService {
       | 'SLOT_FULL'
       | 'SLOT_UNAVAILABLE'
       | 'BOOKING_CUTOFF_PASSED'
+      | 'ALREADY_BOOKED'
       | null = null;
     let requiredAction:
       | 'COMPLETE_IDENTITY_VERIFICATION'
@@ -530,6 +541,10 @@ export class BookingsService {
       canBook = false;
       reasonCode = 'SLOT_FULL';
       requiredAction = 'CONTACT_STUDIO';
+    } else if (sudahDiKelas > 0 && eligiblePackages.length === 0) {
+      canBook = false;
+      reasonCode = 'ALREADY_BOOKED';
+      requiredAction = null;
     } else if (eligiblePackages.length === 0) {
       canBook = false;
       if (items.length > 0) {
@@ -959,8 +974,9 @@ export class BookingsService {
             throw new ApiProblem('CLASS_ALREADY_FINISHED', HttpStatus.CONFLICT);
         }
 
-        // Satu member satu kursi per kelas, kecuali paketnya "bawa teman": staf boleh menambah kursi
-        // untuk temannya (bukan member) sebanyak yang diizinkan paket, memakai sesi paket yang sama.
+        // Satu member satu kursi per kelas, kecuali paketnya "bawa teman": member sendiri atau staf
+        // boleh menambah kursi untuk temannya (bukan member) sebanyak yang diizinkan paket, memakai
+        // sesi paket yang sama.
         const sudahDiKelas = await tx.pemesananKelas.count({
           where: {
             userId: customerUserId,
@@ -970,9 +986,8 @@ export class BookingsService {
         });
         let kursiTeman = false;
         if (sudahDiKelas > 0) {
-          const maks = customerFlow
-            ? 0
-            : ((await maksTemanPaket(tx, [customerPackage.packageId])).get(customerPackage.packageId) ?? 0);
+          const maks =
+            (await maksTemanPaket(tx, [customerPackage.packageId])).get(customerPackage.packageId) ?? 0;
           if (sudahDiKelas > maks) throw new ApiProblem('DUPLICATE_ACTIVE_BOOKING', HttpStatus.CONFLICT);
           kursiTeman = true;
         }

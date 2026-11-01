@@ -73,7 +73,10 @@ describe('BookingsService - Shared / Family Package Booking', () => {
         findUnique: jest.fn(async ({ where }: any) => mockUsers[where.id] ?? null),
       },
       pemesananKelas: {
-        count: jest.fn(async () => options.activeBookingsCount),
+        count: jest.fn(async ({ where }: any = {}) =>
+          // Cek "sudah terdaftar di kelas ini" (paket bawa teman): pada skenario ini belum.
+          where?.userId && where?.classSlotId ? 0 : options.activeBookingsCount,
+        ),
         findFirst: jest.fn(async () => null),
         create: jest.fn(async ({ data }: any) => ({
           ...data,
@@ -115,11 +118,17 @@ describe('BookingsService - Shared / Family Package Booking', () => {
           const purchaseClause = andList?.[1]?.OR;
 
           if (mockPackage.status !== args?.where?.status) return [];
-          if (mockPackage.validUntil && args?.where?.validUntil?.gt && mockPackage.validUntil <= new Date()) return [];
+          if (
+            mockPackage.validUntil &&
+            args?.where?.validUntil?.gt &&
+            mockPackage.validUntil <= new Date()
+          )
+            return [];
           if (mockPackage.remainingSessions <= 0) return [];
           if (args?.where?.package?.OR) {
             const classMatches = args.where.package.OR.some(
-              (c: any) => c.classTypeId === null || c.classTypeId === mockPackage.package.classTypeId,
+              (c: any) =>
+                c.classTypeId === null || c.classTypeId === mockPackage.package.classTypeId,
             );
             if (!classMatches) return [];
           }
@@ -129,7 +138,10 @@ describe('BookingsService - Shared / Family Package Booking', () => {
               if (clause.userId && clause.userId === mockPackage.userId) return true;
               if (clause.package?.isShareable && clause.sharedMembers?.some?.userId) {
                 const targetId = clause.sharedMembers.some.userId;
-                return Boolean(mockPackage.package.isShareable) && mockPackage.sharedMembers.some((sm: any) => sm.userId === targetId);
+                return (
+                  Boolean(mockPackage.package.isShareable) &&
+                  mockPackage.sharedMembers.some((sm: any) => sm.userId === targetId)
+                );
               }
               return false;
             });
@@ -149,7 +161,10 @@ describe('BookingsService - Shared / Family Package Booking', () => {
         }),
       },
       pemesananKelas: {
-        count: jest.fn(async () => options.activeBookingsCount),
+        count: jest.fn(async ({ where }: any = {}) =>
+          // Cek "sudah terdaftar di kelas ini" (paket bawa teman): pada skenario ini belum.
+          where?.userId && where?.classSlotId ? 0 : options.activeBookingsCount,
+        ),
       },
     };
 
