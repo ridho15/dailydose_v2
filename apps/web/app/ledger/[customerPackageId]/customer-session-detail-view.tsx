@@ -9,6 +9,9 @@ import {
   ledgerFailure,
   manageCustomerPackage,
   packageActionFailure,
+  getPackageSyncPreview,
+  syncCustomerPackage,
+  type PackageSyncPreview,
   type CustomerPackageAction,
   type LedgerHistory,
 } from '@/api-clients/ledger-client';
@@ -51,6 +54,47 @@ export function CustomerSessionDetailView({ id }: { id: string }) {
   const [error, setError] = useState('');
   const sessionContext = useSessionContext();
   const canManagePackage = Boolean(sessionContext?.hasCapability('customer-package:manage'));
+  const isSuperOwner = Boolean(sessionContext?.session?.roles?.includes('SUPER_OWNER'));
+  const [syncDialogOpen, setSyncDialogOpen] = useState(false);
+  const [syncPreview, setSyncPreview] = useState<PackageSyncPreview | null>(null);
+  const [syncLoading, setSyncLoading] = useState(false);
+  const [syncActing, setSyncActing] = useState(false);
+  const [syncError, setSyncError] = useState('');
+
+  const openSyncDialog = async () => {
+    setSyncDialogOpen(true);
+    setSyncLoading(true);
+    setSyncError('');
+    try {
+      const preview = await getPackageSyncPreview(id);
+      setSyncPreview(preview);
+    } catch (cause) {
+      setSyncError(packageActionFailure(cause));
+    } finally {
+      setSyncLoading(false);
+    }
+  };
+
+  const handleConfirmSync = async (reason: string) => {
+    if (reason.trim().length < 5) {
+      setSyncError('Alasan sinkronisasi wajib diisi minimal 5 karakter.');
+      return;
+    }
+    setSyncActing(true);
+    setSyncError('');
+    try {
+      const res = await syncCustomerPackage(id, { reason: reason.trim() });
+      setSyncDialogOpen(false);
+      setNotice(
+        `Sinkronisasi berhasil diterapkan. Selisih (drift): ${res.drift > 0 ? "+" : ""}${res.drift} sesi. Saldo paket diperbarui.`,
+      );
+      await load();
+    } catch (cause) {
+      setSyncError(packageActionFailure(cause));
+    } finally {
+      setSyncActing(false);
+    }
+  };
   const [action, setAction] = useState<CustomerPackageAction | null>(null);
   const [days, setDays] = useState('30');
   const [targetDate, setTargetDate] = useState('');
@@ -200,6 +244,15 @@ export function CustomerSessionDetailView({ id }: { id: string }) {
         )}
         {canManagePackage && (
           <div className="mt-4 flex flex-wrap gap-2" aria-label="Kelola paket">
+            {isSuperOwner && (
+              <Button
+                variant="secondary"
+                data-testid="btn-open-sync-dialog"
+                onClick={() => void openSyncDialog()}
+              >
+                Sinkronisasi Riwayat Sesi
+              </Button>
+            )}
             {balance.status !== 'FROZEN' && balance.ledgerBalance > 0 && (
               <Button
                 variant="secondary"
@@ -371,6 +424,86 @@ export function CustomerSessionDetailView({ id }: { id: string }) {
           </ul>
         )}
       </Panel>
+      <Panel className="overflow-hidden" data-testid="panel-booking-history">
+        <div className="border-b border-dd-line px-5 py-4">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h2 className="font-semibold text-dd-ink">Riwayat booking & jadwal kelas</h2>
+              <p className="mt-1 text-sm text-dd-muted">
+                Semua pemesanan kelas yang pernah menggunakan paket ini (hadir, aktif, dan batal).
+              </p>
+            </div>
+            {history.bookingHistory && history.bookingHistory.length > 0 && (
+              <Badge tone="neutral">
+                {history.bookingHistory.length} pemesanan
+              </Badge>
+            )}
+          </div>
+        </div>
+        {!history.bookingHistory || history.bookingHistory.length === 0 ? (
+          <p className="px-5 py-4 text-sm text-dd-muted">
+            Belum ada riwayat pemesanan kelas untuk paket ini.
+          </p>
+        ) : (
+          <ul className="divide-y divide-dd-line">
+            {history.bookingHistory.map((booking) => (
+              <li
+                key={booking.id}
+                className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 hover:bg-dd-surface-muted/20 transition"
+              >
+                <div>
+                  <div className="flex items-center gap-2">
+                    <strong className="text-sm text-dd-ink font-semibold">
+                      {booking.className}
+                    </strong>
+                    <Badge
+                      tone={
+                        booking.bookingStatus === "ATTENDED"
+                          ? "success"
+                          : booking.bookingStatus === "BOOKED"
+                            ? "info"
+                            : booking.bookingStatus === "NO_SHOW"
+                              ? "danger"
+                              : "neutral"
+                      }
+                    >
+                      {booking.bookingStatus === "ATTENDED"
+                        ? "Hadir"
+                        : booking.bookingStatus === "BOOKED"
+                          ? "Booking Aktif"
+                          : booking.bookingStatus === "NO_SHOW"
+                            ? "Tidak Hadir"
+                            : "Dibatalkan"}
+                    </Badge>
+                  </div>
+                  <p className="mt-1 text-xs text-dd-muted">
+                    {booking.branchName ?? "Semua Cabang"}
+                    {booking.startsAt
+                      ? ` · Jadwal: ${formatDate(booking.startsAt, true)}`
+                      : ""}
+                    {booking.instructorName ? ` · Instruktur: ${booking.instructorName}` : ""}
+                    {` · Dipesan pada ${formatDate(booking.bookedAt, true)}`}
+                  </p>
+                  {booking.bookedByUser && (
+                    <div className="mt-1.5 flex items-center gap-1.5">
+                      <span className="text-xs text-dd-muted">
+                        Pemesan: <strong className="text-dd-ink">{booking.bookedByUser.displayName}</strong>
+                      </span>
+                      <Badge tone={booking.bookedByUser.isOwner ? "success" : "neutral"}>
+                        {booking.bookedByUser.isOwner ? "Pemilik" : "Anggota Bersama"}
+                      </Badge>
+                    </div>
+                  )}
+                </div>
+                <ButtonLink variant="ghost" size="sm" href={`/bookings/${booking.id}`}>
+                  Detail Booking
+                </ButtonLink>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Panel>
+
       <Panel className="overflow-hidden">
         <div className="border-b border-dd-line px-5 py-4">
           <h2 className="font-semibold text-dd-ink">Histori penggunaan sesi</h2>
@@ -537,6 +670,116 @@ export function CustomerSessionDetailView({ id }: { id: string }) {
           onChanged={() => void load()}
         />
       )}
+
+      <ReasonDialog
+        open={syncDialogOpen}
+        title="Sinkronisasi Riwayat Sesi Paket (Super Admin)"
+        description="Fitur rekonsiliasi satu paket per pelanggan untuk memastikan saldo sisa dan status paket akurat dengan menghitung ulang dari seluruh riwayat kehadiran, booking, pembatalan, dan penyesuaian resmi."
+        label="Alasan Sinkronisasi (Wajib, min 5 karakter)"
+        confirmLabel="Terapkan Sinkronisasi"
+        maxLength={500}
+        busy={syncActing}
+        error={syncError}
+        onCancel={() => {
+          setSyncDialogOpen(false);
+          setSyncError('');
+        }}
+        onConfirm={(reason) => void handleConfirmSync(reason)}
+      >
+        {syncLoading ? (
+          <div className="py-4 text-center text-sm text-dd-muted">
+            Memuat perbandingan riwayat sesi…
+          </div>
+        ) : syncPreview ? (
+          <div className="space-y-4 mb-4 text-xs">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 bg-dd-surface-muted/50 p-3 rounded-dd-sm border border-dd-line">
+              <div>
+                <span className="text-dd-muted block">Hadir (ATTENDED)</span>
+                <strong className="text-dd-ink text-sm">{syncPreview.breakdown.attendedCount}</strong>
+              </div>
+              <div>
+                <span className="text-dd-muted block">Tidak Hadir (NO_SHOW)</span>
+                <strong className="text-dd-ink text-sm">{syncPreview.breakdown.noShowCount}</strong>
+              </div>
+              <div>
+                <span className="text-dd-muted block">Booking Aktif (BOOKED)</span>
+                <strong className="text-dd-ink text-sm">{syncPreview.breakdown.bookedCount}</strong>
+              </div>
+              <div>
+                <span className="text-dd-muted block">Batal (CANCELLED)</span>
+                <strong className="text-dd-ink text-sm">{syncPreview.breakdown.cancelledCount}</strong>
+              </div>
+            </div>
+
+            <div className="border border-dd-line rounded-dd-sm overflow-hidden">
+              <table className="w-full text-left">
+                <thead className="bg-dd-surface-muted text-dd-muted border-b border-dd-line text-[11px] font-semibold uppercase">
+                  <tr>
+                    <th className="py-2 px-3">Metrik</th>
+                    <th className="py-2 px-3 text-center">Tercatat Saat Ini</th>
+                    <th className="py-2 px-3 text-center">Hasil Hitung Riwayat</th>
+                    <th className="py-2 px-3 text-center">Perubahan / Drift</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-dd-line/60">
+                  <tr>
+                    <td className="py-2 px-3 font-medium">Sisa Sesi (Ledger)</td>
+                    <td className="py-2 px-3 text-center">{syncPreview.current.remainingSessions}</td>
+                    <td className="py-2 px-3 text-center font-bold text-dd-forest">{syncPreview.calculated.remainingSessions}</td>
+                    <td className="py-2 px-3 text-center font-semibold">
+                      {syncPreview.drift === 0 ? (
+                        <span className="text-dd-muted">0 (Sesuai)</span>
+                      ) : syncPreview.drift > 0 ? (
+                        <span className="text-dd-success">+{syncPreview.drift} sesi</span>
+                      ) : (
+                        <span className="text-dd-danger">{syncPreview.drift} sesi</span>
+                      )}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="py-2 px-3 font-medium">Sesi Terpakai</td>
+                    <td className="py-2 px-3 text-center">{syncPreview.current.usedSessions}</td>
+                    <td className="py-2 px-3 text-center font-bold">{syncPreview.calculated.usedSessions}</td>
+                    <td className="py-2 px-3 text-center text-dd-muted">
+                      {syncPreview.calculated.usedSessions - syncPreview.current.usedSessions !== 0
+                        ? `${syncPreview.calculated.usedSessions - syncPreview.current.usedSessions > 0 ? "+" : ""}${syncPreview.calculated.usedSessions - syncPreview.current.usedSessions}`
+                        : "0"}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="py-2 px-3 font-medium">Sesi Tersedia</td>
+                    <td className="py-2 px-3 text-center">{syncPreview.current.availableSessions}</td>
+                    <td className="py-2 px-3 text-center font-bold">{syncPreview.calculated.availableSessions}</td>
+                    <td className="py-2 px-3 text-center text-dd-muted">
+                      {syncPreview.calculated.availableSessions - syncPreview.current.availableSessions !== 0
+                        ? `${syncPreview.calculated.availableSessions - syncPreview.current.availableSessions > 0 ? "+" : ""}${syncPreview.calculated.availableSessions - syncPreview.current.availableSessions}`
+                        : "0"}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="py-2 px-3 font-medium">Status Paket</td>
+                    <td className="py-2 px-3 text-center">{syncPreview.current.status}</td>
+                    <td className="py-2 px-3 text-center font-bold">{syncPreview.calculated.status}</td>
+                    <td className="py-2 px-3 text-center text-dd-muted">
+                      {syncPreview.current.status === syncPreview.calculated.status ? "Sama" : "Berubah"}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            {syncPreview.hasDrift ? (
+              <div className="rounded-dd-sm bg-amber-50 border border-amber-200 p-2.5 text-amber-900">
+                <strong>Perhatian:</strong> Ditemukan selisih (drift) antara histori transaksi dan saldo paket. Konfirmasi sinkronisasi akan menyesuaikan saldo paket ke nilai terhitung dan mencatat mutasi ledger penyesuaian manual.
+              </div>
+            ) : (
+              <div className="rounded-dd-sm bg-emerald-50 border border-emerald-200 p-2.5 text-emerald-900">
+                <strong>Informasi:</strong> Saldo tercatat saat ini sudah persis sama dengan riwayat transaksi.
+              </div>
+            )}
+          </div>
+        ) : null}
+      </ReasonDialog>
     </section>
   );
 }
