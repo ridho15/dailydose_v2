@@ -13,6 +13,7 @@ import {
   removePackageMember,
   type SharedPackageMember,
 } from '@/api-clients/ledger-client';
+import { customerClient, type CustomerSummary } from '../customers/customer-client';
 
 const RELATIONSHIP_OPTIONS = [
   { value: 'FAMILY', label: 'Keluarga' },
@@ -45,6 +46,7 @@ export function SharedPackageMembersDialog({
   const [error, setError] = useState('');
   const [members, setMembers] = useState<SharedPackageMember[]>([]);
   const [owner, setOwner] = useState<{
+    id?: string;
     displayName: string;
     phoneMasked: string | null;
     activeBookings?: number;
@@ -64,7 +66,7 @@ export function SharedPackageMembersDialog({
     try {
       const res = await listPackageMembers(customerPackageId);
       setMembers(res.members ?? []);
-      setOwner(res.owner ?? null);
+      setOwner(res.owner ? { ...res.owner, id: (res.owner as any).id } : null);
     } catch (cause) {
       setError(packageActionFailure(cause));
     } finally {
