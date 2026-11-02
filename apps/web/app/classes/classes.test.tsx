@@ -555,7 +555,7 @@ describe('ClassSlotView instructor attendance verification', () => {
       ),
     );
     expect(
-      await screen.findByText('Presensi baru dapat dicatat mulai 30 menit sebelum kelas dimulai.'),
+      (await screen.findAllByText('Presensi baru dapat dicatat mulai 30 menit sebelum kelas dimulai.'))[0],
     ).toBeVisible();
   });
 });

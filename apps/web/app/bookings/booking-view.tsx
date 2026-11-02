@@ -330,7 +330,13 @@ export function BookingView({
       setRescheduleCursor(reschedulePage.nextCursor);
       setMessage('Data booking siap digunakan.');
     } catch (error) {
-      setFailure(await bookingFailure(error));
+      const msg = await bookingFailure(error);
+      setFailure(msg);
+      feedback.showToast({
+        tone: 'danger',
+        title: 'Gagal membuat booking',
+        message: msg,
+      });
     } finally {
       setBusy(false);
       setInitialLoaded(true);
@@ -1093,11 +1099,12 @@ export function BookingView({
               {selectedSlot.bookedCount + 1}/{selectedSlot.capacity}. Tidak ada pemotongan saldo sesi permanen pada tahap booking (sesi hanya direservasi sementara).
             </Panel>
           )}
+          {failure && <Feedback kind="error">{failure}</Feedback>}
         </form>
       </Drawer>
 
       {busy && <Skeleton label="Memproses booking" />}
-      {failure && <Feedback kind="error">{failure}</Feedback>}
+      {!createOpen && failure && <Feedback kind="error">{failure}</Feedback>}
       {message && !busy && <Feedback kind="status">{message}</Feedback>}
       {canReview && activeTab === 'reschedules' && (
         <section aria-labelledby="reschedule-queue-title">

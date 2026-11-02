@@ -445,12 +445,19 @@ export function VouchersView() {
               });
               await load();
             } catch {
-              setError('Voucher belum berhasil dibuat. Periksa input dan coba lagi.');
+              const msg = 'Voucher belum berhasil dibuat. Periksa input dan coba lagi.';
+              setError(msg);
+              feedback.showToast({
+                tone: 'danger',
+                title: 'Gagal membuat voucher',
+                message: msg,
+              });
             } finally {
               setBusy(false);
             }
           }}
         >
+          {error && <AlertBanner tone="danger" title="Voucher belum tersimpan" message={error} />}
           <div className="grid gap-4 sm:grid-cols-2">
             <TextInput
               label="Kode voucher"

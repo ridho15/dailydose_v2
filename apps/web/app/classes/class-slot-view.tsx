@@ -229,7 +229,13 @@ export function ClassSlotView({
       setMessage(success);
       return true;
     } catch (error) {
-      setFailure(classSlotFailure(error));
+      const msg = classSlotFailure(error);
+      setFailure(msg);
+      feedback.showToast({
+        tone: 'danger',
+        title: 'Gagal memproses kelas',
+        message: msg,
+      });
       return false;
     } finally {
       setBusy(false);
@@ -995,7 +1001,7 @@ export function ClassSlotView({
                 confirmLabel: 'Simpan perubahan',
               });
               if (accepted)
-                await run(
+                return await run(
                   () =>
                     client.update(panel.slot.id, {
                       ...input,
@@ -1005,6 +1011,7 @@ export function ClassSlotView({
                     }),
                   'Perubahan kelas berhasil disimpan.',
                 );
+              return false;
             }}
             onPublish={async () => {
               const accepted = await feedback.confirm({
@@ -1067,7 +1074,13 @@ export function ClassSlotView({
                   `Kelas selesai: ${result.attendanceCount} hadir, ${result.noShowCount ?? 0} no-show.`,
                 );
               } catch (error) {
-                setFailure(classSlotFailure(error));
+                const msg = classSlotFailure(error);
+                setFailure(msg);
+                feedback.showToast({
+                  tone: 'danger',
+                  title: 'Gagal menyelesaikan kelas',
+                  message: msg,
+                });
               } finally {
                 setBusy(false);
               }

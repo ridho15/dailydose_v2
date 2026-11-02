@@ -198,4 +198,43 @@ describe('Super Admin Class Schedule Edit Override', () => {
     expect(optionLabels.filter((label) => label?.includes('Reformer'))).toHaveLength(1);
     expect(optionLabels.filter((label) => label?.includes('Mat Pilates'))).toHaveLength(1);
   });
+
+  it('keeps the edit form open when onUpdate returns false or fails', async () => {
+    const user = userEvent.setup();
+    const onUpdate = vi.fn().mockResolvedValue(false);
+
+    render(
+      <AppFeedbackProvider>
+        <DetailPanel
+          slot={confirmedSlotWithBookings}
+          instructorName="Lucia"
+          classTypes={classTypes}
+          instructors={instructors}
+          canManage={true}
+          canComplete={false}
+          canManageAttendance={false}
+          canReadBookings={true}
+          isSuperOwner={true}
+          busy={false}
+          onAssign={vi.fn()}
+          onUpdate={onUpdate}
+          onPublish={vi.fn()}
+          onCancel={vi.fn()}
+          onComplete={vi.fn()}
+        />
+      </AppFeedbackProvider>,
+    );
+
+    const editBtn = screen.getByRole('button', { name: 'Edit kelas (Super Admin)' });
+    await user.click(editBtn);
+
+    const form = screen.getByRole('form', { name: 'Edit draft kelas' });
+    expect(form).toBeInTheDocument();
+
+    const submitBtn = within(form).getByRole('button', { name: /Simpan perubahan kelas/i });
+    await user.click(submitBtn);
+
+    expect(onUpdate).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('form', { name: 'Edit draft kelas' })).toBeInTheDocument();
+  });
 });

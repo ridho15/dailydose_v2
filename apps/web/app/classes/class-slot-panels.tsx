@@ -362,7 +362,7 @@ export function DetailPanel({
     capacity?: number;
     bookingCutoffHours?: number | null;
     reason?: string;
-  }): Promise<void>;
+  }): Promise<boolean | void>;
   onPublish(): Promise<void>;
   onCancel(reason: CancellationReason, note?: string): Promise<void>;
   onComplete(reason: string): Promise<void>;
@@ -495,8 +495,8 @@ export function DetailPanel({
                 studios={studios}
                 busy={busy}
                 onSubmit={async (input) => {
-                  await onUpdate(input);
-                  setEditOpen(false);
+                  const ok = await onUpdate(input);
+                  if (ok) setEditOpen(false);
                 }}
               />
             )}
@@ -569,8 +569,8 @@ export function DetailPanel({
                   busy={busy}
                   isSuperOwner={isSuperOwner}
                   onSubmit={async (input) => {
-                    await onUpdate(input);
-                    setEditOpen(false);
+                    const ok = await onUpdate(input);
+                    if (ok) setEditOpen(false);
                   }}
                 />
               )}
@@ -599,8 +599,8 @@ export function DetailPanel({
                   busy={busy}
                   isSuperOwner={isSuperOwner}
                   onSubmit={async (input) => {
-                    await onUpdate(input);
-                    setEditOpen(false);
+                    const ok = await onUpdate(input);
+                    if (ok) setEditOpen(false);
                   }}
                 />
               )}
@@ -629,8 +629,8 @@ export function DetailPanel({
                   busy={busy}
                   isSuperOwner={isSuperOwner}
                   onSubmit={async (input) => {
-                    await onUpdate(input);
-                    setEditOpen(false);
+                    const ok = await onUpdate(input);
+                    if (ok) setEditOpen(false);
                   }}
                 />
               )}
@@ -938,7 +938,7 @@ function DraftEditForm({
     capacity?: number;
     bookingCutoffHours?: number | null;
     reason?: string;
-  }): Promise<void>;
+  }): Promise<boolean | void>;
 }) {
   const parts = (value: Date) => {
     const formatted = new Intl.DateTimeFormat('en-CA', {
