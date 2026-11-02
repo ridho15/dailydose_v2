@@ -73,13 +73,17 @@ export function MobileBottomNavigation({
         badge: customerBadges.upcomingBookingsCount,
         badgeColor: 'bg-dd-forest',
       },
-      { href: '/packages', label: 'Paket', icon: ListChecks },
+      {
+        href: '/account/packages',
+        label: 'Paket',
+        icon: ListChecks,
+        badge: customerBadges.actionableOrdersCount,
+        badgeColor: 'bg-dd-brass',
+      },
       {
         href: '/account/profile',
         label: 'Akun',
         icon: UserRound,
-        badge: customerBadges.actionableOrdersCount,
-        badgeColor: 'bg-dd-brass',
         dot: customerBadges.verificationActionRequired,
       },
     ];

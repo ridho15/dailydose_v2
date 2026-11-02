@@ -1,272 +1,417 @@
 'use client';
 
+import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { browserLedgerClient, type LedgerBalance } from '@/api-clients/ledger-client';
+import { CalendarDays, MessageCircle } from 'lucide-react';
+import { browserLedgerClient, type LedgerBalance, type LedgerClient } from '@/api-clients/ledger-client';
+import {
+  browserOrderClient,
+  type CustomerOrder,
+  type OrderStatus,
+} from '@/api-clients/order-client';
+import {
+  browserBookingClient,
+  type BookingClient,
+  type CustomerBookingRecord,
+} from '@/api-clients/booking-client';
 import { Button, ButtonLink } from '../../components/actions';
-import { EmptyState, Feedback, PageHeader, Skeleton, StatusBadge } from '../../ui';
-import { Pagination } from '../../components/admin/admin-ui';
-import { useSessionContext } from '../../session-context';
+import { useStudioPreference } from '../../components/public/public-experience';
 import { SharedPackageMembersDialog } from '../../components/shared-package-members-dialog';
+import { formatRupiah } from '../../lib/formatters';
+import { useSessionContext } from '../../session-context';
+import { Feedback, Skeleton, StatusBadge } from '../../ui';
 
 export function isExpiredPackage(item: LedgerBalance): boolean {
   const isPast = new Date(item.expiryAt).getTime() < Date.now();
   return item.status === 'EXPIRED' || isPast;
 }
 
-export function CustomerPackagesView() {
-  const session = useSessionContext();
-  const currentUserId = session?.session?.id;
-  const [items, setItems] = useState<LedgerBalance[]>([]);
-  const [selectedPackageForMembers, setSelectedPackageForMembers] = useState<LedgerBalance | null>(null);
-  const [tab, setTab] = useState<'ACTIVE' | 'HISTORY'>('ACTIVE');
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [cursor, setCursor] = useState<string>();
-  const [cursorHistory, setCursorHistory] = useState<string[]>([]);
-  const [nextCursor, setNextCursor] = useState<string | null>();
-  const [total, setTotal] = useState(0);
+const SEDANG_DIPROSES: readonly OrderStatus[] = ['AWAITING_PAYMENT', 'PENDING', 'ACTION_REQUIRED'];
+/** Selama ada pesanan yang diperiksa, halaman memeriksa ulang supaya paket muncul tanpa muat ulang. */
+const CEK_ULANG_MS = 60_000;
 
-  const loadPage = useCallback(async (pageCursor?: string) => {
-    setLoading(true);
-    setError('');
-    try {
-      const value = await browserLedgerClient.list(undefined, pageCursor);
-      setItems(value.items);
-      setNextCursor(value.nextCursor);
-      setTotal(value.summary.packageCount);
-      setCursor(pageCursor);
-      return true;
-    } catch {
-      setError('Paket Anda belum dapat dimuat.');
-      return false;
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+type OrderClient = Pick<typeof browserOrderClient, 'list'>;
 
-  useEffect(() => {
-    void loadPage();
-  }, [loadPage]);
+const tanggal = (value: Date | string) =>
+  new Date(value).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
 
-  const activeItems = useMemo(
-    () => items.filter((item) => item.status === 'ACTIVE' && !isExpiredPackage(item)),
-    [items],
-  );
-  const historyItems = useMemo(
-    () => items.filter((item) => isExpiredPackage(item) || item.status !== 'ACTIVE'),
-    [items],
-  );
-  const displayedItems = tab === 'ACTIVE' ? activeItems : historyItems;
+/** "baru saja", "25 menit lalu", "4 jam lalu", "2 hari lalu". */
+export function sejak(value: Date | string, now = Date.now()) {
+  const menit = Math.max(0, Math.round((now - new Date(value).getTime()) / 60_000));
+  if (menit < 2) return 'baru saja';
+  if (menit < 60) return `${menit} menit lalu`;
+  const jam = Math.round(menit / 60);
+  if (jam < 24) return `${jam} jam lalu`;
+  return `${Math.round(jam / 24)} hari lalu`;
+}
 
+/** Nomor WhatsApp cabang dari daftar tombol WhatsApp publik (`https://wa.me/<nomor>?text=…`). */
+function nomorWa(href: string | undefined) {
+  return href?.match(/wa\.me\/(\d+)/)?.[1] ?? null;
+}
+
+const LANGKAH = ['Pesanan dibuat', 'Bukti transfer', 'Diperiksa studio', 'Paket aktif'] as const;
+const langkahKe: Record<string, number> = { AWAITING_PAYMENT: 1, ACTION_REQUIRED: 1, PENDING: 2 };
+
+function KartuPesanan({ order, waHref }: { order: CustomerOrder; waHref: string | null }) {
+  const aktif = langkahKe[order.status] ?? 0;
+  const detail = `/orders/${encodeURIComponent(order.id)}?returnTo=${encodeURIComponent('/account/packages')}`;
   return (
-    <main className="space-y-6">
-      <PageHeader
-        eyebrow="Member area"
-        title="Paket Saya"
-        description="Lihat saldo sesi, masa aktif, dan lanjutkan langsung ke jadwal booking."
-        backHref="/account"
-        backLabel="Kembali ke Beranda"
-        context={
-          <ButtonLink variant="secondary" size="sm" href="/packages">
-            Tambah paket
-          </ButtonLink>
-        }
-      />
-      {error && <Feedback kind="error">{error}</Feedback>}
-
-      <div
-        className="my-2 inline-flex rounded-none border border-ed-line bg-ed-tint/50 p-1"
-        role="tablist"
-        aria-label="Tab paket"
-      >
-        {(['ACTIVE', 'HISTORY'] as const).map((value) => (
-          <button
-            key={value}
-            type="button"
-            role="tab"
-            aria-selected={tab === value}
-            className={`min-h-11 rounded-none px-4 text-sm font-semibold transition cursor-pointer ${
-              tab === value
-                ? 'bg-ed-forest text-white'
-                : 'bg-transparent text-ed-muted hover:bg-ed-tint hover:text-ed-ink'
-            }`}
-            onClick={() => setTab(value)}
-          >
-            {value === 'ACTIVE' ? 'Paket Aktif' : 'Riwayat Paket'}
-          </button>
-        ))}
+    <li className="rounded-dd-xl border border-dd-line bg-white p-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="m-0 text-base font-semibold text-dd-ink">{order.packageName}</p>
+          <p className="m-0 mt-0.5 text-sm text-dd-muted">
+            {[order.branchName, formatRupiah(order.payableAmountRp)].filter(Boolean).join(' · ')}
+          </p>
+        </div>
+        <StatusBadge tone={order.status === 'PENDING' ? 'info' : 'warning'}>
+          {order.status === 'PENDING'
+            ? 'Sedang diperiksa'
+            : order.status === 'ACTION_REQUIRED'
+              ? 'Bukti perlu diganti'
+              : 'Belum dibayar'}
+        </StatusBadge>
       </div>
 
-      {loading ? (
-        <Skeleton />
-      ) : displayedItems.length === 0 ? (
-        <EmptyState
-          title={tab === 'ACTIVE' ? 'Belum ada paket aktif' : 'Belum ada riwayat paket'}
-          description={
-            tab === 'ACTIVE'
-              ? 'Paket akan tampil setelah bukti pembayaran pesanan disetujui.'
-              : 'Paket yang masa berlakunya telah berakhir akan tersimpan di sini.'
-          }
-        />
-      ) : (
-        <>
-          <div className="grid gap-4 md:grid-cols-2">
-            {displayedItems.map((item, index) => {
-              const expired = isExpiredPackage(item);
-              return (
-                <article
-                  className="rounded-none border border-ed-line bg-white p-5 shadow-none sm:p-6"
-                  key={item.id}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-start gap-2.5">
-                      <span className="inline-flex size-6 shrink-0 items-center justify-center rounded-none border border-ed-line bg-ed-tint font-serif text-xs font-normal text-ed-forest mt-0.5">
-                        #{cursorHistory.length * 20 + index + 1}
-                      </span>
-                      <div>
-                        <p className="text-[13px] font-bold text-ed-green">
-                          {item.branchName ?? 'Daily Dose'}
-                        </p>
-                        <h2 className="font-serif mt-1 text-xl font-normal tracking-tight text-ed-ink">
-                          {item.packageName ?? 'Paket kelas'}
-                        </h2>
-                        <p className="mt-1 text-sm text-ed-muted">
-                          {item.classTypeName ?? 'Kelas Daily Dose'}
-                        </p>
-                        {item.isShareable && (
-                          <div className="mt-1 flex items-center gap-1.5">
-                            {item.customer?.id && currentUserId && item.customer.id !== currentUserId ? (
-                              <span className="text-xs font-semibold text-ed-forest">
-                                Paket bersama milik {item.customer.displayName}
-                              </span>
-                            ) : (
-                              <span className="text-xs font-semibold text-ed-forest">
-                                Paket Bersama (Family / Duet)
-                              </span>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                    <StatusBadge
-                      tone={
-                        expired
-                          ? 'neutral'
-                          : item.status === 'ACTIVE'
-                            ? 'success'
-                            : 'warning'
-                      }
-                    >
-                      {expired
-                        ? 'Kedaluwarsa'
-                        : item.status === 'ACTIVE'
-                          ? 'Aktif'
-                          : 'Tidak aktif'}
-                    </StatusBadge>
-                  </div>
-                  <dl className="mt-5 grid grid-cols-3 gap-2">
-                    <div className="rounded-none border border-ed-line/70 bg-ed-tint/40 p-3">
-                      <dt
-                        className={`text-[13px] ${ expired && item.available > 0 ?'text-rose-800 font-semibold'
-                            : 'text-ed-muted'
-                        }`}
-                      >
-                        {expired ? (item.available > 0 ? 'Hangus' : 'Habis') : 'Tersedia'}
-                      </dt>
-                      <dd
-                        className={`mt-1 font-serif text-xl font-normal ${
-                          expired && item.available > 0 ? 'text-rose-800' : 'text-ed-forest'
-                        }`}
-                      >
-                        {item.available}
-                      </dd>
-                    </div>
-                    <div className="rounded-none border border-ed-line/70 bg-ed-tint/40 p-3">
-                      <dt className="text-[13px] text-ed-muted">Dipesan</dt>
-                      <dd className="mt-1 font-serif text-xl font-normal text-ed-ink">{item.reserved}</dd>
-                    </div>
-                    <div className="rounded-none border border-ed-line/70 bg-ed-tint/40 p-3">
-                      <dt className="text-[13px] text-ed-muted">Total</dt>
-                      <dd className="mt-1 font-serif text-xl font-normal text-ed-ink">{item.ledgerBalance}</dd>
-                    </div>
-                  </dl>
-                  <p className="mt-4 text-xs leading-relaxed text-ed-muted">
-                    {expired
-                      ? `Kedaluwarsa pada ${new Date(item.expiryAt).toLocaleDateString('id-ID')}`
-                      : `Berlaku sampai ${new Date(item.expiryAt).toLocaleDateString('id-ID')}`}
-                  </p>
-                  <div className="mt-5 flex flex-wrap gap-2">
-                    {!expired && item.status === 'ACTIVE' ? (
-                      <ButtonLink
-                        href={
-                          item.branchId
-                            ? `/classes?branch=${encodeURIComponent(item.branchId)}#schedule`
-                            : '/classes#schedule'
-                        }
-                      >
-                        Booking kelas
-                      </ButtonLink>
-                    ) : expired ? (
-                      <ButtonLink
-                        variant="secondary"
-                        href="/packages"
-                      >
-                        Beli paket baru
-                      </ButtonLink>
-                    ) : null}
-                    {item.isShareable && (
-                      <Button
-                        variant="secondary"
-                        onClick={() => setSelectedPackageForMembers(item)}
-                      >
-                        {item.customer?.id === currentUserId || !item.customer?.id
-                          ? `Kelola Anggota (${item.sharedMembers?.length ?? 0})`
-                          : 'Lihat Anggota Bersama'}
-                      </Button>
-                    )}
-                  </div>
-                </article>
-              );
-            })}
-          </div>
-          <Pagination
-            hasPrevious={cursorHistory.length > 0 && !loading}
-            hasNext={Boolean(nextCursor) && !loading}
-            totalLabel={
-              total <= displayedItems.length
-                ? `${displayedItems.length.toLocaleString('id-ID')} paket`
-                : `${displayedItems.length.toLocaleString('id-ID')} dari ${total.toLocaleString('id-ID')} paket`
-            }
-            currentPage={cursorHistory.length + 1}
-            onPrevious={() => {
-              const previous = cursorHistory.at(-1) ?? '';
-              void loadPage(previous || undefined).then((loaded) => {
-                if (loaded) setCursorHistory((current) => current.slice(0, -1));
-              });
-            }}
-            onNext={() => {
-              if (!nextCursor) return;
-              void loadPage(nextCursor).then((loaded) => {
-                if (loaded) setCursorHistory((current) => [...current, cursor ?? '']);
-              });
-            }}
-          />
-        </>
+      <ol aria-label="Tahap pesanan" className="m-0 mt-4 grid list-none grid-cols-4 gap-1.5 p-0">
+        {LANGKAH.map((nama, i) => (
+          <li key={nama} aria-current={i === aktif ? 'step' : undefined}>
+            <span
+              className={`block h-1.5 rounded-full ${i < aktif ? 'bg-dd-forest' : i === aktif ? 'bg-dd-brass' : 'bg-dd-line'}`}
+            />
+            <span
+              className={`mt-1.5 block text-xs leading-tight ${i === aktif ? 'font-semibold text-dd-ink' : 'text-dd-muted'}`}
+            >
+              {nama}
+            </span>
+          </li>
+        ))}
+      </ol>
+
+      {order.status === 'PENDING' && (
+        <p className="m-0 mt-4 text-[15px] leading-relaxed text-dd-ink">
+          Bukti transfer terkirim {sejak(order.submittedAt)}. Studio sedang mencocokkan dengan mutasi
+          rekening. Paket langsung muncul di halaman ini setelah disetujui; tidak perlu mengirim
+          ulang bukti.
+        </p>
+      )}
+      {order.status === 'AWAITING_PAYMENT' && (
+        <p className="m-0 mt-4 text-[15px] leading-relaxed text-dd-ink">
+          Transfer tepat {formatRupiah(order.payableAmountRp)}, lalu unggah bukti transfernya
+          {order.expiresAt ? ` sebelum ${tanggal(order.expiresAt)}` : ''}.
+        </p>
+      )}
+      {order.status === 'ACTION_REQUIRED' && (
+        <p className="m-0 mt-4 text-[15px] leading-relaxed text-dd-ink">
+          Bukti transfer belum bisa dicocokkan. Unggah ulang foto bukti yang jelas (nominal dan
+          tanggal terbaca).
+        </p>
       )}
 
-      {selectedPackageForMembers && (
+      <div className="mt-4 flex flex-wrap gap-2">
+        {order.status === 'PENDING' ? (
+          waHref && (
+            <ButtonLink
+              href={waHref}
+              target="_blank"
+              rel="noreferrer"
+              leadingIcon={<MessageCircle className="size-4" aria-hidden="true" />}
+            >
+              Tanya studio via WhatsApp
+            </ButtonLink>
+          )
+        ) : (
+          <ButtonLink href={detail}>
+            {order.status === 'ACTION_REQUIRED' ? 'Ganti bukti transfer' : 'Lanjutkan pembayaran'}
+          </ButtonLink>
+        )}
+        <ButtonLink variant="secondary" href={detail}>
+          Detail pesanan
+        </ButtonLink>
+      </div>
+    </li>
+  );
+}
+
+function KartuPaket({
+  item,
+  milikSendiri,
+  onAnggota,
+}: {
+  item: LedgerBalance;
+  milikSendiri: boolean;
+  onAnggota(): void;
+}) {
+  const hampirHabis = item.available > 0 && item.available <= 2;
+  return (
+    <li className="rounded-dd-xl border border-dd-line bg-white p-5">
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <p className="m-0 text-base font-semibold text-dd-ink">{item.packageName ?? 'Paket kelas'}</p>
+          <p className="m-0 mt-0.5 text-sm text-dd-muted">
+            {[item.classTypeName, item.branchName].filter(Boolean).join(' · ')}
+          </p>
+          {item.isShareable && (
+            <p className="m-0 mt-1 text-xs font-semibold text-dd-forest">
+              {milikSendiri ? 'Paket Bersama (Family / Duet)' : `Paket bersama milik ${item.customer?.displayName ?? 'member lain'}`}
+            </p>
+          )}
+        </div>
+        <div className="shrink-0 text-right">
+          <p className="m-0 text-[32px] font-semibold leading-none tabular-nums text-dd-forest">
+            {item.available}
+          </p>
+          <p className="m-0 mt-1 text-xs text-dd-muted">sesi tersisa</p>
+        </div>
+      </div>
+      <p className={`m-0 mt-3 text-sm ${hampirHabis ? 'font-semibold text-dd-warning' : 'text-dd-muted'}`}>
+        Berlaku sampai {tanggal(item.expiryAt)}
+        {item.reserved > 0 ? ` · ${item.reserved} sesi sudah dibooking` : ''}
+        {hampirHabis ? ' · hampir habis' : ''}
+      </p>
+      <div className="mt-4 flex flex-wrap gap-2">
+        <ButtonLink
+          href={item.branchId ? `/classes?branch=${encodeURIComponent(item.branchId)}#schedule` : '/classes#schedule'}
+        >
+          Booking kelas
+        </ButtonLink>
+        {item.isShareable && (
+          <Button variant="secondary" onClick={onAnggota}>
+            {milikSendiri ? `Kelola Anggota (${item.sharedMembers?.length ?? 0})` : 'Lihat Anggota Bersama'}
+          </Button>
+        )}
+      </div>
+    </li>
+  );
+}
+
+/**
+ * Paket Saya: satu halaman untuk semua yang ingin diketahui member tentang paketnya. Pesanan yang
+ * masih berjalan (dan tahap pemeriksaannya), paket aktif dengan sisa sesi, booking terdekat, lalu
+ * riwayat. Sebelumnya informasi ini tersebar di Pesanan Saya, Paket & Sesi, dan Booking Saya.
+ */
+export function CustomerPackagesView({
+  ledger = browserLedgerClient,
+  orders = browserOrderClient,
+  bookings = browserBookingClient,
+}: {
+  ledger?: Pick<LedgerClient, 'list'>;
+  orders?: OrderClient;
+  bookings?: Pick<BookingClient, 'list'>;
+} = {}) {
+  const session = useSessionContext();
+  const currentUserId = session?.session?.id;
+  const studio = useStudioPreference();
+  const [paket, setPaket] = useState<LedgerBalance[] | null>(null);
+  const [pesanan, setPesanan] = useState<CustomerOrder[]>([]);
+  const [booking, setBooking] = useState<CustomerBookingRecord[]>([]);
+  const [gagal, setGagal] = useState('');
+  const [anggota, setAnggota] = useState<LedgerBalance | null>(null);
+
+  const muat = useCallback(async () => {
+    const semuaPaket = async () => {
+      const items: LedgerBalance[] = [];
+      let cursor: string | undefined;
+      for (let halaman = 0; halaman < 10; halaman += 1) {
+        const page = await ledger.list(undefined, cursor);
+        items.push(...page.items);
+        if (!page.nextCursor) break;
+        cursor = page.nextCursor;
+      }
+      return { items };
+    };
+    const [p, o, b] = await Promise.allSettled([
+      semuaPaket(),
+      orders.list({ limit: 10 }),
+      bookings.list({ timeline: 'UPCOMING', limit: 3 }),
+    ]);
+    if (p.status === 'fulfilled') setPaket(p.value.items);
+    else setGagal('Paket Anda belum dapat dimuat. Coba muat ulang halaman.');
+    if (o.status === 'fulfilled') setPesanan(o.value.items ?? []);
+    if (b.status === 'fulfilled') setBooking(b.value.items ?? []);
+  }, [bookings, ledger, orders]);
+
+  useEffect(() => {
+    void muat();
+  }, [muat]);
+
+  const berjalan = useMemo(() => pesanan.filter((o) => SEDANG_DIPROSES.includes(o.status)), [pesanan]);
+  const adaDiperiksa = berjalan.some((o) => o.status === 'PENDING');
+  useEffect(() => {
+    if (!adaDiperiksa) return;
+    const timer = window.setInterval(() => void muat(), CEK_ULANG_MS);
+    return () => window.clearInterval(timer);
+  }, [adaDiperiksa, muat]);
+
+  const aktif = (paket ?? []).filter((item) => item.status === 'ACTIVE' && !isExpiredPackage(item));
+  const riwayat = (paket ?? []).filter((item) => isExpiredPackage(item) || item.status !== 'ACTIVE');
+  const totalSesi = aktif.reduce((s, item) => s + item.available, 0);
+
+  const waUntuk = (order: CustomerOrder) => {
+    const daftar = studio?.whatsappStudios ?? [];
+    const nomor = nomorWa((daftar.find((s) => s.id === order.branchId) ?? daftar[0])?.href);
+    if (!nomor) return null;
+    const pesan = `Halo Daily Dose${order.branchName ? ` ${order.branchName}` : ''}, saya sudah transfer ${formatRupiah(order.payableAmountRp)} untuk paket ${order.packageName} (${tanggal(order.submittedAt)}). Mohon dibantu dicek. Terima kasih.`;
+    return `https://wa.me/${nomor}?text=${encodeURIComponent(pesan)}`;
+  };
+
+  return (
+    <main className="space-y-7 font-sans" aria-labelledby="paket-saya-title">
+      <header className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h1 id="paket-saya-title" className="m-0 text-[26px] font-semibold tracking-[-0.02em] text-dd-ink sm:text-[30px]">
+            Paket Saya
+          </h1>
+          <p className="m-0 mt-1 text-[15px] text-dd-muted">
+            {paket === null
+              ? 'Memuat paket…'
+              : aktif.length
+                ? `${totalSesi} sesi tersisa dari ${aktif.length} paket aktif.`
+                : 'Belum ada paket aktif.'}
+          </p>
+        </div>
+        <ButtonLink variant="secondary" size="sm" href="/packages">
+          Tambah paket
+        </ButtonLink>
+      </header>
+
+      {gagal && <Feedback kind="error">{gagal}</Feedback>}
+
+      {berjalan.length > 0 && (
+        <section aria-labelledby="pesanan-berjalan" className="space-y-3">
+          <h2 id="pesanan-berjalan" className="m-0 text-lg font-semibold text-dd-ink">
+            Pesanan sedang diproses
+          </h2>
+          <ul className="m-0 grid list-none gap-3 p-0">
+            {berjalan.map((order) => (
+              <KartuPesanan key={order.id} order={order} waHref={waUntuk(order)} />
+            ))}
+          </ul>
+        </section>
+      )}
+
+      <section aria-labelledby="paket-aktif" className="space-y-3">
+        <h2 id="paket-aktif" className="m-0 text-lg font-semibold text-dd-ink">
+          Paket aktif
+        </h2>
+        {paket === null && !gagal ? (
+          <Skeleton label="Memuat paket" />
+        ) : aktif.length === 0 ? (
+          <div className="rounded-dd-xl border border-dd-line bg-white p-5">
+            <p className="m-0 text-base font-semibold text-dd-ink">Belum ada paket aktif</p>
+            <p className="m-0 mt-1 text-[15px] text-dd-muted">
+              {berjalan.length
+                ? 'Paket muncul di sini setelah pesanan di atas disetujui.'
+                : 'Beli paket untuk mulai booking kelas.'}
+            </p>
+            {!berjalan.length && (
+              <div className="mt-4">
+                <ButtonLink href="/packages">Lihat paket</ButtonLink>
+              </div>
+            )}
+          </div>
+        ) : (
+          <ul className="m-0 grid list-none gap-3 p-0 md:grid-cols-2">
+            {aktif.map((item) => (
+              <KartuPaket
+                key={item.id}
+                item={item}
+                milikSendiri={!item.customer?.id || item.customer.id === currentUserId}
+                onAnggota={() => setAnggota(item)}
+              />
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <section aria-labelledby="booking-terdekat" className="space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <h2 id="booking-terdekat" className="m-0 text-lg font-semibold text-dd-ink">
+            Booking terdekat
+          </h2>
+          <Link href="/bookings" className="text-sm font-semibold text-dd-forest">
+            Semua booking
+          </Link>
+        </div>
+        {booking.length === 0 ? (
+          <p className="m-0 text-[15px] text-dd-muted">Belum ada kelas yang dibooking.</p>
+        ) : (
+          <ul className="m-0 grid list-none gap-2 p-0">
+            {booking.map((b) => (
+              <li key={b.id}>
+                <Link
+                  href={`/bookings/${encodeURIComponent(b.id)}`}
+                  className="flex items-center gap-3 rounded-dd-lg border border-dd-line bg-white px-4 py-3 text-dd-ink no-underline hover:border-dd-forest"
+                >
+                  <CalendarDays className="size-5 shrink-0 text-dd-forest" aria-hidden="true" />
+                  <span className="min-w-0">
+                    <span className="block text-[15px] font-semibold">
+                      {b.classSlot?.classType?.name ?? 'Kelas'}
+                    </span>
+                    <span className="block text-sm text-dd-muted">
+                      {b.classSlot
+                        ? new Date(b.classSlot.startAt).toLocaleString('id-ID', {
+                            weekday: 'short',
+                            day: 'numeric',
+                            month: 'short',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                            timeZone: b.classSlot.timezone || 'Asia/Jakarta',
+                          })
+                        : ''}
+                      {b.branch?.name ? ` · ${b.branch.name}` : ''}
+                    </span>
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      {(riwayat.length > 0 || pesanan.length > berjalan.length) && (
+        <details className="rounded-dd-xl border border-dd-line bg-white p-5">
+          <summary className="cursor-pointer text-[15px] font-semibold text-dd-ink">
+            Riwayat paket dan pesanan
+          </summary>
+          {riwayat.length > 0 && (
+            <ul className="m-0 mt-4 grid list-none gap-2 p-0">
+              {riwayat.map((item) => (
+                <li key={item.id} className="flex flex-wrap items-center justify-between gap-2 border-b border-dd-line/70 pb-2 text-sm">
+                  <span className="text-dd-ink">{item.packageName ?? 'Paket kelas'}</span>
+                  <span className={item.available > 0 ? 'font-semibold text-dd-danger' : 'text-dd-muted'}>
+                    {item.available > 0 ? `${item.available} sesi hangus` : 'Habis'} · berakhir {tanggal(item.expiryAt)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className="mt-4 flex flex-wrap items-center gap-4 text-sm">
+            {riwayat.length > 0 && (
+              <ButtonLink variant="secondary" size="sm" href="/packages">
+                Beli paket baru
+              </ButtonLink>
+            )}
+            <Link href="/orders" className="font-semibold text-dd-forest">
+              Lihat semua pesanan
+            </Link>
+          </div>
+        </details>
+      )}
+
+      {anggota && (
         <SharedPackageMembersDialog
-          open={Boolean(selectedPackageForMembers)}
-          onClose={() => setSelectedPackageForMembers(null)}
-          customerPackageId={selectedPackageForMembers.id}
-          packageName={selectedPackageForMembers.packageName}
+          open={Boolean(anggota)}
+          onClose={() => setAnggota(null)}
+          customerPackageId={anggota.id}
+          packageName={anggota.packageName}
           canManage={
-            (selectedPackageForMembers.customer?.id === currentUserId ||
-              !selectedPackageForMembers.customer?.id) &&
-            !isExpiredPackage(selectedPackageForMembers) &&
-            selectedPackageForMembers.status === 'ACTIVE'
+            (anggota.customer?.id === currentUserId || !anggota.customer?.id) &&
+            !isExpiredPackage(anggota) &&
+            anggota.status === 'ACTIVE'
           }
-          onChanged={() => void loadPage(cursor)}
+          onChanged={() => void muat()}
         />
       )}
     </main>

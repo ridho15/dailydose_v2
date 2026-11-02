@@ -125,7 +125,7 @@ describe('MobileBottomNavigation (customer - Tiket T-03)', () => {
     expect(links[0]?.getAttribute('href')).toBe('/account');
     expect(links[1]?.getAttribute('href')).toBe('/classes');
     expect(links[2]?.getAttribute('href')).toBe('/bookings');
-    expect(links[3]?.getAttribute('href')).toBe('/packages');
+    expect(links[3]?.getAttribute('href')).toBe('/account/packages');
     expect(links[4]?.getAttribute('href')).toBe('/account/profile');
   });
 

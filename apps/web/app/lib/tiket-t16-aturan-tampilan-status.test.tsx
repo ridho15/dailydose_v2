@@ -88,23 +88,22 @@ describe('Tiket T-16: Aturan Tampilan Menurut Status', () => {
 
       render(<CustomerPackagesView />);
 
-      // Tab Paket Aktif: hanya menampilkan paket aktif dengan tombol "Booking kelas"
+      // Paket aktif: hanya paket yang masih berlaku, dengan tombol "Booking kelas"
       expect(await screen.findByText('Paket 10 Sesi Aktif')).toBeVisible();
-      expect(screen.getByRole('link', { name: 'Booking kelas' })).toBeVisible();
-      expect(screen.queryByText('Paket Kedaluwarsa 2024')).not.toBeInTheDocument();
+      expect(screen.getAllByRole('link', { name: 'Booking kelas' })).toHaveLength(1);
+      expect(screen.getByText('Paket Kedaluwarsa 2024')).not.toBeVisible();
 
-      // Pindah ke Tab Riwayat Paket:
-      await userEvent.click(screen.getByRole('tab', { name: 'Riwayat Paket' }));
+      // Buka riwayat di halaman yang sama
+      await userEvent.click(screen.getByText('Riwayat paket dan pesanan'));
 
-      // Paket kedaluwarsa tampil di tab riwayat
-      expect(await screen.findByText('Paket Kedaluwarsa 2024')).toBeVisible();
-      expect(screen.getByText('Kedaluwarsa')).toBeVisible();
-      expect(screen.getByText('Hangus')).toBeVisible();
+      // Paket kedaluwarsa tampil di riwayat, sesi sisanya ditandai hangus
+      expect(screen.getByText('Paket Kedaluwarsa 2024')).toBeVisible();
+      expect(screen.getByText(/14 sesi hangus/)).toBeVisible();
 
-      // Tombol "Booking kelas" TIDAK PERNAH muncul untuk paket kedaluwarsa
-      expect(screen.queryByRole('link', { name: 'Booking kelas' })).not.toBeInTheDocument();
+      // Tombol "Booking kelas" tetap hanya satu (milik paket aktif)
+      expect(screen.getAllByRole('link', { name: 'Booking kelas' })).toHaveLength(1);
 
-      // Tombol diganti menjadi "Beli paket baru" yang mengarah ke /packages
+      // Riwayat menawarkan "Beli paket baru" yang mengarah ke /packages
       const buyNewBtn = screen.getByRole('link', { name: 'Beli paket baru' });
       expect(buyNewBtn).toBeVisible();
       expect(buyNewBtn).toHaveAttribute('href', '/packages');

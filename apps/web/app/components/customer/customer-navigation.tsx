@@ -59,13 +59,16 @@ export function isCustomerTabActive(pathname: string, href: string) {
   if (href === '/account/profile') {
     return (
       pathname === '/account/profile' ||
-      (pathname.startsWith('/account/') && pathname !== '/account') ||
+      (pathname.startsWith('/account/') && !pathname.startsWith('/account/packages')) ||
       pathname === '/orders' ||
       pathname.startsWith('/orders/') ||
       pathname === '/checkout' ||
       pathname.startsWith('/checkout/') ||
       pathname === '/check-in-pass'
     );
+  }
+  if (href === '/account/packages') {
+    return pathname.startsWith('/account/packages') || pathname === '/packages' || pathname.startsWith('/packages/');
   }
   return isCustomerNavigationActive(pathname, href);
 }
