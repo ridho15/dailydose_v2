@@ -393,8 +393,12 @@ export type CustomerRescheduleOptions = {
     timezone: string;
     status: string;
     availableCapacity: number;
-    branch: { id: string; name: string; timezone: string };
+    eligible?: boolean;
+    ineligibilityReason?: 'SCHEDULE_CONFLICT' | 'DUPLICATE_BOOKING' | 'SLOT_FULL' | string | null;
+    branch?: { id: string; name: string; timezone: string };
     classType: { id: string; name: string };
+    instructor?: { id: string; displayName: string | null } | null;
+    studio?: { id: string; name: string } | null;
   }>;
 };
 
