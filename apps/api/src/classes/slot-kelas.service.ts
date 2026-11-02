@@ -1,4 +1,5 @@
 import { HITUNG_TERISI, terisi } from './terisi';
+import { bacaOpsional } from '../foundation/tabel-opsional';
 import { requireReason } from '../foundation/reason';
 import { HttpStatus, Injectable, Logger, Optional } from '@nestjs/common';
 import { WhatsAppGatewayService } from '../notifications/whatsapp-gateway.service';
@@ -40,10 +41,15 @@ const STATUS_ALLOWED: Record<
 /** Kapasitas cabang + tipe kelas dari Data Master, atau null bila belum diatur. */
 async function kapasitasCabang(tx: any, branchId: string, classTypeId: string) {
   if (typeof tx.kapasitasKelasCabang?.findUnique !== 'function') return null;
-  const row = await tx.kapasitasKelasCabang.findUnique({
-    where: { branchId_classTypeId: { branchId, classTypeId } },
-    select: { capacity: true },
-  });
+  const row = await bacaOpsional<{ capacity: number } | null>(
+    'kapasitas_kelas_cabang',
+    () =>
+      tx.kapasitasKelasCabang.findUnique({
+        where: { branchId_classTypeId: { branchId, classTypeId } },
+        select: { capacity: true },
+      }),
+    null,
+  );
   return row?.capacity ?? null;
 }
 

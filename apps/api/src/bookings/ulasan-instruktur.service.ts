@@ -1,5 +1,6 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
+import { bacaOpsional } from '../foundation/tabel-opsional';
 import type { SessionPrincipal } from '../identity/identity.service';
 import { PolicyService } from '../identity/policy.service';
 import { ApiProblem } from '../identity/security';
@@ -101,10 +102,17 @@ export class UlasanInstrukturService {
       take: 20,
     });
     if (bookings.length === 0) return [];
-    const sudah = await this.db.ulasanInstruktur.findMany({
-      where: { bookingId: { in: bookings.map((b) => b.id) } },
-      select: { bookingId: true },
-    });
+    // Tabel ulasan belum dibuat: jangan tawarkan ulasan dulu (menyimpannya pasti gagal).
+    const sudah = await bacaOpsional(
+      'ulasan_instruktur',
+      () =>
+        this.db.ulasanInstruktur.findMany({
+          where: { bookingId: { in: bookings.map((b) => b.id) } },
+          select: { bookingId: true },
+        }),
+      null,
+    );
+    if (sudah === null) return [];
     const selesai = new Set(sudah.map((u) => u.bookingId));
     return bookings
       .filter((b) => !selesai.has(b.id))

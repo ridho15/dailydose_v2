@@ -1,5 +1,6 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
+import { bacaOpsional } from '../foundation/tabel-opsional';
 import type { SessionPrincipal } from '../identity/identity.service';
 import { PolicyService } from '../identity/policy.service';
 import { ApiProblem } from '../identity/security';
@@ -327,9 +328,14 @@ export class RingkasanKeuanganService {
     };
 
     const pembayar = (biaya as { id: string }[]).length
-      ? await this.db.pembayarPengeluaran.findMany({
-          where: { otherCostId: { in: (biaya as { id: string }[]).map((b) => b.id) } },
-        })
+      ? await bacaOpsional(
+          'pembayar_pengeluaran',
+          () =>
+            this.db.pembayarPengeluaran.findMany({
+              where: { otherCostId: { in: (biaya as { id: string }[]).map((b) => b.id) } },
+            }),
+          [],
+        )
       : [];
     const namaPembayar = pembayar.length
       ? new Map(

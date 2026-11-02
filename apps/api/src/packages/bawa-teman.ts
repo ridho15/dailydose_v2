@@ -1,3 +1,5 @@
+import { bacaOpsional } from '../foundation/tabel-opsional';
+
 /**
  * Paket "bawa teman" (mis. Double Trouble Deal): pemilik paket boleh memasukkan dirinya sekali lagi
  * ke kelas yang sama sebagai kursi untuk temannya, yang tidak perlu menjadi member. Kursi teman
@@ -21,7 +23,11 @@ export async function maksTemanPaket(
 ): Promise<Map<string, number>> {
   const ids = [...new Set(packageIds.filter((id): id is string => Boolean(id)))];
   if (!ids.length || typeof db.paketBawaTeman?.findMany !== 'function') return new Map();
-  const rows = await db.paketBawaTeman.findMany({ where: { packageId: { in: ids } } });
+  const rows = await bacaOpsional(
+    'paket_bawa_teman',
+    () => db.paketBawaTeman!.findMany({ where: { packageId: { in: ids } } }),
+    [],
+  );
   return new Map(rows.map((r) => [r.packageId, r.maksTeman]));
 }
 
@@ -31,6 +37,10 @@ export async function bookingTeman(
   bookingIds: readonly string[],
 ): Promise<Map<string, string | null>> {
   if (!bookingIds.length || typeof db.bookingTeman?.findMany !== 'function') return new Map();
-  const rows = await db.bookingTeman.findMany({ where: { bookingId: { in: [...bookingIds] } } });
+  const rows = await bacaOpsional(
+    'booking_teman',
+    () => db.bookingTeman!.findMany({ where: { bookingId: { in: [...bookingIds] } } }),
+    [],
+  );
   return new Map(rows.map((r) => [r.bookingId, r.namaTeman]));
 }

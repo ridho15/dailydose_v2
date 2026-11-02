@@ -1,5 +1,6 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
+import { bacaOpsional } from '../foundation/tabel-opsional';
 import type { SessionPrincipal } from '../identity/identity.service';
 import { PolicyService } from '../identity/policy.service';
 import { ApiProblem } from '../identity/security';
@@ -110,9 +111,14 @@ export async function hitungModalSesi(
   if (!sesi.length) return hasil;
   const tarif: BarisTarif[] =
     typeof db.modalSesi?.findMany === 'function'
-      ? await db.modalSesi.findMany({
-          where: { branchId: { in: [...new Set(sesi.map((x) => x.classSlot.branchId))] } },
-        })
+      ? await bacaOpsional(
+          'modal_sesi',
+          () =>
+            db.modalSesi.findMany({
+              where: { branchId: { in: [...new Set(sesi.map((x) => x.classSlot.branchId))] } },
+            }),
+          [],
+        )
       : [];
   const tambah = (peta: Map<string, number>, kunci: string, n: number) =>
     peta.set(kunci, (peta.get(kunci) ?? 0) + n);

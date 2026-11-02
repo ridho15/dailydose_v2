@@ -3,6 +3,7 @@ import type { SessionPrincipal } from '../identity/identity.service';
 import { ApiProblem, ENTITY_ID_REGEX } from '../identity/security';
 import { MasterAccessService } from './master-access.service';
 import { PrismaService } from '../database/prisma.service';
+import { bacaOpsional } from '../foundation/tabel-opsional';
 import { HITUNG_TERISI, terisi } from '../classes/terisi';
 import {
   calculateSlotFee,
@@ -89,7 +90,11 @@ export class EffectiveSettingsService {
           },
         }),
         typeof this.db.kapasitasKelasCabang?.findMany === 'function'
-          ? this.db.kapasitasKelasCabang.findMany({ where: scopeWhere })
+          ? bacaOpsional(
+              'kapasitas_kelas_cabang',
+              () => this.db.kapasitasKelasCabang.findMany({ where: scopeWhere }),
+              [],
+            )
           : Promise.resolve([]),
       ]);
       const kap = new Map(kapasitas.map((k) => [`${k.branchId}|${k.classTypeId}`, k.capacity]));
