@@ -29,6 +29,7 @@ export function SharedPackageMembersDialog({
   packageName,
   canManage = false,
   onChanged,
+  searchCustomers = (q: string) => customerClient.list({ q, status: "ACTIVE" }),
 }: {
   open: boolean;
   onClose(): void;
@@ -36,6 +37,7 @@ export function SharedPackageMembersDialog({
   packageName?: string;
   canManage?: boolean;
   onChanged?: () => void;
+  searchCustomers?: (query: string) => Promise<{ items: CustomerSummary[] }>;
 }) {
   const feedback = useOptionalAppFeedback();
   const [loading, setLoading] = useState(true);
@@ -52,6 +54,8 @@ export function SharedPackageMembersDialog({
   // Form self-service tambah member
   const [identifier, setIdentifier] = useState('');
   const [relationship, setRelationship] = useState('FRIEND');
+  const [selectedCustomer, setSelectedCustomer] = useState<CustomerSummary | null>(null);
+  const [suggestions, setSuggestions] = useState<CustomerSummary[]>([]);
 
   const load = useCallback(async () => {
     if (!open || !customerPackageId) return;
@@ -73,8 +77,38 @@ export function SharedPackageMembersDialog({
       void load();
       setIdentifier('');
       setError('');
+      setSelectedCustomer(null);
+      setSuggestions([]);
     }
   }, [load, open]);
+
+  useEffect(() => {
+    if (!canManage || !identifier.trim() || selectedCustomer || identifier.includes('@')) {
+      setSuggestions([]);
+      return;
+    }
+    const clean = identifier.trim();
+    if (clean.length < 2 || clean.replace(/\D/g, '').length >= 8) {
+      setSuggestions([]);
+      return;
+    }
+    let active = true;
+    const timer = setTimeout(async () => {
+      try {
+        const res = await searchCustomers(clean);
+        if (active) {
+          const list = (res?.items ?? []).filter((c) => c.id !== owner?.id);
+          setSuggestions(list.slice(0, 5));
+        }
+      } catch {
+        if (active) setSuggestions([]);
+      }
+    }, 100);
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [canManage, identifier, owner?.id, selectedCustomer]);
 
   const handleAddMember = async (e?: React.FormEvent) => {
     e?.preventDefault();
@@ -83,22 +117,35 @@ export function SharedPackageMembersDialog({
       setError('Masukkan email atau nomor WhatsApp teman yang ingin diundang.');
       return;
     }
-    const hasDigits = cleanId.replace(/\D/g, "").length >= 6;
-    const isEmail = cleanId.includes("@");
-    if (!isEmail && !hasDigits) {
-      setError('Masukkan nomor WhatsApp (contoh: 08123456789) atau email anggota, bukan nama.');
-      return;
-    }
-    if (owner && cleanId.toLowerCase() === owner.displayName.toLowerCase()) {
-      setError(`Pemilik paket (${owner.displayName}) sudah otomatis memiliki akses dan tidak perlu didaftarkan sebagai anggota tambahan.`);
-      return;
+
+    if (selectedCustomer) {
+      if (owner && selectedCustomer.id === owner.id) {
+        setError(`Pemilik paket (${owner.displayName}) sudah otomatis memiliki akses dan tidak perlu didaftarkan sebagai anggota tambahan.`);
+        return;
+      }
+      if (members.some((m) => m.userId === selectedCustomer.id)) {
+        setError(`${selectedCustomer.displayName} sudah terdaftar sebagai anggota di paket ini.`);
+        return;
+      }
+    } else {
+      const hasDigits = cleanId.replace(/\D/g, "").length >= 6;
+      const isEmail = cleanId.includes("@");
+      if (!isEmail && !hasDigits) {
+        setError('Masukkan nomor WhatsApp (contoh: 08123456789) atau email anggota, bukan nama.');
+        return;
+      }
+      if (owner && cleanId.toLowerCase() === owner.displayName.toLowerCase()) {
+        setError(`Pemilik paket (${owner.displayName}) sudah otomatis memiliki akses dan tidak perlu didaftarkan sebagai anggota tambahan.`);
+        return;
+      }
     }
 
     setBusy(true);
     setError('');
     try {
       const added = await addPackageMember(customerPackageId, {
-        identifier: cleanId,
+        userId: selectedCustomer?.id,
+        identifier: selectedCustomer ? (selectedCustomer.phoneE164 || selectedCustomer.email || selectedCustomer.displayName) : cleanId,
         relationship,
       });
       feedback?.showToast({
@@ -107,6 +154,7 @@ export function SharedPackageMembersDialog({
         message: `${added.displayName} telah ditambahkan ke paket bersama.`,
       });
       setIdentifier('');
+      setSelectedCustomer(null);
       await load();
       onChanged?.();
     } catch (cause) {
@@ -257,15 +305,57 @@ export function SharedPackageMembersDialog({
                   Undang Teman / Tambah Anggota (Self-Service)
                 </legend>
 
-                <TextInput
-                  label="Email atau Nomor WhatsApp Teman"
-                  placeholder="Contoh: teman@gmail.com atau 081234567890"
-                  value={identifier}
-                  onChange={(e) => setIdentifier(e.target.value)}
-                  disabled={busy}
-                  data-testid="input-member-identifier"
-                  required
-                />
+                <div className="relative">
+                  <TextInput
+                    label={canManage ? "Cari Nama Member, Nomor WhatsApp, atau Email" : "Email atau Nomor WhatsApp Teman"}
+                    placeholder={canManage ? "Ketik nama pelanggan (mis. Valerie) atau 0812..." : "Contoh: teman@gmail.com atau 081234567890"}
+                    value={identifier}
+                    onChange={(e) => {
+                      setIdentifier(e.target.value);
+                      if (selectedCustomer) setSelectedCustomer(null);
+                    }}
+                    disabled={busy}
+                    data-testid="input-member-identifier"
+                    required
+                  />
+                  {selectedCustomer && (
+                    <div className="mt-1 flex items-center justify-between rounded-dd-sm border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-xs text-emerald-800">
+                      <span>
+                        Member dipilih: <strong>{selectedCustomer.displayName}</strong> ({selectedCustomer.phoneE164 || selectedCustomer.email || "Akun Terdaftar"})
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedCustomer(null);
+                          setIdentifier("");
+                        }}
+                        className="text-xs font-semibold text-emerald-700 underline hover:text-emerald-900"
+                      >
+                        Ganti
+                      </button>
+                    </div>
+                  )}
+                  {suggestions.length > 0 && !selectedCustomer && (
+                    <ul className="absolute z-20 mt-1 max-h-48 w-full overflow-auto rounded-dd-sm border border-dd-line bg-white py-1 shadow-md">
+                      {suggestions.map((cust) => (
+                        <li
+                          key={cust.id}
+                          className="cursor-pointer px-3 py-2 text-xs hover:bg-dd-surface-muted transition"
+                          onClick={() => {
+                            setSelectedCustomer(cust);
+                            setIdentifier(cust.displayName);
+                            setSuggestions([]);
+                          }}
+                        >
+                          <div className="font-semibold text-dd-ink">{cust.displayName}</div>
+                          <div className="text-[11px] text-dd-muted">
+                            {[cust.phoneE164, cust.email].filter(Boolean).join(" · ") || "Pelanggan Terdaftar"}
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
 
                 <SelectInput
                   label="Hubungan / Relasi"

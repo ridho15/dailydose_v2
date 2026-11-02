@@ -29,13 +29,19 @@ function pesanGalat(error: unknown) {
   const code =
     error instanceof ApiError
       ? [
-          (error.data as { code?: string; title?: string } | null)?.code,
+          error.code,
+          (error.data as { code?: string; error?: { code?: string }; title?: string } | null)?.code,
+          (error.data as { code?: string; error?: { code?: string }; title?: string } | null)?.error?.code,
           (error.data as { code?: string; title?: string } | null)?.title,
           error.message,
-        ].join(' ')
+        ]
+          .filter(Boolean)
+          .join(' ')
       : '';
   if (/PHONE_ALREADY_REGISTERED/.test(code))
     return 'Nomor ini sudah dipakai akun lain. Masuk dengan nomor itu, atau hubungi studio.';
+  if (/PHONE_ALREADY_SET/.test(code))
+    return 'Nomor WhatsApp sudah tersimpan sebelumnya. Silakan segarkan halaman.';
   if (/VALIDATION/.test(code)) return 'Nomor WhatsApp tidak valid. Contoh: 0812 3456 7890.';
   return 'Nomor belum tersimpan. Coba lagi sebentar.';
 }
@@ -113,6 +119,23 @@ export function LengkapiAkunView({ client = browserClient }: { client?: Lengkapi
             description="QR kehadiran dan pengingat kelas dikirim ke nomor ini."
             error={galat || undefined}
           />
+          {galat && galat.includes("sudah dipakai akun lain") && (
+            <div className="rounded-dd-sm border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 space-y-1.5">
+              <p className="font-semibold">Akun lama Anda sudah terdaftar dengan nomor ini:</p>
+              <p>
+                Jika Anda sebelumnya sudah terdaftar (misalnya lewat nomor HP atau email lain), silakan keluar lalu masuk menggunakan nomor tersebut.
+              </p>
+              <div className="flex flex-wrap items-center gap-2 pt-1 font-semibold text-dd-forest">
+                <a href="/sign-in" className="underline hover:text-dd-forest/80">
+                  Masuk ke Akun Lama
+                </a>
+                <span>·</span>
+                <a href="/forgot-password" className="underline hover:text-dd-forest/80">
+                  Lupa Kata Sandi
+                </a>
+              </div>
+            </div>
+          )}
           <Button type="submit" disabled={sibuk || nomor.trim().length < 9}>
             {sibuk ? 'Menyimpan…' : 'Simpan dan lanjut'}
           </Button>

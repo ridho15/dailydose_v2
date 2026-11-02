@@ -14,6 +14,12 @@ vi.mock('@/api-clients/ledger-client', async (importOriginal) => {
   };
 });
 
+vi.mock('../customers/customer-client', () => ({
+  customerClient: {
+    list: vi.fn(),
+  },
+}));
+
 describe('SharedPackageMembersDialog - Self-Service Sharing Paket', () => {
   const customerPackageId = 'cp-100';
 
@@ -197,5 +203,71 @@ describe('SharedPackageMembersDialog - Self-Service Sharing Paket', () => {
     expect(
       await screen.findByText('Paket sudah kedaluwarsa sehingga tidak dapat menambah anggota baru.'),
     ).toBeInTheDocument();
+  });
+
+  it('Staf dapat mencari anggota dengan mengetik nama dan memilih dari saran', async () => {
+    const searchMock = vi.fn().mockResolvedValue({
+      items: [
+        {
+          id: 'user-cynthia',
+          displayName: 'Cynthia Winata',
+          phoneE164: '+6282164220585',
+          email: 'winata.cynthia@yahoo.com',
+        },
+      ],
+    });
+
+    vi.mocked(ledgerClient.listPackageMembers).mockResolvedValue({
+      customerPackageId,
+      package: { id: 'p-1', name: 'FLASH SALE 10.10', isShareable: true },
+      owner: {
+        id: 'user-owner',
+        displayName: 'Valerie Gunawan',
+        phoneMasked: '0812****',
+      },
+      remainingSessions: 5,
+      status: 'ACTIVE',
+      members: [],
+    });
+
+    vi.mocked(ledgerClient.addPackageMember).mockResolvedValue({
+      id: 'member-2',
+      userId: 'user-cynthia',
+      relationship: 'FRIEND',
+      displayName: 'Cynthia Winata',
+      phoneMasked: '0821****',
+      createdAt: new Date().toISOString(),
+    });
+
+    const user = userEvent.setup();
+    render(
+      <SharedPackageMembersDialog
+        open={true}
+        onClose={vi.fn()}
+        customerPackageId={customerPackageId}
+        packageName="FLASH SALE 10.10"
+        canManage={true}
+        searchCustomers={searchMock}
+      />,
+    );
+
+    await screen.findByText('Valerie Gunawan');
+    const input = screen.getByTestId('input-member-identifier');
+    await user.type(input, 'Cynthia');
+
+    expect(await screen.findByText('Cynthia Winata')).toBeInTheDocument();
+    await user.click(screen.getByText('Cynthia Winata'));
+
+    expect(screen.getByText(/Member dipilih:/)).toBeInTheDocument();
+
+    await user.click(screen.getByTestId('btn-add-member'));
+
+    await waitFor(() => {
+      expect(ledgerClient.addPackageMember).toHaveBeenCalledWith(customerPackageId, {
+        userId: 'user-cynthia',
+        identifier: '+6282164220585',
+        relationship: 'FRIEND',
+      });
+    });
   });
 });

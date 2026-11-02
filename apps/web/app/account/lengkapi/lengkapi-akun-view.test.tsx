@@ -60,6 +60,25 @@ describe('LengkapiAkunView', () => {
     expect(refresh).not.toHaveBeenCalled();
   });
 
+  it('menjelaskan bila nomor sudah dipakai akun lain dengan format galat asli server ({ error: { code } })', async () => {
+    session = {
+      displayName: 'Ayu',
+      phoneRequired: true,
+      identityVerificationStatus: 'ACTION_REQUIRED',
+    };
+    const client = klien();
+    client.simpanNomor.mockRejectedValueOnce(
+      new ApiError('Permintaan tidak dapat diproses.', 409, {
+        error: { code: 'PHONE_ALREADY_REGISTERED', message: 'Permintaan tidak dapat diproses.' },
+      }, 'PHONE_ALREADY_REGISTERED'),
+    );
+    render(<LengkapiAkunView client={client} />);
+    await userEvent.type(screen.getByLabelText('Nomor WhatsApp'), '081234567890');
+    await userEvent.click(screen.getByRole('button', { name: 'Simpan dan lanjut' }));
+    expect(await screen.findByText(/sudah dipakai akun lain/)).toBeVisible();
+    expect(screen.getByRole('link', { name: 'Masuk ke Akun Lama' })).toBeVisible();
+  });
+
   it('setelah nomor tersimpan, meminta selfie; akun lengkap kembali ke beranda', () => {
     session = {
       displayName: 'Ayu',
