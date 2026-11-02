@@ -119,7 +119,7 @@ Masih terbuka (butuh keputusan atau pekerjaan lebih besar):
 | Item | Catatan |
 | :--- | :--- |
 | Ambil alih akun lewat email belum terverifikasi | Orang bisa mendaftar dengan email member lalu ikut masuk saat member login Google. Perlu verifikasi email saat daftar. |
-| Rahasia QR check-in | `CHECK_IN_TOKEN_SECRET`/`SESSION_SECRET` belum diisi di produksi sehingga memakai nilai bawaan di kode. Mengisinya membuat QR lama tidak berlaku (member perlu QR baru); tentukan waktunya. |
+| Rahasia QR check-in | Diputuskan pemilik 2 November: QR statis tetap dipakai, tidak diubah. |
 | Pembatasan percobaan login | Masih di memori per proses; perlu Redis/DB bila server lebih dari satu. |
 | Nonce Google | Belum diwajibkan (perlu perubahan di web dan API). |
 | Batas voucher per member | Belum ada; perlu keputusan pemilik. |
