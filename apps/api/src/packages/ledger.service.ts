@@ -1220,6 +1220,7 @@ export class LedgerService {
   }
 
   private assertSuperOwner(principal: SessionPrincipal) {
+    this.policy.requireCapability(principal.capabilities, "customer-package:manage");
     const isSuperOwner = principal.roles.some((r) => r.role === "SUPER_OWNER");
     if (!isSuperOwner) {
       throw new ApiProblem("FORBIDDEN", HttpStatus.FORBIDDEN);

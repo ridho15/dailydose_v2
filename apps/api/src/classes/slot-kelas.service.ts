@@ -1212,10 +1212,10 @@ export class ClassSlotService {
     const kelas = await this.db.slotKelas.findMany({
       where: {
         status: { in: [...STATUS_ALLOWED.complete] },
-        endAt: { lte: batasAkhir, gte: new Date(now.getTime() - 7 * 86_400_000) },
+        endAt: { lte: batasAkhir, gte: new Date(now.getTime() - 90 * 86_400_000) },
       },
       select: { id: true },
-      orderBy: { endAt: 'asc' },
+      orderBy: { endAt: 'desc' },
       take: 200,
     });
     const sistem = {
