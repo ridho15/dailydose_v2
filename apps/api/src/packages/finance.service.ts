@@ -6,7 +6,12 @@ import { requireReason } from '../foundation/reason';
 import type { SessionPrincipal } from '../identity/identity.service';
 import { PolicyService } from '../identity/policy.service';
 import { ApiProblem } from '../identity/security';
-import { calculateSlotFee, summarizeInstructorFees } from './instructor-fee-calculator';
+import {
+  calculateSlotFee,
+  presensiMilikInstruktur,
+  sortFeesNewestFirst,
+  summarizeInstructorFees,
+} from './instructor-fee-calculator';
 import { hitungModalSesi } from './modal-sesi.service';
 import { koreksiHonorDalamRentang } from './koreksi-jam.service';
 import {
@@ -17,6 +22,18 @@ import {
 } from './finance-range';
 
 /** Rentang laporan: `from`/`until` (inklusif, `YYYY-MM-DD`); `period` (`YYYY-MM`) adalah singkatan satu bulan penuh. */
+/** Batas atas nominal pengeluaran; kolom amountRp bertipe Int 32-bit. */
+export const BATAS_NOMINAL_PENGELUARAN_RP = 2_000_000_000;
+
+function pastikanNominalPengeluaran(amountRp: number) {
+  if (!Number.isInteger(amountRp) || amountRp <= 0)
+    throw new ApiProblem('INVALID_AMOUNT', HttpStatus.BAD_REQUEST);
+  if (amountRp > BATAS_NOMINAL_PENGELUARAN_RP)
+    throw new ApiProblem('VALIDATION_ERROR', HttpStatus.UNPROCESSABLE_ENTITY, false, [
+      { field: 'amountRp', issue: 'TOO_LARGE' },
+    ]);
+}
+
 export interface FinanceQuery {
   branchId?: string;
   from?: string;
@@ -47,6 +64,13 @@ export class FinanceService {
     private readonly policy: PolicyService,
     private readonly audit: AuditService,
   ) {}
+
+  private punyaAksesSemuaCabang(principal: SessionPrincipal) {
+    return (
+      principal.capabilities.includes('branch:all') ||
+      principal.roles.some((r) => ['SUPER_OWNER', 'FINANCE'].includes(r.role as string))
+    );
+  }
 
   private ensureBranchAccess(principal: SessionPrincipal, targetBranchId?: string) {
     const isGlobal =
@@ -167,6 +191,7 @@ export class FinanceService {
         instructorAttendance: {
           select: {
             id: true,
+            instructorId: true,
             checkedInAt: true,
             latitude: true,
             longitude: true,
@@ -207,10 +232,11 @@ export class FinanceService {
     );
     const instructorFeeMissing = slots.length > 0 && (fees.length === 0 || unconfiguredClassCount > 0);
 
+    const tarifUrut = sortFeesNewestFirst(fees);
     const sessions = slots.map((s) => {
       const slotAny = s as any;
       const slotFee = s.instructorId
-        ? calculateSlotFee(fees, {
+        ? calculateSlotFee(tarifUrut, {
             startAt: s.startAt,
             endAt: s.endAt,
             branchId: s.branchId,
@@ -236,7 +262,7 @@ export class FinanceService {
         feePerJamRp: slotFee.feePerJamRp,
         feeRp: slotFee.feeRp,
         isManualFee: Boolean(slotAny.isManualFee),
-        attendanceVerified: Boolean(att),
+        attendanceVerified: presensiMilikInstruktur(slotAny, s.instructorId),
         attendanceTime: att?.checkedInAt ? new Date(att.checkedInAt).toISOString() : null,
         latitude: att?.latitude ? Number(att.latitude) : null,
         longitude: att?.longitude ? Number(att.longitude) : null,
@@ -416,9 +442,7 @@ export class FinanceService {
     this.policy.requireAnyCapability(principal.capabilities, ['finance:manage', 'expense:create']);
     this.ensureBranchAccess(principal, input.branchId);
 
-    if (!Number.isInteger(input.amountRp) || input.amountRp <= 0) {
-      throw new ApiProblem('INVALID_AMOUNT', HttpStatus.BAD_REQUEST);
-    }
+    pastikanNominalPengeluaran(input.amountRp);
     const incurredOn = this.costDay(input);
     // Aturan yang sama dengan updateOtherCost: keterangan 1-2000 karakter, kategori kode huruf besar.
     const description = String(input.description ?? '').trim();
@@ -559,8 +583,7 @@ export class FinanceService {
       data.description = description;
     }
     if (input.amountRp !== undefined) {
-      if (!Number.isInteger(input.amountRp) || input.amountRp <= 0)
-        throw new ApiProblem('INVALID_AMOUNT', HttpStatus.BAD_REQUEST);
+      pastikanNominalPengeluaran(input.amountRp);
       data.amountRp = input.amountRp;
     }
     if (Object.keys(data).length === 0)
@@ -746,21 +769,29 @@ export class FinanceService {
     input: { branchId?: string; from?: string; until?: string },
   ) {
     this.policy.requireCapability(principal.capabilities, 'finance:read');
+    if (input.branchId) this.ensureBranchAccess(principal, input.branchId);
+    const isGlobal = this.punyaAksesSemuaCabang(principal);
     const branch = input.branchId
       ? await this.db.cabang.findUnique({ where: { id: input.branchId } })
-      : await this.db.cabang.findFirst();
+      : await this.db.cabang.findFirst(
+          isGlobal ? undefined : { where: { id: { in: principal.branchIds } } },
+        );
+    // Staf tanpa akses semua cabang tidak boleh jatuh ke seluruh cabang saat tidak ada cabang yang cocok.
+    if (!branch && !isGlobal) throw new ApiProblem('FORBIDDEN', HttpStatus.FORBIDDEN);
+
+    const fromDate = input.from ? new Date(input.from) : new Date(Date.now() - 30 * 86400000);
+    const untilDate = input.until ? new Date(input.until) : new Date();
+    const range = input.from || input.until ? financeRange(input) : null;
 
     const purchases = await this.db.pembelian.findMany({
       where: {
         ...(branch ? { branchId: branch.id } : {}),
         status: 'PAID',
+        ...(range ? { paidAt: { gte: range.fromDate, lt: range.untilExclusive } } : {}),
       },
     });
 
     const revenue = purchases.reduce((sum, p) => sum + p.totalAmountRp, 0);
-
-    const fromDate = input.from ? new Date(input.from) : new Date(Date.now() - 30 * 86400000);
-    const untilDate = input.until ? new Date(input.until) : new Date();
 
     const branchItem = {
       id: branch?.id ?? 'branch-1',
@@ -797,7 +828,13 @@ export class FinanceService {
     input: { branchId?: string; from?: string; until?: string; limit?: number; cursor?: string },
   ) {
     this.policy.requireCapability(principal.capabilities, 'finance:read');
+    if (input.branchId) this.ensureBranchAccess(principal, input.branchId);
     const limit = input.limit ? Math.min(input.limit, 100) : 50;
+    const lingkupCabang = input.branchId
+      ? { branchId: input.branchId }
+      : this.punyaAksesSemuaCabang(principal)
+        ? {}
+        : { branchId: { in: principal.branchIds } };
 
     // Pembelian menunggu verifikasi lebih dari 24 jam
     const agingCutoff = new Date(Date.now() - 24 * 3600 * 1000);
@@ -805,7 +842,7 @@ export class FinanceService {
       where: {
         status: 'WAITING_VERIFICATION',
         createdAt: { lt: agingCutoff },
-        ...(input.branchId ? { branchId: input.branchId } : {}),
+        ...lingkupCabang,
       },
       include: {
         branch: { select: { code: true } },
@@ -1013,7 +1050,7 @@ export class FinanceService {
       include: {
         instructor: true,
         classType: true,
-        instructorAttendance: { select: { id: true } },
+        instructorAttendance: { select: { id: true, instructorId: true } },
       },
     });
 

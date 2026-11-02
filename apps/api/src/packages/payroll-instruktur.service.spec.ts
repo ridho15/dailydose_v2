@@ -20,7 +20,7 @@ const slot = (id: string, start: string, hadir: boolean) => ({
   isManualFee: false,
   classType: { name: 'Group' },
   branch: { name: 'Gading' },
-  instructorAttendance: hadir ? { checkedInAt: new Date(start) } : null,
+  instructorAttendance: hadir ? { checkedInAt: new Date(start), instructorId: 'i-a' } : null,
 });
 
 function setup() {

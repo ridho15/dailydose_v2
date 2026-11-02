@@ -59,7 +59,7 @@ describe('BookingsService - Anti-Booking Kembar Duplicate Guard (Poin 8)', () =>
       paketBawaTeman: {
         findMany: jest.fn(async () => (maksTeman ? [{ packageId: 'pkg-1', maksTeman }] : [])),
       },
-      bookingTeman: { create: jest.fn() },
+      bookingTeman: { create: jest.fn(), findMany: jest.fn(async () => []) },
       slotKelas: {
         findUnique: jest.fn(async () => mockSlot),
         update: jest.fn(async () => ({})),
@@ -71,6 +71,13 @@ describe('BookingsService - Anti-Booking Kembar Duplicate Guard (Poin 8)', () =>
         findUnique: jest.fn(async () => mockCustomer),
       },
       pemesananKelas: {
+        // Booking aktif member ini di kelas yang sama (untuk menghitung kursi teman yang sudah ada).
+        findMany: jest.fn(async ({ where }: any) =>
+          where?.userId && where?.classSlotId === slotId &&
+          existingBookingStatus && ['BOOKED', 'ATTENDED'].includes(existingBookingStatus)
+            ? [{ id: 'existing-1' }]
+            : [],
+        ),
         count: jest.fn(async ({ where }: any) => {
           // Booking milik member ini di kelas yang sama (pengecekan duplikat).
           if (where?.userId && where?.classSlotId === slotId)
@@ -274,6 +281,27 @@ describe('BookingsService - Anti-Booking Kembar Duplicate Guard (Poin 8)', () =>
     it('member dengan paket biasa tetap ditolak booking ganda', async () => {
       const { service } = createService('BOOKED', 1, 0);
       await expect(tambahLagi(service, principal, 'SELF')).rejects.toMatchObject({
+        code: 'DUPLICATE_ACTIVE_BOOKING',
+      });
+    });
+
+    it('kursi sendiri dibatalkan, kursi teman masih ada: booking baru adalah kursi member sendiri', async () => {
+      const { service, tx } = createService('BOOKED', 1, 1);
+      // Satu-satunya booking aktif member di kelas ini adalah kursi teman.
+      tx.bookingTeman.findMany.mockResolvedValue([{ bookingId: 'existing-1', namaTeman: 'Rani' }] as never);
+      const result = await tambahLagi(service, staf, 'ADMIN_ASSISTED');
+      expect(result.status).toBe(HttpStatus.CREATED);
+      expect(tx.bookingTeman.create).not.toHaveBeenCalled();
+    });
+
+    it('kursi teman sudah sebanyak batas paket: kursi teman tambahan ditolak', async () => {
+      const { service, tx } = createService('BOOKED', 2, 1);
+      tx.pemesananKelas.findMany.mockResolvedValue([{ id: 'own-1' }, { id: 'friend-1' }] as never);
+      tx.pemesananKelas.count.mockImplementation(async ({ where }: any) =>
+        where?.userId && where?.classSlotId === slotId ? 2 : 0,
+      );
+      tx.bookingTeman.findMany.mockResolvedValue([{ bookingId: 'friend-1', namaTeman: 'Rani' }] as never);
+      await expect(tambahLagi(service, staf, 'ADMIN_ASSISTED')).rejects.toMatchObject({
         code: 'DUPLICATE_ACTIVE_BOOKING',
       });
     });

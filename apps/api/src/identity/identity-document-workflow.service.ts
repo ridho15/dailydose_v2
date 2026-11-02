@@ -6,6 +6,7 @@ import type { SessionPrincipal } from './identity.service';
 import { PolicyService } from './policy.service';
 import { PRIVATE_FILE_STORAGE, type PrivateFileStorage } from './private-file-storage';
 import { ApiProblem, newId } from './security';
+import { bolehAksesIdentitas } from './customer-visibility';
 
 export type IdentityDocumentKind = 'KTP_FRONT' | 'SELFIE';
 
@@ -174,6 +175,8 @@ export class IdentityDocumentWorkflowService {
     if (id.startsWith('doc-ktp-')) targetUserId = id.replace('doc-ktp-', '');
     else if (id.startsWith('doc-selfie-')) targetUserId = id.replace('doc-selfie-', '');
 
+    if (targetUserId && this.db && !(await bolehAksesIdentitas(this.db as never, principal, targetUserId)))
+      throw new ApiProblem('NOT_FOUND', HttpStatus.NOT_FOUND);
     if (targetUserId && this.db) {
       const existing = await this.db.profilPengguna.findUnique({ where: { userId: targetUserId } });
       const currentNotes = existing?.notes ? `${existing.notes} | ` : '';

@@ -223,6 +223,36 @@ export function checkVoucherApplicability(
   return { valid: true };
 }
 
+/**
+ * Pakai satu kuota voucher secara atomik: kenaikan hanya terjadi bila kuota belum habis pada saat
+ * UPDATE, sehingga dua pesanan bersamaan tidak bisa melewati batas. Dipanggil di transaksi pesanan.
+ */
+export async function pakaiKuotaVoucher(
+  tx: Prisma.TransactionClient,
+  voucher: { id: string; quota?: number | null },
+): Promise<void> {
+  const hasil = await tx.voucher.updateMany({
+    where:
+      voucher.quota === null || voucher.quota === undefined
+        ? { id: voucher.id }
+        : { id: voucher.id, usedCount: { lt: voucher.quota } },
+    data: { usedCount: { increment: 1 } },
+  });
+  if (hasil.count === 0) throw new ApiProblem('VOUCHER_QUOTA_EXHAUSTED', HttpStatus.CONFLICT);
+}
+
+/** Kembalikan kuota saat pesanan bervoucher batal/ditolak; tidak pernah di bawah 0. */
+export async function lepasKuotaVoucher(
+  tx: Prisma.TransactionClient,
+  voucherId: string | null | undefined,
+): Promise<void> {
+  if (!voucherId) return;
+  await tx.voucher.updateMany({
+    where: { id: voucherId, usedCount: { gt: 0 } },
+    data: { usedCount: { decrement: 1 } },
+  });
+}
+
 @Injectable()
 export class VoucherService {
   constructor(

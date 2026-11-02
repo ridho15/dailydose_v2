@@ -303,7 +303,7 @@ describe('class slot status guards', () => {
     expect(tx.sessionLedger.create).not.toHaveBeenCalled();
   });
 
-  it.each(['DRAFT', 'PUBLISHED', 'CANCELLED'])('completes only CONFIRMED classes (%s refused)', async (status) => {
+  it.each(['DRAFT', 'CANCELLED'])('completes only PUBLISHED/CONFIRMED classes (%s refused)', async (status) => {
     const { service, tx } = build(slotRow({ status, bookings: [] }));
     await expect(service.complete(principal, slotId, {}, key, 'c')).rejects.toMatchObject({
       code: 'INVALID_STATE_TRANSITION',
@@ -404,7 +404,7 @@ describe('class slot optimistic locking', () => {
     const ok = build(slotRow({ status: 'CONFIRMED', version: 4, bookings: [] }));
     await ok.service.complete(principal, slotId, { expectedVersion: 4 }, key, 'c');
     expect(ok.tx.slotKelas.updateMany).toHaveBeenCalledWith({
-      where: { id: slotId, status: 'CONFIRMED', version: 4 },
+      where: { id: slotId, status: { in: ['PUBLISHED', 'CONFIRMED'] }, version: 4 },
       data: { status: 'COMPLETED', version: { increment: 1 } },
     });
   });

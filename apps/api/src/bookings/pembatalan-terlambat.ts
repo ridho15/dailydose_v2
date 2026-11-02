@@ -14,19 +14,23 @@ export const KODE_PEMBATALAN_TERLAMBAT = 'LATE_CANCELLATION';
 export const CAP_PUTUS_PEMBATALAN = 'booking:late-cancel:decide';
 
 /**
- * Sesi yang dikembalikan bila disetujui: 1 bila sesinya sudah terpotong (ada potongan ATTEND untuk
- * booking ini, atau booking sudah berstatus Hadir), 0 bila belum (booking aktif biasa).
+ * Sesi yang dikembalikan bila disetujui: 1 hanya bila sesinya memang sudah terpotong, 0 bila belum.
+ * Terpotong berarti ada potongan ATTEND untuk booking ini (sesi V2 dipotong saat kelas selesai),
+ * atau booking hasil migrasi V1 yang sudah Hadir/Tidak hadir (V1 memotong saat booking dikunci
+ * dan migrasi tidak membuat baris potongan). Booking V2 yang sudah check-in tetapi kelasnya belum
+ * selesai belum terpotong, jadi tidak ada yang dikembalikan.
  */
 export async function sesiTerpotong(
   tx: Prisma.TransactionClient,
-  booking: { id: string; status: string },
+  booking: { id: string; status: string; bookingNumber?: string | null },
 ): Promise<number> {
-  if (booking.status === 'ATTENDED') return 1;
   const potongan = await tx.sessionLedger.findFirst({
     where: { referenceId: booking.id, type: SessionMutationType.ATTEND },
     select: { id: true },
   });
-  return potongan ? 1 : 0;
+  if (potongan) return 1;
+  const dariV1 = booking.bookingNumber?.startsWith('BKG-V1-') ?? false;
+  return dariV1 && (booking.status === 'ATTENDED' || booking.status === 'NO_SHOW') ? 1 : 0;
 }
 
 /** Menjalankan pembatalan yang sudah disetujui, di dalam transaksi pemanggil. */
@@ -53,10 +57,9 @@ export async function jalankanPembatalanTerlambat(
   if (booking.status === 'CANCELLED' && !isAlreadyCancelledForMedical)
     throw new ApiProblem('BOOKING_NOT_ACTIVE', HttpStatus.CONFLICT);
 
-  // Dihitung saat diputuskan: bila izin medis atau kelas keburu selesai, sesinya dikembalikan.
-  const sesiKembali = (isAlreadyCancelledForMedical || isMedical)
-    ? (pengajuan.sessionCount > 0 ? pengajuan.sessionCount : 1)
-    : await sesiTerpotong(tx, booking);
+  // Dihitung saat diputuskan (juga untuk izin medis): hanya sesi yang benar-benar sudah terpotong
+  // yang dikembalikan, supaya pembatalan tidak menghasilkan sesi gratis.
+  const sesiKembali = await sesiTerpotong(tx, booking);
 
   if (!isAlreadyCancelledForMedical) {
     await tx.pemesananKelas.update({

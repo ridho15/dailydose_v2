@@ -144,6 +144,11 @@ Aturan kerahasiaan per peran ada di [Rules.md](./Rules.md#2-kerahasiaan-data-keu
    batas yang sama).
 10. Presensi member dilakukan dengan **staf memindai QR member**.
 11. Login foto: menunggu gambar baru dari pemilik (lihat HANDOFF).
+12. Penjualan tunai/kartu/manual staf wajib disetujui **Manager atau Super Owner**, dan bukan oleh
+    orang yang mencatatnya (2 November 2026).
+13. Kode unik transfer **tetap dihitung** sebagai omzet (2 November 2026).
+14. Paket N hari yang aktif tanggal D berlaku **sampai 23.59 WIB tanggal D + N** (contoh: aktif 1
+    November, 120 hari, berakhir 1 Maret 23.59 WIB) (2 November 2026).
 
 ## 6. Perlu konfirmasi (asumsi saat membangun)
 

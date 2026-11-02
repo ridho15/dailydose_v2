@@ -21,16 +21,26 @@ export class ProblemDetailsFilter implements ExceptionFilter {
     const response = http.getResponse<Response>();
 
     const isConcurrencyConflict = (error as any)?.code === 'P2034';
+    // Klik ganda / permintaan bersamaan yang menabrak kunci unik atau baris yang sudah terhapus
+    // adalah konflik dari sisi pengguna, bukan kesalahan server.
+    const isDuplicate = (error as any)?.code === 'P2002';
+    const isGone = (error as any)?.code === 'P2025';
 
-    const status = isConcurrencyConflict
+    const status = isConcurrencyConflict || isDuplicate
       ? HttpStatus.CONFLICT
-      : error instanceof HttpException
+      : isGone
+        ? HttpStatus.NOT_FOUND
+        : error instanceof HttpException
         ? error.getStatus()
         : HttpStatus.INTERNAL_SERVER_ERROR;
 
     const code = isConcurrencyConflict
       ? 'CONCURRENCY_CONFLICT'
-      : error instanceof ApiProblem
+      : isDuplicate
+        ? 'DUPLICATE_REQUEST'
+        : isGone
+          ? 'RESOURCE_NOT_FOUND'
+          : error instanceof ApiProblem
         ? error.code
         : error instanceof HttpException
           ? `HTTP_${status}`

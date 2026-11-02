@@ -59,7 +59,7 @@ function setup(
     packagePromotion: { findFirst: jest.fn().mockResolvedValue(options.promotion ?? null) },
     voucher: {
       findFirst: jest.fn().mockResolvedValue(options.voucher ?? null),
-      update: jest.fn().mockResolvedValue({}),
+      updateMany: jest.fn().mockResolvedValue({ count: 1 }),
     },
     pembelian: {
       create: jest.fn().mockImplementation(async ({ data }) => {
@@ -204,7 +204,7 @@ describe('assisted (walk-in) package sale', () => {
       discountRp: 100_000,
       totalAmountRp: 900_000,
     });
-    expect(ok.tx.voucher.update).toHaveBeenCalledWith({
+    expect(ok.tx.voucher.updateMany).toHaveBeenCalledWith({
       where: { id: voucher.id },
       data: { usedCount: { increment: 1 } },
     });

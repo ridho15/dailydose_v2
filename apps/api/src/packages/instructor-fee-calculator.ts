@@ -7,7 +7,12 @@ export type InstructorFeeRow = {
   classTypeId: string;
   effectiveDate: Date;
   feePerJamRp: number;
+  /** Tie-break bila dua versi fee punya effectiveDate yang sama. */
+  createdAt?: Date;
+  id?: string;
 };
+
+type PresensiInstruktur = { instructorId?: string | null; [kunci: string]: unknown };
 
 export type FeeableSlot = {
   startAt: Date;
@@ -16,7 +21,7 @@ export type FeeableSlot = {
   classTypeId: string;
   instructor: { id: string; displayName: string } | null;
   classType: { name: string } | null;
-  instructorAttendance?: unknown;
+  instructorAttendance?: PresensiInstruktur | null;
   instructorFeeRp?: number | null;
   isManualFee?: boolean;
 };
@@ -48,8 +53,38 @@ export function periodRange(periodStr?: string) {
   return { period, fromDate, nextMonth };
 }
 
+const OFFSET_WIB_MS = 7 * 3_600_000;
+
+/** Tanggal kalender WIB (`YYYY-MM-DD`) dari sebuah waktu; WIB UTC+7 tanpa DST. */
+export function tanggalWib(waktu: Date): string {
+  return new Date(waktu.getTime() + OFFSET_WIB_MS).toISOString().slice(0, 10);
+}
+
+/**
+ * effectiveDate disimpan sebagai tengah malam UTC dari tanggal yang diketik admin, jadi yang
+ * dibandingkan adalah tanggal kalendernya, bukan jamnya. Kelas jam 06:00 WIB pada tanggal berlaku
+ * harus sudah memakai tarif baru.
+ */
+export function berlakuPadaKelas(effectiveDate: Date, startAt: Date): boolean {
+  return effectiveDate.toISOString().slice(0, 10) <= tanggalWib(startAt);
+}
+
+/** Presensi hanya sah untuk honor bila dicatat atas instruktur yang menjadwalkan kelas itu. */
+export function presensiMilikInstruktur(
+  slot: { instructorAttendance?: PresensiInstruktur | null },
+  instructorId: string | null | undefined,
+): boolean {
+  const att = slot.instructorAttendance;
+  return Boolean(att && instructorId && att.instructorId === instructorId);
+}
+
 export function sortFeesNewestFirst(fees: readonly InstructorFeeRow[]): InstructorFeeRow[] {
-  return [...fees].sort((a, b) => b.effectiveDate.getTime() - a.effectiveDate.getTime());
+  return [...fees].sort(
+    (a, b) =>
+      b.effectiveDate.getTime() - a.effectiveDate.getTime() ||
+      (b.createdAt?.getTime() ?? 0) - (a.createdAt?.getTime() ?? 0) ||
+      (b.id ?? '').localeCompare(a.id ?? ''),
+  );
 }
 
 export function teachingHours(slot: Pick<FeeableSlot, 'startAt' | 'endAt'>): number {
@@ -57,8 +92,8 @@ export function teachingHours(slot: Pick<FeeableSlot, 'startAt' | 'endAt'>): num
 }
 
 /**
- * Fee/jam yang berlaku untuk satu kelas: konfigurasi cabang kelas itu lebih dulu, lalu konfigurasi
- * cabang lain, lalu fee bawaan. `fees` harus sudah urut effectiveDate terbaru lebih dulu.
+ * Fee/jam yang berlaku untuk satu kelas: konfigurasi instruktur di cabang kelas itu (dan tipe
+ * kelasnya), bila tidak ada maka fee bawaan. Fee cabang lain tidak dipakai. `fees` harus sudah urut effectiveDate terbaru lebih dulu.
  *
  * Fee hanya berasal dari Data Master (per instruktur, cabang, dan tipe kelas). Nominal yang dulu
  * bisa diketik di form jadwal (`instructorFeeRp`/`isManualFee`) tidak dipakai lagi.
@@ -75,10 +110,9 @@ export function calculateSlotFee(
   const applicable = (f: InstructorFeeRow) =>
     f.instructorId === slot.instructorId &&
     f.classTypeId === slot.classTypeId &&
-    f.effectiveDate <= slot.startAt;
-  const matched =
-    sortedFees.find((f) => applicable(f) && f.branchId === slot.branchId) ??
-    sortedFees.find(applicable);
+    f.branchId === slot.branchId &&
+    berlakuPadaKelas(f.effectiveDate, slot.startAt);
+  const matched = sortedFees.find(applicable);
   const feePerJamRp = matched?.feePerJamRp ?? DEFAULT_INSTRUCTOR_FEE_PER_HOUR_RP;
   return {
     hours,
@@ -126,7 +160,7 @@ export function summarizeInstructorFees(
     }
 
     const { hours, feeRp, configured } = calculateSlotFee(sortedFees, { ...slot, instructorId: id });
-    if (!slot.instructorAttendance) {
+    if (!presensiMilikInstruktur(slot, id)) {
       entry.unverifiedFeeRp += feeRp;
       entry.unverifiedClassCount += 1;
       continue;

@@ -112,7 +112,7 @@ describe('InstructorManagementService attendance data', () => {
   });
 
   it('counts this month\'s completed classes without attendance as a blocker', async () => {
-    const { service } = build({ month: [monthSlot({ id: 'att' }), monthSlot(null), monthSlot(null)] });
+    const { service } = build({ month: [monthSlot({ id: 'att', instructorId: coach.id }), monthSlot(null), monthSlot(null)] });
     const detail = await service.detail(admin, coach.id);
     expect(detail.blockers.completedWithoutCheckIn).toBe(2);
   });
@@ -163,7 +163,7 @@ describe('InstructorManagementService attendance data', () => {
 });
 
 describe('InstructorManagementService honor', () => {
-  const month = [monthSlot({ id: 'att' }), monthSlot(null)];
+  const month = [monthSlot({ id: 'att', instructorId: coach.id }), monthSlot(null)];
 
   it('shows a fee-permitted viewer this month\'s honor with the unverified part split out', async () => {
     const { service } = build({ month });
@@ -190,7 +190,7 @@ describe('InstructorManagementService honor', () => {
 
   it('flags classes billed at the default fee because no fee is configured', async () => {
     const { service } = build({
-      month: [monthSlot({ id: 'att' }, { classTypeId: 'private' })],
+      month: [monthSlot({ id: 'att', instructorId: coach.id }, { classTypeId: 'private' })],
       fees: [fee],
     });
     const detail = await service.detail(superOwner, coach.id);

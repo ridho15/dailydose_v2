@@ -12,6 +12,7 @@ import { AuditService } from '../foundation/audit.service';
 import type { SessionPrincipal } from '../identity/identity.service';
 import { PolicyService } from '../identity/policy.service';
 import { ApiProblem, ENTITY_ID_REGEX, newId } from '../identity/security';
+import { cabangPublik, instrukturPublik } from '../foundation/tampilan-publik';
 
 const UUID = ENTITY_ID_REGEX;
 const OFFSET = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?(?:Z|[+-]\d{2}:\d{2})$/;
@@ -35,7 +36,9 @@ const STATUS_ALLOWED: Record<
   update: [ClassSlotStatus.DRAFT, ClassSlotStatus.PUBLISHED, ClassSlotStatus.CONFIRMED],
   publish: [ClassSlotStatus.DRAFT],
   cancel: [ClassSlotStatus.DRAFT, ClassSlotStatus.PUBLISHED, ClassSlotStatus.CONFIRMED],
-  complete: [ClassSlotStatus.CONFIRMED],
+  // Kelas Terbit juga bisa diselesaikan: konfirmasi kuota (auto-cancel) tidak selalu aktif, dan
+  // tanpa penyelesaian sesi member tidak pernah terpotong.
+  complete: [ClassSlotStatus.PUBLISHED, ClassSlotStatus.CONFIRMED],
 };
 
 /** Kapasitas cabang + tipe kelas dari Data Master, atau null bila belum diatur. */
@@ -129,7 +132,7 @@ export class ClassSlotService {
     reason?: string | null,
   ) {
     return this.audit?.catat(tx, {
-      actorId: principal.userId,
+      actorId: principal.userId || undefined,
       branchId: slot.branchId,
       correlationId,
       action,
@@ -188,11 +191,11 @@ export class ClassSlotService {
       cancellationReason: slot.cancellationReason ?? null,
       notes: slot.notes ?? null,
       version: slot.version ?? 1,
-      branch: slot.branch,
+      branch: cabangPublik(slot.branch),
       studio: slot.studio,
       room: slot.room,
       classType: slot.classType,
-      instructor: slot.instructor,
+      instructor: instrukturPublik(slot.instructor),
       instructorAttendance: slot.instructorAttendance ?? null,
     };
   }
@@ -1038,12 +1041,16 @@ export class ClassSlotService {
           throw new ApiProblem('INVALID_STATE_TRANSITION', HttpStatus.CONFLICT);
         if (expectedVersion !== undefined && slot.version !== expectedVersion)
           throw new ApiProblem('STALE_VERSION', HttpStatus.CONFLICT);
+        // Menyelesaikan kelas memotong sesi semua peserta yang tidak hadir, jadi hanya boleh setelah
+        // kelas benar-benar berakhir.
+        if (slot.endAt.getTime() > now.getTime())
+          throw new ApiProblem('CLASS_NOT_ENDED', HttpStatus.CONFLICT);
 
         // Atomic lock guard: update status ke COMPLETED terlebih dahulu untuk mengunci baris secara eksklusif di MySQL
         const lockResult = await tx.slotKelas.updateMany({
           where: {
             id,
-            status: ClassSlotStatus.CONFIRMED,
+            status: { in: [...STATUS_ALLOWED.complete] },
             ...(expectedVersion !== undefined ? { version: expectedVersion } : {}),
           },
           data: { status: ClassSlotStatus.COMPLETED, version: { increment: 1 } },
@@ -1078,6 +1085,12 @@ export class ClassSlotService {
         let attendanceCount = 0;
         let noShowCount = 0;
         for (const booking of slot.bookings) {
+          // Booking batal tidak menempati kursi lagi: tidak boleh berubah jadi NO_SHOW atau
+          // memotong sesi (termasuk pembatalan terlambat yang sudah disetujui dan sesinya dikembalikan).
+          if (booking.status === 'CANCELLED') continue;
+          // Booking hasil migrasi V1 sudah diperhitungkan V1 (sisa sesi ikut dipindahkan); memotong
+          // lagi di sini berarti potong dua kali.
+          if (booking.bookingNumber?.startsWith('BKG-V1-')) continue;
           const wasAttended = booking.status === 'ATTENDED' || Boolean(booking.attendance);
           const newStatus = wasAttended ? 'ATTENDED' : 'NO_SHOW';
           if (wasAttended) attendanceCount += 1;
@@ -1118,7 +1131,7 @@ export class ClassSlotService {
                   balanceAfter: remainingAfter,
                   referenceId: booking.id,
                   notes: noteText,
-                  createdById: principal.userId,
+                  createdById: principal.userId || null,
                 },
               });
 
@@ -1186,6 +1199,43 @@ export class ClassSlotService {
       noShowCount: bookings.filter((b) => b.status === 'BOOKED' && !b.attendance).length,
       activeReservationCount: bookings.filter((b) => b.status === 'BOOKED' || b.status === 'ATTENDED').length,
     };
+  }
+
+  /**
+   * Menyelesaikan otomatis kelas yang sudah berakhir (dipanggil penjadwal). Sesi member dipotong
+   * saat kelas selesai, jadi tanpa ini sesi tidak pernah berkurang bila staf tidak menekan
+   * "Selesaikan kelas". Diberi jeda setelah jam selesai untuk scan yang terlambat (scan setelah
+   * kelas selesai tetap tercatat lewat backfill tanpa potong ganda). Hanya 7 hari terakhir.
+   */
+  async selesaikanOtomatis(now = new Date(), jedaMenit = 30) {
+    const batasAkhir = new Date(now.getTime() - jedaMenit * 60_000);
+    const kelas = await this.db.slotKelas.findMany({
+      where: {
+        status: { in: [...STATUS_ALLOWED.complete] },
+        endAt: { lte: batasAkhir, gte: new Date(now.getTime() - 7 * 86_400_000) },
+      },
+      select: { id: true },
+      orderBy: { endAt: 'asc' },
+      take: 200,
+    });
+    const sistem = {
+      sessionId: 'penjadwal',
+      userId: '',
+      roles: [],
+      capabilities: ['class-slot:read', 'class-slot:manage', 'branch:all'],
+      branchIds: [],
+    } as unknown as SessionPrincipal;
+    let selesai = 0;
+    let gagal = 0;
+    for (const { id } of kelas) {
+      try {
+        await this.complete(sistem, id, { reason: 'Selesai otomatis setelah jam kelas' }, `auto-selesai-${id}`, 'penjadwal', now);
+        selesai += 1;
+      } catch {
+        gagal += 1;
+      }
+    }
+    return { diperiksa: kelas.length, selesai, gagal };
   }
 
   private validateKey(key: string) {

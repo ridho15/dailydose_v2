@@ -95,7 +95,9 @@ export class CustomerProfileService {
     if (!displayName || displayName.length < 2 || displayName.length > 160)
       throw new ApiProblem('VALIDATION_ERROR', HttpStatus.UNPROCESSABLE_ENTITY);
     const isCustomer = principal.roles.some(({ role }) => role === 'CUSTOMER');
-    if (!isCustomer && input.preferredBranchId)
+    // Cabang staf menentukan cakupan aksesnya (cabang kosong = semua cabang), jadi staf tidak boleh
+    // mengubahnya sendiri, termasuk mengosongkannya. Hanya pengelola akses yang mengatur cabang staf.
+    if (!isCustomer && input.preferredBranchId !== undefined)
       throw new ApiProblem('VALIDATION_ERROR', HttpStatus.UNPROCESSABLE_ENTITY);
     const branch = input.preferredBranchId
       ? await this.db.cabang.findFirst({

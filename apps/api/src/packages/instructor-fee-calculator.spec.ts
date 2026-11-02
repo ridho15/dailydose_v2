@@ -24,7 +24,7 @@ const slot = (over: Partial<FeeableSlot> = {}): FeeableSlot => ({
   classTypeId: 'group',
   instructor: coach,
   classType: { name: 'Group Class' },
-  instructorAttendance: { id: 'att' },
+  instructorAttendance: { id: 'att', instructorId: coach.id },
   ...over,
 });
 const withId = (s: FeeableSlot) => ({ ...s, instructorId: coach.id });
@@ -38,13 +38,41 @@ describe('calculateSlotFee', () => {
     expect(calculateSlotFee(fees, withId(slot())).feePerJamRp).toBe(200_000);
   });
 
-  it('falls back to a fee configured in another branch, then to the default', () => {
+  it('ignores a fee configured only in another branch and uses the default', () => {
     const other = sortFeesNewestFirst([fee({ branchId: 'branch-b', feePerJamRp: 180_000 })]);
-    expect(calculateSlotFee(other, withId(slot()))).toMatchObject({ feePerJamRp: 180_000, configured: true });
-    expect(calculateSlotFee([], withId(slot()))).toMatchObject({
+    expect(calculateSlotFee(other, withId(slot()))).toMatchObject({
       feePerJamRp: DEFAULT_INSTRUCTOR_FEE_PER_HOUR_RP,
       configured: false,
     });
+  });
+
+  it('applies a fee from the WIB calendar date, so a 06:00 WIB class on the effective date gets the new rate', () => {
+    const fees = sortFeesNewestFirst([
+      fee({ effectiveDate: new Date('2026-01-01T00:00:00Z'), feePerJamRp: 100_000 }),
+      fee({ effectiveDate: new Date('2026-09-10T00:00:00Z'), feePerJamRp: 250_000 }),
+    ]);
+    // 06:00 WIB = 23:00 UTC hari sebelumnya, tetapi tanggal WIB-nya 10 September.
+    const pagi = slot({
+      startAt: new Date('2026-09-09T23:00:00Z'),
+      endAt: new Date('2026-09-10T00:00:00Z'),
+    });
+    expect(calculateSlotFee(fees, withId(pagi)).feePerJamRp).toBe(250_000);
+    // 23:00 WIB tanggal 9 masih tarif lama.
+    const malam = slot({
+      startAt: new Date('2026-09-09T16:00:00Z'),
+      endAt: new Date('2026-09-09T17:00:00Z'),
+    });
+    expect(calculateSlotFee(fees, withId(malam)).feePerJamRp).toBe(100_000);
+  });
+
+  it('breaks ties between same-date fee versions by newest createdAt, then id', () => {
+    const sama = new Date('2026-01-01T00:00:00Z');
+    const urut = sortFeesNewestFirst([
+      fee({ id: 'a', effectiveDate: sama, createdAt: new Date('2026-01-02'), feePerJamRp: 1 }),
+      fee({ id: 'b', effectiveDate: sama, createdAt: new Date('2026-01-03'), feePerJamRp: 2 }),
+      fee({ id: 'c', effectiveDate: sama, createdAt: new Date('2026-01-03'), feePerJamRp: 3 }),
+    ]);
+    expect(urut.map((f) => f.id)).toEqual(['c', 'b', 'a']);
   });
 
   it('uses the newest fee already effective at class start, ignoring future ones', () => {
@@ -146,5 +174,15 @@ describe('periodRange', () => {
 
   it('defaults to the current month', () => {
     expect(periodRange().period).toBe(new Date().toISOString().slice(0, 7));
+  });
+});
+
+describe('summarizeInstructorFees: presensi milik instruktur lain', () => {
+  it('tidak membayar honor bila presensi dicatat atas instruktur lain', () => {
+    const [hasil] = summarizeInstructorFees(
+      [slot({ instructorAttendance: { id: 'att', instructorId: 'coach-lain' } })],
+      [fee()],
+    );
+    expect(hasil).toMatchObject({ totalFeeRp: 0, unverifiedClassCount: 1, unverifiedFeeRp: 200_000 });
   });
 });

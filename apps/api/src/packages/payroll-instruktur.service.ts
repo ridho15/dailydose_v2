@@ -3,7 +3,7 @@ import { PrismaService } from '../database/prisma.service';
 import type { SessionPrincipal } from '../identity/identity.service';
 import { PolicyService } from '../identity/policy.service';
 import { financeRange } from './finance-range';
-import { calculateSlotFee, sortFeesNewestFirst } from './instructor-fee-calculator';
+import { calculateSlotFee, presensiMilikInstruktur, sortFeesNewestFirst } from './instructor-fee-calculator';
 import { AKSI_KOREKSI_JAM } from './koreksi-jam.service';
 
 /**
@@ -67,7 +67,7 @@ type SlotPayroll = {
   isManualFee: boolean;
   classType: { name: string } | null;
   branch: { name: string } | null;
-  instructorAttendance: { checkedInAt: Date } | null;
+  instructorAttendance: { checkedInAt: Date; instructorId: string } | null;
 };
 
 @Injectable()
@@ -111,7 +111,7 @@ export class PayrollInstrukturService {
           isManualFee: true,
           classType: { select: { name: true } },
           branch: { select: { name: true } },
-          instructorAttendance: { select: { checkedInAt: true } },
+          instructorAttendance: { select: { checkedInAt: true, instructorId: true } },
         },
         orderBy: { startAt: 'desc' },
       }),
@@ -130,6 +130,7 @@ export class PayrollInstrukturService {
     const tarif = sortFeesNewestFirst(fees);
     const kelas: BarisPayroll[] = slots.map((s) => {
       const hitung = calculateSlotFee(tarif, { ...s, instructorId });
+      const sah = presensiMilikInstruktur(s, instructorId);
       return {
         classSlotId: s.id,
         mulai: s.startAt.toISOString(),
@@ -138,10 +139,10 @@ export class PayrollInstrukturService {
         namaCabang: s.branch?.name ?? '',
         jam: hitung.hours,
         // Nominal hanya untuk kelas yang check-in QR-nya tercatat; kelas lain tampil tanpa rupiah.
-        tarifPerJamRp: s.instructorAttendance ? hitung.feePerJamRp : 0,
-        honorRp: s.instructorAttendance ? hitung.feeRp : 0,
-        terverifikasi: Boolean(s.instructorAttendance),
-        hadirPada: s.instructorAttendance?.checkedInAt.toISOString() ?? null,
+        tarifPerJamRp: sah ? hitung.feePerJamRp : 0,
+        honorRp: sah ? hitung.feeRp : 0,
+        terverifikasi: sah,
+        hadirPada: sah ? (s.instructorAttendance?.checkedInAt.toISOString() ?? null) : null,
       };
     });
 

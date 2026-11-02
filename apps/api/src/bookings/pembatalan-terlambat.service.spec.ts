@@ -22,12 +22,14 @@ const manager = {
   branchIds: [MK],
 } as never;
 
-function setup(status = 'ATTENDED') {
+// Booking "terkunci Hadir" berasal dari V1 (sesinya sudah dipotong V1 saat dikunci H-24).
+function setup(status = 'ATTENDED', bookingNumber = 'BKG-V1-00000001') {
   const tx = {
     pemesananKelas: {
       findUnique: jest.fn(async () => ({
         id: BOOKING,
         status,
+        bookingNumber,
         userId: 'cust-1',
         classSlotId: 'slot-1',
         customerPackageId: 'pkg-1',
@@ -181,7 +183,7 @@ describe('PembatalanTerlambatService', () => {
     expect(hasil.status).toBe('REJECTED');
     expect(tx.pemesananKelas.update).not.toHaveBeenCalled();
   });
-  it('izin medis: kursi langsung dilepas saat pengajuan, dan saat disetujui sesi dikembalikan tanpa error', async () => {
+  it('izin medis: kursi langsung dilepas; sesi yang belum terpotong tetap utuh dan tidak ada sesi tambahan', async () => {
     const { tx, service } = setup('BOOKED');
     const hasilAjukan = await service.ajukan(
       admin,
@@ -191,7 +193,7 @@ describe('PembatalanTerlambatService', () => {
     );
     expect(hasilAjukan).toMatchObject({
       bookingId: BOOKING,
-      sessionCount: 1,
+      sessionCount: 0,
     });
     // Kursi langsung dikosongkan dan booking dibatalkan seketika
     expect(tx.pemesananKelas.update).toHaveBeenCalledWith(
@@ -205,7 +207,7 @@ describe('PembatalanTerlambatService', () => {
       data: { bookedCount: { decrement: 1 } },
     });
 
-    // Saat Manager menyetujui, sesi dikembalikan
+    // Saat Manager menyetujui: booking ini belum pernah dipotong, jadi tidak ada sesi yang ditambahkan
     tx.pemesananKelas.findUnique.mockResolvedValueOnce({ id: BOOKING, status: 'CANCELLED', classSlot: { branchId: MK } } as never);
     tx.sessionAdjustRequest.findUnique.mockResolvedValue({
       id: REQ,
@@ -221,12 +223,13 @@ describe('PembatalanTerlambatService', () => {
     } as never);
 
     const hasilPutus = await service.putuskan(manager, REQ, 'approve', { expectedVersion: 1 }, now);
-    expect(hasilPutus).toMatchObject({ status: 'APPROVED', sessionsReturned: 1, resultingBalance: 1 });
-    expect(tx.paketPelanggan.update).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { id: 'pkg-1' },
-        data: expect.objectContaining({ remainingSessions: 1, status: 'ACTIVE' }),
-      }),
-    );
+    expect(hasilPutus).toMatchObject({ status: 'APPROVED', sessionsReturned: 0 });
+    expect(tx.paketPelanggan.update).not.toHaveBeenCalled();
+  });
+
+  it('booking V2 yang sudah check-in tetapi kelasnya belum selesai: tidak ada sesi yang dikembalikan', async () => {
+    const { service } = setup('ATTENDED', 'BKG-20261102-0001');
+    const hasil = await service.ajukan(admin, BOOKING, { reason: 'Member harus pulang mendadak, keluarga sakit' }, now);
+    expect(hasil).toMatchObject({ sessionCount: 0 });
   });
 });

@@ -12,6 +12,8 @@ import type { SessionPrincipal } from '../identity/identity.service';
 import { PolicyService } from '../identity/policy.service';
 import { ApiProblem, ENTITY_ID_REGEX } from '../identity/security';
 import { buildPhoneSearchVariants, normalizePhone } from '../identity/manajemen-pelanggan.service';
+import { MEMEGANG_SESI } from './sesi-terpesan';
+import { maskContactEmail } from '../identity/customer-visibility';
 
 export const ADJUSTMENT_REASON_CODES = [
   'MIGRATION_CORRECTION',
@@ -213,7 +215,7 @@ export class LedgerService {
         where,
         include: {
           ...packageInclude,
-          bookings: { where: { status: 'BOOKED' }, select: { id: true } },
+          bookings: { where: MEMEGANG_SESI, select: { id: true } },
         },
         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         take: pageNumber ? limit : limit + 1,
@@ -293,7 +295,7 @@ export class LedgerService {
           _sum: { remainingSessions: true, usedSessions: true },
         }),
         this.db.pemesananKelas.count({
-          where: { status: 'BOOKED', customerPackage: { is: base } },
+          where: { ...MEMEGANG_SESI, customerPackage: { is: base } },
         }),
         this.db.sessionLedger.groupBy({
           by: ['type'],
@@ -710,7 +712,7 @@ export class LedgerService {
     if (packageIds.length === 0) return result;
     const grouped = await this.db.pemesananKelas.groupBy({
       by: ['customerPackageId'],
-      where: { customerPackageId: { in: packageIds }, status: 'BOOKED' },
+      where: { customerPackageId: { in: packageIds }, ...MEMEGANG_SESI },
       _count: { _all: true },
     });
     for (const g of grouped) {
@@ -772,7 +774,7 @@ export class LedgerService {
         this.assertPackageAccess(principal, 'ledger:adjust:request', pkg);
 
         const reserved = await tx.pemesananKelas.count({
-          where: { customerPackageId: pkg.id, status: 'BOOKED' },
+          where: { customerPackageId: pkg.id, ...MEMEGANG_SESI },
         });
         this.assertBalanceAllows(pkg.remainingSessions, reserved, quantity);
 
@@ -853,7 +855,7 @@ export class LedgerService {
         this.assertPackageAccess(principal, 'ledger:adjust:decide', pkg);
 
         const reserved = await tx.pemesananKelas.count({
-          where: { customerPackageId: pkg.id, status: 'BOOKED' },
+          where: { customerPackageId: pkg.id, ...MEMEGANG_SESI },
         });
         this.assertBalanceAllows(pkg.remainingSessions, reserved, quantity);
 
@@ -1013,7 +1015,7 @@ export class LedgerService {
             where: { id: row.customerPackageId },
           });
           const reserved = await tx.pemesananKelas.count({
-            where: { customerPackageId: pkg.id, status: 'BOOKED' },
+            where: { customerPackageId: pkg.id, ...MEMEGANG_SESI },
           });
           this.assertBalanceAllows(pkg.remainingSessions, reserved, row.sessionCount);
 
@@ -1584,7 +1586,7 @@ export class LedgerService {
           relationship: m.relationship,
           displayName: m.user?.displayName,
           phoneMasked: maskPhone(m.user?.phone),
-          email: m.user?.email,
+          email: maskContactEmail(m.user?.email),
           addedById: m.addedById,
           addedByRole: m.addedByRole,
           createdAt: m.createdAt.toISOString(),
@@ -1642,18 +1644,18 @@ export class LedgerService {
       throw problem('SHARING_LIMIT_EXCEEDED', HttpStatus.BAD_REQUEST, 'sharedMembers');
     }
 
-    let targetUser: { id: string; displayName: string; email: string | null; phone: string | null; status: string } | null = null;
+    let targetUser: { id: string; displayName: string; email: string | null; phone: string | null; status: string; role: string } | null = null;
 
     if (rawId && UUID.test(rawId)) {
       targetUser = await this.db.user.findUnique({
         where: { id: rawId },
-        select: { id: true, displayName: true, email: true, phone: true, status: true },
+        select: { id: true, displayName: true, email: true, phone: true, status: true, role: true },
       });
     } else if (rawIdentifier) {
       if (rawIdentifier.includes('@')) {
         targetUser = await this.db.user.findFirst({
           where: { email: rawIdentifier.trim().toLowerCase() },
-          select: { id: true, displayName: true, email: true, phone: true, status: true },
+          select: { id: true, displayName: true, email: true, phone: true, status: true, role: true },
         });
       } else {
         let cleanPhone = rawIdentifier;
@@ -1671,12 +1673,13 @@ export class LedgerService {
               ...phoneVariants.map((p) => ({ phone: p })),
             ],
           },
-          select: { id: true, displayName: true, email: true, phone: true, status: true },
+          select: { id: true, displayName: true, email: true, phone: true, status: true, role: true },
         });
       }
     }
 
-    if (!targetUser || targetUser.status !== 'ACTIVE') {
+    // Hanya akun member (bukan staf) yang bisa ditambahkan ke paket bersama.
+    if (!targetUser || targetUser.status !== 'ACTIVE' || (targetUser as { role?: string }).role !== 'CUSTOMER') {
       throw problem('USER_NOT_FOUND', HttpStatus.NOT_FOUND, 'userId');
     }
 
@@ -1725,7 +1728,7 @@ export class LedgerService {
       relationship: created.relationship,
       displayName: created.user.displayName,
       phoneMasked: maskPhone(created.user.phone),
-      email: created.user.email,
+      email: maskContactEmail(created.user.email),
       addedById: created.addedById,
       addedByRole: created.addedByRole,
       createdAt: created.createdAt.toISOString(),

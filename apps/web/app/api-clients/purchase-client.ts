@@ -618,7 +618,8 @@ export function purchaseFailure(error: unknown): string {
     IDEMPOTENCY_IN_PROGRESS: 'Permintaan sebelumnya masih diproses. Coba lagi tanpa mengubah data.',
     PURCHASE_ALREADY_DECIDED: 'Purchase ini sudah memiliki keputusan.',
     STALE_VERSION: 'Data purchase berubah. Muat ulang sebelum mengambil keputusan.',
-    SEPARATION_OF_DUTIES_VIOLATION: 'Purchase tidak boleh diputus oleh requestor yang sama.',
+    SEPARATION_OF_DUTIES_VIOLATION: 'Penjualan tidak boleh disetujui oleh orang yang mencatatnya.',
+    DIRECT_PAYMENT_APPROVER_REQUIRED: 'Penjualan tunai/kartu hanya bisa disetujui Manager atau Super Owner.',
     RESOURCE_NOT_FOUND: 'Data tidak tersedia dalam cabang yang dipilih.',
   };
   if (code && messages[code]) return messages[code];

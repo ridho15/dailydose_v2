@@ -1,4 +1,4 @@
-import { HttpStatus, Injectable } from '@nestjs/common';
+import { HttpStatus, Injectable, Optional } from '@nestjs/common';
 import { Prisma, PurchaseStatus } from '@prisma/client';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { RuntimeConfigService } from '../configuration/runtime-config.service';
@@ -9,13 +9,17 @@ import type { SessionPrincipal } from '../identity/identity.service';
 import { ApiProblem, ENTITY_ID_REGEX } from '../identity/security';
 import { PackageAccessService } from './package-access.service';
 import { PackagePricingService } from './kalkulasi-harga-paket.service';
+import { alamatBukti, bolehTerimaBukti, idUnggahan, pastikanPemilik, teksPendek } from './bukti-aman';
+import { ConfigGatedObjectStorageProvider } from './proof-providers';
 import {
   VoucherService,
   calculateVoucherDiscount,
   checkVoucherApplicability,
   isPercentageVoucherType,
   normalizeVoucherCode,
+  pakaiKuotaVoucher,
 } from './voucher.service';
+import { batalkanPesananKedaluwarsa } from './payment-expiration-worker';
 
 const PAGE_SIZE = 20;
 const UUID = ENTITY_ID_REGEX;
@@ -24,6 +28,12 @@ export type AssistedPaymentMethod = (typeof ASSISTED_PAYMENT_METHODS)[number];
 
 const newInvoiceNumber = () =>
   `INV-${Date.now().toString(36).toUpperCase()}-${randomBytes(3).toString('hex').toUpperCase()}`;
+
+/** Paket khusus satu cabang hanya dijual di cabang itu; paket multi-cabang (branchId null) bebas. */
+function pastikanPaketDijualDiCabang(pkg: { branchId: string | null }, branchId: string) {
+  if (pkg.branchId && pkg.branchId !== branchId)
+    throw new ApiProblem('PACKAGE_BRANCH_MISMATCH', HttpStatus.UNPROCESSABLE_ENTITY);
+}
 
 @Injectable()
 export class CustomerOrderService {
@@ -35,6 +45,7 @@ export class CustomerOrderService {
     private readonly idempotency: IdempotencyService,
     private readonly config: RuntimeConfigService,
     private readonly auditService: AuditService,
+    @Optional() private readonly storage?: ConfigGatedObjectStorageProvider,
   ) {}
 
   private orderView(order: any, _revealAccount = false) {
@@ -341,6 +352,7 @@ export class CustomerOrderService {
         const branch = await tx.cabang.findUnique({ where: { id: input.branchId } });
         if (!branch || !branch.active)
           throw new ApiProblem('RESOURCE_NOT_FOUND', HttpStatus.NOT_FOUND);
+        pastikanPaketDijualDiCabang(pkg, input.branchId);
 
         const { voucher, discountRp, subtotalRp, totalAmountRp: baseAmountRp, promotion } = await this.priceOrder(
           tx,
@@ -428,10 +440,7 @@ export class CustomerOrderService {
         });
 
         if (voucher) {
-          await tx.voucher.update({
-            where: { id: voucher.id },
-            data: { usedCount: { increment: 1 } },
-          });
+          await pakaiKuotaVoucher(tx, voucher);
         }
 
         if (input.paymentProofId) {
@@ -605,40 +614,42 @@ export class CustomerOrderService {
   async attachOrderProof(
     principal: SessionPrincipal,
     orderId: string,
-    input: { paymentProofId?: string; fileUrl?: string; bankName?: string; accountHolder?: string },
+    input: { paymentProofId?: string; bankName?: string; accountHolder?: string },
     correlationId: string,
   ) {
     const order = await this.db.pembelian.findUnique({
       where: { id: orderId },
     });
-    const isOwner = order?.userId === principal.userId;
-    const isStaff =
-      principal.roles.some((r) => ['ADMIN', 'SUPER_OWNER', 'OWNER', 'MANAGER', 'FINANCE'].includes(r.role as any)) ||
-      principal.capabilities.some((c) => ['payment:review', 'payment:decide', 'purchase:review', 'purchase:decide'].includes(c));
+    if (!order) throw new ApiProblem('RESOURCE_NOT_FOUND', HttpStatus.NOT_FOUND);
+    // Staf hanya untuk pesanan di cabangnya (bukan sekadar berperan staf).
+    if (order.userId !== principal.userId)
+      this.access.scope(principal, order.branchId, ['payment:review', 'purchase:review', 'purchase:record']);
+    if (!bolehTerimaBukti(order))
+      throw new ApiProblem('INVALID_STATE_TRANSITION', HttpStatus.CONFLICT);
 
-    if (!order || (!isOwner && !isStaff))
-      throw new ApiProblem('RESOURCE_NOT_FOUND', HttpStatus.NOT_FOUND);
+    // Alamat berkas selalu dibentuk dari id unggahan milik peminta, tidak pernah dari isian body.
+    const proofId = idUnggahan(input.paymentProofId);
+    await pastikanPemilik(this.storage, proofId, principal.userId);
+    const fileUrl = alamatBukti(proofId);
+    const bankName = teksPendek(input.bankName);
+    const accountHolder = teksPendek(input.accountHolder);
 
-    const proofId = input.paymentProofId ?? randomUUID();
-    const fileUrl = input.fileUrl ?? `/uploads/payment-proofs/${proofId}`;
-
-    const proof = await this.db.buktiPembayaran.upsert({
+    await this.db.buktiPembayaran.upsert({
       where: { purchaseId: order.id },
       create: {
         id: proofId,
         purchaseId: order.id,
         fileUrl,
-        bankName: input.bankName ?? null,
-        accountHolder: input.accountHolder ?? null,
+        bankName,
+        accountHolder,
       },
       update: {
         fileUrl,
-        bankName: input.bankName ?? undefined,
-        accountHolder: input.accountHolder ?? undefined,
+        bankName: bankName ?? undefined,
+        accountHolder: accountHolder ?? undefined,
         uploadedAt: new Date(),
       },
     });
-
     this.auditService.record({
       action: 'PAYMENT_PROOF_ATTACHED',
       resourceType: 'Purchase',
@@ -782,8 +793,7 @@ export class CustomerOrderService {
         const pkg = await tx.paket.findUnique({ where: { id: packageId } });
         if (!pkg || pkg.status !== 'ACTIVE')
           throw new ApiProblem('RESOURCE_NOT_FOUND', HttpStatus.NOT_FOUND);
-        if (pkg.branchId && pkg.branchId !== branchId)
-          throw new ApiProblem('PACKAGE_BRANCH_MISMATCH', HttpStatus.UNPROCESSABLE_ENTITY);
+        pastikanPaketDijualDiCabang(pkg, branchId);
 
         const { voucher, discountRp, subtotalRp, totalAmountRp, promotion } = await this.priceOrder(
           tx,
@@ -828,10 +838,7 @@ export class CustomerOrderService {
           },
         });
         if (voucher) {
-          await tx.voucher.update({
-            where: { id: voucher.id },
-            data: { usedCount: { increment: 1 } },
-          });
+          await pakaiKuotaVoucher(tx, voucher);
         }
 
         this.auditService.record({
@@ -869,22 +876,15 @@ export class CustomerOrderService {
   // --- Indonesian Domain Aliases ---
   async expireStaleOrders(principal: SessionPrincipal, olderThanHours = 24) {
     this.access.review(principal, true);
-    const cutoff = new Date(Date.now() - olderThanHours * 3600 * 1000);
+    if (!Number.isInteger(olderThanHours) || olderThanHours < 1 || olderThanHours > 720)
+      throw new ApiProblem('VALIDATION_ERROR', HttpStatus.BAD_REQUEST, false, [
+        { field: 'olderThanHours', issue: 'INVALID' },
+      ]);
     const now = new Date();
 
-    const result = await this.db.pembelian.updateMany({
-      where: {
-        status: { in: ['PENDING', 'WAITING_VERIFICATION'] },
-        paymentProof: null,
-        OR: [
-          { paymentExpiresAt: { lt: now } },
-          { AND: [{ paymentExpiresAt: null }, { createdAt: { lt: cutoff } }] },
-        ],
-      },
-      data: {
-        status: 'CANCELLED',
-      },
-    });
+    // Hanya pesanan mandiri pelanggan; penjualan catatan staf menunggu persetujuan, bukan hangus.
+    const ids = await batalkanPesananKedaluwarsa(this.db, olderThanHours, now);
+    const result = { count: ids.length };
 
     // Pembatalan massal oleh staf: satu catatan ringkas (jumlah dan batas waktu), bukan satu per pesanan.
     if (result.count > 0)

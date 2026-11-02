@@ -11,11 +11,14 @@ import { browserOrderClient, orderError, type CustomerOrder } from '@/api-client
 import { orderReasonLabels, orderTimelineLabels } from '@/lib/order-presenters';
 import { PageHeader, Skeleton, StatusBadge } from '../../ui';
 
+// Halaman yang boleh menjadi tujuan "kembali" dari detail pesanan (jalur persis, bukan awalan).
+const TUJUAN_KEMBALI = new Set(['/orders', '/account/packages']);
+
 function safeReturnTo(value: string | null) {
-  if (!value || !value.startsWith('/orders') || value.startsWith('//')) return '/orders';
+  if (!value || !value.startsWith('/') || value.startsWith('//')) return '/orders';
   try {
     const parsed = new URL(value, 'http://local');
-    return parsed.origin === 'http://local' && parsed.pathname === '/orders'
+    return parsed.origin === 'http://local' && TUJUAN_KEMBALI.has(parsed.pathname)
       ? `${parsed.pathname}${parsed.search}`
       : '/orders';
   } catch {

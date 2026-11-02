@@ -32,7 +32,7 @@ function setup() {
           ...jam('2026-10-05T01:00:00Z'),
           instructorFeeRp: null,
           isManualFee: false,
-          instructorAttendance: { id: 'a1' },
+          instructorAttendance: { id: 'a1', instructorId: 'anna' },
         },
         {
           instructorId: 'anna',
@@ -41,7 +41,7 @@ function setup() {
           ...jam('2026-10-06T01:00:00Z'),
           instructorFeeRp: null,
           isManualFee: false,
-          instructorAttendance: { id: 'a2' },
+          instructorAttendance: { id: 'a2', instructorId: 'anna' },
         },
         {
           instructorId: 'anna',
@@ -60,7 +60,7 @@ function setup() {
           ...jam('2026-10-08T01:00:00Z'),
           instructorFeeRp: 300_000,
           isManualFee: true,
-          instructorAttendance: { id: 'b1' },
+          instructorAttendance: { id: 'b1', instructorId: 'budi' },
         },
         // Citra: berhonor tetapi belum ada rekening.
         {
@@ -70,7 +70,7 @@ function setup() {
           ...jam('2026-10-09T01:00:00Z'),
           instructorFeeRp: null,
           isManualFee: false,
-          instructorAttendance: { id: 'c1' },
+          instructorAttendance: { id: 'c1', instructorId: 'citra' },
         },
       ]),
     },

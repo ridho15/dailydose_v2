@@ -4,8 +4,14 @@ import type { SessionPrincipal } from '../identity/identity.service';
 import { ApiProblem } from '../identity/security';
 import { PrismaService } from '../database/prisma.service';
 import { dateInTimeZone, startOfLocalDateUtc } from '../identity/assignment-boundary';
+import { otherCostInRange } from '../packages/finance-range';
 import { hitungModalSesi } from '../packages/modal-sesi.service';
-import { calculateSlotFee, summarizeInstructorFees } from '../packages/instructor-fee-calculator';
+import {
+  calculateSlotFee,
+  presensiMilikInstruktur,
+  sortFeesNewestFirst,
+  summarizeInstructorFees,
+} from '../packages/instructor-fee-calculator';
 import { verificationStatusWhere } from '../identity/manajemen-pelanggan.service';
 
 /**
@@ -236,15 +242,13 @@ export class DashboardService {
   }): Promise<FinancialResult> {
     const fromDate = new Date(`${params.from}T00:00:00Z`);
     const untilDate = new Date(`${params.until}T23:59:59.999Z`);
-    const fromPeriod = params.from.slice(0, 7);
-    const untilPeriod = params.until.slice(0, 7);
 
     const [purchases, otherCosts, completedSlots, fees] = await Promise.all([
       this.db.pembelian.findMany({
         where: {
           branchId: { in: params.branchIds },
           status: PurchaseStatus.PAID,
-          createdAt: { gte: fromDate, lte: untilDate },
+          paidAt: { gte: fromDate, lte: untilDate },
         },
         select: {
           branchId: true,
@@ -268,7 +272,13 @@ export class DashboardService {
         ? this.db.otherCost.findMany({
             where: {
               branchId: { in: params.branchIds },
-              period: { gte: fromPeriod, lte: untilPeriod },
+              ...otherCostInRange({
+                from: params.from,
+                until: params.until,
+                fromDate,
+                untilExclusive: new Date(Date.parse(`${params.until}T00:00:00.000Z`) + 86_400_000),
+                label: `${params.from}/${params.until}`,
+              }),
             },
             select: {
               branchId: true,
@@ -285,7 +295,7 @@ export class DashboardService {
         include: {
           instructor: true,
           classType: true,
-          instructorAttendance: { select: { id: true } },
+          instructorAttendance: { select: { id: true, instructorId: true } },
         },
       }),
       this.db.instructorFee?.findMany
@@ -335,7 +345,7 @@ export class DashboardService {
         bEntry.revenue += p.totalAmountRp;
       }
 
-      const dKey = p.createdAt.toISOString().slice(0, 10);
+      const dKey = (p.paidAt ?? p.createdAt).toISOString().slice(0, 10);
       const tEntry = trendMap.get(dKey);
       if (tEntry) {
         tEntry.revenue += p.totalAmountRp;
@@ -366,10 +376,11 @@ export class DashboardService {
     }
 
     // Hitung biaya instruktur per kelas completed dan update trend harian
+    const tarifUrut = sortFeesNewestFirst(fees);
     for (const s of completedSlots) {
-      // Hanya kelas yang presensi instrukturnya tercatat menjadi beban honor.
-      if (!s.instructorId || !s.instructorAttendance) continue;
-      const slotFee = calculateSlotFee(fees, {
+      // Hanya kelas yang presensi instrukturnya tercatat atas instruktur kelas itu menjadi beban honor.
+      if (!s.instructorId || !presensiMilikInstruktur(s, s.instructorId)) continue;
+      const slotFee = calculateSlotFee(tarifUrut, {
         startAt: s.startAt,
         endAt: s.endAt,
         branchId: s.branchId,

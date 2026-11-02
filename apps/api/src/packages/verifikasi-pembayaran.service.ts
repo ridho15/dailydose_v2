@@ -1,7 +1,6 @@
 import { HttpStatus, Injectable, Optional } from '@nestjs/common';
 import { Prisma, PurchaseStatus, SessionMutationType } from '@prisma/client';
 import { readFile, stat } from 'node:fs/promises';
-import { resolve } from 'node:path';
 import { PrismaService } from '../database/prisma.service';
 import { IdempotencyService } from '../foundation/idempotency.service';
 import type { SessionPrincipal } from '../identity/identity.service';
@@ -11,6 +10,9 @@ import { buildPhoneSearchVariants } from '../identity/manajemen-pelanggan.servic
 import { NotificationWriterService } from '../notifications/notification-writer.service';
 import { EmailNotificationService } from '../email/email-notification.service';
 import { ConfigGatedObjectStorageProvider } from './proof-providers';
+import { escapeXml, jalurBuktiLokal, jenisBukti } from './bukti-aman';
+import { berlakuSampai } from '../foundation/masa-berlaku';
+import { lepasKuotaVoucher } from './voucher.service';
 
 @Injectable()
 export class PaymentReviewService {
@@ -489,52 +491,36 @@ export class PaymentReviewService {
       this.access.scope(principal, proof.purchase.branchId, ['payment:review', 'purchase:review']);
     }
 
+    // Isi bukti hanya dikirim bila benar-benar gambar/PDF (dicek dari byte awal), dan jenisnya
+    // ditentukan dari isi, bukan dari alamat atau tipe yang tersimpan.
+    const kirim = (bytes: Buffer | null | undefined) => {
+      const mimeType = bytes && bytes.length > 0 ? jenisBukti(bytes) : null;
+      return mimeType ? { bytes: bytes!, mimeType } : null;
+    };
+
     if (proof.fileUrl.startsWith('data:')) {
-      const parts = proof.fileUrl.split(',');
-      const mime = parts[0]?.match(/:(.*?);/)?.[1] || 'image/jpeg';
-      const buffer = Buffer.from(parts[1] || '', 'base64');
-      return { bytes: buffer, mimeType: mime };
+      const hasil = kirim(Buffer.from(proof.fileUrl.split(',')[1] || '', 'base64'));
+      if (hasil) return hasil;
     }
 
     if (this.storage) {
-      try {
-        const bytes = await this.storage.readPrivateObject(`payment-proofs/${proof.id}`);
-        if (bytes && bytes.length > 0) {
-          return { bytes, mimeType: this.detectMime(bytes) };
-        }
-      } catch {}
+      const hasil = kirim(
+        await this.storage.readPrivateObject(`payment-proofs/${proof.id}`).catch(() => null),
+      );
+      if (hasil) return hasil;
+    }
 
-      if (proof.fileUrl && !proof.fileUrl.startsWith('http') && !proof.fileUrl.startsWith('data:')) {
-        const cleanPath = proof.fileUrl.replace(/^\//, '');
-        try {
-          const bytes = await this.storage.readPrivateObject(cleanPath);
-          if (bytes && bytes.length > 0) {
-            return { bytes, mimeType: this.detectMime(bytes) };
-          }
-        } catch {}
-        if (cleanPath.includes('%')) {
-          try {
-            const decodedPath = decodeURIComponent(cleanPath);
-            const bytes = await this.storage.readPrivateObject(decodedPath);
-            if (bytes && bytes.length > 0) {
-              return { bytes, mimeType: this.detectMime(bytes) };
-            }
-          } catch {}
+    // Bukti lama hasil migrasi V1: berkas gambar di bawah folder kerja, tanpa keluar dari sana.
+    if (proof.fileUrl && !/^(https?:|data:)/.test(proof.fileUrl)) {
+      const jalur = jalurBuktiLokal(proof.fileUrl);
+      if (jalur) {
+        const exists = await stat(jalur).then((s) => s.isFile()).catch(() => false);
+        if (exists) {
+          const hasil = kirim(await readFile(jalur).catch(() => null));
+          if (hasil) return hasil;
         }
       }
     }
-
-    try {
-      if (proof.fileUrl && !proof.fileUrl.startsWith('http')) {
-        const cleanPath = proof.fileUrl.replace(/^\//, '');
-        const fullPath = resolve(process.cwd(), cleanPath);
-        const exists = await stat(fullPath).then((s) => s.isFile()).catch(() => false);
-        if (exists) {
-          const bytes = await readFile(fullPath);
-          return { bytes, mimeType: this.detectMime(bytes) };
-        }
-      }
-    } catch {}
 
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="400" viewBox="0 0 600 400">
   <rect width="600" height="400" fill="#f8fafc" rx="8"/>
@@ -543,10 +529,10 @@ export class PaymentReviewService {
     Bukti Pembayaran Terlampir
   </text>
   <text x="300" y="205" dominant-baseline="middle" text-anchor="middle" font-family="sans-serif" font-size="13" fill="#64748b">
-    ID: ${proof.id}
+    ID: ${escapeXml(proof.id)}
   </text>
   <text x="300" y="235" dominant-baseline="middle" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#94a3b8">
-    ${proof.bankName ? `Bank: ${proof.bankName}` : ''}${proof.accountHolder ? ` · A/N: ${proof.accountHolder}` : ''}
+    ${proof.bankName ? `Bank: ${escapeXml(proof.bankName)}` : ''}${proof.accountHolder ? ` · A/N: ${escapeXml(proof.accountHolder)}` : ''}
   </text>
 </svg>`.trim();
     return {
@@ -576,7 +562,8 @@ export class PaymentReviewService {
     key: string,
     correlationId: string,
   ) {
-    this.access.review(principal, true, true);
+    // Memutus pembayaran (termasuk tunai) butuh wewenang keputusan; pencatat penjualan saja tidak cukup.
+    this.access.review(principal, true);
     if (!key)
       throw new ApiProblem('VALIDATION_ERROR', HttpStatus.BAD_REQUEST);
     const allowedReasons =
@@ -618,33 +605,38 @@ export class PaymentReviewService {
           });
           if (!purchase) throw new ApiProblem('RESOURCE_NOT_FOUND', HttpStatus.NOT_FOUND);
 
-          // Poin 3: Pembayaran langsung di kasir (CASH, CARD/EDC, MANUAL_STAFF).
-          // Staf cabang (Admin/Manager) dengan wewenang purchase:record berwenang mengonfirmasi
-          // penerimaan pembayaran kasir langsung di cabangnya.
-          const isDirectPayment = ['CASH', 'CARD', 'MANUAL_STAFF'].includes(purchase.paymentMethod ?? '');
-          if (isDirectPayment && principal.capabilities.includes('purchase:record')) {
-            this.access.scope(principal, purchase.branchId, ['purchase:record', 'payment:decide', 'purchase:decide']);
-          } else {
-            this.access.scope(principal, purchase.branchId, ['payment:decide', 'purchase:decide']);
-          }
+          this.access.scope(principal, purchase.branchId, ['payment:decide', 'purchase:decide']);
 
-          // Super Owner dan Superadmin memiliki wewenang penuh untuk menyetujui transaksi apa pun (God Mode).
-          const isSuper = principal.roles.some((r) =>
-            r.role === 'SUPER_OWNER',
-          );
-          // Pembeli (pelanggan) dilarang menyetujui transaksinya sendiri, kecuali Super Admin / Super Owner.
-          if (!isSuper && purchase.userId === principal.userId) {
+          const isSuper = principal.roles.some((r) => r.role === 'SUPER_OWNER');
+          // Pembayaran langsung di kasir (tunai, kartu/EDC, manual staf): uangnya tidak bisa
+          // dicocokkan dengan mutasi rekening, jadi keputusan pemilik: wajib disetujui Manager
+          // atau Super Owner, dan bukan orang yang mencatat penjualannya.
+          const isDirectPayment = ['CASH', 'CARD', 'MANUAL_STAFF'].includes(purchase.paymentMethod ?? '');
+          if (
+            isDirectPayment &&
+            decision === 'APPROVED' &&
+            !principal.roles.some((r) => r.role === 'MANAGER' || r.role === 'SUPER_OWNER')
+          )
+            throw new ApiProblem('DIRECT_PAYMENT_APPROVER_REQUIRED', HttpStatus.FORBIDDEN);
+          // Pembeli tidak boleh menyetujui transaksinya sendiri, dan pencatat penjualan tidak boleh
+          // menyetujui catatannya sendiri (semua metode). Super Owner dikecualikan.
+          if (!isSuper && purchase.userId === principal.userId)
             throw new ApiProblem('SEPARATION_OF_DUTIES_VIOLATION', HttpStatus.FORBIDDEN);
-          }
-          // Pemisahan tugas berlaku ketat untuk transaksi online/transfer non-kasir.
-          // Untuk kasir langsung (CASH/CARD/MANUAL_STAFF), staf kasir yang melayani boleh langsung memverifikasi transaksi.
-          if (!isSuper && !isDirectPayment && purchase.recordedById === principal.userId) {
+          if (!isSuper && purchase.recordedById === principal.userId)
             throw new ApiProblem('SEPARATION_OF_DUTIES_VIOLATION', HttpStatus.FORBIDDEN);
-          }
           if (purchase.status !== 'PENDING' && purchase.status !== 'WAITING_VERIFICATION')
             throw new ApiProblem('PURCHASE_ALREADY_DECIDED', HttpStatus.CONFLICT);
 
           const decidedAt = new Date();
+          // Transfer bank hanya boleh disetujui bila bukti ada. Lewat batas bayar tetap sah bila buktinya
+          // diunggah sebelum batas (staf baru sempat memeriksa sesudahnya); menolak selalu boleh.
+          if (decision === 'APPROVED' && purchase.paymentMethod === 'BANK_TRANSFER') {
+            const batas = purchase.paymentExpiresAt;
+            const bukti = purchase.paymentProof;
+            if (batas && decidedAt.getTime() > batas.getTime() && (!bukti || bukti.uploadedAt.getTime() > batas.getTime()))
+              throw new ApiProblem('PAYMENT_EXPIRED', HttpStatus.CONFLICT);
+            if (!bukti) throw new ApiProblem('PAYMENT_PROOF_REQUIRED', HttpStatus.CONFLICT);
+          }
           const nextStatus = decision === 'APPROVED' ? PurchaseStatus.PAID : PurchaseStatus.REJECTED;
 
           const updated = await tx.pembelian.update({
@@ -666,23 +658,28 @@ export class PaymentReviewService {
             if (existingPkg) {
               customerPackage = existingPkg;
             } else {
-              const validUntil = new Date(
-                decidedAt.getTime() + (purchase.package.validityDays || 30) * 24 * 60 * 60 * 1000,
-              );
+              const validUntil = berlakuSampai(decidedAt, purchase.package.validityDays || 30);
 
-              customerPackage = await tx.paketPelanggan.create({
-                data: {
-                  userId: purchase.userId,
-                  packageId: purchase.packageId,
-                  purchaseId: purchase.id,
-                  totalSessions: purchase.package.sessionCount,
-                  remainingSessions: purchase.package.sessionCount,
-                  usedSessions: 0,
-                  validFrom: decidedAt,
-                  validUntil,
-                  status: 'ACTIVE',
-                },
-              });
+              try {
+                customerPackage = await tx.paketPelanggan.create({
+                  data: {
+                    userId: purchase.userId,
+                    packageId: purchase.packageId,
+                    purchaseId: purchase.id,
+                    totalSessions: purchase.package.sessionCount,
+                    remainingSessions: purchase.package.sessionCount,
+                    usedSessions: 0,
+                    validFrom: decidedAt,
+                    validUntil,
+                    status: 'ACTIVE',
+                  },
+                });
+              } catch (error) {
+                // Persetujuan ganda bersamaan: purchaseId unik, yang kalah balapan dapat 409 bukan 500.
+                if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002')
+                  throw new ApiProblem('PURCHASE_ALREADY_DECIDED', HttpStatus.CONFLICT);
+                throw error;
+              }
 
               // Catat mutasi awal kuota sesi di SessionLedger (Spesifikasi v1.0)
               await tx.sessionLedger.create({
@@ -702,6 +699,35 @@ export class PaymentReviewService {
               where: { purchaseId: purchase.id },
               data: { status: 'EXPIRED', validUntil: new Date(0) },
             });
+            // Penjualan di meja yang ditolak: booking yang sudah dibuat dengan paket itu tidak boleh
+            // tersisa. Tidak ada sesi yang dipotong (potongan baru terjadi saat kelas selesai).
+            const paketDitolak = await tx.paketPelanggan.findUnique({
+              where: { purchaseId: purchase.id },
+              select: { id: true },
+            });
+            if (paketDitolak) {
+              const aktif = await tx.pemesananKelas.findMany({
+                where: { customerPackageId: paketDitolak.id, status: 'BOOKED' },
+                select: { id: true, classSlotId: true },
+              });
+              if (aktif.length > 0) {
+                await tx.pemesananKelas.updateMany({
+                  where: { id: { in: aktif.map((b) => b.id) }, status: 'BOOKED' },
+                  data: {
+                    status: 'CANCELLED',
+                    cancelledAt: decidedAt,
+                    cancellationReason: 'Pembayaran ditolak',
+                    cancelledById: principal.userId,
+                  },
+                });
+                for (const b of aktif)
+                  await tx.slotKelas.update({
+                    where: { id: b.classSlotId },
+                    data: { bookedCount: { decrement: 1 } },
+                  });
+              }
+            }
+            await lepasKuotaVoucher(tx, purchase.voucherId);
           }
 
           const purchaseWithAudit = { ...updated, auditReference: null };

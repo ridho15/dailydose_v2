@@ -1,12 +1,18 @@
 import { Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
 import { AutoCancelService } from '../classes/auto-cancel.service';
+import { ClassSlotService } from '../classes/slot-kelas.service';
 import { PrismaService } from '../database/prisma.service';
 import { KirimQrService } from '../notifications/kirim-qr.service';
 import { ReminderScheduleService } from '../notifications/reminder-schedule.service';
 import { PaymentExpirationWorkerService } from '../packages/payment-expiration-worker';
 
 export type SchedulerJobName =
-  'expire-orders' | 'expire-packages' | 'auto-cancel' | 'reminders' | 'check-in-qr';
+  | 'expire-orders'
+  | 'expire-packages'
+  | 'auto-cancel'
+  | 'complete-classes'
+  | 'reminders'
+  | 'check-in-qr';
 
 export interface SchedulerJobStatus {
   name: SchedulerJobName;
@@ -56,6 +62,7 @@ export class SchedulerService implements OnApplicationBootstrap, OnModuleDestroy
     private readonly autoCancel: AutoCancelService,
     private readonly reminders: ReminderScheduleService,
     private readonly kirimQr: KirimQrService,
+    private readonly kelas: ClassSlotService,
   ) {
     this.jobs = [
       {
@@ -93,6 +100,12 @@ export class SchedulerService implements OnApplicationBootstrap, OnModuleDestroy
             cancelled: result.cancelledSlotsCount,
           };
         },
+      },
+      {
+        name: 'complete-classes',
+        label: 'Selesaikan kelas yang sudah berakhir (potong sesi member)',
+        intervalMs: 15 * MINUTE,
+        run: async () => ({ ...(await this.kelas.selesaikanOtomatis()) }),
       },
       {
         name: 'reminders',

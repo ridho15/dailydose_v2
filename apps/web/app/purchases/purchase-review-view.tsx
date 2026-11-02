@@ -462,10 +462,14 @@ export function PurchaseReviewView({
     item.paymentMethod === 'CASH' || item.paymentMethod === 'CARD' || item.paymentMethod === 'MANUAL_STAFF';
 
   const isOwnRecord = (item: ReviewPurchase) =>
-    !isSuper && !isDirectCashOrCard(item) && Boolean(item.recordedById) && item.recordedById === currentUserId;
+    !isSuper && Boolean(item.recordedById) && item.recordedById === currentUserId;
 
+  // Penjualan tunai/kartu hanya disetujui Manager atau Super Owner (keputusan pemilik).
+  const isManagerOrSuper = Boolean(
+    sessionContext?.session?.roles?.some((r) => r === 'MANAGER' || r === 'SUPER_OWNER'),
+  );
   const canDecideItem = (item: ReviewPurchase) =>
-    canDecide || (canRecord && isDirectCashOrCard(item));
+    canDecide && (!isDirectCashOrCard(item) || isManagerOrSuper);
 
   const actions = (item: ReviewPurchase, compact = false) => (
     <div

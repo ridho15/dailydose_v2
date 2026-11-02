@@ -608,6 +608,7 @@ export class AttendanceService {
       },
     });
     if (!token) throw new ApiProblem('RESOURCE_NOT_FOUND', HttpStatus.NOT_FOUND);
+    this.requireBranch(principal, token.booking.classSlot.branch.id, 'attendance:manage');
 
     const now = new Date();
     const isExpired = token.expiresAt < now;
@@ -637,8 +638,13 @@ export class AttendanceService {
     _correlationId: string,
   ) {
     this.policy.requireCapability(principal.capabilities, 'attendance:manage');
-    const token = await this.db.checkInToken.findUnique({ where: { id } });
+    const token = await this.db.checkInToken.findUnique({
+      where: { id },
+      include: { booking: { select: { classSlot: { select: { branchId: true } } } } },
+    });
     if (!token) throw new ApiProblem('RESOURCE_NOT_FOUND', HttpStatus.NOT_FOUND);
+    // Staf hanya boleh mencabut token kelas di cabangnya.
+    this.requireBranch(principal, token.booking.classSlot.branchId, 'attendance:manage');
     if (token.isUsed) throw new ApiProblem('TOKEN_ALREADY_USED', HttpStatus.CONFLICT);
 
     await this.db.checkInToken.update({

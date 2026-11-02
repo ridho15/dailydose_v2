@@ -65,6 +65,7 @@ describe('BookingsService.walkIn (Fase 3: Alur Cepat Walk-In & Booking Kasir)', 
     };
 
     const tx = {
+      $queryRaw: jest.fn().mockResolvedValue([]),
       user: {
         findUnique: jest.fn(async () => mockCustomer),
       },

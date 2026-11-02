@@ -1,7 +1,7 @@
 import { HITUNG_TERISI, STATUS_MENEMPATI_KURSI, terisi } from '../classes/terisi';
 import { HttpStatus, Injectable, Optional } from '@nestjs/common';
 import { AuditService } from '../foundation/audit.service';
-import { Prisma, type BookingStatus, SessionMutationType, PaymentMethod } from '@prisma/client';
+import { Prisma, BookingStatus, SessionMutationType, PaymentMethod } from '@prisma/client';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { RuntimeConfigService } from '../configuration/runtime-config.service';
 import { PrismaService } from '../database/prisma.service';
@@ -10,8 +10,11 @@ import { IdempotencyService } from '../foundation/idempotency.service';
 import type { SessionPrincipal } from '../identity/identity.service';
 import { PolicyService } from '../identity/policy.service';
 import { ApiProblem, ENTITY_ID_REGEX } from '../identity/security';
+import { cabangPublik } from '../foundation/tampilan-publik';
 import { paketBerlakuDi } from './cabang-paket';
 import { bookingTeman, maksTemanPaket } from '../packages/bawa-teman';
+import { MEMEGANG_SESI } from '../packages/sesi-terpesan';
+import { berlakuSampai } from '../foundation/masa-berlaku';
 
 export type BookingCancellationReasonCode =
   | 'PERSONAL_UNAVAILABLE'
@@ -143,7 +146,7 @@ export class BookingsService {
     if (ids.length === 0) return new Map<string, number>();
     const groups = await this.db.pemesananKelas.groupBy({
       by: ['customerPackageId'],
-      where: { customerPackageId: { in: ids }, status: 'BOOKED' },
+      where: { customerPackageId: { in: ids }, ...MEMEGANG_SESI },
       _count: { _all: true },
     });
     return new Map(groups.map((group) => [group.customerPackageId, group._count._all]));
@@ -174,7 +177,7 @@ export class BookingsService {
       source: booking.source ?? 'SELF',
       version: 1,
       idempotentReplay: false,
-      branch: slot?.branch ?? null,
+      branch: cabangPublik(slot?.branch),
       customer: booking.user
         ? {
             id: booking.user.id,
@@ -313,7 +316,7 @@ export class BookingsService {
       customerFlow ? 'booking:self:cancel' : 'booking:cancel:assisted',
     );
     // Staf wajib menyebut alasan (jejak pembatalan atas nama pelanggan, min. 10 karakter).
-    const staffReason = input.reason?.trim() ?? '';
+    const staffReason = typeof input.reason === 'string' ? input.reason.trim() : '';
     if (!customerFlow && (staffReason.length < 10 || staffReason.length > 200))
       throw new ApiProblem('VALIDATION_ERROR', HttpStatus.UNPROCESSABLE_ENTITY, false, [
         { field: 'reason', issue: 'REASON_REQUIRED' },
@@ -444,7 +447,8 @@ export class BookingsService {
       where: {
         status: 'ACTIVE',
         remainingSessions: { gt: 0 },
-        validUntil: { gt: now },
+        // Masih berlaku saat kelas dimulai, bukan hanya hari ini.
+        validUntil: { gt: slot.startAt > now ? slot.startAt : now },
         AND: [
           {
             OR: [
@@ -474,10 +478,7 @@ export class BookingsService {
     const items = await Promise.all(
       matchingPackages.map(async (pkg) => {
         const activeBookingsCount = await this.db.pemesananKelas.count({
-          where: {
-            customerPackageId: pkg.id,
-            status: 'BOOKED',
-          },
+          where: { customerPackageId: pkg.id, ...MEMEGANG_SESI },
         });
         const availableSessions = Math.max(0, pkg.remainingSessions - activeBookingsCount);
         return {
@@ -502,12 +503,16 @@ export class BookingsService {
     const sudahDiKelas = await this.db.pemesananKelas.count({
       where: { userId: principal.userId, classSlotId: slot.id, status: { in: ['BOOKED', 'ATTENDED'] } },
     });
-    const maksTeman =
-      sudahDiKelas > 0 ? await maksTemanPaket(this.db, items.map((item) => item.packageId)) : new Map();
+    const temanAda = sudahDiKelas > 0 ? await jumlahKursiTeman(this.db, principal.userId, slot.id) : 0;
+    // Member sudah punya kursinya sendiri: booking berikutnya hanya boleh kursi teman.
+    const punyaKursiSendiri = sudahDiKelas - temanAda > 0;
+    const maksTeman = punyaKursiSendiri
+      ? await maksTemanPaket(this.db, items.map((item) => item.packageId))
+      : new Map<string, number>();
     const eligiblePackages = items
       .filter((item) => item.available > 0)
-      .filter((item) => sudahDiKelas === 0 || (maksTeman.get(item.packageId) ?? 0) >= sudahDiKelas)
-      .map((item) => (sudahDiKelas > 0 ? { ...item, kursiTeman: true } : item));
+      .filter((item) => !punyaKursiSendiri || (maksTeman.get(item.packageId) ?? 0) > temanAda)
+      .map((item) => (punyaKursiSendiri ? { ...item, kursiTeman: true } : item));
 
     let canBook = true;
     let reasonCode:
@@ -541,7 +546,7 @@ export class BookingsService {
       canBook = false;
       reasonCode = 'SLOT_FULL';
       requiredAction = 'CONTACT_STUDIO';
-    } else if (sudahDiKelas > 0 && eligiblePackages.length === 0) {
+    } else if (punyaKursiSendiri && eligiblePackages.length === 0) {
       canBook = false;
       reasonCode = 'ALREADY_BOOKED';
       requiredAction = null;
@@ -626,7 +631,16 @@ export class BookingsService {
     const customerFlow = this.isCustomer(principal);
     const instructorFlow = isInstructorRosterPrincipal(principal);
     const targetUserId = customerFlow ? principal.userId : query.customerId;
-    const limit = Math.min(query.limit ?? PAGE_SIZE, 100);
+    // Parameter query dari URL: nilai yang tidak sah dijawab 422, bukan diteruskan ke Prisma (500).
+    const limitAngka = query.limit === undefined ? PAGE_SIZE : Number(query.limit);
+    if (!Number.isInteger(limitAngka) || limitAngka < 1)
+      throw new ApiProblem('VALIDATION_ERROR', HttpStatus.UNPROCESSABLE_ENTITY);
+    const limit = Math.min(limitAngka, 100);
+    if (query.status && !(Object.values(BookingStatus) as string[]).includes(query.status))
+      throw new ApiProblem('VALIDATION_ERROR', HttpStatus.UNPROCESSABLE_ENTITY);
+    for (const tanggal of [query.from, query.until])
+      if (tanggal && Number.isNaN(new Date(tanggal).getTime()))
+        throw new ApiProblem('VALIDATION_ERROR', HttpStatus.UNPROCESSABLE_ENTITY);
     const pageNumber = query.page && Number(query.page) > 0 ? Number(query.page) : undefined;
     if (query.cursor && !UUID.test(query.cursor))
       throw new ApiProblem('VALIDATION_ERROR', HttpStatus.UNPROCESSABLE_ENTITY);
@@ -890,6 +904,9 @@ export class BookingsService {
       async (tx) => {
         // Kunci baris slot_kelas secara eksklusif (pessimistic lock) untuk mencegah race condition & overbooking
         await tx.$queryRaw`SELECT id FROM slot_kelas WHERE id = ${input.classSlotId} FOR UPDATE`;
+        // Kunci juga paketnya (urutan tetap: slot lalu paket) supaya dua booking bersamaan di kelas
+        // berbeda tidak sama-sama lolos cek sisa sesi dan membuat paket minus.
+        await tx.$queryRaw`SELECT id FROM paket_pelanggan WHERE id = ${input.customerPackageId} FOR UPDATE`;
 
         const slot = await tx.slotKelas.findUnique({
           where: { id: input.classSlotId },
@@ -931,10 +948,10 @@ export class BookingsService {
             ['SUPER_OWNER', 'ADMIN', 'OWNER', 'MANAGER'].includes(r.role as any),
           ) || principal.capabilities?.includes('class-slot:manage');
 
-        // Untuk backdated booking oleh Admin/Super Owner, paket cukup valid saat jadwal kelas berlangsung
-        const packageExpired = isPrivilegedStaff && slotPast
-          ? customerPackage.validUntil <= slot.startAt
-          : customerPackage.validUntil <= now;
+        // Paket harus masih berlaku saat kelasnya dimulai: kelas setelah paket habis tidak boleh
+        // dibooking walaupun hari ini paketnya masih aktif (sesinya akan dipotong dari paket
+        // kedaluwarsa). Ini juga berlaku untuk booking mundur oleh Admin/Super Owner.
+        const packageExpired = customerPackage.validUntil <= slot.startAt;
         if (customerPackage.status !== 'ACTIVE' || packageExpired)
           throw new ApiProblem('INSUFFICIENT_AVAILABLE_SESSIONS', HttpStatus.CONFLICT);
 
@@ -951,10 +968,7 @@ export class BookingsService {
 
         // Periksa sisa sesi dikurangi booking aktif (Rule #1 & #2: sesi fisik belum dipotong)
         const activeBookingsCount = await tx.pemesananKelas.count({
-          where: {
-            customerPackageId: customerPackage.id,
-            status: 'BOOKED',
-          },
+          where: { customerPackageId: customerPackage.id, ...MEMEGANG_SESI },
         });
         if (customerPackage.remainingSessions - activeBookingsCount <= 0)
           throw new ApiProblem('INSUFFICIENT_AVAILABLE_SESSIONS', HttpStatus.CONFLICT);
@@ -986,10 +1000,15 @@ export class BookingsService {
         });
         let kursiTeman = false;
         if (sudahDiKelas > 0) {
-          const maks =
-            (await maksTemanPaket(tx, [customerPackage.packageId])).get(customerPackage.packageId) ?? 0;
-          if (sudahDiKelas > maks) throw new ApiProblem('DUPLICATE_ACTIVE_BOOKING', HttpStatus.CONFLICT);
-          kursiTeman = true;
+          // Hitung kursi teman yang sudah ada, bukan sekadar jumlah booking: bila member membatalkan
+          // kursinya sendiri dan memesan lagi, booking baru itu kursinya sendiri, bukan teman tambahan.
+          const temanAda = await jumlahKursiTeman(tx, customerUserId, slot.id);
+          if (sudahDiKelas - temanAda > 0) {
+            const maks =
+              (await maksTemanPaket(tx, [customerPackage.packageId])).get(customerPackage.packageId) ?? 0;
+            if (temanAda >= maks) throw new ApiProblem('DUPLICATE_ACTIVE_BOOKING', HttpStatus.CONFLICT);
+            kursiTeman = true;
+          }
         }
 
         // Pencegahan booking ganda lintas kelas dengan jadwal bertabrakan (Overlapping Schedule)
@@ -1140,6 +1159,9 @@ export class BookingsService {
         leaseMs: 30_000,
       },
       async (tx) => {
+        // Walk-in mengambil kursi terakhir sama seperti booking biasa: kunci slot dulu agar dua
+        // staf yang menambah walk-in bersamaan tidak melebihi kapasitas.
+        await tx.$queryRaw`SELECT id FROM slot_kelas WHERE id = ${input.classSlotId} FOR UPDATE`;
         const customer = await tx.user.findUnique({
           where: { id: input.customerUserId },
         });
@@ -1209,7 +1231,9 @@ export class BookingsService {
 
         // 1. Catat Pembelian Kasir (Status PENDING untuk antrean Maker-Checker Manager)
         const invoiceNumber = `INV-${Date.now().toString(36).toUpperCase()}-${randomBytes(3).toString('hex').toUpperCase()}`;
-        const note = input.paymentNote?.trim() || 'Walk-in kasir meja depan (Instant Reserve)';
+        const note =
+          (typeof input.paymentNote === 'string' ? input.paymentNote.trim() : '') ||
+          'Walk-in kasir meja depan (Instant Reserve)';
         const order = await tx.pembelian.create({
           data: {
             id: randomUUID(),
@@ -1230,7 +1254,7 @@ export class BookingsService {
 
         // 2. Buat Paket Pelanggan Aktif (Instant Reserve Sesi Pertama)
         const durationDays = pkg.validityDays || 30;
-        const validUntil = new Date(now.getTime() + durationDays * 86_400_000);
+        const validUntil = berlakuSampai(now, durationDays);
         const customerPackage = await tx.paketPelanggan.create({
           data: {
             id: randomUUID(),
@@ -1333,4 +1357,18 @@ export class BookingsService {
       },
     );
   }
+}
+
+/** Kursi teman milik member di satu kelas (booking aktif yang tercatat di `booking_teman`). */
+async function jumlahKursiTeman(
+  db: { pemesananKelas: { findMany(args: unknown): Promise<Array<{ id: string }>> } },
+  userId: string,
+  classSlotId: string,
+): Promise<number> {
+  const aktif = await db.pemesananKelas.findMany({
+    where: { userId, classSlotId, status: { in: ['BOOKED', 'ATTENDED'] } },
+    select: { id: true },
+  });
+  if (!aktif?.length) return 0;
+  return (await bookingTeman(db as never, aktif.map((b) => b.id))).size;
 }

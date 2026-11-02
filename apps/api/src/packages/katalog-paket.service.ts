@@ -81,6 +81,21 @@ async function simpanBawaTeman(tx: any, packageId: string, bawaTeman: boolean | 
   else await tx.paketBawaTeman.deleteMany({ where: { packageId } });
 }
 
+const HARGA_PAKET_MAKS_RP = 2_000_000_000;
+
+/** Angka paket harus bilangan bulat wajar; NaN, nol, negatif, atau pecahan ditolak. Yang undefined dilewati. */
+function cekAngkaPaket(n: { priceRp?: number; sessionCount?: number; validityDays?: number }) {
+  const salah: { field: string; issue: string }[] = [];
+  const bulat = (v: number | undefined) => v !== undefined && Number.isInteger(v);
+  if (n.priceRp !== undefined && !(bulat(n.priceRp) && n.priceRp >= 0 && n.priceRp <= HARGA_PAKET_MAKS_RP))
+    salah.push({ field: 'priceRp', issue: 'INVALID' });
+  if (n.sessionCount !== undefined && !(bulat(n.sessionCount) && n.sessionCount >= 1))
+    salah.push({ field: 'sessionCount', issue: 'INVALID' });
+  if (n.validityDays !== undefined && !(bulat(n.validityDays) && n.validityDays >= 1))
+    salah.push({ field: 'validityDays', issue: 'INVALID' });
+  if (salah.length) throw new ApiProblem('VALIDATION_ERROR', HttpStatus.BAD_REQUEST, false, salah);
+}
+
 @Injectable()
 export class PackageCatalogService {
   constructor(
@@ -206,8 +221,8 @@ export class PackageCatalogService {
     const sessionCount = Number(input.sessionCount);
     const validityDays = Number(input.validityDays ?? input.durationDays ?? 30);
 
-    if (!code || !name || priceRp < 0 || sessionCount < 1)
-      throw new ApiProblem('VALIDATION_ERROR', HttpStatus.BAD_REQUEST);
+    if (!code || !name) throw new ApiProblem('VALIDATION_ERROR', HttpStatus.BAD_REQUEST);
+    cekAngkaPaket({ priceRp, sessionCount, validityDays });
 
     const isMultiBranch = Boolean(
       input.isMultiBranch === true ||
@@ -290,6 +305,17 @@ export class PackageCatalogService {
       async (tx) => {
         const pkg = await tx.paket.findUnique({ where: { id } });
         if (!pkg) throw new ApiProblem('RESOURCE_NOT_FOUND', HttpStatus.NOT_FOUND);
+
+        cekAngkaPaket({
+          priceRp: body.priceRp !== undefined ? Number(body.priceRp) : undefined,
+          sessionCount: body.sessionCount !== undefined ? Number(body.sessionCount) : undefined,
+          validityDays:
+            body.validityDays !== undefined
+              ? Number(body.validityDays)
+              : body.durationDays !== undefined
+                ? Number(body.durationDays)
+                : undefined,
+        });
 
         const isMultiBranch =
           body.isMultiBranch !== undefined

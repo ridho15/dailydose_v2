@@ -16,6 +16,7 @@ try {
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { CorrelationInterceptor } from './platform/correlation.interceptor';
+import { SaringRahasiaInterceptor } from './platform/saring-rahasia.interceptor';
 import { ProblemDetailsFilter } from './platform/problem-details.filter';
 import type { NextFunction, Request, Response } from 'express';
 import { json, raw, urlencoded } from 'express';
@@ -50,7 +51,7 @@ async function bootstrap(): Promise<void> {
     next();
   });
   app.setGlobalPrefix('api/v1');
-  app.useGlobalInterceptors(new CorrelationInterceptor());
+  app.useGlobalInterceptors(new CorrelationInterceptor(), new SaringRahasiaInterceptor());
   app.useGlobalFilters(new ProblemDetailsFilter());
   app.enableShutdownHooks();
   await app.listen(Number(process.env.PORT ?? 3001));

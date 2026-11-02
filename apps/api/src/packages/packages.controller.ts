@@ -455,7 +455,8 @@ export class PackagesController {
     @Req() r: AuthenticatedRequest,
     @Query('olderThanHours') olderThanHours?: string,
   ) {
-    const hours = olderThanHours ? parseInt(olderThanHours, 10) : 24;
+    // Angka dikirim apa adanya (NaN bila bukan bilangan) supaya service yang menolak nilai tidak sah.
+    const hours = olderThanHours === undefined || olderThanHours === '' ? 24 : Number(olderThanHours);
     return this.customerOrders.expireStaleOrders(r.principal, hours);
   }
   // Penjualan manual di meja (staf mencatat atas nama pelanggan; disetujui penyetuju lain).
@@ -518,6 +519,9 @@ export class PackagesController {
     response.setHeader('Content-Type', result.mimeType);
     response.setHeader('Cache-Control', 'private, no-store');
     response.setHeader('Content-Disposition', 'inline');
+    // Gambar pengganti SVG tidak boleh menjalankan skrip bila dibuka langsung di tab.
+    if (result.mimeType === 'image/svg+xml')
+      response.setHeader('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; sandbox");
     response.setHeader('X-Content-Type-Options', 'nosniff');
     response.setHeader('Referrer-Policy', 'no-referrer');
     response.send(result.bytes);

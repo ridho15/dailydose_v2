@@ -61,8 +61,8 @@ describe('LedgerService - Shared Package Members Management', () => {
     };
 
     const mockUsers: Record<string, any> = {
-      [ownerId]: { id: ownerId, displayName: 'Owner User', phone: '081234567890', email: 'owner@test.com', status: 'ACTIVE' },
-      [friendId]: { id: friendId, displayName: 'Friend User', phone: '081299998888', email: 'friend@test.com', status: 'ACTIVE' },
+      [ownerId]: { id: ownerId, displayName: 'Owner User', phone: '081234567890', email: 'owner@test.com', status: 'ACTIVE', role: 'CUSTOMER' },
+      [friendId]: { id: friendId, displayName: 'Friend User', phone: '081299998888', email: 'friend@test.com', status: 'ACTIVE', role: 'CUSTOMER' },
     };
 
     const db = {

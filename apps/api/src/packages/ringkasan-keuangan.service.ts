@@ -74,8 +74,11 @@ export interface JurnalKas {
   period: string;
   branchId: string | null;
   masukRp: number;
-  keluarRp: number;
-  selisihRp: number;
+  /** Null bagi peran tanpa `finance:read` (Admin/Manager hanya boleh melihat omzet cabangnya). */
+  keluarRp: number | null;
+  selisihRp: number | null;
+  /** True bila baris melebihi batas tampilan; total tetap dari agregat seluruh data. */
+  terpotong: boolean;
   rows: BarisJurnal[];
 }
 
@@ -142,7 +145,7 @@ export class RingkasanKeuanganService {
         include: {
           instructor: true,
           classType: true,
-          instructorAttendance: { select: { id: true } },
+          instructorAttendance: { select: { id: true, instructorId: true } },
         },
       }),
       this.db.instructorFee.findMany({
@@ -262,14 +265,35 @@ export class RingkasanKeuanganService {
     const period = input.period ?? now.toISOString().slice(0, 7);
     const range = financeRange({ period });
     const cabang = input.branchId ? { branchId: input.branchId } : {};
+    // Total pengeluaran dan laba hanya untuk pemegang finance:read; staf cabang hanya melihat
+    // pengeluaran yang ia catat sendiri.
+    const lihatKeuangan = principal.capabilities.includes('finance:read');
+    const whereBeli = {
+      ...cabang,
+      status: 'PAID' as const,
+      paidAt: { gte: range.fromDate, lt: range.untilExclusive },
+    };
+    const whereBiaya = {
+      ...cabang,
+      ...otherCostInRange(range),
+      ...(lihatKeuangan ? {} : { createdById: principal.userId }),
+    };
 
-    const [pembelian, biaya] = await Promise.all([
+    const [totalBeli, totalBiaya, pembelian, biaya] = await Promise.all([
+      this.db.pembelian.aggregate({
+        where: whereBeli,
+        _sum: { totalAmountRp: true },
+        _count: { _all: true },
+      }),
+      lihatKeuangan
+        ? this.db.otherCost.aggregate({
+            where: whereBiaya,
+            _sum: { amountRp: true },
+            _count: { _all: true },
+          })
+        : this.db.otherCost.count({ where: whereBiaya }),
       this.db.pembelian.findMany({
-        where: {
-          ...cabang,
-          status: 'PAID',
-          paidAt: { gte: range.fromDate, lt: range.untilExclusive },
-        },
+        where: whereBeli,
         select: {
           id: true,
           branchId: true,
@@ -285,7 +309,7 @@ export class RingkasanKeuanganService {
         take: MAKS_BARIS_JURNAL,
       }),
       this.db.otherCost.findMany({
-        where: { ...cabang, ...otherCostInRange(range) },
+        where: whereBiaya,
         select: {
           id: true,
           branchId: true,
@@ -378,14 +402,20 @@ export class RingkasanKeuanganService {
       })),
     ].sort((a, b) => (a.tanggal === b.tanggal ? 0 : a.tanggal < b.tanggal ? 1 : -1));
 
-    const masukRp = rows.filter((r) => r.arah === 'MASUK').reduce((s, r) => s + r.amountRp, 0);
-    const keluarRp = rows.filter((r) => r.arah === 'KELUAR').reduce((s, r) => s + r.amountRp, 0);
+    // Total dari agregat seluruh data, bukan dari baris yang dipotong `take`.
+    const masukRp = totalBeli._sum.totalAmountRp ?? 0;
+    const jumlahBeli = totalBeli._count._all;
+    const jumlahBiaya =
+      typeof totalBiaya === 'number' ? totalBiaya : (totalBiaya._count._all as number);
+    const keluarRp =
+      typeof totalBiaya === 'number' ? null : (totalBiaya._sum.amountRp ?? 0);
     return {
       period,
       branchId: input.branchId ?? null,
       masukRp,
       keluarRp,
-      selisihRp: masukRp - keluarRp,
+      selisihRp: keluarRp === null ? null : masukRp - keluarRp,
+      terpotong: jumlahBeli > (pembelian as unknown[]).length || jumlahBiaya > (biaya as unknown[]).length,
       rows,
     };
   }
