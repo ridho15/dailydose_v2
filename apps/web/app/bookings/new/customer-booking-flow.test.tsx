@@ -235,4 +235,43 @@ describe('customer self booking flow', () => {
     expect(screen.getByText('Kelas grup')).toBeVisible();
     expect(screen.queryByText('Group Reformer')).toBeNull();
   });
+  it("surfaces SCHEDULE_CONFLICT clearly with toast when booking collides with existing class", async () => {
+    window.history.replaceState({}, "", `?slot=${options.slot.id}`);
+    const client = bookingClient(options);
+    vi.mocked(client.create).mockRejectedValue({ code: "SCHEDULE_CONFLICT" });
+
+    render(
+      <AppFeedbackProvider>
+        <CustomerBookingFlow client={client} />
+      </AppFeedbackProvider>,
+    );
+
+    await screen.findByText("Reformer 10");
+    await userEvent.click(screen.getByRole("button", { name: "Lanjutkan ke review booking" }));
+    await userEvent.click(screen.getByRole("button", { name: "Ya, konfirmasi booking" }));
+
+    expect(
+      (await screen.findAllByText("Jadwal kelas bertabrakan dengan jadwal kelas lain yang sudah Anda ikuti."))[0],
+    ).toBeVisible();
+  });
+
+  it("surfaces CLASS_ALREADY_FINISHED clearly when booking an ended class", async () => {
+    window.history.replaceState({}, "", `?slot=${options.slot.id}`);
+    const client = bookingClient(options);
+    vi.mocked(client.create).mockRejectedValue({ code: "CLASS_ALREADY_FINISHED" });
+
+    render(
+      <AppFeedbackProvider>
+        <CustomerBookingFlow client={client} />
+      </AppFeedbackProvider>,
+    );
+
+    await screen.findByText("Reformer 10");
+    await userEvent.click(screen.getByRole("button", { name: "Lanjutkan ke review booking" }));
+    await userEvent.click(screen.getByRole("button", { name: "Ya, konfirmasi booking" }));
+
+    expect(
+      (await screen.findAllByText("Kelas ini sudah selesai dan tidak dapat dipesan lagi."))[0],
+    ).toBeVisible();
+  });
 });

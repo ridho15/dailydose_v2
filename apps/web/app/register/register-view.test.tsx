@@ -187,4 +187,53 @@ describe('customer self-registration', () => {
     }
     window.history.replaceState({}, '', '/');
   });
+  it("surfaces specific error when phone is already registered (PHONE_ALREADY_REGISTERED)", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(verificationClient, "register").mockRejectedValue({
+      response: {
+        status: 409,
+        data: { code: "PHONE_ALREADY_REGISTERED" },
+      },
+    });
+    render(<RegisterView />);
+
+    await user.type(screen.getByLabelText("Nama lengkap"), "Nadia Putri");
+    await user.type(screen.getByLabelText("Nomor WhatsApp"), "0812 3456 7890");
+    await user.type(screen.getByLabelText("Email"), "nadia@example.com");
+    await user.type(screen.getByLabelText("Password"), "password-aman");
+    const foto = new File(["wajah"], "selfie.jpg", { type: "image/jpeg" });
+    await user.upload(screen.getByLabelText(/Ambil foto sekarang/), foto);
+    await user.click(screen.getByLabelText(/Saya menyetujui Syarat & Ketentuan Layanan/i));
+    await user.click(screen.getByRole("button", { name: "Daftar dan masuk" }));
+
+    expect(
+      await screen.findByText(/Nomor WhatsApp ini sudah terdaftar\. Akun Anda mungkin sudah dibuatkan oleh staf studio/i),
+    ).toBeVisible();
+    expect(screen.getByText("Nomor WhatsApp ini sudah terdaftar.")).toBeVisible();
+  });
+
+  it("surfaces specific error when email is already registered (EMAIL_ALREADY_REGISTERED)", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(verificationClient, "register").mockRejectedValue({
+      response: {
+        status: 409,
+        data: { code: "EMAIL_ALREADY_REGISTERED" },
+      },
+    });
+    render(<RegisterView />);
+
+    await user.type(screen.getByLabelText("Nama lengkap"), "Nadia Putri");
+    await user.type(screen.getByLabelText("Nomor WhatsApp"), "0812 3456 7890");
+    await user.type(screen.getByLabelText("Email"), "nadia@example.com");
+    await user.type(screen.getByLabelText("Password"), "password-aman");
+    const foto = new File(["wajah"], "selfie.jpg", { type: "image/jpeg" });
+    await user.upload(screen.getByLabelText(/Ambil foto sekarang/), foto);
+    await user.click(screen.getByLabelText(/Saya menyetujui Syarat & Ketentuan Layanan/i));
+    await user.click(screen.getByRole("button", { name: "Daftar dan masuk" }));
+
+    expect(
+      await screen.findByText(/Alamat email ini sudah terdaftar\. Silakan gunakan email lain atau masuk ke akun Anda/i),
+    ).toBeVisible();
+    expect(screen.getByText("Alamat email ini sudah terdaftar.")).toBeVisible();
+  });
 });

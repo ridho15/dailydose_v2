@@ -8,7 +8,7 @@ import { AuthPageShell } from '../components/auth/auth-page-shell';
 
 export function ResetPasswordView({ client = browserIdentityClient }: { client?: IdentityClient }) {
   const [show, setShow] = useState(false);
-  const [status, setStatus] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
+  const [status, setStatus] = useState<'idle' | 'loading' | 'done' | 'mismatch' | 'error'>('idle');
   return (
     <AuthPageShell
       eyebrow="Kredensial baru"
@@ -23,7 +23,7 @@ export function ResetPasswordView({ client = browserIdentityClient }: { client?:
           const data = new FormData(event.currentTarget);
           const password = String(data.get('password'));
           if (password !== String(data.get('confirmation'))) {
-            setStatus('error');
+            setStatus('mismatch');
             return;
           }
           const token = new URLSearchParams(window.location.search).get('token') ?? '';
@@ -81,8 +81,11 @@ export function ResetPasswordView({ client = browserIdentityClient }: { client?:
           Password berhasil diperbarui. <Link href="/sign-in">Silakan masuk ke akun</Link>.
         </Feedback>
       )}
+      {status === 'mismatch' && (
+        <Feedback kind="error">Konfirmasi password tidak cocok dengan password baru.</Feedback>
+      )}
       {status === 'error' && (
-        <Feedback kind="error">Password harus sama, dan tautan harus masih berlaku.</Feedback>
+        <Feedback kind="error">Tautan reset password sudah tidak berlaku atau sudah digunakan. Silakan minta tautan baru di halaman Lupa Password.</Feedback>
       )}
     </AuthPageShell>
   );

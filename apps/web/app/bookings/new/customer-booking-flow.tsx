@@ -557,8 +557,14 @@ export function CustomerBookingFlow({ client = browserBookingClient }: { client?
                 });
               })
               .catch(async (error) => {
-                setMessage(await bookingFailure(error));
+                const msg = await bookingFailure(error);
+                setMessage(msg);
                 setStatus('error');
+                feedback.showToast({
+                  tone: 'danger',
+                  title: 'Booking belum dapat diproses',
+                  message: msg,
+                });
               })
               .finally(() => {
                 isSubmittingRef.current = false;

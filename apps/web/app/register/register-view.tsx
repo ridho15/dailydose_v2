@@ -257,8 +257,23 @@ export function RegisterView() {
             const completed = await session?.completeSignIn(returnTo);
             if (!completed) throw new Error('session');
           } catch (error) {
-            const status = (error as { response?: { status?: number } }).response?.status;
-            setMessage(registrationRequestErrorMessage(status));
+            const res = (error as {
+              response?: {
+                status?: number;
+                data?: { code?: string; details?: Array<{ field?: string; issue?: string }> };
+              };
+            }).response;
+            const status = res?.status;
+            const code = res?.data?.code;
+            const details = res?.data?.details;
+            if (code === 'PHONE_ALREADY_REGISTERED') {
+              setErrors((prev) => ({ ...prev, phone: 'Nomor WhatsApp ini sudah terdaftar.' }));
+            } else if (code === 'EMAIL_ALREADY_REGISTERED') {
+              setErrors((prev) => ({ ...prev, email: 'Alamat email ini sudah terdaftar.' }));
+            } else if (code === 'UPLOAD_REJECTED') {
+              setSelfieError(details?.[0]?.issue || 'Format foto tidak didukung.');
+            }
+            setMessage(registrationRequestErrorMessage(status, code, details));
             setState('error');
           }
         }}

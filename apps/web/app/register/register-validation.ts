@@ -72,8 +72,24 @@ export function validateRegistration(values: RegisterValues): RegisterErrors {
   );
 }
 
-export function registrationRequestErrorMessage(status?: number): string {
+export function registrationRequestErrorMessage(
+  status?: number,
+  code?: string,
+  details?: Array<{ field?: string; issue?: string }>,
+): string {
+  if (code === 'PHONE_ALREADY_REGISTERED') {
+    return 'Nomor WhatsApp ini sudah terdaftar. Akun Anda mungkin sudah dibuatkan oleh staf studio. Silakan langsung masuk.';
+  }
+  if (code === 'EMAIL_ALREADY_REGISTERED') {
+    return 'Alamat email ini sudah terdaftar. Silakan gunakan email lain atau masuk ke akun Anda.';
+  }
+  if (code === 'UPLOAD_REJECTED' && details?.[0]?.issue) {
+    return details[0].issue;
+  }
   if (status === 409) return 'Email atau nomor WhatsApp sudah digunakan.';
-  if (status === 422) return 'Periksa kembali data yang diisi.';
+  if (status === 422) {
+    if (details?.[0]?.issue) return details[0].issue;
+    return 'Periksa kembali data yang diisi.';
+  }
   return 'Registrasi belum dapat diproses. Coba kembali.';
 }
