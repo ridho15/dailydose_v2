@@ -487,6 +487,7 @@ export class BookingsService {
           packageId: pkg.packageId,
           name: pkg.package.name,
           packageName: pkg.package.name,
+          isShareable: Boolean(pkg.package?.isShareable),
           available: availableSessions,
           remainingSessions: availableSessions,
           projectedAvailable: Math.max(0, availableSessions - 1),
@@ -511,7 +512,13 @@ export class BookingsService {
       : new Map<string, number>();
     const eligiblePackages = items
       .filter((item) => item.available > 0)
-      .filter((item) => !punyaKursiSendiri || (maksTeman.get(item.packageId) ?? 0) > temanAda)
+      .filter((item) => {
+        if (!punyaKursiSendiri) return true;
+        const bawaTemanMaks = maksTeman.get(item.packageId) ?? 0;
+        const isShareable = Boolean((item as any).isShareable);
+        const maks = isShareable && bawaTemanMaks < 1 ? 1 : bawaTemanMaks;
+        return maks > temanAda;
+      })
       .map((item) => (punyaKursiSendiri ? { ...item, kursiTeman: true } : item));
 
     let canBook = true;
@@ -1004,8 +1011,10 @@ export class BookingsService {
           // kursinya sendiri dan memesan lagi, booking baru itu kursinya sendiri, bukan teman tambahan.
           const temanAda = await jumlahKursiTeman(tx, customerUserId, slot.id);
           if (sudahDiKelas - temanAda > 0) {
-            const maks =
+            const bawaTemanMaks =
               (await maksTemanPaket(tx, [customerPackage.packageId])).get(customerPackage.packageId) ?? 0;
+            const isShareable = Boolean(customerPackage.package?.isShareable);
+            const maks = isShareable && bawaTemanMaks < 1 ? 1 : bawaTemanMaks;
             if (temanAda >= maks) throw new ApiProblem('DUPLICATE_ACTIVE_BOOKING', HttpStatus.CONFLICT);
             kursiTeman = true;
           }

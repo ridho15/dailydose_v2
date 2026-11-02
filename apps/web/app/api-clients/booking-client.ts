@@ -453,6 +453,9 @@ export type InstructorCheckInResult = {
 /** Satu bentuk saldo paket untuk semua pemanggil, apa pun versi respons API-nya. */
 export function normalizePackageBalance(item: any): CustomerPackageBalance {
   const expiryAt = item.expiryAt ? new Date(item.expiryAt) : new Date(0);
+  const isShareable = Boolean(item.isShareable || item.package?.isShareable);
+  const bawaTemanMaks = Number(item.maksTeman) || 0;
+  const maksTeman = isShareable && bawaTemanMaks < 1 ? 1 : bawaTemanMaks;
   return {
     ...item,
     customerUserId: item.customer?.id ?? item.customerUserId,
@@ -464,7 +467,8 @@ export function normalizePackageBalance(item: any): CustomerPackageBalance {
     available: item.available ?? item.remainingSessions ?? 0,
     reserved: item.reserved ?? 0,
     expiryAt: Number.isFinite(expiryAt.getTime()) ? expiryAt : new Date(0),
-    isShareable: Boolean(item.isShareable),
+    maksTeman,
+    isShareable,
     sharedWithUserIds: item.sharedWithUserIds ?? [],
     sharedMembers: item.sharedMembers ?? [],
   };

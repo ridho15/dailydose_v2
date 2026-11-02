@@ -20,6 +20,7 @@ describe('BookingsService - Anti-Booking Kembar Duplicate Guard (Poin 8)', () =>
     existingBookingStatus?: 'BOOKED' | 'ATTENDED' | 'CANCELLED' | 'SCHEDULE_CONFLICT' | null,
     activeBookingsCount = 0,
     maksTeman = 0,
+    isShareable = false,
   ) {
     const futureDate = new Date(Date.now() + 24 * 3600 * 1000);
     const mockSlot = {
@@ -46,7 +47,7 @@ describe('BookingsService - Anti-Booking Kembar Duplicate Guard (Poin 8)', () =>
       remainingSessions: 5,
       purchase: { status: 'PAID' },
       packageId: 'pkg-1',
-      package: { id: 'pkg-1', name: 'Pkg 10', branchId, classTypeId: 'ct-1' },
+      package: { id: 'pkg-1', name: 'Pkg 10', branchId, classTypeId: 'ct-1', isShareable },
     };
 
     const mockCustomer = {
@@ -310,6 +311,27 @@ describe('BookingsService - Anti-Booking Kembar Duplicate Guard (Poin 8)', () =>
       const { service, tx } = createService(null, 0, 1);
       await tambahLagi(service, staf, 'ADMIN_ASSISTED');
       expect(tx.bookingTeman.create).not.toHaveBeenCalled();
+    });
+
+    it('member dengan paket shareable/family (isShareable: true) boleh booking kursi teman meski maksTeman=0', async () => {
+      const { service, tx } = createService('BOOKED', 1, 0, true);
+      const result = await tambahLagi(service, staf, 'ADMIN_ASSISTED');
+      expect(result.status).toBe(HttpStatus.CREATED);
+      expect(tx.bookingTeman.create).toHaveBeenCalledWith({
+        data: { bookingId: 'new-bkg-id', packageId: 'pkg-1', namaTeman: 'Rani' },
+      });
+    });
+
+    it('member dengan paket shareable yang sudah membawa 1 teman ditolak menambah teman kedua', async () => {
+      const { service, tx } = createService('BOOKED', 2, 0, true);
+      tx.pemesananKelas.findMany.mockResolvedValue([{ id: 'own-1' }, { id: 'friend-1' }] as never);
+      tx.pemesananKelas.count.mockImplementation(async ({ where }: any) =>
+        where?.userId && where?.classSlotId === slotId ? 2 : 0,
+      );
+      tx.bookingTeman.findMany.mockResolvedValue([{ bookingId: 'friend-1', namaTeman: 'Rani' }] as never);
+      await expect(tambahLagi(service, staf, 'ADMIN_ASSISTED')).rejects.toMatchObject({
+        code: 'DUPLICATE_ACTIVE_BOOKING',
+      });
     });
   });
 

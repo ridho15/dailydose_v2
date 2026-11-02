@@ -104,7 +104,11 @@ export function calonUntuk(
 ): Calon | null {
   const kursi = kursiMember.get(customer.id) ?? 0;
   if (kursi === 0) return pilihCalon(customer, packages, slot, slot.timezone);
-  const paketTeman = packages.filter((item) => (item.maksTeman ?? 0) >= kursi);
+  const paketTeman = packages.filter((item) => {
+    const bawaTemanMaks = item.maksTeman ?? 0;
+    const maks = item.isShareable && bawaTemanMaks < 1 ? 1 : bawaTemanMaks;
+    return maks >= kursi;
+  });
   if (!paketTeman.length) return null;
   const calon = pilihCalon(customer, paketTeman, slot, slot.timezone);
   return calon.paket ? { ...calon, teman: true } : null;
@@ -156,8 +160,8 @@ export function TimetableRosterPanel({
   };
 
   const muatPeserta = useCallback(async () => {
-    const page = await client.list({ classSlotId: slot.id, status: 'BOOKED', limit: 50 });
-    setPeserta(page.items);
+    const page = await client.list({ classSlotId: slot.id, limit: 50 });
+    setPeserta(page.items.filter((b) => b.status !== 'CANCELLED'));
   }, [client, slot.id]);
 
   useEffect(() => {
@@ -166,9 +170,9 @@ export function TimetableRosterPanel({
     setFailure('');
     setQuery('');
     client
-      .list({ classSlotId: slot.id, status: 'BOOKED', limit: 50 })
+      .list({ classSlotId: slot.id, limit: 50 })
       .then((page) => {
-        if (!batal) setPeserta(page.items);
+        if (!batal) setPeserta(page.items.filter((b) => b.status !== 'CANCELLED'));
       })
       .catch(async (error) => {
         if (!batal) setFailure(await bookingFailure(error));
@@ -420,10 +424,17 @@ export function TimetableRosterPanel({
                   className="flex items-center justify-between gap-2.5 border-b border-dd-line/60 pb-2"
                 >
                   <span className="min-w-0">
-                    <span className="block text-base text-dd-ink">
-                      {booking.kursiTeman
-                        ? booking.namaTeman || `Teman dari ${booking.customer?.displayName ?? 'member'}`
-                        : (booking.customer?.displayName ?? 'Member')}
+                    <span className="flex items-center gap-2">
+                      <span className="block text-base text-dd-ink">
+                        {booking.kursiTeman
+                          ? booking.namaTeman || `Teman dari ${booking.customer?.displayName ?? 'member'}`
+                          : (booking.customer?.displayName ?? 'Member')}
+                      </span>
+                      {booking.status === 'ATTENDED' && (
+                        <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-800">
+                          Hadir
+                        </span>
+                      )}
                     </span>
                     {booking.kursiTeman && booking.namaTeman && (
                       <span className="block text-sm text-dd-muted">

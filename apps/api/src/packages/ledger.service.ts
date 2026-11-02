@@ -245,10 +245,13 @@ export class LedgerService {
     const temanPaket = await maksTemanPaket(this.db, pageRows.map((row) => row.packageId));
     const items = pageRows.map((row) => {
       const reserved = row.bookings.length;
+      const bawaTemanMaks = temanPaket.get(row.packageId) ?? 0;
+      const isShareable = Boolean((row.package as any)?.isShareable);
+      const maksTeman = isShareable && bawaTemanMaks < 1 ? 1 : bawaTemanMaks;
       return {
         ...this.balanceView(row, reserved),
-        /** Kursi teman yang boleh ditambahkan per kelas (paket "bawa teman"); 0 bila tidak. */
-        maksTeman: temanPaket.get(row.packageId) ?? 0,
+        /** Kursi teman yang boleh ditambahkan per kelas (paket "bawa teman" atau paket shareable/family/duet); 0 bila tidak. */
+        maksTeman,
         sessionCountSnapshot: row.totalSessions,
         usage: {
           initialSessions: row.totalSessions,

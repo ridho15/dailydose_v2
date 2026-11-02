@@ -39,4 +39,13 @@ describe('calonUntuk (paket bawa teman)', () => {
   it('jatah teman sudah terpakai: tidak tampil lagi', () => {
     expect(calonUntuk(khamelia, [paket({ maksTeman: 1 })], slot, new Map([['u1', 2]]))).toBeNull();
   });
+
+  it('member dengan paket shareable/family (isShareable: true) tampil lagi sebagai kursi teman', () => {
+    const calon = calonUntuk(khamelia, [paket({ isShareable: true })], slot, new Map([['u1', 1]]));
+    expect(calon).toMatchObject({ teman: true, kendala: null, paket: { id: 'cp1' } });
+  });
+
+  it('member dengan paket shareable/family yang jatah temannya sudah terpakai: tidak tampil lagi', () => {
+    expect(calonUntuk(khamelia, [paket({ isShareable: true })], slot, new Map([['u1', 2]]))).toBeNull();
+  });
 });
