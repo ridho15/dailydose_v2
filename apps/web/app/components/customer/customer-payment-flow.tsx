@@ -660,7 +660,25 @@ export function CustomerPaymentFlow({
                     accept="image/jpeg,image/png,application/pdf"
                     onChange={(event) => {
                       const selected = event.target.files?.[0] ?? null;
-                      if (selected && selected.size > 10_000_000) {
+                      if (!selected) {
+                        setFile(null);
+                        setFailure(undefined);
+                        return;
+                      }
+                      const allowedMimes = ['image/jpeg', 'image/png', 'application/pdf'];
+                      if (!allowedMimes.includes(selected.type)) {
+                        setFailure({
+                          code: 'PAYMENT_PROOF_MIME_MISMATCH',
+                          message: 'Format file tidak didukung. Harap pilih gambar JPEG, PNG, atau PDF.',
+                          correlationReference: undefined,
+                          retryable: false,
+                          stage: undefined,
+                        });
+                        setFile(null);
+                        setUploadSession(undefined);
+                        return;
+                      }
+                      if (selected.size > 10_000_000) {
                         setFailure({
                           code: 'PAYMENT_PROOF_TOO_LARGE',
                           message: 'Ukuran file melebihi 10 MB.',

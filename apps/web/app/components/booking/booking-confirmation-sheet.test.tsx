@@ -362,4 +362,95 @@ describe('BookingConfirmationSheet (Tiket T-05 / Spesifikasi 5.3)', () => {
       expect.any(String),
     );
   });
+  it("renders purchase link instead of disabled button when user has no matching package", () => {
+    render(
+      <BookingConfirmationSheet
+        isOpen={true}
+        onClose={vi.fn()}
+        slot={mockSlot}
+        packageItem={null}
+        availablePackages={[]}
+        studioName="Daily Dose Kemang"
+      />,
+    );
+
+    expect(screen.getByText("Tidak ditemukan paket aktif yang sesuai untuk kelas ini.")).toBeVisible();
+    const purchaseLink = screen.getByRole("link", { name: "Beli paket untuk kelas ini" });
+    expect(purchaseLink).toBeVisible();
+    expect(purchaseLink).toHaveAttribute(
+      "href",
+      "/packages?branch=branch-kemang&classType=type-group&slot=slot-123",
+    );
+  });
+
+  it("supports bring-a-friend input when package is shareable", async () => {
+    const shareablePackage: LedgerBalance = {
+      ...mockPackage,
+      id: "pkg-shareable",
+      packageName: "Double Trouble Deal",
+      isShareable: true,
+    };
+
+    const mockBookingClient = {
+      create: vi.fn().mockResolvedValue({
+        id: "bk-friend",
+        status: "BOOKED",
+        createdAt: new Date(),
+        version: 1,
+      } as Booking),
+    } as unknown as BookingClient;
+
+    render(
+      <BookingConfirmationSheet
+        isOpen={true}
+        onClose={vi.fn()}
+        slot={mockSlot}
+        packageItem={shareablePackage}
+        studioName="Daily Dose Kemang"
+        bookingClient={mockBookingClient}
+      />,
+    );
+
+    const friendInput = screen.getByLabelText("Bawa Teman (Opsional)");
+    expect(friendInput).toBeVisible();
+    await userEvent.type(friendInput, "Jessica");
+
+    await userEvent.click(screen.getByRole("button", { name: "Konfirmasi booking sekarang" }));
+
+    expect(mockBookingClient.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        classSlotId: mockSlot.id,
+        customerPackageId: "pkg-shareable",
+        namaTeman: "Jessica",
+      }),
+      expect.any(String),
+    );
+  });
+
+  it("handles SCHEDULE_CONFLICT error with a clear Indonesian message", async () => {
+    const mockBookingClient = {
+      create: vi.fn().mockRejectedValue({
+        code: "SCHEDULE_CONFLICT",
+      }),
+    } as unknown as BookingClient;
+
+    render(
+      <BookingConfirmationSheet
+        isOpen={true}
+        onClose={vi.fn()}
+        slot={mockSlot}
+        packageItem={mockPackage}
+        studioName="Daily Dose Kemang"
+        bookingClient={mockBookingClient}
+      />,
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Konfirmasi booking sekarang" }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText("Jadwal kelas bertabrakan dengan jadwal kelas lain yang sudah Anda ikuti."),
+      ).toBeVisible();
+    });
+  });
 });

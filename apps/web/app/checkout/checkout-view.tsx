@@ -27,11 +27,11 @@ export function CheckoutView() {
   const feedback = useAppFeedback();
   const sessionContext = useSessionContext();
   const session = sessionContext?.session;
-  const packageId = params.get('package') ?? '';
-  const branchId = params.get('branch');
-  const requestedClassTypeId = params.get('classType') ?? '';
-  const slot = params.get('slot');
-  const orderId = params.get('order');
+  const packageId = params.get('package') || params.get('packageId') || '';
+  const branchId = params.get('branch') || params.get('branchId');
+  const requestedClassTypeId = params.get('classType') || params.get('classTypeId') || '';
+  const slot = params.get('slot') || params.get('slotId');
+  const orderId = params.get('order') || params.get('orderId');
   const [options, setOptions] = useState<CheckoutOptions | null>(null);
   const [selectedClassTypeId, setSelectedClassTypeId] = useState('');
   const [order, setOrder] = useState<CustomerOrder | null>(null);
@@ -40,6 +40,7 @@ export function CheckoutView() {
   const [error, setError] = useState('');
   const [errorCode, setErrorCode] = useState('');
   const [voucherCode, setVoucherCode] = useState('');
+  const [voucherError, setVoucherError] = useState('');
   const [voucherPreview, setVoucherPreview] = useState<{
     code: string;
     packagePromotionDiscountRp: number;
@@ -50,10 +51,13 @@ export function CheckoutView() {
   } | null>(null);
   const [voucherBusy, setVoucherBusy] = useState(false);
 
+  const effectiveBranchId = branchId?.trim() || options?.package.branchId || '';
+
   useEffect(() => {
     setLoading(true);
     setError('');
     setErrorCode('');
+    setVoucherError('');
     const request = orderId
       ? browserOrderClient.detail(orderId).then((value) => setOrder(value))
       : packageId
@@ -311,6 +315,7 @@ export function CheckoutView() {
                 onChange={(value) => {
                   setSelectedClassTypeId(value);
                   setVoucherPreview(null);
+                  setVoucherError('');
                 }}
               />
             </div>
@@ -373,6 +378,7 @@ export function CheckoutView() {
             onChange={(event) => {
               setVoucherCode(event.target.value.toUpperCase());
               setVoucherPreview(null);
+              setVoucherError('');
             }}
             placeholder="Contoh: WELCOME10"
             wrapperClassName="sm:flex-1"
@@ -381,17 +387,16 @@ export function CheckoutView() {
             type="button"
             variant="secondary"
             disabled={
-              voucherBusy || !branchId || !selectedClassTypeId || voucherCode.trim().length < 3
+              voucherBusy || !effectiveBranchId || !selectedClassTypeId || voucherCode.trim().length < 3
             }
             loading={voucherBusy}
             onClick={async () => {
               setVoucherBusy(true);
-              setError('');
+              setVoucherError('');
               try {
-                const effectiveBranchId = branchId?.trim();
                 if (!effectiveBranchId) {
                   setVoucherPreview(null);
-                  setError('Cabang checkout tidak valid.');
+                  setVoucherError('Cabang checkout tidak valid.');
                   return;
                 }
 
@@ -402,9 +407,20 @@ export function CheckoutView() {
                   voucherCode,
                 );
                 setVoucherPreview(result);
+                feedback.showToast({
+                  tone: 'success',
+                  title: 'Voucher berhasil diterapkan',
+                  message: `Hemat ${formatRupiah(result.discountRp)} untuk pesanan Anda.`,
+                });
               } catch (cause) {
                 setVoucherPreview(null);
-                setError(orderError(cause));
+                const message = orderError(cause);
+                setVoucherError(message);
+                feedback.showToast({
+                  tone: 'danger',
+                  title: 'Voucher tidak dapat digunakan',
+                  message,
+                });
               } finally {
                 setVoucherBusy(false);
               }
@@ -413,6 +429,15 @@ export function CheckoutView() {
             Terapkan voucher
           </Button>
         </div>
+        {voucherError && (
+          <div className="mt-3">
+            <AlertBanner
+              tone="danger"
+              title="Voucher tidak dapat digunakan"
+              message={voucherError}
+            />
+          </div>
+        )}
         {voucherPreview && (
           <dl className="mt-4 grid gap-2 rounded-none border border-ed-line bg-ed-tint/40 p-4 text-sm sm:grid-cols-4">
             {voucherPreview.packagePromotionDiscountRp > 0 && (
@@ -439,8 +464,10 @@ export function CheckoutView() {
               </dd>
             </div>
             <div>
-              <dt className="text-xs text-ed-muted">Harga setelah diskon</dt>
-              <dd className="font-semibold text-ed-ink">{formatRupiah(voucherPreview.priceAfterDiscountRp)}</dd>
+              <dt className="text-xs text-ed-muted">Total setelah diskon</dt>
+              <dd className="font-semibold text-ed-ink">
+                {formatRupiah(voucherPreview.priceAfterDiscountRp)}
+              </dd>
             </div>
           </dl>
         )}
@@ -474,7 +501,7 @@ export function CheckoutView() {
               const created = await browserOrderClient.create(
                 packageId,
                 slot,
-                branchId,
+                effectiveBranchId,
                 selectedClassTypeId,
                 voucherPreview?.code,
                 options.package,
@@ -490,6 +517,11 @@ export function CheckoutView() {
               const details = orderErrorDetails(cause);
               setError(details.message);
               setErrorCode(details.code);
+              feedback.showToast({
+                tone: 'danger',
+                title: 'Pesanan belum berhasil dibuat',
+                message: details.message,
+              });
             } finally {
               setSubmitting(false);
             }

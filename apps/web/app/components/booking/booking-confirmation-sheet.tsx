@@ -98,6 +98,7 @@ export function BookingConfirmationSheet({
 }: BookingConfirmationSheetProps) {
   const [status, setStatus] = useState<BookingSheetStatus>('ready');
   const [selectedPkgId, setSelectedPkgId] = useState<string>('');
+  const [namaTeman, setNamaTeman] = useState<string>('');
   const [errorMessage, setErrorMessage] = useState<string>('');
   const [bookingResult, setBookingResult] = useState<Booking | null>(null);
   const isSubmittingRef = useRef(false);
@@ -114,6 +115,7 @@ export function BookingConfirmationSheet({
         setStatus('ready');
       }
       setErrorMessage('');
+      setNamaTeman('');
       setBookingResult(null);
       isSubmittingRef.current = false;
       idempotencyKeyRef.current = crypto.randomUUID();
@@ -147,6 +149,7 @@ export function BookingConfirmationSheet({
           classSlotId: slot.id,
           customerPackageId: currentPkg.id,
           source: 'SELF',
+          ...(namaTeman.trim() ? { namaTeman: namaTeman.trim() } : {}),
         },
         idempotencyKeyRef.current,
       );
@@ -432,7 +435,7 @@ export function BookingConfirmationSheet({
                             value={pkg.id}
                             checked={isChecked}
                             disabled={status === 'submitting'}
-                            onChange={() => setSelectedPkgId(pkg.id)}
+                            onChange={() => { setSelectedPkgId(pkg.id); setErrorMessage(''); }}
                             className="mt-0.5 size-4 accent-dd-forest"
                           />
                           <div className="flex-1">
@@ -446,20 +449,47 @@ export function BookingConfirmationSheet({
                     })}
                   </div>
                 ) : currentPkg ? (
-                  <div>
-                    <strong className="block text-base font-bold text-dd-ink">
-                      {currentPkg.packageName}
-                    </strong>
-                    <p className="mt-1 text-xs text-dd-forest font-medium">
-                      Sisa sesi setelah booking:{' '}
-                      <strong>{Math.max(0, currentPkg.available - 1)} sesi</strong> (dari{' '}
-                      {currentPkg.available} sesi aktif).
-                    </p>
+                  <div className="space-y-2">
+                    <div>
+                      <strong className="block text-base font-bold text-dd-ink">
+                        {currentPkg.packageName}
+                      </strong>
+                      <p className="mt-1 text-xs text-dd-forest font-medium">
+                        Sisa sesi setelah booking:{' '}
+                        <strong>{Math.max(0, currentPkg.available - 1)} sesi</strong> (dari{' '}
+                        {currentPkg.available} sesi aktif).
+                      </p>
+                    </div>
                   </div>
                 ) : (
-                  <p className="text-xs text-red-800">
-                    Tidak ditemukan paket aktif yang sesuai untuk kelas ini.
-                  </p>
+                  <div className="space-y-1">
+                    <p className="text-xs font-semibold text-red-800">
+                      Tidak ditemukan paket aktif yang sesuai untuk kelas ini.
+                    </p>
+                    <p className="text-xs text-dd-muted">
+                      Anda belum memiliki paket aktif untuk studio dan tipe kelas ini.
+                    </p>
+                  </div>
+                )}
+
+                {currentPkg?.isShareable && (
+                  <div className="pt-2 border-t border-dd-forest/20 space-y-1.5">
+                    <label htmlFor="booking-sheet-friend-name" className="block text-xs font-semibold text-dd-forest">
+                      Bawa Teman (Opsional)
+                    </label>
+                    <input
+                      id="booking-sheet-friend-name"
+                      type="text"
+                      value={namaTeman}
+                      onChange={(e) => {
+                        setNamaTeman(e.target.value);
+                        setErrorMessage('');
+                      }}
+                      placeholder="Nama teman Anda (jika mendaftarkan teman)"
+                      disabled={status === 'submitting'}
+                      className="w-full min-h-10 rounded-dd-md border border-dd-forest/30 bg-white px-3 py-1.5 text-xs text-dd-ink placeholder:text-dd-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#09371f]"
+                    />
+                  </div>
                 )}
               </div>
 
@@ -482,21 +512,30 @@ export function BookingConfirmationSheet({
 
             {/* Tombol Utama (Tinggi 52 px) & Tombol Batal */}
             <div className="space-y-2.5">
-              <button
-                type="button"
-                disabled={status === 'submitting' || !currentPkg}
-                onClick={handleConfirmBooking}
-                className="flex h-[52px] min-h-[52px] w-full items-center justify-center rounded-dd-md bg-dd-forest px-6 text-sm font-bold text-white shadow-xs transition hover:bg-dd-forest-hover disabled:opacity-50 disabled:pointer-events-none cursor-pointer"
-              >
-                {status === 'submitting' ? (
-                  <span className="inline-flex items-center gap-2">
-                    <span className="size-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                    <span>Memproses booking...</span>
-                  </span>
-                ) : (
-                  'Konfirmasi booking sekarang'
-                )}
-              </button>
+              {currentPkg ? (
+                <button
+                  type="button"
+                  disabled={status === 'submitting'}
+                  onClick={handleConfirmBooking}
+                  className="flex h-[52px] min-h-[52px] w-full items-center justify-center rounded-dd-md bg-dd-forest px-6 text-sm font-bold text-white shadow-xs transition hover:bg-dd-forest-hover disabled:opacity-50 disabled:pointer-events-none cursor-pointer"
+                >
+                  {status === 'submitting' ? (
+                    <span className="inline-flex items-center gap-2">
+                      <span className="size-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                      <span>Memproses booking...</span>
+                    </span>
+                  ) : (
+                    'Konfirmasi booking sekarang'
+                  )}
+                </button>
+              ) : (
+                <Link
+                  href={"/packages?branch=" + encodeURIComponent(slot.branchId) + "&classType=" + encodeURIComponent(slot.classType.id) + "&slot=" + encodeURIComponent(slot.id)}
+                  className="flex h-[52px] min-h-[52px] w-full items-center justify-center rounded-dd-md bg-dd-forest px-6 text-sm font-bold text-white shadow-xs transition hover:bg-dd-forest-hover cursor-pointer"
+                >
+                  Beli paket untuk kelas ini
+                </Link>
+              )}
 
               <button
                 type="button"

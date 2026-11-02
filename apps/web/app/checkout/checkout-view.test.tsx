@@ -1,8 +1,9 @@
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { CheckoutView } from './checkout-view';
 import { AppFeedbackProvider } from '../components/app-feedback';
-import { OrderClientError } from '@/api-clients/order-client';
+import { OrderClientError, orderErrorDetails } from '@/api-clients/order-client';
 
 const mockSearchParams = vi.hoisted(() => new Map<string, string>());
 const mockRouter = vi.hoisted(() => ({
@@ -140,5 +141,105 @@ describe('CheckoutView verification gate (Tiket T-01)', () => {
     expect(
       screen.getByText('Layanan pesanan belum dapat memproses permintaan. Silakan coba kembali.'),
     ).toBeVisible();
+  });
+});
+
+describe('CheckoutView Voucher Non-Happy Path', () => {
+  const dummyOptions = {
+    package: {
+      id: 'pkg-1',
+      name: 'Paket Pilates 10 Sesi',
+      priceRp: 1500000,
+      effectivePriceRp: 1500000,
+      version: 1,
+      promotion: null,
+      sessionCount: 10,
+      durationDays: 30,
+      branchId: 'branch-1',
+      branchName: 'Daily Dose Menteng',
+      classTypes: [{ id: 'ct-1', name: 'Reformer' }],
+    },
+    paymentAccount: {
+      id: 'pa-1',
+      bankName: 'BCA',
+      accountNumber: '1234567890',
+      accountHolderName: 'PT Daily Dose Pilates',
+      paymentWindowHours: 24,
+    },
+  };
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+    mockSearchParams.clear();
+    mockSearchParams.set('package', 'pkg-1');
+    mockSearchParams.set('branch', 'branch-1');
+    mockSession.session.identityVerificationStatus = 'APPROVED';
+    vi.mocked(browserOrderClient.checkout).mockResolvedValue(dummyOptions);
+  });
+
+  it('displays local voucher error inside the voucher section and avoids global misleading order error banner', async () => {
+    const user = userEvent.setup();
+    vi.mocked(browserOrderClient.previewVoucher).mockRejectedValueOnce(
+      new OrderClientError('VOUCHER_EXPIRED'),
+    );
+
+    render(
+      <AppFeedbackProvider>
+        <CheckoutView />
+      </AppFeedbackProvider>,
+    );
+
+    expect(await screen.findByRole('heading', { name: 'Ringkasan pembelian' })).toBeVisible();
+
+    const voucherInput = screen.getByPlaceholderText('Contoh: WELCOME10');
+    await user.type(voucherInput, 'EXPIRED10');
+    expect((voucherInput as HTMLInputElement).value).toBe('EXPIRED10');
+
+    const applyButton = screen.getByRole('button', { name: 'Terapkan voucher' });
+    expect(applyButton).toBeEnabled();
+    await user.click(applyButton);
+    expect(browserOrderClient.previewVoucher).toHaveBeenCalled();
+
+    const errorElements = await screen.findAllByText('Kode voucher telah kedaluwarsa.');
+    expect(errorElements.length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Voucher tidak dapat digunakan').length).toBeGreaterThan(0);
+
+    // Top order error banner should NOT be rendered
+    expect(screen.queryByText('Pesanan belum berhasil dibuat')).toBeNull();
+
+    const voucherSection = voucherInput.closest('section')!;
+    expect(voucherSection).toHaveTextContent('Kode voucher telah kedaluwarsa.');
+
+    // Typing a new voucher code clears the error inside the voucher section
+    await user.clear(voucherInput);
+    await user.type(voucherInput, 'NEWCODE');
+    expect(voucherSection).not.toHaveTextContent('Kode voucher telah kedaluwarsa.');
+  });
+
+  it('translates VOUCHER_NOT_APPLICABLE and detailed issues correctly in orderErrorDetails', () => {
+    const errorWithDetail = new OrderClientError(
+      'VOUCHER_NOT_APPLICABLE',
+      undefined,
+      false,
+      undefined,
+      [{ field: 'voucherCode', issue: 'EXPIRED' }],
+    );
+    expect(orderErrorDetails(errorWithDetail).message).toBe('Kode voucher telah kedaluwarsa.');
+
+    const errorMinSpend = new OrderClientError(
+      'VOUCHER_NOT_APPLICABLE',
+      undefined,
+      false,
+      undefined,
+      [{ field: 'voucherCode', issue: 'MINIMUM_SPEND_NOT_MET' }],
+    );
+    expect(orderErrorDetails(errorMinSpend).message).toBe(
+      'Total belanja belum memenuhi syarat minimum voucher.',
+    );
+
+    const errorExhausted = new OrderClientError('VOUCHER_QUOTA_EXHAUSTED');
+    expect(orderErrorDetails(errorExhausted).message).toBe(
+      'Kuota penggunaan voucher telah habis.',
+    );
   });
 });

@@ -1184,9 +1184,11 @@ const messages: Record<string, string> = {
   CLASS_ALREADY_FINISHED: 'Kelas ini sudah selesai dan tidak dapat dipesan lagi.',
   SCHEDULE_CONFLICT: 'Jadwal kelas bertabrakan dengan jadwal kelas lain yang sudah Anda ikuti.',
   IDENTITY_VERIFICATION_REQUIRED: 'Verifikasi identitas diperlukan. Selesaikan verifikasi foto selfie terlebih dahulu sebelum memesan kelas.',
+  UNVERIFIED: 'Verifikasi identitas diperlukan. Selesaikan verifikasi foto selfie terlebih dahulu sebelum memesan kelas.',
   BOOKING_NOT_ACTIVE: 'Booking sudah tidak aktif atau sudah dibatalkan.',
   INSUFFICIENT_AVAILABLE_SESSIONS: 'Saldo sesi pelanggan tidak mencukupi.',
   DUPLICATE_ACTIVE_BOOKING: 'Pelanggan sudah memiliki booking aktif untuk kelas ini.',
+  CONFLICT: 'Permintaan booking tidak dapat diproses karena terjadi konflik data atau jadwal.',
   RESOURCE_NOT_FOUND: 'Data tidak tersedia dalam cabang yang dipilih.',
   CONFIGURATION_REQUIRED: 'Fitur booking yang diminta belum tersedia.',
   IDEMPOTENCY_KEY_REUSED: 'Permintaan booking berubah. Silakan mulai konfirmasi baru.',
@@ -1232,7 +1234,7 @@ export async function bookingProblem(error: unknown): Promise<BookingProblem> {
   const typed = error as {
     code?: string;
     status?: number;
-    data?: { code?: string; error?: { code?: string } } | null;
+    data?: { code?: string; message?: string; error?: { code?: string; message?: string } } | null;
     response?: Response & { status?: number };
   };
   let code = typed.code;
@@ -1242,7 +1244,8 @@ export async function bookingProblem(error: unknown): Promise<BookingProblem> {
     try {
       const problem = (await typed.response.clone().json()) as {
         code?: string;
-        error?: { code?: string };
+        message?: string;
+        error?: { code?: string; message?: string };
       };
       code = problem.code ?? problem.error?.code;
     } catch {
@@ -1257,14 +1260,27 @@ export async function bookingProblem(error: unknown): Promise<BookingProblem> {
         ? 'FORBIDDEN'
         : status === 404
           ? 'RESOURCE_NOT_FOUND'
-          : status === 503
-            ? 'CONFIGURATION_REQUIRED'
-            : status === 400 || status === 422
-              ? 'VALIDATION_ERROR'
-              : 'OFFLINE_OR_REQUEST_FAILED';
+          : status === 409
+            ? 'CONFLICT'
+            : status === 503
+              ? 'CONFIGURATION_REQUIRED'
+              : status === 400 || status === 422
+                ? 'VALIDATION_ERROR'
+                : 'OFFLINE_OR_REQUEST_FAILED';
+
+  const serverMessage =
+    typed.data?.error?.message ??
+    typed.data?.message ??
+    (typeof (error as any)?.message === 'string' &&
+    !(error as any).message.includes('fetch') &&
+    !(error as any).message.includes('ApiError') &&
+    !(error as any).message.includes('status code')
+      ? (error as any).message
+      : undefined);
+
   return {
     code,
-    message: messages[code] ?? messages.OFFLINE_OR_REQUEST_FAILED!,
+    message: messages[code] ?? serverMessage ?? messages.OFFLINE_OR_REQUEST_FAILED!,
   };
 }
 

@@ -84,6 +84,7 @@ const makeClient = (options: CustomerRescheduleOptions): BookingClient => ({
   detail: vi.fn().mockResolvedValue(booking),
   rescheduleOptions: vi.fn().mockResolvedValue(options),
   create: vi.fn(),
+  cancel: vi.fn().mockResolvedValue(undefined),
   listReschedules: vi.fn(),
   requestReschedule: vi.fn().mockResolvedValue(request),
   decideReschedule: vi.fn(),
@@ -185,6 +186,53 @@ describe('BookingDetailView reschedule customer', () => {
       render(<BookingDetailView id={bookingId} client={withCancelCheck(new Error('offline'))} />);
       expect(await screen.findByRole('button', { name: 'Batalkan booking' })).toBeVisible();
     });
+
+    it('executes cancellation successfully and shows success message with quota refund note', async () => {
+      const client = withCancelCheck({ ...cutoff, canCancel: true, unavailableReason: null, supportAction: null });
+      render(<BookingDetailView id={bookingId} client={client} />);
+      const user = userEvent.setup();
+
+      await user.click(await screen.findByRole('button', { name: 'Batalkan booking' }));
+      expect(screen.getByText('Konfirmasi Pembatalan Booking')).toBeVisible();
+      expect(screen.getByText(/Kuota sesi paket Anda akan otomatis dikembalikan secara utuh/)).toBeVisible();
+
+      await user.click(screen.getByRole('button', { name: 'Ya, Batalkan' }));
+      expect(client.cancel).toHaveBeenCalledWith(bookingId);
+      expect(await screen.findByText('Booking berhasil dibatalkan')).toBeVisible();
+      expect(screen.getByText(/Kuota sesi paket Anda telah dikembalikan secara utuh/)).toBeVisible();
+    });
+
+    it('displays cutoff error in dialog when cancellation cutoff passes during submission', async () => {
+      const client = withCancelCheck({ ...cutoff, canCancel: true, unavailableReason: null, supportAction: null });
+      vi.mocked(client.cancel!).mockRejectedValueOnce({ code: 'CANCELLATION_CUTOFF_PASSED' });
+      render(<BookingDetailView id={bookingId} client={client} />);
+      const user = userEvent.setup();
+
+      await user.click(await screen.findByRole('button', { name: 'Batalkan booking' }));
+      await user.click(screen.getByRole('button', { name: 'Ya, Batalkan' }));
+
+      expect(
+        await screen.findByText(
+          'Batas waktu pembatalan mandiri (H-24) telah terlewati. Hubungi admin studio jika terdapat kondisi darurat medis.',
+        ),
+      ).toBeVisible();
+    });
+
+    it('displays error in dialog when attendance has already been recorded', async () => {
+      const client = withCancelCheck({ ...cutoff, canCancel: true, unavailableReason: null, supportAction: null });
+      vi.mocked(client.cancel!).mockRejectedValueOnce({ code: 'ATTENDANCE_RECORDED' });
+      render(<BookingDetailView id={bookingId} client={client} />);
+      const user = userEvent.setup();
+
+      await user.click(await screen.findByRole('button', { name: 'Batalkan booking' }));
+      await user.click(screen.getByRole('button', { name: 'Ya, Batalkan' }));
+
+      expect(
+        await screen.findByText(
+          'Kehadiran kelas sudah tercatat atau sesi telah berjalan. Booking tidak dapat dibatalkan.',
+        ),
+      ).toBeVisible();
+    });
   });
 
   it('keeps booking detail readable while reschedule policy is disabled', async () => {
@@ -241,6 +289,23 @@ describe('BookingDetailView reschedule customer', () => {
     const form = screen.getByRole('form', { name: 'Pengajuan reschedule' });
     expect(await within(form).findByText('Permintaan belum dapat diproses')).toBeVisible();
     expect(within(form).getByText('Kelas tujuan sudah penuh.')).toBeVisible();
+  });
+
+  it('displays schedule conflict error inside the reschedule form', async () => {
+    const client = makeClient(eligible);
+    vi.mocked(client.requestReschedule).mockRejectedValue({ code: 'SCHEDULE_CONFLICT' });
+    render(<BookingDetailView id={bookingId} client={client} />);
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole('button', { name: 'Ajukan reschedule' }));
+    await user.click(screen.getByRole('button', { name: 'Tinjau permintaan' }));
+    await user.click(screen.getByRole('button', { name: 'Kirim permintaan' }));
+
+    const form = screen.getByRole('form', { name: 'Pengajuan reschedule' });
+    expect(await within(form).findByText('Permintaan belum dapat diproses')).toBeVisible();
+    expect(
+      within(form).getByText('Jadwal kelas bertabrakan dengan jadwal kelas lain yang sudah Anda ikuti.'),
+    ).toBeVisible();
   });
 
   it('does not request reschedule options without the customer capability', async () => {

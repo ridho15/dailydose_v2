@@ -167,6 +167,7 @@ export class OrderClientError extends Error {
     readonly correlationReference?: string,
     readonly retryable = false,
     readonly stage?: PaymentProofUploadStage,
+    readonly details?: Array<{ field?: string; issue?: string }>,
   ) {
     super(code);
     this.name = 'OrderClientError';
@@ -191,13 +192,20 @@ async function requestResult<T>(
   if (!response.ok) {
     const problem = (await response.json().catch(() => ({}))) as {
       code?: string;
-      error?: { code?: string; correlationId?: string; retryable?: boolean };
+      error?: {
+        code?: string;
+        correlationId?: string;
+        retryable?: boolean;
+        details?: Array<{ field?: string; issue?: string }>;
+      };
+      details?: Array<{ field?: string; issue?: string }>;
     };
     throw new OrderClientError(
       problem.error?.code || problem.code || `HTTP_${response.status}`,
       problem.error?.correlationId ?? response.headers.get('x-correlation-id') ?? undefined,
       problem.error?.retryable ?? response.status >= 500,
       stage,
+      problem.error?.details || problem.details,
     );
   }
   return {
@@ -493,7 +501,7 @@ export function orderErrorDetails(error: unknown) {
     PAYMENT_UNIQUE_CODE_UNAVAILABLE:
       'Kode pembayaran sedang penuh. Tunggu beberapa saat lalu buat pesanan kembali.',
     ORDER_EXPIRED: 'Batas pembayaran sudah berakhir. Buat pesanan baru.',
-    PAYMENT_PROOF_MIME_MISMATCH: 'Isi file tidak sesuai dengan tipe file yang dipilih.',
+    PAYMENT_PROOF_MIME_MISMATCH: 'Format file tidak didukung. Harap pilih gambar JPEG, PNG, atau PDF.',
     PAYMENT_PROOF_SCAN_PENDING: 'Pemeriksaan file masih berjalan. Tunggu sebentar lalu coba lagi.',
     PAYMENT_PROOF_TOO_LARGE: 'Ukuran file melebihi batas 10 MB.',
     PAYMENT_PROOF_CHECKSUM_MISMATCH: 'File berubah saat diunggah. Silakan pilih ulang.',
@@ -526,11 +534,26 @@ export function orderErrorDetails(error: unknown) {
     VOUCHER_INACTIVE: 'Kode voucher sudah tidak aktif.',
     VOUCHER_MINIMUM_NOT_MET: 'Total belanja belum memenuhi syarat minimum voucher.',
     VOUCHER_EXHAUSTED: 'Kuota penggunaan voucher telah habis.',
+    VOUCHER_QUOTA_EXHAUSTED: 'Kuota penggunaan voucher telah habis.',
+    VOUCHER_NOT_APPLICABLE: 'Voucher tidak dapat digunakan untuk pesanan ini.',
   };
+
+  let message = labels[code];
+  if (error instanceof OrderClientError && error.details?.length) {
+    const issue = error.details[0]?.issue;
+    if (issue === 'EXPIRED') message = labels.VOUCHER_EXPIRED;
+    else if (issue === 'NOT_FOUND') message = labels.VOUCHER_INVALID;
+    else if (issue === 'INACTIVE') message = labels.VOUCHER_INACTIVE;
+    else if (issue === 'MINIMUM_SPEND_NOT_MET') message = labels.VOUCHER_MINIMUM_NOT_MET;
+    else if (issue === 'EXHAUSTED') message = labels.VOUCHER_EXHAUSTED;
+  }
+  if (!message) {
+    message = 'Layanan pesanan belum dapat memproses permintaan. Silakan coba kembali.';
+  }
+
   return {
     code,
-    message:
-      labels[code] ?? 'Layanan pesanan belum dapat memproses permintaan. Silakan coba kembali.',
+    message,
     correlationReference:
       error instanceof OrderClientError ? error.correlationReference : undefined,
     retryable: error instanceof OrderClientError ? error.retryable : true,

@@ -151,7 +151,11 @@ export function BookingDetailView({
     try {
       const optionResult = await client.rescheduleOptions(id);
       setOptions(optionResult);
-      setTargetId(optionResult.targets[0]?.id ?? '');
+      setTargetId(
+        optionResult.targets.find((t) => t.eligible !== false)?.id ??
+          optionResult.targets[0]?.id ??
+          '',
+      );
     } catch (cause) {
       setOptions(null);
       setTargetId('');
@@ -641,7 +645,15 @@ export function BookingDetailView({
                 options={options.targets.map((target) => ({
                   id: target.id,
                   label: dateTime(target.startAt, target.timezone),
-                  description: `${target.availableCapacity} tempat tersedia`,
+                  disabled: target.eligible === false,
+                  description:
+                    target.eligible === false
+                      ? target.ineligibilityReason === 'SCHEDULE_CONFLICT'
+                        ? 'Jadwal bertabrakan dengan kelas Anda'
+                        : target.ineligibilityReason === 'DUPLICATE_BOOKING'
+                          ? 'Anda sudah terdaftar di kelas ini'
+                          : 'Kelas sudah penuh'
+                      : `${target.availableCapacity} tempat tersedia`,
                 }))}
                 onChange={(value) => {
                   setTargetId(value);

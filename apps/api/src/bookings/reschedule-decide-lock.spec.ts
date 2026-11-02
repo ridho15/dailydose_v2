@@ -165,4 +165,21 @@ describe('persetujuan ubah jadwal memeriksa ulang kelas tujuan', () => {
     await expect(approve(service)).rejects.toMatchObject({ code: 'INSUFFICIENT_AVAILABLE_SESSIONS' });
     expect(tx.pemesananKelas.update).not.toHaveBeenCalled();
   });
+
+  it('menolak bila pelanggan sudah memiliki booking aktif di kelas tujuan (DUPLICATE_ACTIVE_BOOKING)', async () => {
+    const { service, tx } = setup();
+    tx.pemesananKelas.findFirst.mockResolvedValueOnce({ id: id(99) } as never);
+    await expect(approve(service)).rejects.toMatchObject({ code: 'DUPLICATE_ACTIVE_BOOKING' });
+    expect(tx.pemesananKelas.update).not.toHaveBeenCalled();
+  });
+
+  it('menolak bila jadwal kelas tujuan bertabrakan dengan kelas lain pelanggan (SCHEDULE_CONFLICT)', async () => {
+    const { service, tx } = setup();
+    // findFirst pertama (duplicate check) return null, kedua (schedule conflict) return booking lain
+    tx.pemesananKelas.findFirst
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ id: id(98) } as never);
+    await expect(approve(service)).rejects.toMatchObject({ code: 'SCHEDULE_CONFLICT' });
+    expect(tx.pemesananKelas.update).not.toHaveBeenCalled();
+  });
 });

@@ -139,9 +139,34 @@ export class ReschedulesService {
       take: 20,
     });
 
+    const customerBookings = await this.db.pemesananKelas.findMany({
+      where: {
+        userId: principal.userId,
+        status: { in: ['BOOKED', 'ATTENDED'] },
+        id: { not: booking.id },
+      },
+      select: {
+        classSlotId: true,
+        classSlot: { select: { startAt: true, endAt: true } },
+      },
+    });
+
     const targets = availableSlots.map((slot) => {
       // Kursi terisi dari booking nyata; kolom bookedCount bisa melenceng (sinkronisasi V1).
       const remaining = Math.max(0, slot.capacity - terisi(slot));
+      const duplicate = customerBookings.some((b) => b.classSlotId === slot.id);
+      const conflict = customerBookings.some(
+        (b) => b.classSlot.startAt < slot.endAt && b.classSlot.endAt > slot.startAt,
+      );
+      const eligible = remaining > 0 && !duplicate && !conflict;
+      const ineligibilityReason =
+        remaining <= 0
+          ? 'SLOT_FULL'
+          : duplicate
+            ? 'DUPLICATE_BOOKING'
+            : conflict
+              ? 'SCHEDULE_CONFLICT'
+              : null;
       return {
         id: slot.id,
         startAt: slot.startAt,
@@ -151,8 +176,8 @@ export class ReschedulesService {
         bookedCount: terisi(slot),
         available: remaining,
         availableCapacity: remaining,
-        eligible: remaining > 0,
-        ineligibilityReason: remaining <= 0 ? 'SLOT_FULL' : null,
+        eligible,
+        ineligibilityReason,
         classType: slot.classType,
         instructor: slot.instructor,
         studio: slot.studio,
@@ -332,6 +357,31 @@ export class ReschedulesService {
         if (!targetSlot) throw new ApiProblem('RESOURCE_NOT_FOUND', HttpStatus.NOT_FOUND);
         validasiTujuan(booking, targetSlot, now);
 
+        const duplicate = await tx.pemesananKelas.findFirst({
+          where: {
+            userId: principal.userId,
+            classSlotId: targetSlot.id,
+            status: { in: ['BOOKED', 'ATTENDED'] },
+          },
+          select: { id: true },
+        });
+        if (duplicate) throw new ApiProblem('DUPLICATE_ACTIVE_BOOKING', HttpStatus.CONFLICT);
+
+        const scheduleConflict = await tx.pemesananKelas.findFirst({
+          where: {
+            userId: principal.userId,
+            status: { in: ['BOOKED', 'ATTENDED'] },
+            id: { not: booking.id },
+            classSlotId: { not: targetSlot.id },
+            classSlot: {
+              startAt: { lt: targetSlot.endAt },
+              endAt: { gt: targetSlot.startAt },
+            },
+          },
+          select: { id: true },
+        });
+        if (scheduleConflict) throw new ApiProblem('SCHEDULE_CONFLICT', HttpStatus.CONFLICT);
+
         // Buat record UbahJadwal berstatus PENDING
         const reschedule = await tx.ubahJadwal.create({
           data: {
@@ -461,6 +511,7 @@ export class ReschedulesService {
               capacity: true,
               status: true,
               startAt: true,
+              endAt: true,
               branchId: true,
               classTypeId: true,
             },
@@ -493,6 +544,25 @@ export class ReschedulesService {
           });
           if (duplicate) {
             throw new ApiProblem('DUPLICATE_ACTIVE_BOOKING', HttpStatus.CONFLICT);
+          }
+
+          if (targetSlot) {
+            const scheduleConflict = await tx.pemesananKelas.findFirst({
+              where: {
+                userId: reschedule.booking.userId,
+                status: { in: ['BOOKED', 'ATTENDED'] },
+                id: { not: reschedule.bookingId },
+                classSlotId: { not: reschedule.targetSlotId },
+                classSlot: {
+                  startAt: { lt: targetSlot.endAt },
+                  endAt: { gt: targetSlot.startAt },
+                },
+              },
+              select: { id: true },
+            });
+            if (scheduleConflict) {
+              throw new ApiProblem('SCHEDULE_CONFLICT', HttpStatus.CONFLICT);
+            }
           }
 
           // Pindahkan booking ke targetSlot
