@@ -48,8 +48,10 @@ export interface JurnalKas {
   period: string;
   branchId: string | null;
   masukRp: number;
-  keluarRp: number;
-  selisihRp: number;
+  /** Null untuk peran tanpa akses keuangan (Admin/Manager). */
+  keluarRp: number | null;
+  selisihRp: number | null;
+  terpotong?: boolean;
   rows: BarisJurnal[];
 }
 

@@ -156,7 +156,7 @@ describe('PRIORITAS 8: Instructor Lifecycle & Operational Non-Happy Path Specs',
       classTypeId: 'group',
       instructor: coach,
       classType: { name: 'Group Class' },
-      instructorAttendance: { id: 'att-valid-qr' },
+      instructorAttendance: { id: 'att-valid-qr', instructorId: coach.id },
       ...over,
     });
 

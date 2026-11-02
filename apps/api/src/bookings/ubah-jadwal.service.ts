@@ -9,6 +9,8 @@ import { IdempotencyService } from '../foundation/idempotency.service';
 import type { SessionPrincipal } from '../identity/identity.service';
 import { PolicyService } from '../identity/policy.service';
 import { ApiProblem, ENTITY_ID_REGEX } from '../identity/security';
+import { HITUNG_TERISI, terisi } from '../classes/terisi';
+import { paketBerlakuDi } from './cabang-paket';
 
 export type RescheduleRequestReasonCode =
   | 'CUSTOMER_SCHEDULE_CONFLICT'
@@ -131,20 +133,22 @@ export class ReschedulesService {
         classType: { select: { id: true, name: true } },
         instructor: { select: { id: true, displayName: true } },
         studio: { select: { id: true, name: true } },
+        ...HITUNG_TERISI,
       },
       orderBy: { startAt: 'asc' },
       take: 20,
     });
 
     const targets = availableSlots.map((slot) => {
-      const remaining = Math.max(0, slot.capacity - slot.bookedCount);
+      // Kursi terisi dari booking nyata; kolom bookedCount bisa melenceng (sinkronisasi V1).
+      const remaining = Math.max(0, slot.capacity - terisi(slot));
       return {
         id: slot.id,
         startAt: slot.startAt,
         endAt: slot.endAt,
         timezone: booking.classSlot.branch.timezone,
         capacity: slot.capacity,
-        bookedCount: slot.bookedCount,
+        bookedCount: terisi(slot),
         available: remaining,
         availableCapacity: remaining,
         eligible: remaining > 0,
@@ -310,7 +314,7 @@ export class ReschedulesService {
           where: { id: input.bookingId },
           include: {
             classSlot: true,
-            customerPackage: true,
+            customerPackage: { include: { package: true, purchase: true } },
             user: true,
           },
         });
@@ -323,14 +327,10 @@ export class ReschedulesService {
 
         const targetSlot = await tx.slotKelas.findUnique({
           where: { id: input.targetClassSlotId },
-          include: { branch: true, classType: true },
+          include: { branch: true, classType: true, ...HITUNG_TERISI },
         });
-        if (!targetSlot || !['PUBLISHED', 'CONFIRMED'].includes(targetSlot.status))
-          throw new ApiProblem('RESOURCE_NOT_FOUND', HttpStatus.NOT_FOUND);
-        if (targetSlot.startAt <= now)
-          throw new ApiProblem('BOOKING_CUTOFF_PASSED', HttpStatus.CONFLICT);
-        if (targetSlot.bookedCount >= targetSlot.capacity)
-          throw new ApiProblem('CLASS_CAPACITY_FULL', HttpStatus.CONFLICT);
+        if (!targetSlot) throw new ApiProblem('RESOURCE_NOT_FOUND', HttpStatus.NOT_FOUND);
+        validasiTujuan(booking, targetSlot, now);
 
         // Buat record UbahJadwal berstatus PENDING
         const reschedule = await tx.ubahJadwal.create({
@@ -415,7 +415,11 @@ export class ReschedulesService {
 
         const reschedule = await tx.ubahJadwal.findUnique({
           where: { id },
-          include: { booking: true, targetSlot: true, sourceSlot: true },
+          include: {
+            booking: { include: { customerPackage: { include: { package: true, purchase: true } } } },
+            targetSlot: true,
+            sourceSlot: true,
+          },
         });
         if (!reschedule) throw new ApiProblem('RESOURCE_NOT_FOUND', HttpStatus.NOT_FOUND);
 
@@ -451,8 +455,18 @@ export class ReschedulesService {
         if (decision === 'approve') {
           const targetSlot = await tx.slotKelas.findUnique({
             where: { id: reschedule.targetSlotId },
-            select: { id: true, bookedCount: true, capacity: true },
+            select: {
+              id: true,
+              bookedCount: true,
+              capacity: true,
+              status: true,
+              startAt: true,
+              branchId: true,
+              classTypeId: true,
+            },
           });
+          // Diperiksa ulang saat diputuskan: kelas tujuan bisa sudah batal/lewat sejak diajukan.
+          if (targetSlot) validasiTujuan(reschedule.booking, targetSlot, new Date(), false);
 
           // Hitung riil booking aktif di target slot agar tidak ada selisih kuota
           const activeBookingsOnTarget =
@@ -460,11 +474,12 @@ export class ReschedulesService {
               ? await tx.pemesananKelas.count({
                   where: {
                     classSlotId: reschedule.targetSlotId,
-                    status: { in: ['BOOKED', 'ATTENDED'] },
+                    status: { in: ['BOOKED', 'ATTENDED', 'NO_SHOW'] },
                   },
                 })
-              : 0;
-          const effectiveBooked = Math.max(targetSlot?.bookedCount ?? 0, activeBookingsOnTarget);
+              : (targetSlot?.bookedCount ?? 0);
+          // Kursi dari booking nyata (kolom bookedCount bisa melenceng karena sinkronisasi V1).
+          const effectiveBooked = activeBookingsOnTarget;
           if (!targetSlot || effectiveBooked >= targetSlot.capacity) {
             throw new ApiProblem('CLASS_CAPACITY_FULL', HttpStatus.CONFLICT);
           }
@@ -530,4 +545,44 @@ export class ReschedulesService {
       },
     );
   }
+}
+
+/**
+ * Kelas tujuan pindah jadwal harus bisa dibooking dengan paket booking ini: masih dibuka, belum
+ * dimulai, cabang dan jenis kelasnya cocok dengan paket, dan paket masih berlaku saat kelas itu.
+ */
+function validasiTujuan(
+  booking: {
+    customerPackage?: {
+      validUntil: Date;
+      package?: { classTypeId?: string | null; isMultiBranch?: boolean | null; branchId?: string | null } | null;
+      purchase?: { branchId?: string | null } | null;
+    } | null;
+  },
+  target: {
+    status: string;
+    startAt: Date;
+    branchId: string;
+    classTypeId: string;
+    capacity: number;
+    bookedCount: number;
+    _count?: { bookings?: number } | null;
+  },
+  now: Date,
+  cekKapasitas = true,
+) {
+  if (!['PUBLISHED', 'CONFIRMED'].includes(target.status))
+    throw new ApiProblem('RESOURCE_NOT_FOUND', HttpStatus.NOT_FOUND);
+  if (target.startAt <= now) throw new ApiProblem('BOOKING_CUTOFF_PASSED', HttpStatus.CONFLICT);
+  const cp = booking.customerPackage;
+  if (cp) {
+    if (!paketBerlakuDi(cp, target.branchId))
+      throw new ApiProblem('PACKAGE_BRANCH_MISMATCH', HttpStatus.CONFLICT);
+    if (cp.package?.classTypeId && cp.package.classTypeId !== target.classTypeId)
+      throw new ApiProblem('PACKAGE_CLASS_TYPE_MISMATCH', HttpStatus.CONFLICT);
+    if (cp.validUntil <= target.startAt)
+      throw new ApiProblem('INSUFFICIENT_AVAILABLE_SESSIONS', HttpStatus.CONFLICT);
+  }
+  if (cekKapasitas && terisi(target) >= target.capacity)
+    throw new ApiProblem('CLASS_CAPACITY_FULL', HttpStatus.CONFLICT);
 }

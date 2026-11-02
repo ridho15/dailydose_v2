@@ -102,6 +102,7 @@ describe('Backdated Booking & Member Enrollment into Past Schedules (Solusi 1)',
         findUnique: jest.fn(async () => mockCustomer),
       },
       pemesananKelas: {
+        findMany: jest.fn(async () => (opts?.duplicate ? [{ id: 'existing-dup' }] : [])),
         count: jest.fn(async ({ where }: any) => {
           // Cek duplikat: booking member ini di kelas yang sama.
           if (where?.userId && where?.classSlotId) return opts?.duplicate ? 1 : 0;

@@ -54,7 +54,10 @@ Aturan teknis yang menyertainya:
    Presensi member dan instruktur dilakukan dengan staf memindai QR.
 7. Kapasitas kelas dari Data Master > Kuota & Kapasitas berlaku untuk kelas baru dan kelas mendatang.
 8. Paket berlaku di cabang paket atau cabang tempat dibeli.
-9. Perubahan penting (keuangan, rekening, porsi, pembatalan, koreksi) dicatat di `audit_log`;
+9. Penjualan tunai/kartu/manual staf disetujui Manager atau Super Owner, bukan pencatatnya. Bukti transfer
+   tidak pernah memakai alamat berkas dari peminta.
+10. Paket berlaku sampai 23.59 WIB hari terakhirnya (`foundation/masa-berlaku.ts`).
+11. Perubahan penting (keuangan, rekening, porsi, pembatalan, koreksi) dicatat di `audit_log`;
    nomor rekening disamarkan di audit.
 
 Asumsi yang belum dikonfirmasi pemilik tercantum di [PRD.md](./PRD.md#6-perlu-konfirmasi-asumsi-saat-membangun).

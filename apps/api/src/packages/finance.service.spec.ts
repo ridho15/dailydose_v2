@@ -152,7 +152,7 @@ describe('FinanceService.realtimeInstructorCostReport instructor attendance', ()
     instructor,
     classType: { name: 'Group Class' },
     branch: { id: branchA },
-    instructorAttendance: attended ? { id: id(500 + n) } : null,
+    instructorAttendance: attended ? { id: id(500 + n), instructorId: instructor.id } : null,
   });
 
   function build(slots: unknown[]) {
@@ -227,7 +227,7 @@ describe('instructor honor is computed identically by every finance report', () 
     instructor: coach,
     classType: { name: 'Private Class' },
     branch: { id: branchA },
-    instructorAttendance: attended ? { id: id(500 + n) } : null,
+    instructorAttendance: attended ? { id: id(500 + n), instructorId: coach.id } : null,
   });
   const slots = [mk(1, true), mk(2, false), mk(3, true, id(401))];
   const fees = [
@@ -481,6 +481,20 @@ describe('FinanceService.createOtherCost validation', () => {
     expect(create).not.toHaveBeenCalled();
   });
 
+  it.each([2_000_000_001, 2_500_000_000])('rejects an amount above the 32-bit limit (%d)', async (amountRp) => {
+    const { service, create } = build();
+    await expect(service.createOtherCost(finance, { ...input, amountRp })).rejects.toMatchObject({
+      code: 'VALIDATION_ERROR',
+    });
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('rejects a fractional amount', async () => {
+    const { service, create } = build();
+    await expect(service.createOtherCost(finance, { ...input, amountRp: 10.5 })).rejects.toBeDefined();
+    expect(create).not.toHaveBeenCalled();
+  });
+
   it('rejects a malformed category', async () => {
     const { service, create } = build();
     await expect(
@@ -493,5 +507,42 @@ describe('FinanceService.createOtherCost validation', () => {
     const { service, create } = build(false);
     await expect(service.createOtherCost(superOwner, input)).rejects.toMatchObject({ status: 404 });
     expect(create).not.toHaveBeenCalled();
+  });
+});
+
+describe('FinanceService.overview dan anomalies: lingkup cabang', () => {
+  const staf = principal(['finance:read'], 'OWNER', id(110), [branchA]);
+
+  it('menolak cabang di luar akses staf', async () => {
+    const { service } = setup();
+    await expect(service.overview(staf, { branchId: branchB })).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    await expect(service.anomalies(staf, { branchId: branchB })).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+    });
+  });
+
+  it('tanpa branchId, anomali dibatasi ke cabang milik staf', async () => {
+    const { service, db } = setup();
+    await service.anomalies(staf, {});
+    expect(db.pembelian.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ branchId: { in: [branchA] } }),
+      }),
+    );
+  });
+
+  it('overview memakai cabang milik staf dan menyaring paidAt menurut from/until', async () => {
+    const { service, db } = setup();
+    const findFirst = jest.fn().mockResolvedValue({ id: branchA, code: 'GG', name: 'GG' });
+    (db.cabang as unknown as Record<string, unknown>).findFirst = findFirst;
+    await service.overview(staf, { from: '2026-10-01', until: '2026-10-05' });
+    expect(findFirst).toHaveBeenCalledWith({ where: { id: { in: [branchA] } } });
+    expect(db.pembelian.findMany).toHaveBeenCalledWith({
+      where: {
+        branchId: branchA,
+        status: 'PAID',
+        paidAt: { gte: new Date('2026-10-01T00:00:00Z'), lt: new Date('2026-10-06T00:00:00Z') },
+      },
+    });
   });
 });

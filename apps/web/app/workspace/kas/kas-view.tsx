@@ -419,28 +419,38 @@ export function KasView({
 
       {jurnal && (
         <>
-          <div className="grid gap-3 sm:grid-cols-3">
+          {/* Admin/Manager hanya melihat uang masuk; total pengeluaran dan selisih khusus keuangan. */}
+          <div className={`grid gap-3 ${jurnal.keluarRp === null ? 'sm:grid-cols-1' : 'sm:grid-cols-3'}`}>
             <div className="rounded-dd-lg border border-dd-line bg-white p-5">
               <p className="m-0 text-sm font-medium text-dd-muted">Uang masuk</p>
               <p className="m-0 mt-1 text-[26px] font-semibold tabular-nums text-dd-forest">
                 {rp(jurnal.masukRp)}
               </p>
             </div>
-            <div className="rounded-dd-lg border border-dd-line bg-white p-5">
-              <p className="m-0 text-sm font-medium text-dd-muted">Uang keluar</p>
-              <p className="m-0 mt-1 text-[26px] font-semibold tabular-nums text-dd-ink">
-                {rp(jurnal.keluarRp)}
-              </p>
-            </div>
-            <div className="rounded-dd-lg border border-dd-line bg-white p-5">
-              <p className="m-0 text-sm font-medium text-dd-muted">Selisih</p>
-              <p
-                className={`m-0 mt-1 text-[26px] font-semibold tabular-nums ${jurnal.selisihRp < 0 ? 'text-dd-danger' : 'text-dd-ink'}`}
-              >
-                {rp(jurnal.selisihRp)}
-              </p>
-            </div>
+            {jurnal.keluarRp !== null && (
+              <div className="rounded-dd-lg border border-dd-line bg-white p-5">
+                <p className="m-0 text-sm font-medium text-dd-muted">Uang keluar</p>
+                <p className="m-0 mt-1 text-[26px] font-semibold tabular-nums text-dd-ink">
+                  {rp(jurnal.keluarRp)}
+                </p>
+              </div>
+            )}
+            {jurnal.selisihRp !== null && (
+              <div className="rounded-dd-lg border border-dd-line bg-white p-5">
+                <p className="m-0 text-sm font-medium text-dd-muted">Selisih</p>
+                <p
+                  className={`m-0 mt-1 text-[26px] font-semibold tabular-nums ${jurnal.selisihRp < 0 ? 'text-dd-danger' : 'text-dd-ink'}`}
+                >
+                  {rp(jurnal.selisihRp)}
+                </p>
+              </div>
+            )}
           </div>
+          {jurnal.terpotong && (
+            <p className="m-0 text-sm text-dd-muted">
+              Daftar di bawah dipotong; total di atas tetap dihitung dari semua transaksi.
+            </p>
+          )}
           <p className="m-0 text-sm text-dd-muted">
             Honor instruktur tidak masuk jurnal ini; payroll tampil di beranda Owner.
           </p>

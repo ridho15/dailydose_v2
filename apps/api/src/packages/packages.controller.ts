@@ -455,7 +455,8 @@ export class PackagesController {
     @Req() r: AuthenticatedRequest,
     @Query('olderThanHours') olderThanHours?: string,
   ) {
-    const hours = olderThanHours ? parseInt(olderThanHours, 10) : 24;
+    // Angka dikirim apa adanya (NaN bila bukan bilangan) supaya service yang menolak nilai tidak sah.
+    const hours = olderThanHours === undefined || olderThanHours === '' ? 24 : Number(olderThanHours);
     return this.customerOrders.expireStaleOrders(r.principal, hours);
   }
   // Penjualan manual di meja (staf mencatat atas nama pelanggan; disetujui penyetuju lain).

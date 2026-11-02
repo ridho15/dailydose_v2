@@ -4,7 +4,7 @@ import type { SessionPrincipal } from '../identity/identity.service';
 import { PolicyService } from '../identity/policy.service';
 import { ApiProblem } from '../identity/security';
 import { financeRange, type FinanceRange } from './finance-range';
-import { calculateSlotFee, sortFeesNewestFirst } from './instructor-fee-calculator';
+import { calculateSlotFee, presensiMilikInstruktur, sortFeesNewestFirst } from './instructor-fee-calculator';
 import { AKSI_KOREKSI_JAM, detailKoreksi } from './koreksi-jam.service';
 import { buatXlsx, type Sel } from './xlsx-sederhana';
 
@@ -143,7 +143,7 @@ export class TransferHonorService {
           endAt: true,
           instructorFeeRp: true,
           isManualFee: true,
-          instructorAttendance: { select: { id: true } },
+          instructorAttendance: { select: { id: true, instructorId: true } },
         },
       }),
       this.db.instructorFee.findMany(),
@@ -181,7 +181,7 @@ export class TransferHonorService {
       if (!s.instructorId) continue;
       const { feeRp } = calculateSlotFee(tarif, { ...s, instructorId: s.instructorId });
       const b = ambil(s.instructorId);
-      if (s.instructorAttendance) {
+      if (presensiMilikInstruktur(s, s.instructorId)) {
         b.terverifikasiRp += feeRp;
         b.kelasTerverifikasi += 1;
       } else {

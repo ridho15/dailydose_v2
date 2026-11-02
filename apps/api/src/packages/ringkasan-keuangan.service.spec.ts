@@ -24,7 +24,7 @@ const slot = (branchId: string) => ({
   endAt: new Date('2026-10-20T03:00:00Z'),
   instructor: { id: 'i-a', displayName: 'Asrida' },
   classType: { name: 'Group' },
-  instructorAttendance: { id: 'att' },
+  instructorAttendance: { id: 'att', instructorId: 'i-a' },
   instructorFeeRp: null,
   isManualFee: false,
 });
@@ -39,6 +39,10 @@ function setup() {
       ]),
     },
     pembelian: {
+      aggregate: jest.fn(async () => ({
+        _sum: { totalAmountRp: 1_850_000 },
+        _count: { _all: 1 },
+      })),
       findMany: jest.fn(async (args: { select?: { invoiceNumber?: boolean } }) =>
         args.select?.invoiceNumber
           ? [
@@ -109,6 +113,8 @@ function setup() {
       ]),
     },
     otherCost: {
+      aggregate: jest.fn(async () => ({ _sum: { amountRp: 450_000 }, _count: { _all: 1 } })),
+      count: jest.fn(async () => 1),
       findMany: jest.fn(async (args: { select?: { description?: boolean } }) =>
         args.select?.description
           ? [
@@ -206,7 +212,7 @@ describe('RingkasanKeuanganService.jurnalKas', () => {
     const { service, db } = setup();
     const hasil = await service.jurnalKas(admin, { branchId: 'gg', period: '2026-10' }, NOW);
 
-    expect(hasil).toMatchObject({ masukRp: 1_850_000, keluarRp: 450_000, selisihRp: 1_400_000 });
+    expect(hasil).toMatchObject({ masukRp: 1_850_000, terpotong: false });
     expect(hasil.rows.map((r) => [r.tanggal, r.arah])).toEqual([
       ['2026-10-22', 'KELUAR'],
       ['2026-10-21', 'MASUK'],
@@ -215,6 +221,36 @@ describe('RingkasanKeuanganService.jurnalKas', () => {
     expect(db.otherCost.findMany).toHaveBeenCalledWith(
       expect.objectContaining({ where: expect.objectContaining({ branchId: 'gg' }) }),
     );
+  });
+
+  it('menyembunyikan total pengeluaran dan selisih dari peran tanpa finance:read', async () => {
+    const { service, db } = setup();
+    const hasil = await service.jurnalKas(admin, { branchId: 'gg', period: '2026-10' }, NOW);
+    expect(hasil.keluarRp).toBeNull();
+    expect(hasil.selisihRp).toBeNull();
+    expect(hasil.masukRp).toBe(1_850_000);
+    // Staf cabang hanya melihat pengeluaran yang ia catat sendiri.
+    expect(db.otherCost.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ createdById: 'u-admin' }),
+      }),
+    );
+    expect(db.otherCost.aggregate).not.toHaveBeenCalled();
+  });
+
+  it('memberi total lengkap kepada finance:read dan menandai baris yang terpotong', async () => {
+    const { service, db } = setup();
+    db.pembelian.aggregate.mockResolvedValue({
+      _sum: { totalAmountRp: 9_000_000 },
+      _count: { _all: 600 },
+    });
+    const hasil = await service.jurnalKas(superOwner, { branchId: 'gg', period: '2026-10' }, NOW);
+    expect(hasil).toMatchObject({
+      masukRp: 9_000_000,
+      keluarRp: 450_000,
+      selisihRp: 8_550_000,
+      terpotong: true,
+    });
   });
 
   it('menolak cabang lain dan mewajibkan cabang untuk staf cabang', async () => {

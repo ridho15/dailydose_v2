@@ -105,6 +105,26 @@ Status: menunggu hasil dari developer.
 | Panduan staf (PDF) | Panduan Admin/Instruktur dibuat 28 Okt; belum memuat fitur setelahnya (modal sesi, transfer honor, bawa teman). PDF terpisah untuk bawa teman sudah dibuat di luar repo. |
 | Excel KlikBCA | Kolom sesuai template, terbaca Excel/LibreOffice, tetapi **belum diuji di Converter BCA asli**. Uji sekali dengan nominal kecil. |
 
+### 4.3 Audit keamanan dan bug (2 November 2026)
+Empat audit (keamanan API, booking/paket, pembayaran/keuangan, web) dan perbaikannya ada di commit
+`fix(keamanan)` tanggal 2 November. Ringkasan yang sudah ditutup: berkas server bisa diunduh lewat
+bukti transfer, staf bisa menjadi lintas cabang lewat profil, data akun instruktur ikut terkirim di
+jadwal, booking batal ikut terpotong saat kelas selesai, rekening/WhatsApp contoh di halaman bayar,
+persetujuan tunai sendiri, dokumen identitas lintas cabang, sesi bisa minus, pengembalian sesi yang
+tidak pernah dipotong, validasi pindah jadwal, kuota voucher, kedaluwarsa otomatis yang membatalkan
+penjualan staf, fee lintas cabang dan tanggal berlaku WIB, koreksi jam, kebocoran laporan antar cabang,
+jurnal kas untuk Admin, dan beberapa error 500 dari input tidak sah.
+
+Masih terbuka (butuh keputusan atau pekerjaan lebih besar):
+| Item | Catatan |
+| :--- | :--- |
+| Ambil alih akun lewat email belum terverifikasi | Orang bisa mendaftar dengan email member lalu ikut masuk saat member login Google. Perlu verifikasi email saat daftar. |
+| Rahasia QR check-in | `CHECK_IN_TOKEN_SECRET`/`SESSION_SECRET` belum diisi di produksi sehingga memakai nilai bawaan di kode. Mengisinya membuat QR lama tidak berlaku (member perlu QR baru); tentukan waktunya. |
+| Pembatasan percobaan login | Masih di memori per proses; perlu Redis/DB bila server lebih dari satu. |
+| Nonce Google | Belum diwajibkan (perlu perubahan di web dan API). |
+| Batas voucher per member | Belum ada; perlu keputusan pemilik. |
+| Test E2E mock | Banyak teks sudah usang setelah perubahan tampilan; perlu diperbarui. |
+
 ## 5. Masalah yang diketahui
 
 ### 5.1 `ALTER TABLE paket ADD COLUMN is_shareable` (dari developer)

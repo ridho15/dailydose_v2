@@ -26,6 +26,9 @@ export function isExpiredPackage(item: LedgerBalance): boolean {
   return item.status === 'EXPIRED' || isPast;
 }
 
+const labelStatusPaket = (status: string) =>
+  ({ FROZEN: 'Dibekukan', DEPLETED: 'Habis', CANCELLED: 'Dibatalkan', SUSPENDED: 'Ditangguhkan' })[status] ?? 'Tidak aktif';
+
 const SEDANG_DIPROSES: readonly OrderStatus[] = ['AWAITING_PAYMENT', 'PENDING', 'ACTION_REQUIRED'];
 /** Selama ada pesanan yang diperiksa, halaman memeriksa ulang supaya paket muncul tanpa muat ulang. */
 const CEK_ULANG_MS = 60_000;
@@ -226,8 +229,10 @@ export function CustomerPackagesView({
       orders.list({ limit: 10 }),
       bookings.list({ timeline: 'UPCOMING', limit: 3 }),
     ]);
-    if (p.status === 'fulfilled') setPaket(p.value.items);
-    else setGagal('Paket Anda belum dapat dimuat. Coba muat ulang halaman.');
+    if (p.status === 'fulfilled') {
+      setPaket(p.value.items);
+      setGagal('');
+    } else setGagal('Paket Anda belum dapat dimuat. Coba muat ulang halaman.');
     if (o.status === 'fulfilled') setPesanan(o.value.items ?? []);
     if (b.status === 'fulfilled') setBooking(b.value.items ?? []);
   }, [bookings, ledger, orders]);
@@ -250,7 +255,8 @@ export function CustomerPackagesView({
 
   const waUntuk = (order: CustomerOrder) => {
     const daftar = studio?.whatsappStudios ?? [];
-    const nomor = nomorWa((daftar.find((s) => s.id === order.branchId) ?? daftar[0])?.href);
+    // Hanya nomor cabang pesanan itu sendiri; tanpa nomor cabang, tombol WhatsApp tidak ditampilkan.
+    const nomor = nomorWa(daftar.find((s) => s.id === order.branchId)?.href);
     if (!nomor) return null;
     const pesan = `Halo Daily Dose${order.branchName ? ` ${order.branchName}` : ''}, saya sudah transfer ${formatRupiah(order.payableAmountRp)} untuk paket ${order.packageName} (${tanggal(order.submittedAt)}). Mohon dibantu dicek. Terima kasih.`;
     return `https://wa.me/${nomor}?text=${encodeURIComponent(pesan)}`;
@@ -380,8 +386,8 @@ export function CustomerPackagesView({
               {riwayat.map((item) => (
                 <li key={item.id} className="flex flex-wrap items-center justify-between gap-2 border-b border-dd-line/70 pb-2 text-sm">
                   <span className="text-dd-ink">{item.packageName ?? 'Paket kelas'}</span>
-                  <span className={item.available > 0 ? 'font-semibold text-dd-danger' : 'text-dd-muted'}>
-                    {item.available > 0 ? `${item.available} sesi hangus` : 'Habis'} · berakhir {tanggal(item.expiryAt)}
+                  <span className={item.available > 0 && isExpiredPackage(item) ? 'font-semibold text-dd-danger' : 'text-dd-muted'}>
+                    {item.available > 0 && isExpiredPackage(item) ? `${item.available} sesi hangus` : item.available > 0 ? labelStatusPaket(item.status) : 'Habis'} · berakhir {tanggal(item.expiryAt)}
                   </span>
                 </li>
               ))}

@@ -28,12 +28,13 @@ function setup() {
         endAt: new Date('2026-10-20T02:55:00Z'),
         instructorFeeRp: null,
         isManualFee: false,
+        status: 'COMPLETED',
         classType: { name: 'Group' },
       }),
       findMany: jest.fn().mockResolvedValue([{ id: 'slot-1', classType: { name: 'Group' } }]),
     },
     user: {
-      findUnique: jest.fn().mockResolvedValue({ id: 'i-a', displayName: 'Asrida' }),
+      findUnique: jest.fn().mockResolvedValue({ id: 'i-a', displayName: 'Asrida', role: 'INSTRUCTOR' }),
       findMany: jest.fn().mockResolvedValue([
         { id: 'i-a', displayName: 'Asrida' },
         { id: 'u-mgr', displayName: 'Budi Manager' },
@@ -50,9 +51,12 @@ function setup() {
         },
       ]),
     },
+    penugasanInstruktur: {
+      findFirst: jest.fn().mockResolvedValue({ id: 'pg-1' }),
+    },
     auditLog: {
       create: jest.fn().mockResolvedValue({}),
-      findMany: jest.fn(),
+      findMany: jest.fn().mockResolvedValue([]),
       findFirst: jest.fn(),
     },
   };
@@ -175,6 +179,53 @@ describe('KoreksiJamService.koreksi', () => {
     await expect(
       service.koreksi(admin, { classSlotId: 'slot-1', hours: 1, reason: ALASAN }, { buffer: PNG }),
     ).rejects.toBeDefined();
+  });
+});
+
+describe('KoreksiJamService.koreksi: validasi sasaran', () => {
+  const panggil = (service: KoreksiJamService, hours = 1) =>
+    service.koreksi(manager, { classSlotId: 'slot-1', hours, reason: ALASAN }, { buffer: PNG });
+
+  it('menolak kelas yang belum selesai', async () => {
+    const { service, db } = setup();
+    db.slotKelas.findUnique.mockResolvedValue({
+      ...(await db.slotKelas.findUnique()),
+      status: 'PUBLISHED',
+    });
+    await expect(panggil(service)).rejects.toMatchObject({ code: 'INVALID_STATE_TRANSITION' });
+  });
+
+  it('menolak pengguna yang bukan instruktur', async () => {
+    const { service, db } = setup();
+    db.user.findUnique.mockResolvedValue({ id: 'i-a', displayName: 'Asrida', role: 'ADMIN' });
+    await expect(panggil(service)).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+  });
+
+  it('menolak instruktur yang tidak bertugas di cabang kelas', async () => {
+    const { service, db, storage } = setup();
+    db.penugasanInstruktur.findFirst.mockResolvedValue(null);
+    await expect(panggil(service)).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+    expect(storage.put).not.toHaveBeenCalled();
+  });
+
+  it('membatasi total koreksi per kelas dan instruktur pada 8 jam', async () => {
+    const { service, db } = setup();
+    db.auditLog.findMany.mockResolvedValue([
+      {
+        detail: {
+          after: { classSlotId: 'slot-1', instructorId: 'i-a', hours: 7, classStartAt: 'x', amountRp: 1 },
+        },
+      },
+      // Kelas lain tidak ikut dihitung.
+      {
+        detail: {
+          after: { classSlotId: 'slot-2', instructorId: 'i-a', hours: 8, classStartAt: 'x', amountRp: 1 },
+        },
+      },
+    ]);
+    await expect(panggil(service, 2)).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+    await expect(panggil(service, 1)).resolves.toMatchObject({ hours: 1 });
+    await expect(panggil(service, -2)).resolves.toMatchObject({ hours: -2 });
   });
 });
 

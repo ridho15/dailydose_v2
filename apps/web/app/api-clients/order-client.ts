@@ -441,6 +441,10 @@ export const browserOrderClient = {
           'SCANNING',
         );
       }
+      // Pemeriksaan yang belum selesai bukan berarti berkasnya ditolak: minta coba lagi, jangan
+      // suruh member membuang bukti yang sah.
+      if (status.scanStatus === 'PENDING')
+        throw new OrderClientError('PAYMENT_PROOF_SCAN_PENDING', undefined, true, 'SCANNING');
       if (status.scanStatus !== 'CLEAN')
         throw new OrderClientError('PAYMENT_PROOF_NOT_CLEAN', undefined, false, 'SCANNING');
       progress({ ...session, stage: 'ATTACHING' });
@@ -490,6 +494,7 @@ export function orderErrorDetails(error: unknown) {
       'Kode pembayaran sedang penuh. Tunggu beberapa saat lalu buat pesanan kembali.',
     ORDER_EXPIRED: 'Batas pembayaran sudah berakhir. Buat pesanan baru.',
     PAYMENT_PROOF_MIME_MISMATCH: 'Isi file tidak sesuai dengan tipe file yang dipilih.',
+    PAYMENT_PROOF_SCAN_PENDING: 'Pemeriksaan file masih berjalan. Tunggu sebentar lalu coba lagi.',
     PAYMENT_PROOF_TOO_LARGE: 'Ukuran file melebihi batas 10 MB.',
     PAYMENT_PROOF_CHECKSUM_MISMATCH: 'File berubah saat diunggah. Silakan pilih ulang.',
     PAYMENT_PROOF_NOT_CLEAN:

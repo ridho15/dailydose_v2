@@ -17,7 +17,9 @@ import {
   checkVoucherApplicability,
   isPercentageVoucherType,
   normalizeVoucherCode,
+  pakaiKuotaVoucher,
 } from './voucher.service';
+import { batalkanPesananKedaluwarsa } from './payment-expiration-worker';
 
 const PAGE_SIZE = 20;
 const UUID = ENTITY_ID_REGEX;
@@ -26,6 +28,12 @@ export type AssistedPaymentMethod = (typeof ASSISTED_PAYMENT_METHODS)[number];
 
 const newInvoiceNumber = () =>
   `INV-${Date.now().toString(36).toUpperCase()}-${randomBytes(3).toString('hex').toUpperCase()}`;
+
+/** Paket khusus satu cabang hanya dijual di cabang itu; paket multi-cabang (branchId null) bebas. */
+function pastikanPaketDijualDiCabang(pkg: { branchId: string | null }, branchId: string) {
+  if (pkg.branchId && pkg.branchId !== branchId)
+    throw new ApiProblem('PACKAGE_BRANCH_MISMATCH', HttpStatus.UNPROCESSABLE_ENTITY);
+}
 
 @Injectable()
 export class CustomerOrderService {
@@ -344,6 +352,7 @@ export class CustomerOrderService {
         const branch = await tx.cabang.findUnique({ where: { id: input.branchId } });
         if (!branch || !branch.active)
           throw new ApiProblem('RESOURCE_NOT_FOUND', HttpStatus.NOT_FOUND);
+        pastikanPaketDijualDiCabang(pkg, input.branchId);
 
         const { voucher, discountRp, subtotalRp, totalAmountRp: baseAmountRp, promotion } = await this.priceOrder(
           tx,
@@ -431,10 +440,7 @@ export class CustomerOrderService {
         });
 
         if (voucher) {
-          await tx.voucher.update({
-            where: { id: voucher.id },
-            data: { usedCount: { increment: 1 } },
-          });
+          await pakaiKuotaVoucher(tx, voucher);
         }
 
         if (input.paymentProofId) {
@@ -787,8 +793,7 @@ export class CustomerOrderService {
         const pkg = await tx.paket.findUnique({ where: { id: packageId } });
         if (!pkg || pkg.status !== 'ACTIVE')
           throw new ApiProblem('RESOURCE_NOT_FOUND', HttpStatus.NOT_FOUND);
-        if (pkg.branchId && pkg.branchId !== branchId)
-          throw new ApiProblem('PACKAGE_BRANCH_MISMATCH', HttpStatus.UNPROCESSABLE_ENTITY);
+        pastikanPaketDijualDiCabang(pkg, branchId);
 
         const { voucher, discountRp, subtotalRp, totalAmountRp, promotion } = await this.priceOrder(
           tx,
@@ -833,10 +838,7 @@ export class CustomerOrderService {
           },
         });
         if (voucher) {
-          await tx.voucher.update({
-            where: { id: voucher.id },
-            data: { usedCount: { increment: 1 } },
-          });
+          await pakaiKuotaVoucher(tx, voucher);
         }
 
         this.auditService.record({
@@ -874,22 +876,15 @@ export class CustomerOrderService {
   // --- Indonesian Domain Aliases ---
   async expireStaleOrders(principal: SessionPrincipal, olderThanHours = 24) {
     this.access.review(principal, true);
-    const cutoff = new Date(Date.now() - olderThanHours * 3600 * 1000);
+    if (!Number.isInteger(olderThanHours) || olderThanHours < 1 || olderThanHours > 720)
+      throw new ApiProblem('VALIDATION_ERROR', HttpStatus.BAD_REQUEST, false, [
+        { field: 'olderThanHours', issue: 'INVALID' },
+      ]);
     const now = new Date();
 
-    const result = await this.db.pembelian.updateMany({
-      where: {
-        status: { in: ['PENDING', 'WAITING_VERIFICATION'] },
-        paymentProof: null,
-        OR: [
-          { paymentExpiresAt: { lt: now } },
-          { AND: [{ paymentExpiresAt: null }, { createdAt: { lt: cutoff } }] },
-        ],
-      },
-      data: {
-        status: 'CANCELLED',
-      },
-    });
+    // Hanya pesanan mandiri pelanggan; penjualan catatan staf menunggu persetujuan, bukan hangus.
+    const ids = await batalkanPesananKedaluwarsa(this.db, olderThanHours, now);
+    const result = { count: ids.length };
 
     // Pembatalan massal oleh staf: satu catatan ringkas (jumlah dan batas waktu), bukan satu per pesanan.
     if (result.count > 0)

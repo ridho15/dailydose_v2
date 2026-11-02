@@ -4,6 +4,7 @@ import { bacaOpsional } from '../foundation/tabel-opsional';
 import type { SessionPrincipal } from '../identity/identity.service';
 import { PolicyService } from '../identity/policy.service';
 import { ApiProblem } from '../identity/security';
+import { berlakuPadaKelas } from './instructor-fee-calculator';
 
 /**
  * Modal per sesi untuk profit.
@@ -64,11 +65,12 @@ export function tarifUntuk(
   tarif: readonly BarisTarif[],
   p: { branchId: string; classTypeId: string | null; pada: Date },
 ): BarisTarif | null {
-  const berlaku = (t: BarisTarif) => t.branchId === p.branchId && t.effectiveDate <= p.pada;
+  const berlaku = (t: BarisTarif) => t.branchId === p.branchId && berlakuPadaKelas(t.effectiveDate, p.pada);
   const urut = [...tarif].sort(
     (a, b) =>
       b.effectiveDate.getTime() - a.effectiveDate.getTime() ||
-      b.createdAt.getTime() - a.createdAt.getTime(),
+      b.createdAt.getTime() - a.createdAt.getTime() ||
+      b.id.localeCompare(a.id),
   );
   return (
     (p.classTypeId ? urut.find((t) => berlaku(t) && t.classTypeId === p.classTypeId) : undefined) ??

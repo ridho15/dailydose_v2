@@ -13,6 +13,7 @@ import { PolicyService } from '../identity/policy.service';
 import { ApiProblem, ENTITY_ID_REGEX } from '../identity/security';
 import { buildPhoneSearchVariants, normalizePhone } from '../identity/manajemen-pelanggan.service';
 import { MEMEGANG_SESI } from './sesi-terpesan';
+import { maskContactEmail } from '../identity/customer-visibility';
 
 export const ADJUSTMENT_REASON_CODES = [
   'MIGRATION_CORRECTION',
@@ -1301,7 +1302,7 @@ export class LedgerService {
           relationship: m.relationship,
           displayName: m.user?.displayName,
           phoneMasked: maskPhone(m.user?.phone),
-          email: m.user?.email,
+          email: maskContactEmail(m.user?.email),
           addedById: m.addedById,
           addedByRole: m.addedByRole,
           createdAt: m.createdAt.toISOString(),
@@ -1359,18 +1360,18 @@ export class LedgerService {
       throw problem('SHARING_LIMIT_EXCEEDED', HttpStatus.BAD_REQUEST, 'sharedMembers');
     }
 
-    let targetUser: { id: string; displayName: string; email: string | null; phone: string | null; status: string } | null = null;
+    let targetUser: { id: string; displayName: string; email: string | null; phone: string | null; status: string; role: string } | null = null;
 
     if (rawId && UUID.test(rawId)) {
       targetUser = await this.db.user.findUnique({
         where: { id: rawId },
-        select: { id: true, displayName: true, email: true, phone: true, status: true },
+        select: { id: true, displayName: true, email: true, phone: true, status: true, role: true },
       });
     } else if (rawIdentifier) {
       if (rawIdentifier.includes('@')) {
         targetUser = await this.db.user.findFirst({
           where: { email: rawIdentifier.trim().toLowerCase() },
-          select: { id: true, displayName: true, email: true, phone: true, status: true },
+          select: { id: true, displayName: true, email: true, phone: true, status: true, role: true },
         });
       } else {
         let cleanPhone = rawIdentifier;
@@ -1388,12 +1389,13 @@ export class LedgerService {
               ...phoneVariants.map((p) => ({ phone: p })),
             ],
           },
-          select: { id: true, displayName: true, email: true, phone: true, status: true },
+          select: { id: true, displayName: true, email: true, phone: true, status: true, role: true },
         });
       }
     }
 
-    if (!targetUser || targetUser.status !== 'ACTIVE') {
+    // Hanya akun member (bukan staf) yang bisa ditambahkan ke paket bersama.
+    if (!targetUser || targetUser.status !== 'ACTIVE' || (targetUser as { role?: string }).role !== 'CUSTOMER') {
       throw problem('USER_NOT_FOUND', HttpStatus.NOT_FOUND, 'userId');
     }
 
@@ -1442,7 +1444,7 @@ export class LedgerService {
       relationship: created.relationship,
       displayName: created.user.displayName,
       phoneMasked: maskPhone(created.user.phone),
-      email: created.user.email,
+      email: maskContactEmail(created.user.email),
       addedById: created.addedById,
       addedByRole: created.addedByRole,
       createdAt: created.createdAt.toISOString(),

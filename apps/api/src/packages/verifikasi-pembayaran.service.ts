@@ -11,6 +11,8 @@ import { NotificationWriterService } from '../notifications/notification-writer.
 import { EmailNotificationService } from '../email/email-notification.service';
 import { ConfigGatedObjectStorageProvider } from './proof-providers';
 import { escapeXml, jalurBuktiLokal, jenisBukti } from './bukti-aman';
+import { berlakuSampai } from '../foundation/masa-berlaku';
+import { lepasKuotaVoucher } from './voucher.service';
 
 @Injectable()
 export class PaymentReviewService {
@@ -626,6 +628,15 @@ export class PaymentReviewService {
             throw new ApiProblem('PURCHASE_ALREADY_DECIDED', HttpStatus.CONFLICT);
 
           const decidedAt = new Date();
+          // Transfer bank hanya boleh disetujui bila bukti ada. Lewat batas bayar tetap sah bila buktinya
+          // diunggah sebelum batas (staf baru sempat memeriksa sesudahnya); menolak selalu boleh.
+          if (decision === 'APPROVED' && purchase.paymentMethod === 'BANK_TRANSFER') {
+            const batas = purchase.paymentExpiresAt;
+            const bukti = purchase.paymentProof;
+            if (batas && decidedAt.getTime() > batas.getTime() && (!bukti || bukti.uploadedAt.getTime() > batas.getTime()))
+              throw new ApiProblem('PAYMENT_EXPIRED', HttpStatus.CONFLICT);
+            if (!bukti) throw new ApiProblem('PAYMENT_PROOF_REQUIRED', HttpStatus.CONFLICT);
+          }
           const nextStatus = decision === 'APPROVED' ? PurchaseStatus.PAID : PurchaseStatus.REJECTED;
 
           const updated = await tx.pembelian.update({
@@ -647,23 +658,28 @@ export class PaymentReviewService {
             if (existingPkg) {
               customerPackage = existingPkg;
             } else {
-              const validUntil = new Date(
-                decidedAt.getTime() + (purchase.package.validityDays || 30) * 24 * 60 * 60 * 1000,
-              );
+              const validUntil = berlakuSampai(decidedAt, purchase.package.validityDays || 30);
 
-              customerPackage = await tx.paketPelanggan.create({
-                data: {
-                  userId: purchase.userId,
-                  packageId: purchase.packageId,
-                  purchaseId: purchase.id,
-                  totalSessions: purchase.package.sessionCount,
-                  remainingSessions: purchase.package.sessionCount,
-                  usedSessions: 0,
-                  validFrom: decidedAt,
-                  validUntil,
-                  status: 'ACTIVE',
-                },
-              });
+              try {
+                customerPackage = await tx.paketPelanggan.create({
+                  data: {
+                    userId: purchase.userId,
+                    packageId: purchase.packageId,
+                    purchaseId: purchase.id,
+                    totalSessions: purchase.package.sessionCount,
+                    remainingSessions: purchase.package.sessionCount,
+                    usedSessions: 0,
+                    validFrom: decidedAt,
+                    validUntil,
+                    status: 'ACTIVE',
+                  },
+                });
+              } catch (error) {
+                // Persetujuan ganda bersamaan: purchaseId unik, yang kalah balapan dapat 409 bukan 500.
+                if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002')
+                  throw new ApiProblem('PURCHASE_ALREADY_DECIDED', HttpStatus.CONFLICT);
+                throw error;
+              }
 
               // Catat mutasi awal kuota sesi di SessionLedger (Spesifikasi v1.0)
               await tx.sessionLedger.create({
@@ -683,6 +699,35 @@ export class PaymentReviewService {
               where: { purchaseId: purchase.id },
               data: { status: 'EXPIRED', validUntil: new Date(0) },
             });
+            // Penjualan di meja yang ditolak: booking yang sudah dibuat dengan paket itu tidak boleh
+            // tersisa. Tidak ada sesi yang dipotong (potongan baru terjadi saat kelas selesai).
+            const paketDitolak = await tx.paketPelanggan.findUnique({
+              where: { purchaseId: purchase.id },
+              select: { id: true },
+            });
+            if (paketDitolak) {
+              const aktif = await tx.pemesananKelas.findMany({
+                where: { customerPackageId: paketDitolak.id, status: 'BOOKED' },
+                select: { id: true, classSlotId: true },
+              });
+              if (aktif.length > 0) {
+                await tx.pemesananKelas.updateMany({
+                  where: { id: { in: aktif.map((b) => b.id) }, status: 'BOOKED' },
+                  data: {
+                    status: 'CANCELLED',
+                    cancelledAt: decidedAt,
+                    cancellationReason: 'Pembayaran ditolak',
+                    cancelledById: principal.userId,
+                  },
+                });
+                for (const b of aktif)
+                  await tx.slotKelas.update({
+                    where: { id: b.classSlotId },
+                    data: { bookedCount: { decrement: 1 } },
+                  });
+              }
+            }
+            await lepasKuotaVoucher(tx, purchase.voucherId);
           }
 
           const purchaseWithAudit = { ...updated, auditReference: null };

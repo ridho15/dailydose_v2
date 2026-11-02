@@ -47,6 +47,16 @@ describe('tarifUntuk', () => {
         ?.modalPerSesiRp,
     ).toBe(50_000);
   });
+  it('membandingkan tanggal WIB: kelas 06:00 WIB pada tanggal berlaku sudah memakai tarif baru', () => {
+    // 06:00 WIB 1 Oktober = 23:00 UTC 30 September.
+    expect(
+      tarifUntuk(daftar, {
+        branchId: 'untar',
+        classTypeId: 'grp',
+        pada: new Date('2026-09-30T23:00:00Z'),
+      })?.modalPerSesiRp,
+    ).toBe(50_000);
+  });
   it('tipe kelas tanpa tarif khusus memakai tarif semua tipe kelas cabang itu', () => {
     expect(
       tarifUntuk(daftar, { branchId: 'untar', classTypeId: 'pvt', pada: new Date('2026-10-20') })

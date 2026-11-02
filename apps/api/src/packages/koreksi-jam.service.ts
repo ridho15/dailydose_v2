@@ -210,11 +210,16 @@ export class KoreksiJamService {
         endAt: true,
         instructorFeeRp: true,
         isManualFee: true,
+        status: true,
         classType: { select: { name: true } },
       },
     });
     if (!slot) throw new ApiProblem('RESOURCE_NOT_FOUND', HttpStatus.NOT_FOUND);
     this.aksesCabang(principal, slot.branchId);
+    // Honor hanya timbul dari kelas yang benar-benar selesai; kelas lain tidak layak dikoreksi.
+    if (slot.status !== 'COMPLETED') {
+      throw new ApiProblem('INVALID_STATE_TRANSITION', HttpStatus.CONFLICT);
+    }
 
     // Instruktur pengganti boleh dipilih; tanpa pilihan, instruktur yang tercatat di kelas.
     const instructorId = body.instructorId || slot.instructorId;
@@ -225,11 +230,40 @@ export class KoreksiJamService {
     }
     const instruktur = await this.db.user.findUnique({
       where: { id: instructorId },
-      select: { id: true, displayName: true },
+      select: { id: true, displayName: true, role: true },
     });
     if (!instruktur) {
       throw new ApiProblem('VALIDATION_ERROR', HttpStatus.UNPROCESSABLE_ENTITY, false, [
         { field: 'instructorId', issue: 'NOT_FOUND' },
+      ]);
+    }
+    if (instruktur.role !== 'INSTRUCTOR') {
+      throw new ApiProblem('VALIDATION_ERROR', HttpStatus.UNPROCESSABLE_ENTITY, false, [
+        { field: 'instructorId', issue: 'NOT_INSTRUCTOR' },
+      ]);
+    }
+    const penugasan = await this.db.penugasanInstruktur.findFirst({
+      where: { coachId: instructorId, branchId: slot.branchId, active: true },
+      select: { id: true },
+    });
+    if (!penugasan) {
+      throw new ApiProblem('VALIDATION_ERROR', HttpStatus.UNPROCESSABLE_ENTITY, false, [
+        { field: 'instructorId', issue: 'NOT_ASSIGNED_TO_BRANCH' },
+      ]);
+    }
+    // Koreksi tidak bisa diubah, jadi total per kelas dan instruktur dibatasi agar salah ketik berulang
+    // tidak menggelembungkan honor.
+    const sebelumnya = await this.db.auditLog.findMany({
+      where: { action: AKSI_KOREKSI_JAM, targetUserId: instructorId },
+      select: { detail: true },
+    });
+    const totalJam = sebelumnya.reduce((jumlah: number, b: { detail: unknown }) => {
+      const d = detailKoreksi(b.detail);
+      return d && d.classSlotId === slot.id && d.instructorId === instructorId ? jumlah + d.hours : jumlah;
+    }, 0);
+    if (Math.abs(totalJam + hours) > MAKS_JAM) {
+      throw new ApiProblem('VALIDATION_ERROR', HttpStatus.UNPROCESSABLE_ENTITY, false, [
+        { field: 'hours', issue: 'TOTAL_EXCEEDS_LIMIT' },
       ]);
     }
 

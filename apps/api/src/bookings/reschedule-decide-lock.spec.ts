@@ -50,7 +50,15 @@ function setup(
     slotKelas: {
       findUnique: jest.fn(async () => {
         calls.push('read-target-slot');
-        return { id: targetSlotId, bookedCount: targetBookedCount, capacity: 4 };
+        return {
+          id: targetSlotId,
+          bookedCount: targetBookedCount,
+          capacity: 4,
+          status: 'PUBLISHED',
+          startAt: new Date(Date.now() + 3 * 86_400_000),
+          branchId,
+          classTypeId: 'ct-1',
+        };
       }),
       update: jest.fn(async () => ({})),
     },
@@ -129,5 +137,32 @@ describe('persetujuan ubah jadwal menjaga kuota slot tujuan', () => {
     await expect(service.decide(other, id(30), 'approve', { reasonCode: 'ELIGIBILITY_VERIFIED' }, 'key-5', 'c')).rejects.toMatchObject({ code: 'RESOURCE_NOT_FOUND' });
     // Lintas cabang boleh.
     await service.decide({ ...admin, capabilities: ['reschedule:decide', 'branch:all'], branchIds: [] }, id(30), 'reject', { reasonCode: 'OUTSIDE_POLICY' }, 'key-6', 'c');
+  });
+});
+
+describe('persetujuan ubah jadwal memeriksa ulang kelas tujuan', () => {
+  it('menolak bila kelas tujuan sudah dibatalkan sejak diajukan, tanpa memindahkan booking', async () => {
+    const { service, tx } = setup();
+    tx.slotKelas.findUnique.mockResolvedValueOnce({
+      id: targetSlotId, bookedCount: 0, capacity: 4, status: 'CANCELLED',
+      startAt: new Date(Date.now() + 86_400_000), branchId, classTypeId: 'ct-1',
+    } as never);
+    await expect(approve(service)).rejects.toMatchObject({ code: 'RESOURCE_NOT_FOUND' });
+    expect(tx.pemesananKelas.update).not.toHaveBeenCalled();
+  });
+
+  it('menolak bila paket booking tidak berlaku sampai kelas tujuan', async () => {
+    const { service, tx } = setup();
+    tx.ubahJadwal.findUnique.mockImplementationOnce(async () => ({
+      id: id(30), status: 'PENDING', reason: null, bookingId: id(10), sourceSlotId, targetSlotId,
+      sourceSlot: { id: sourceSlotId, branchId },
+      targetSlot: { id: targetSlotId, branchId },
+      booking: {
+        id: id(10), userId: id(300), status: 'BOOKED', classSlotId: sourceSlotId,
+        customerPackage: { validUntil: new Date(Date.now() + 86_400_000), package: null, purchase: null },
+      },
+    }) as never);
+    await expect(approve(service)).rejects.toMatchObject({ code: 'INSUFFICIENT_AVAILABLE_SESSIONS' });
+    expect(tx.pemesananKelas.update).not.toHaveBeenCalled();
   });
 });

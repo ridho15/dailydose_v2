@@ -57,7 +57,7 @@ export class InstructorManagementService {
         include: {
           instructor: { select: { id: true, displayName: true } },
           classType: { select: { name: true } },
-          instructorAttendance: { select: { id: true } },
+          instructorAttendance: { select: { id: true, instructorId: true } },
         },
       }),
       this.db.instructorFee.findMany({ where: { instructorId: { in: instructorIds } } }),
