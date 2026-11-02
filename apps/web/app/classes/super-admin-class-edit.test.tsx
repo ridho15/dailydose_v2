@@ -9,6 +9,7 @@ const now = new Date();
 const confirmedSlotWithBookings: ClassSlot = {
   id: 'slot-confirmed-1',
   branchId: 'branch-1',
+  studioId: 'studio-1',
   classTypeId: 'type-1',
   instructorUserId: 'instructor-1',
   startAt: new Date(now.getTime() + 2 * 3600 * 1000),
@@ -152,5 +153,49 @@ describe('Super Admin Class Schedule Edit Override', () => {
     const form = screen.getByRole('form', { name: 'Edit draft kelas' });
     expect(form).toBeInTheDocument();
     expect(within(form).getByLabelText('Tanggal')).not.toBeDisabled();
+  });
+
+  it('deduplicates class types in edit form when multiple branches provide identical class types', async () => {
+    const user = userEvent.setup();
+    const duplicatedClassTypes = [
+      { id: 'type-1', code: 'REF', name: 'Reformer', branchId: 'branch-1' },
+      { id: 'type-1', code: 'REF', name: 'Reformer', branchId: 'branch-2' },
+      { id: 'type-2', code: 'MAT', name: 'Mat Pilates', branchId: 'branch-1' },
+      { id: 'type-2', code: 'MAT', name: 'Mat Pilates', branchId: 'branch-2' },
+    ];
+
+    render(
+      <AppFeedbackProvider>
+        <DetailPanel
+          slot={confirmedSlotWithBookings}
+          instructorName="Lucia"
+          classTypes={duplicatedClassTypes}
+          instructors={instructors}
+          canManage={true}
+          canComplete={false}
+          canManageAttendance={false}
+          canReadBookings={true}
+          isSuperOwner={true}
+          busy={false}
+          onAssign={vi.fn()}
+          onUpdate={vi.fn()}
+          onPublish={vi.fn()}
+          onCancel={vi.fn()}
+          onComplete={vi.fn()}
+        />
+      </AppFeedbackProvider>,
+    );
+
+    const editBtn = screen.getByRole('button', { name: 'Edit kelas (Super Admin)' });
+    await user.click(editBtn);
+
+    const form = screen.getByRole('form', { name: 'Edit draft kelas' });
+    const classTypeSelect = within(form).getByRole('combobox', { name: /Tipe kelas/i });
+    await user.click(classTypeSelect);
+
+    const options = screen.getAllByRole('option');
+    const optionLabels = options.map((opt) => opt.textContent);
+    expect(optionLabels.filter((label) => label?.includes('Reformer'))).toHaveLength(1);
+    expect(optionLabels.filter((label) => label?.includes('Mat Pilates'))).toHaveLength(1);
   });
 });

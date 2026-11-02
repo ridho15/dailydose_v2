@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   browserBookingClient,
   bookingFailure,
@@ -109,10 +109,14 @@ export function CreatePanel({
   const activeBranchTimezone =
     branches?.find((b) => b.id === selectedBranchId)?.timezone ?? timezone;
 
-  // Filter pilihan sesuai cabang yang aktif dipilih pada form
-  const branchClassTypes = classTypes.filter(
-    (item) => !item.branchId || item.branchId === selectedBranchId,
-  );
+  // Filter pilihan sesuai cabang yang aktif dipilih pada form dan pastikan opsi unik
+  const branchClassTypes = useMemo(() => {
+    const scoped = classTypes.filter(
+      (item) => !item.branchId || item.branchId === selectedBranchId,
+    );
+    const pool = scoped.length > 0 ? scoped : classTypes;
+    return [...new Map(pool.map((item) => [item.id, item])).values()];
+  }, [classTypes, selectedBranchId]);
   const branchStudios = studios.filter(
     (studio) => !studio.branchId || studio.branchId === selectedBranchId,
   );
@@ -967,6 +971,41 @@ function DraftEditForm({
   const hasBookings = (slot.status === 'PUBLISHED' || slot.status === 'CONFIRMED') && (slot.bookedCount ?? 0) > 0;
   const isLockedForNormalStaff = !isSuperOwner && hasBookings;
 
+  const branchClassTypes = useMemo(() => {
+    const scoped = classTypes.filter(
+      (item) => !item.branchId || item.branchId === slot.branchId,
+    );
+    const pool = scoped.length > 0 ? scoped : classTypes;
+    const unique = [...new Map(pool.map((item) => [item.id, item])).values()];
+    const currentName = (slot as { classType?: { name?: string | null } }).classType?.name;
+    if (slot.classTypeId && !unique.some((item) => item.id === slot.classTypeId)) {
+      unique.unshift({
+        id: slot.classTypeId,
+        code: slot.classTypeId.slice(0, 8),
+        name: currentName || 'Tipe kelas saat ini',
+        branchId: slot.branchId,
+      });
+    }
+    return unique;
+  }, [classTypes, slot.branchId, slot.classTypeId, (slot as { classType?: { name?: string | null } }).classType?.name]);
+
+  const branchInstructors = useMemo(() => {
+    const scoped = instructors.filter(
+      (item) => !item.branchId || item.branchId === slot.branchId,
+    );
+    const pool = scoped.length > 0 ? scoped : instructors;
+    const unique = [...new Map(pool.map((item) => [item.id, item])).values()];
+    const currentName = (slot as { instructor?: { displayName?: string | null } }).instructor?.displayName;
+    if (slot.instructorUserId && !unique.some((item) => item.id === slot.instructorUserId)) {
+      unique.unshift({
+        id: slot.instructorUserId,
+        displayName: currentName || 'Instruktur saat ini',
+        branchId: slot.branchId,
+      });
+    }
+    return unique;
+  }, [instructors, slot.branchId, slot.instructorUserId, (slot as { instructor?: { displayName?: string | null } }).instructor?.displayName]);
+
   return (
     <form
       className="grid gap-3 rounded-dd-md border border-dd-line bg-dd-surface p-4"
@@ -1063,7 +1102,7 @@ function DraftEditForm({
         defaultValue={slot.classTypeId}
         required
         disabled={isLockedForNormalStaff}
-        options={classTypes.map((item) => ({
+        options={branchClassTypes.map((item) => ({
           id: item.id,
           label: item.name,
           description: item.code,
@@ -1108,7 +1147,7 @@ function DraftEditForm({
         defaultValue={slot.instructorUserId ?? ''}
         placeholder="Tetapkan nanti"
         disabled={isLockedForNormalStaff}
-        options={instructors.map((item) => ({ id: item.id, label: item.displayName }))}
+        options={branchInstructors.map((item) => ({ id: item.id, label: item.displayName }))}
       />
       <div className="grid gap-3 sm:grid-cols-3">
         <DateInput label="Tanggal" name="date" defaultValue={start.date} disabled={isLockedForNormalStaff} required={!isLockedForNormalStaff} />
