@@ -119,9 +119,9 @@ describe('AttendanceService.consumeInstructor persistence', () => {
     ).rejects.toMatchObject({ code: 'CHECK_IN_WINDOW_CLOSED' });
   });
 
-  it('refuses a scan for a slot that is not CONFIRMED', async () => {
+  it('refuses a scan for a slot that is not running (DRAFT)', async () => {
     const { db, service } = build();
-    db.instructorCheckInToken.findUnique.mockResolvedValue(tokenFor({ status: 'PUBLISHED' }));
+    db.instructorCheckInToken.findUnique.mockResolvedValue(tokenFor({ status: 'DRAFT' }));
     await expect(
       service.consumeInstructor(instructor, { token: rawToken }, 'k', 'c', NOW),
     ).rejects.toMatchObject({ code: 'INVALID_STATE_TRANSITION' });
@@ -207,7 +207,7 @@ describe('AttendanceService.verifyInstructorAttendance (manual)', () => {
     await expect(
       service.verifyInstructorAttendance(admin, slotId, {}, NOW),
     ).rejects.toMatchObject({ code: 'INVALID_STATE_TRANSITION' });
-    db.slotKelas.findUnique.mockResolvedValue(slotRow({ status: 'PUBLISHED' }));
+    db.slotKelas.findUnique.mockResolvedValue(slotRow({ status: 'DRAFT' }));
     await expect(
       service.verifyInstructorAttendance(admin, slotId, {}, NOW),
     ).rejects.toMatchObject({ code: 'INVALID_STATE_TRANSITION' });
@@ -280,7 +280,7 @@ describe('AttendanceService.issueInstructor (studio-issued, slot-bound token)', 
     await expect(service.issueInstructor(admin, slotId, 'k', 'c', NOW)).rejects.toMatchObject({
       code: 'INVALID_STATE_TRANSITION',
     });
-    tx.slotKelas.findUnique.mockResolvedValue(slotWithNames({ status: 'PUBLISHED' }));
+    tx.slotKelas.findUnique.mockResolvedValue(slotWithNames({ status: 'DRAFT' }));
     await expect(service.issueInstructor(admin, slotId, 'k', 'c', NOW)).rejects.toMatchObject({
       code: 'INVALID_STATE_TRANSITION',
     });
