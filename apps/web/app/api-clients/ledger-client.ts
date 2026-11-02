@@ -605,7 +605,7 @@ const packageActionMessages: Record<string, string> = {
   USER_NOT_FOUND: 'Member tidak ditemukan atau akun sedang tidak aktif.',
   MEMBER_HAS_ACTIVE_BOOKINGS: 'Member masih memiliki booking aktif dengan paket ini. Batalkan booking terlebih dahulu.',
   MEMBER_NOT_FOUND: 'Member tidak terdaftar di paket ini.',
-  VALIDATION_ERROR: 'Data belum valid. Periksa jumlah hari dan alasan.',
+  VALIDATION_ERROR: 'Data yang dimasukkan belum valid. Periksa kembali data Anda.',
   FORBIDDEN: 'Anda tidak memiliki izin mengelola paket pelanggan.',
   RESOURCE_NOT_FOUND: 'Paket tidak ditemukan atau berada di luar cakupan cabang Anda.',
 };
@@ -670,13 +670,41 @@ export async function syncCustomerPackage(
 
 export function packageActionFailure(error: unknown): string {
   notifySessionFailure(error);
-  const typed = error as { status?: number; data?: { code?: string; error?: { code?: string } } };
-  const code = typed?.data?.code ?? typed?.data?.error?.code;
-  if (code && packageActionMessages[code]) return packageActionMessages[code]!;
+  const typed = error as {
+    status?: number;
+    code?: string;
+    message?: string;
+    data?: {
+      code?: string;
+      error?: {
+        code?: string;
+        message?: string;
+        details?: Array<{ field: string; issue: string }>;
+      };
+      details?: Array<{ field: string; issue: string }>;
+    };
+  };
+  const code = typed?.code ?? typed?.data?.code ?? typed?.data?.error?.code;
+  if (code && packageActionMessages[code]) {
+    const details = typed?.data?.error?.details ?? typed?.data?.details;
+    if (code === 'VALIDATION_ERROR' && details && details.length > 0) {
+      if (details.some((d) => d.field === 'userId' || d.field === 'identifier')) {
+        return 'Data anggota belum valid. Masukkan nomor WhatsApp atau email yang terdaftar.';
+      }
+      if (details.some((d) => d.field === 'days' || d.field === 'reason')) {
+        return 'Data belum valid. Periksa jumlah hari dan alasan perpanjangan/pembekuan.';
+      }
+    }
+    return packageActionMessages[code]!;
+  }
   if (typed?.status === 403) return packageActionMessages.FORBIDDEN!;
   if (typed?.status === 404) return packageActionMessages.RESOURCE_NOT_FOUND!;
   if (typed?.status === 409) return packageActionMessages.PACKAGE_CHANGED!;
-  if (typed?.status === 400 || typed?.status === 422) return packageActionMessages.VALIDATION_ERROR!;
+  if (typed?.status === 400 || typed?.status === 422) {
+    const serverMsg = typed?.data?.error?.message;
+    if (serverMsg && serverMsg !== 'Permintaan tidak dapat diproses.') return serverMsg;
+    return packageActionMessages.VALIDATION_ERROR!;
+  }
   if (typed?.status === 401) return 'Sesi Anda telah berakhir. Silakan masuk kembali.';
   return 'Layanan belum dapat dijangkau. Coba kembali beberapa saat lagi.';
 }

@@ -83,6 +83,16 @@ export function SharedPackageMembersDialog({
       setError('Masukkan email atau nomor WhatsApp teman yang ingin diundang.');
       return;
     }
+    const hasDigits = cleanId.replace(/\D/g, "").length >= 6;
+    const isEmail = cleanId.includes("@");
+    if (!isEmail && !hasDigits) {
+      setError('Masukkan nomor WhatsApp (contoh: 08123456789) atau email anggota, bukan nama.');
+      return;
+    }
+    if (owner && cleanId.toLowerCase() === owner.displayName.toLowerCase()) {
+      setError(`Pemilik paket (${owner.displayName}) sudah otomatis memiliki akses dan tidak perlu didaftarkan sebagai anggota tambahan.`);
+      return;
+    }
 
     setBusy(true);
     setError('');
@@ -175,6 +185,11 @@ export function SharedPackageMembersDialog({
             </div>
             <Badge tone="success">Pemilik</Badge>
           </div>
+        )}
+        {owner && (
+          <p className="-mt-2 text-xs text-dd-muted italic">
+            * Pemilik Utama sudah otomatis memiliki akses ke kuota sesi dan tidak perlu dimasukkan ulang ke anggota tambahan.
+          </p>
         )}
 
         <div>

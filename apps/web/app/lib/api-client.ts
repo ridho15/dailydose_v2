@@ -8,12 +8,14 @@ export type ApiFetchOptions = RequestInit & {
 export class ApiError extends Error {
   status: number;
   data: unknown;
+  code?: string;
 
-  constructor(message: string, status: number, data?: unknown) {
+  constructor(message: string, status: number, data?: unknown, code?: string) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
     this.data = data;
+    this.code = code;
   }
 }
 
@@ -56,11 +58,21 @@ export async function apiFetch<T>(
   if (!response.ok) {
     let errorData: unknown = null;
     let errorMessage = `Request failed with status ${response.status}`;
+    let errorCode: string | undefined = undefined;
     try {
       errorData = await response.json();
       if (typeof errorData === 'object' && errorData !== null) {
         const payload = errorData as Record<string, unknown>;
-        if (typeof payload.message === 'string') errorMessage = payload.message;
+        const errObj =
+          payload.error && typeof payload.error === 'object'
+            ? (payload.error as Record<string, unknown>)
+            : null;
+
+        if (typeof errObj?.code === 'string') errorCode = errObj.code;
+        else if (typeof payload.code === 'string') errorCode = payload.code;
+
+        if (typeof errObj?.message === 'string') errorMessage = errObj.message;
+        else if (typeof payload.message === 'string') errorMessage = payload.message;
         else if (typeof payload.detail === 'string') errorMessage = payload.detail;
         else if (typeof payload.title === 'string') errorMessage = payload.title;
       }
@@ -69,7 +81,7 @@ export async function apiFetch<T>(
       if (response.statusText) errorMessage = response.statusText;
     }
 
-    throw new ApiError(errorMessage, response.status, errorData);
+    throw new ApiError(errorMessage, response.status, errorData, errorCode);
   }
 
   // Handle empty responses (204 No Content, etc.)
