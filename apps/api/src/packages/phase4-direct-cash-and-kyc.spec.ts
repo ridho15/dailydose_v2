@@ -66,78 +66,64 @@ describe('Fase 4: Otorisasi Pembayaran Kasir Tunai/EDC & Delegasi KYC Cabang', (
       return { service, tx };
     }
 
-    it('Happy Path: Admin cabang yang mencatat pembayaran kasir CASH dapat langsung memutuskannya', async () => {
-      const cashPurchase = {
-        id: 'order-cash-1',
-        userId: customerId,
-        recordedById: staffAdminId, // Dicatat oleh admin ini di kasir
-        branchId: branchGandaria,
-        packageId,
-        paymentMethod: 'CASH',
-        status: 'PENDING',
-        invoiceNumber: 'INV-CASH-1',
-        package: { id: packageId, sessionCount: 10, validityDays: 30 },
-        branch: { name: 'Gandaria Studio' },
-        paymentProof: null,
-      };
+    const kasir = (over: Record<string, unknown> = {}) => ({
+      id: 'order-cash-1',
+      userId: customerId,
+      recordedById: staffAdminId, // Dicatat oleh admin di kasir
+      branchId: branchGandaria,
+      packageId,
+      paymentMethod: 'CASH',
+      status: 'PENDING',
+      invoiceNumber: 'INV-CASH-1',
+      package: { id: packageId, sessionCount: 10, validityDays: 30 },
+      branch: { name: 'Gandaria Studio' },
+      paymentProof: null,
+      ...over,
+    });
 
-      const { service, tx } = setupPaymentReview(cashPurchase);
+    it('Keputusan pemilik: Admin yang mencatat penjualan tunai tidak bisa menyetujuinya', async () => {
+      const { service, tx } = setupPaymentReview(kasir());
+      await expect(
+        service.decide(adminPrincipal, 'order-cash-1', 'APPROVED', { expectedVersion: 1 }, 'key-idemp-1', 'corr-1'),
+      ).rejects.toBeDefined();
+      expect(tx.pembelian.update).not.toHaveBeenCalled();
+      expect(tx.paketPelanggan.create).not.toHaveBeenCalled();
+    });
 
-      const result = await service.decide(
-        adminPrincipal,
-        cashPurchase.id,
-        'APPROVED',
-        { expectedVersion: 1 },
-        'key-idemp-1',
-        'corr-1',
-      );
-
-      expect(result).toBeDefined();
+    it('Happy Path: Manager cabang menyetujui penjualan tunai yang dicatat Admin', async () => {
+      const { service, tx } = setupPaymentReview(kasir());
+      await service.decide(managerPrincipal, 'order-cash-1', 'APPROVED', { expectedVersion: 1 }, 'key-idemp-2', 'corr-2');
       expect(tx.pembelian.update).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { id: cashPurchase.id },
-          data: expect.objectContaining({
-            status: 'PAID',
-            verifiedById: staffAdminId,
-          }),
+          where: { id: 'order-cash-1' },
+          data: expect.objectContaining({ status: 'PAID', verifiedById: staffManagerId }),
         }),
       );
       expect(tx.paketPelanggan.create).toHaveBeenCalled();
     });
 
-    it('Happy Path: Manager cabang yang mencatat pembayaran EDC/CARD dapat langsung memutuskannya', async () => {
-      const cardPurchase = {
-        id: 'order-card-1',
-        userId: customerId,
-        recordedById: staffManagerId, // Dicatat oleh manager di kasir
-        branchId: branchGandaria,
-        packageId,
-        paymentMethod: 'CARD',
-        status: 'PENDING',
-        invoiceNumber: 'INV-CARD-1',
-        package: { id: packageId, sessionCount: 5, validityDays: 30 },
-        branch: { name: 'Gandaria Studio' },
-        paymentProof: null,
+    it('No Happy Path: Manager tidak bisa menyetujui penjualan kartu/EDC yang ia catat sendiri', async () => {
+      const { service, tx } = setupPaymentReview(
+        kasir({ id: 'order-card-1', recordedById: staffManagerId, paymentMethod: 'CARD' }),
+      );
+      await expect(
+        service.decide(managerPrincipal, 'order-card-1', 'APPROVED', { expectedVersion: 1 }, 'key-idemp-5', 'corr-5'),
+      ).rejects.toMatchObject({ code: 'SEPARATION_OF_DUTIES_VIOLATION' });
+      expect(tx.pembelian.update).not.toHaveBeenCalled();
+    });
+
+    it('No Happy Path: Finance tidak menyetujui penjualan tunai (hanya Manager atau Super Owner)', async () => {
+      const finance = {
+        sessionId: 'sess-fin',
+        userId: '00000000-0000-4000-8000-000000000050',
+        roles: [{ role: 'FINANCE' as const, branchId: null }],
+        capabilities: policy.capabilities([{ role: 'FINANCE', branchId: null }]),
+        branchIds: [],
       };
-
-      const { service, tx } = setupPaymentReview(cardPurchase);
-
-      const result = await service.decide(
-        managerPrincipal,
-        cardPurchase.id,
-        'APPROVED',
-        { expectedVersion: 1 },
-        'key-idemp-2',
-        'corr-2',
-      );
-
-      expect(result).toBeDefined();
-      expect(tx.pembelian.update).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: { id: cardPurchase.id },
-          data: expect.objectContaining({ status: 'PAID' }),
-        }),
-      );
+      const { service } = setupPaymentReview(kasir());
+      await expect(
+        service.decide(finance as never, 'order-cash-1', 'APPROVED', { expectedVersion: 1 }, 'key-idemp-6', 'corr-6'),
+      ).rejects.toMatchObject({ code: 'DIRECT_PAYMENT_APPROVER_REQUIRED' });
     });
 
     it('No Happy Path: Non-kasir (BANK_TRANSFER) tetap menolak pencatat yang ingin menyetujui sendiri (Maker-Checker)', async () => {
@@ -189,10 +175,10 @@ describe('Fase 4: Otorisasi Pembayaran Kasir Tunai/EDC & Delegasi KYC Cabang', (
 
       const { service } = setupPaymentReview(offBranchPurchase);
 
-      // Admin Gandaria dilarang menyetujui kasir Surabaya
+      // Manager Gandaria dilarang menyetujui kasir Surabaya
       await expect(
         service.decide(
-          adminPrincipal,
+          managerPrincipal,
           offBranchPurchase.id,
           'APPROVED',
           { expectedVersion: 1 },

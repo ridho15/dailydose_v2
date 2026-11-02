@@ -13,6 +13,7 @@ import { ApiProblem, ENTITY_ID_REGEX } from '../identity/security';
 import { cabangPublik } from '../foundation/tampilan-publik';
 import { paketBerlakuDi } from './cabang-paket';
 import { bookingTeman, maksTemanPaket } from '../packages/bawa-teman';
+import { MEMEGANG_SESI } from '../packages/sesi-terpesan';
 
 export type BookingCancellationReasonCode =
   | 'PERSONAL_UNAVAILABLE'
@@ -144,7 +145,7 @@ export class BookingsService {
     if (ids.length === 0) return new Map<string, number>();
     const groups = await this.db.pemesananKelas.groupBy({
       by: ['customerPackageId'],
-      where: { customerPackageId: { in: ids }, status: 'BOOKED' },
+      where: { customerPackageId: { in: ids }, ...MEMEGANG_SESI },
       _count: { _all: true },
     });
     return new Map(groups.map((group) => [group.customerPackageId, group._count._all]));
@@ -475,10 +476,7 @@ export class BookingsService {
     const items = await Promise.all(
       matchingPackages.map(async (pkg) => {
         const activeBookingsCount = await this.db.pemesananKelas.count({
-          where: {
-            customerPackageId: pkg.id,
-            status: 'BOOKED',
-          },
+          where: { customerPackageId: pkg.id, ...MEMEGANG_SESI },
         });
         const availableSessions = Math.max(0, pkg.remainingSessions - activeBookingsCount);
         return {
@@ -891,6 +889,9 @@ export class BookingsService {
       async (tx) => {
         // Kunci baris slot_kelas secara eksklusif (pessimistic lock) untuk mencegah race condition & overbooking
         await tx.$queryRaw`SELECT id FROM slot_kelas WHERE id = ${input.classSlotId} FOR UPDATE`;
+        // Kunci juga paketnya (urutan tetap: slot lalu paket) supaya dua booking bersamaan di kelas
+        // berbeda tidak sama-sama lolos cek sisa sesi dan membuat paket minus.
+        await tx.$queryRaw`SELECT id FROM paket_pelanggan WHERE id = ${input.customerPackageId} FOR UPDATE`;
 
         const slot = await tx.slotKelas.findUnique({
           where: { id: input.classSlotId },
@@ -952,10 +953,7 @@ export class BookingsService {
 
         // Periksa sisa sesi dikurangi booking aktif (Rule #1 & #2: sesi fisik belum dipotong)
         const activeBookingsCount = await tx.pemesananKelas.count({
-          where: {
-            customerPackageId: customerPackage.id,
-            status: 'BOOKED',
-          },
+          where: { customerPackageId: customerPackage.id, ...MEMEGANG_SESI },
         });
         if (customerPackage.remainingSessions - activeBookingsCount <= 0)
           throw new ApiProblem('INSUFFICIENT_AVAILABLE_SESSIONS', HttpStatus.CONFLICT);
@@ -1141,6 +1139,9 @@ export class BookingsService {
         leaseMs: 30_000,
       },
       async (tx) => {
+        // Walk-in mengambil kursi terakhir sama seperti booking biasa: kunci slot dulu agar dua
+        // staf yang menambah walk-in bersamaan tidak melebihi kapasitas.
+        await tx.$queryRaw`SELECT id FROM slot_kelas WHERE id = ${input.classSlotId} FOR UPDATE`;
         const customer = await tx.user.findUnique({
           where: { id: input.customerUserId },
         });

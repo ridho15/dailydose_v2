@@ -12,6 +12,7 @@ import type { SessionPrincipal } from '../identity/identity.service';
 import { PolicyService } from '../identity/policy.service';
 import { ApiProblem, ENTITY_ID_REGEX } from '../identity/security';
 import { buildPhoneSearchVariants, normalizePhone } from '../identity/manajemen-pelanggan.service';
+import { MEMEGANG_SESI } from './sesi-terpesan';
 
 export const ADJUSTMENT_REASON_CODES = [
   'MIGRATION_CORRECTION',
@@ -213,7 +214,7 @@ export class LedgerService {
         where,
         include: {
           ...packageInclude,
-          bookings: { where: { status: 'BOOKED' }, select: { id: true } },
+          bookings: { where: MEMEGANG_SESI, select: { id: true } },
         },
         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         take: pageNumber ? limit : limit + 1,
@@ -293,7 +294,7 @@ export class LedgerService {
           _sum: { remainingSessions: true, usedSessions: true },
         }),
         this.db.pemesananKelas.count({
-          where: { status: 'BOOKED', customerPackage: { is: base } },
+          where: { ...MEMEGANG_SESI, customerPackage: { is: base } },
         }),
         this.db.sessionLedger.groupBy({
           by: ['type'],
@@ -676,7 +677,7 @@ export class LedgerService {
     if (packageIds.length === 0) return result;
     const grouped = await this.db.pemesananKelas.groupBy({
       by: ['customerPackageId'],
-      where: { customerPackageId: { in: packageIds }, status: 'BOOKED' },
+      where: { customerPackageId: { in: packageIds }, ...MEMEGANG_SESI },
       _count: { _all: true },
     });
     for (const g of grouped) {
@@ -738,7 +739,7 @@ export class LedgerService {
         this.assertPackageAccess(principal, 'ledger:adjust:request', pkg);
 
         const reserved = await tx.pemesananKelas.count({
-          where: { customerPackageId: pkg.id, status: 'BOOKED' },
+          where: { customerPackageId: pkg.id, ...MEMEGANG_SESI },
         });
         this.assertBalanceAllows(pkg.remainingSessions, reserved, quantity);
 
@@ -819,7 +820,7 @@ export class LedgerService {
         this.assertPackageAccess(principal, 'ledger:adjust:decide', pkg);
 
         const reserved = await tx.pemesananKelas.count({
-          where: { customerPackageId: pkg.id, status: 'BOOKED' },
+          where: { customerPackageId: pkg.id, ...MEMEGANG_SESI },
         });
         this.assertBalanceAllows(pkg.remainingSessions, reserved, quantity);
 
@@ -979,7 +980,7 @@ export class LedgerService {
             where: { id: row.customerPackageId },
           });
           const reserved = await tx.pemesananKelas.count({
-            where: { customerPackageId: pkg.id, status: 'BOOKED' },
+            where: { customerPackageId: pkg.id, ...MEMEGANG_SESI },
           });
           this.assertBalanceAllows(pkg.remainingSessions, reserved, row.sessionCount);
 

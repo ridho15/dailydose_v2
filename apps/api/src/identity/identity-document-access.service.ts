@@ -5,6 +5,7 @@ import type { SessionPrincipal } from './identity.service';
 import { PolicyService } from './policy.service';
 import { PRIVATE_FILE_STORAGE, type PrivateFileStorage } from './private-file-storage';
 import { ApiProblem, newId } from './security';
+import { bolehAksesIdentitas } from './customer-visibility';
 
 interface ActiveAuthorization {
   /** Pengguna yang diberi otorisasi; berkas hanya dapat dibaca oleh pengguna yang sama. */
@@ -65,6 +66,9 @@ export class IdentityDocumentAccessService {
       userId = documentId;
       kind = 'ktp';
     }
+
+    if (!(await bolehAksesIdentitas(this.db as never, principal, userId)))
+      throw new ApiProblem('NOT_FOUND', HttpStatus.NOT_FOUND);
 
     let profile: any = null;
     if (this.db?.profilPengguna) {

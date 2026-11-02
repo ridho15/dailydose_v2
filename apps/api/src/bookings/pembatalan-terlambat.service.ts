@@ -110,7 +110,7 @@ export class PembatalanTerlambatService {
             customerPackageId: booking.customerPackageId,
             bookingId,
             requestedById: principal.userId,
-            sessionCount: isMedical ? 1 : await sesiTerpotong(tx, booking),
+            sessionCount: await sesiTerpotong(tx, booking),
             reason: (isMedical ? `[IZIN MEDIS] ${reason}` : reason).slice(0, 500),
             reasonCode: KODE_PEMBATALAN_TERLAMBAT,
           },

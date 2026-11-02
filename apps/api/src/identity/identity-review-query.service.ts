@@ -3,6 +3,7 @@ import { PrismaService } from '../database/prisma.service';
 import type { SessionPrincipal } from './identity.service';
 import { PolicyService } from './policy.service';
 import { ApiProblem } from './security';
+import { bolehAksesIdentitas } from './customer-visibility';
 import {
   buildPhoneSearchVariants,
   customerVerificationStatus,
@@ -297,7 +298,8 @@ export class IdentityReviewQueryService {
       where: { id: userId },
       include: { profile: true },
     });
-    if (!user) throw new ApiProblem('NOT_FOUND', HttpStatus.NOT_FOUND);
+    if (!user || !(await bolehAksesIdentitas(this.db as never, principal, userId)))
+      throw new ApiProblem('NOT_FOUND', HttpStatus.NOT_FOUND);
 
     const documents: any[] = [];
     const verificationStatus = customerVerificationStatus(user.profile);

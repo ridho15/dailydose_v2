@@ -128,13 +128,16 @@ export function PaymentReviewDetailView({
     authorityOverride?.canReview ??
     Boolean(sessionContext?.hasCapability('payment:review', 'purchase:review'));
   const [detail, setDetail] = useState<ReviewDetail | null>(null);
-  const canRecord = Boolean(sessionContext?.hasCapability('purchase:record'));
   const isDirectPayment = ['CASH', 'CARD', 'MANUAL_STAFF'].includes(detail?.purchase?.paymentMethod || '');
+  // Penjualan tunai/kartu hanya disetujui Manager atau Super Owner (keputusan pemilik).
+  const isManagerOrSuper = Boolean(
+    sessionContext?.session?.roles?.some((r) => r === 'MANAGER' || r === 'SUPER_OWNER'),
+  );
   const canDecide =
     authorityOverride?.canDecide ??
     Boolean(
-      sessionContext?.hasCapability('payment:decide', 'purchase:decide') ||
-      (canRecord && isDirectPayment),
+      sessionContext?.hasCapability('payment:decide', 'purchase:decide') &&
+      (!isDirectPayment || isManagerOrSuper),
     );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -301,15 +304,13 @@ export function PaymentReviewDetailView({
         sessionContext?.session?.id &&
         purchase.customer.id === sessionContext.session.id,
     );
-    const isDirectCashOrCard = ['CASH', 'CARD', 'MANUAL_STAFF'].includes(purchase?.paymentMethod || '');
-    const separationOfDutiesBlocked = !isSuper && (isSelfCustomer || (!isDirectCashOrCard && isRecorder));
+    const separationOfDutiesBlocked = !isSuper && (isSelfCustomer || isRecorder);
     const proofRequiresReview = Boolean(purchase?.paymentProof);
     const proofNotYetViewed =
       proofRequiresReview && (!previewUrl || previewLoading || (isImagePreview && !proofImageShown));
     const isPending =
       purchase?.status === 'PENDING' || purchase?.status === 'WAITING_VERIFICATION';
-    const canRecordUser = Boolean(sessionContext?.hasCapability('purchase:record'));
-    const effectiveCanDecide = canDecide || (canRecordUser && isDirectCashOrCard);
+    const effectiveCanDecide = canDecide;
     if (!purchase || !effectiveCanDecide || !isPending || separationOfDutiesBlocked) return;
     if (action === 'APPROVE' && proofNotYetViewed) {
       setError('Anda wajib melihat pratinjau bukti transfer terlebih dahulu sebelum dapat menyetujui pembayaran.');
@@ -767,8 +768,7 @@ export function PaymentReviewDetailView({
                       sessionContext?.session?.id &&
                       purchase.customer.id === sessionContext.session.id,
                   );
-                  const isDirectCashOrCard = ['CASH', 'CARD', 'MANUAL_STAFF'].includes(purchase.paymentMethod || '');
-                  const separationOfDutiesBlocked = !isSuper && !isDirectCashOrCard && (isRecorder || isSelfCustomer);
+                  const separationOfDutiesBlocked = !isSuper && (isRecorder || isSelfCustomer);
                   const proofRequiresReview = Boolean(purchase.paymentProof);
                   const proofNotYetViewed =
                     proofRequiresReview && (!previewUrl || previewLoading || (isImagePreview && !proofImageShown));
