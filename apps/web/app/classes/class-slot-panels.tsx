@@ -374,6 +374,8 @@ export function DetailPanel({
   const isDraft = slot.status === 'DRAFT';
   const isPublished = slot.status === 'PUBLISHED';
   const isConfirmed = slot.status === 'CONFIRMED';
+  // Kelas baru bisa diselesaikan setelah jam selesainya; sistem juga menyelesaikannya otomatis.
+  const sudahBerakhir = new Date(slot.endAt).getTime() <= Date.now();
   const isClosed = ['COMPLETED', 'CANCELLED', 'AUTO_CANCELLED'].includes(slot.status);
   const canRunClass = isConfirmed && (canComplete || canManageAttendance || canVerifyInstructor);
   const hasActions = canManage ? !isClosed : canRunClass;
@@ -738,7 +740,7 @@ export function DetailPanel({
         </DetailSection>
       )}
 
-      {isConfirmed && canComplete && (
+      {(isPublished || isConfirmed) && sudahBerakhir && canComplete && (
         <DetailSection
           id="class-complete-title"
           title="Selesaikan kelas"

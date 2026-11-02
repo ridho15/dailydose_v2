@@ -76,4 +76,41 @@ describe('menyelesaikan kelas', () => {
     expect(tx.slotKelas.updateMany).not.toHaveBeenCalled();
     expect(tx.sessionLedger.create).not.toHaveBeenCalled();
   });
+
+  it('kelas Terbit (belum dikonfirmasi) yang sudah berakhir juga diselesaikan dan sesi peserta hadir dipotong', async () => {
+    const { svc, tx } = build(
+      [{ id: 'b1', status: 'ATTENDED', attendance: { id: 'a1' }, customerPackageId: 'p' }],
+      new Date(Date.now() - 1000),
+    );
+    (tx.slotKelas as any).findUnique = async () => ({
+      id: slotId, branchId, classTypeId: 'ct', instructorId: 'i', startAt: new Date(Date.now() - 3_600_000),
+      endAt: new Date(Date.now() - 1000), capacity: 8, bookedCount: 1, status: 'PUBLISHED', version: 1,
+      bookings: [{ id: 'b1', status: 'ATTENDED', attendance: { id: 'a1' }, customerPackageId: 'p' }],
+      classType: { name: 'X' }, branch: { name: 'B' }, instructorAttendance: null,
+    });
+    await svc.complete(principal, slotId, {}, KEY, 'c');
+    expect(tx.sessionLedger.create).toHaveBeenCalledTimes(1);
+    expect(tx.paketPelanggan.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ remainingSessions: { decrement: 1 } }) }),
+    );
+  });
+
+  it('booking hasil migrasi V1 tidak dipotong lagi', async () => {
+    const { svc, tx } = build(
+      [{ id: 'b1', status: 'ATTENDED', bookingNumber: 'BKG-V1-00000001', attendance: null, customerPackageId: 'p' }],
+      new Date(Date.now() - 1000),
+    );
+    await svc.complete(principal, slotId, {}, KEY, 'c');
+    expect(tx.sessionLedger.create).not.toHaveBeenCalled();
+  });
+
+  it('penjadwal menyelesaikan kelas yang sudah lewat jeda tanpa akun pengguna', async () => {
+    const { svc, tx } = build([{ id: 'b1', status: 'BOOKED', attendance: { id: 'a1' }, customerPackageId: 'p' }], new Date(Date.now() - 3_600_000));
+    (svc as any).db = { slotKelas: { findMany: async () => [{ id: slotId }] } };
+    const hasil = await svc.selesaikanOtomatis(new Date());
+    expect(hasil).toEqual({ diperiksa: 1, selesai: 1, gagal: 0 });
+    expect(tx.sessionLedger.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ createdById: null }) }),
+    );
+  });
 });
