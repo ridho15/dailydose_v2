@@ -128,14 +128,14 @@ export function SharedPackageMembersDialog({
         return;
       }
     } else {
+      if (owner && cleanId.toLowerCase() === owner.displayName.toLowerCase()) {
+        setError(`Pemilik paket (${owner.displayName}) sudah otomatis memiliki akses dan tidak perlu didaftarkan sebagai anggota tambahan.`);
+        return;
+      }
       const hasDigits = cleanId.replace(/\D/g, "").length >= 6;
       const isEmail = cleanId.includes("@");
       if (!isEmail && !hasDigits) {
         setError('Masukkan nomor WhatsApp (contoh: 08123456789) atau email anggota, bukan nama.');
-        return;
-      }
-      if (owner && cleanId.toLowerCase() === owner.displayName.toLowerCase()) {
-        setError(`Pemilik paket (${owner.displayName}) sudah otomatis memiliki akses dan tidak perlu didaftarkan sebagai anggota tambahan.`);
         return;
       }
     }

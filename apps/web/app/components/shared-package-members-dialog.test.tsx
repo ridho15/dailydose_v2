@@ -270,4 +270,165 @@ describe('SharedPackageMembersDialog - Self-Service Sharing Paket', () => {
       });
     });
   });
+
+  it("No Happy Path: Menolak jika pengguna mengetik teks nama biasa tanpa nomor atau email", async () => {
+    vi.mocked(ledgerClient.listPackageMembers).mockResolvedValue({
+      customerPackageId,
+      package: { id: "p-1", name: "Duet Package 10", isShareable: true },
+      owner: {
+        id: "user-owner",
+        displayName: "Valerie Gunawan",
+        phoneMasked: "0812****",
+      },
+      remainingSessions: 5,
+      status: "ACTIVE",
+      members: [],
+    });
+
+    const user = userEvent.setup();
+    render(
+      <SharedPackageMembersDialog
+        open={true}
+        onClose={vi.fn()}
+        customerPackageId={customerPackageId}
+        packageName="FLASH SALE 10.10"
+        canManage={true}
+      />,
+    );
+
+    await screen.findByText("Valerie Gunawan");
+    const input = screen.getByTestId("input-member-identifier");
+    await user.type(input, "Cynthia");
+    await user.click(screen.getByTestId("btn-add-member"));
+
+    expect(
+      await screen.findByText("Masukkan nomor WhatsApp (contoh: 08123456789) atau email anggota, bukan nama."),
+    ).toBeInTheDocument();
+    expect(ledgerClient.addPackageMember).not.toHaveBeenCalled();
+  });
+
+  it("No Happy Path: Mencegah jika pengguna mencoba memasukkan nama Pemilik Utama", async () => {
+    vi.mocked(ledgerClient.listPackageMembers).mockResolvedValue({
+      customerPackageId,
+      package: { id: "p-1", name: "Duet Package 10", isShareable: true },
+      owner: {
+        id: "user-owner",
+        displayName: "Valerie Gunawan",
+        phoneMasked: "0812****",
+      },
+      remainingSessions: 5,
+      status: "ACTIVE",
+      members: [],
+    });
+
+    const user = userEvent.setup();
+    render(
+      <SharedPackageMembersDialog
+        open={true}
+        onClose={vi.fn()}
+        customerPackageId={customerPackageId}
+        packageName="FLASH SALE 10.10"
+        canManage={true}
+      />,
+    );
+
+    await screen.findByText("Valerie Gunawan");
+    const input = screen.getByTestId("input-member-identifier");
+    await user.type(input, "Valerie Gunawan");
+    await user.click(screen.getByTestId("btn-add-member"));
+
+    expect(
+      await screen.findByText(/Pemilik paket \(Valerie Gunawan\) sudah otomatis memiliki akses/),
+    ).toBeInTheDocument();
+    expect(ledgerClient.addPackageMember).not.toHaveBeenCalled();
+  });
+
+  it("No Happy Path: Galat server PACKAGE_NOT_SHAREABLE tampil akurat tanpa teks hari/alasan", async () => {
+    vi.mocked(ledgerClient.listPackageMembers).mockResolvedValue({
+      customerPackageId,
+      package: { id: "p-1", name: "FLASH SALE 10.10", isShareable: false },
+      owner: {
+        id: "user-owner",
+        displayName: "Valerie Gunawan",
+        phoneMasked: "0812****",
+      },
+      remainingSessions: 5,
+      status: "ACTIVE",
+      members: [],
+    });
+
+    vi.mocked(ledgerClient.addPackageMember).mockRejectedValue({
+      status: 400,
+      code: "PACKAGE_NOT_SHAREABLE",
+      data: { error: { code: "PACKAGE_NOT_SHAREABLE", message: "Permintaan tidak dapat diproses." } },
+    });
+
+    const user = userEvent.setup();
+    render(
+      <SharedPackageMembersDialog
+        open={true}
+        onClose={vi.fn()}
+        customerPackageId={customerPackageId}
+        packageName="FLASH SALE 10.10"
+        canManage={true}
+      />,
+    );
+
+    await screen.findByText("Valerie Gunawan");
+    await user.type(screen.getByTestId("input-member-identifier"), "082164220585");
+    await user.click(screen.getByTestId("btn-add-member"));
+
+    expect(
+      await screen.findByText("Paket ini bukan tipe paket bersama (isShareable: false)."),
+    ).toBeInTheDocument();
+    // Memastikan teks galat nyasar tidak muncul
+    expect(screen.queryByText(/jumlah hari dan alasan/i)).toBeNull();
+  });
+
+  it("No Happy Path: Galat server VALIDATION_ERROR field userId menampilkan pesan anggota bukan hari/alasan", async () => {
+    vi.mocked(ledgerClient.listPackageMembers).mockResolvedValue({
+      customerPackageId,
+      package: { id: "p-1", name: "FLASH SALE 10.10", isShareable: true },
+      owner: {
+        id: "user-owner",
+        displayName: "Valerie Gunawan",
+        phoneMasked: "0812****",
+      },
+      remainingSessions: 5,
+      status: "ACTIVE",
+      members: [],
+    });
+
+    vi.mocked(ledgerClient.addPackageMember).mockRejectedValue({
+      status: 400,
+      code: "VALIDATION_ERROR",
+      data: {
+        error: {
+          code: "VALIDATION_ERROR",
+          message: "Permintaan tidak dapat diproses.",
+          details: [{ field: "userId", issue: "VALIDATION_ERROR" }],
+        },
+      },
+    });
+
+    const user = userEvent.setup();
+    render(
+      <SharedPackageMembersDialog
+        open={true}
+        onClose={vi.fn()}
+        customerPackageId={customerPackageId}
+        packageName="FLASH SALE 10.10"
+        canManage={true}
+      />,
+    );
+
+    await screen.findByText("Valerie Gunawan");
+    await user.type(screen.getByTestId("input-member-identifier"), "082164220585");
+    await user.click(screen.getByTestId("btn-add-member"));
+
+    expect(
+      await screen.findByText("Data anggota belum valid. Masukkan nomor WhatsApp atau email yang terdaftar."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/jumlah hari dan alasan/i)).toBeNull();
+  });
 });
