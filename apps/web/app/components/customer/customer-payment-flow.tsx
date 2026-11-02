@@ -31,6 +31,7 @@ import { Button, ButtonLink } from '../actions';
 import { compressImageIfNeeded } from '@/lib/image-compression';
 import { AlertBanner, useAppFeedback } from '../app-feedback';
 import { formatRupiah } from '../../lib/formatters';
+import { useStudioPreference } from '../public/public-experience';
 
 const steps = ['Ringkasan', 'Pembayaran', 'Unggah bukti', 'Status'];
 
@@ -101,15 +102,8 @@ export function CustomerPaymentFlow({
     if (proofPreviewUrl) proofPreviewRef.current?.focus();
   }, [proofPreviewUrl]);
 
-  const defaultPaymentAccount = useMemo(
-    () => ({
-      bankName: 'BCA',
-      accountNumber: '8040 123 8899',
-      accountHolderName: 'PT DAILY DOSE INDONESIA',
-    }),
-    [],
-  );
-  const activePaymentAccount = order.paymentAccount ?? defaultPaymentAccount;
+  // Tanpa rekening cabang, jangan pernah menampilkan rekening contoh: member bisa salah transfer.
+  const activePaymentAccount = order.paymentAccount ?? null;
 
   const expiryFormatter = useMemo(() => {
     return new Intl.DateTimeFormat('id-ID', {
@@ -129,7 +123,7 @@ export function CustomerPaymentFlow({
     [now, order.expiresAt],
   );
   const paymentAccountAvailable = Boolean(
-    activePaymentAccount.bankName &&
+    activePaymentAccount?.bankName &&
       activePaymentAccount.accountNumber &&
       activePaymentAccount.accountHolderName,
   );
@@ -139,7 +133,13 @@ export function CustomerPaymentFlow({
     (paymentAccountAvailable || paymentMethod === 'QRIS');
   const paymentCode = formatPaymentCode(order.paymentUniqueCode);
   const waMessage = `Halo Daily Dose Pilates, saya ingin konfirmasi pembayaran pesanan:\n- Paket: ${order.packageName}\n- No. Pesanan: ${order.id}\n- Nominal: ${formatRupiah(order.payableAmountRp)}\n- Metode: ${paymentMethod === 'QRIS' ? 'QRIS Instan' : 'Transfer Bank'}\nMohon dibantu verifikasi ya. Terima kasih!`;
-  const waUrl = `https://wa.me/6281234567890?text=${encodeURIComponent(waMessage)}`;
+  // Nomor WhatsApp cabang pesanan; bila tidak ada, nomor resmi studio.
+  const studio = useStudioPreference();
+  const nomorCabang = (studio?.whatsappStudios ?? [])
+    .find((item) => item.id === order.branchId)
+    ?.href.match(/wa\.me\/(\d+)/)?.[1];
+  const nomorWa = nomorCabang || process.env.NEXT_PUBLIC_OFFICIAL_WHATSAPP || '62895329736127';
+  const waUrl = `https://wa.me/${nomorWa}?text=${encodeURIComponent(waMessage)}`;
   const proofReady =
     order.paymentProofStatus?.uploadStatus === 'FINALIZED' &&
     order.paymentProofStatus.scanStatus === 'CLEAN';
@@ -489,48 +489,54 @@ export function CustomerPaymentFlow({
                   </div>
 
                   {/* Nomor rekening dan tombol Salin nomor rekening */}
-                  <div className="rounded-none border border-ed-line bg-white p-4">
-                    <div className="flex flex-wrap items-center justify-between gap-4">
-                      <div>
-                        <span className="block text-[13px] font-bold text-ed-muted">
-                          Rekening Tujuan ({activePaymentAccount.bankName})
-                        </span>
-                        <strong
-                          className="mt-1 block font-mono text-xl font-bold tracking-wider text-ed-ink sm:text-2xl"
-                          data-testid="account-number"
+                  {activePaymentAccount ? (
+                    <div className="rounded-none border border-ed-line bg-white p-4">
+                      <div className="flex flex-wrap items-center justify-between gap-4">
+                        <div>
+                          <span className="block text-[13px] font-bold text-ed-muted">
+                            Rekening Tujuan ({activePaymentAccount.bankName})
+                          </span>
+                          <strong
+                            className="mt-1 block font-mono text-xl font-bold tracking-wider text-ed-ink sm:text-2xl"
+                            data-testid="account-number"
+                          >
+                            {activePaymentAccount.accountNumber}
+                          </strong>
+                          <span className="mt-0.5 block text-xs text-ed-muted">
+                            a.n. {activePaymentAccount.accountHolderName}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            copyToClipboard(
+                              activePaymentAccount.accountNumber.replace(/\s+/g, ''),
+                              'account',
+                              'Nomor rekening',
+                            )
+                          }
+                          className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-none border border-[#396552] bg-white px-4 py-2.5 text-xs font-semibold text-[#396552] transition hover:bg-[#e9eee6] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#396552] cursor-pointer"
+                          aria-label="Salin nomor rekening"
                         >
-                          {activePaymentAccount.accountNumber}
-                        </strong>
-                        <span className="mt-0.5 block text-xs text-ed-muted">
-                          a.n. {activePaymentAccount.accountHolderName}
-                        </span>
+                          {copiedField === 'account' ? (
+                            <>
+                              <Check className="size-4 text-emerald-700" aria-hidden="true" />
+                              <span>Tersalin ✓</span>
+                            </>
+                          ) : (
+                            <>
+                              <Clipboard className="size-4" aria-hidden="true" />
+                              <span>Salin nomor rekening</span>
+                            </>
+                          )}
+                        </button>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          copyToClipboard(
-                            activePaymentAccount.accountNumber.replace(/\s+/g, ''),
-                            'account',
-                            'Nomor rekening',
-                          )
-                        }
-                        className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-none border border-[#396552] bg-white px-4 py-2.5 text-xs font-semibold text-[#396552] transition hover:bg-[#e9eee6] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#396552] cursor-pointer"
-                        aria-label="Salin nomor rekening"
-                      >
-                        {copiedField === 'account' ? (
-                          <>
-                            <Check className="size-4 text-emerald-700" aria-hidden="true" />
-                            <span>Tersalin ✓</span>
-                          </>
-                        ) : (
-                          <>
-                            <Clipboard className="size-4" aria-hidden="true" />
-                            <span>Salin nomor rekening</span>
-                          </>
-                        )}
-                      </button>
                     </div>
-                  </div>
+                  ) : (
+                    <div className="rounded-none border border-ed-line bg-white p-4 text-sm text-ed-ink" role="alert">
+                      Rekening tujuan cabang ini belum tersedia. Jangan transfer dulu; hubungi studio lewat WhatsApp di bawah.
+                    </div>
+                  )}
                 </div>
               ) : (
                 /* QRIS Mode */

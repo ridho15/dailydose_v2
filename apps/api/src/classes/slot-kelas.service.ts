@@ -12,6 +12,7 @@ import { AuditService } from '../foundation/audit.service';
 import type { SessionPrincipal } from '../identity/identity.service';
 import { PolicyService } from '../identity/policy.service';
 import { ApiProblem, ENTITY_ID_REGEX, newId } from '../identity/security';
+import { cabangPublik, instrukturPublik } from '../foundation/tampilan-publik';
 
 const UUID = ENTITY_ID_REGEX;
 const OFFSET = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?(?:Z|[+-]\d{2}:\d{2})$/;
@@ -188,11 +189,11 @@ export class ClassSlotService {
       cancellationReason: slot.cancellationReason ?? null,
       notes: slot.notes ?? null,
       version: slot.version ?? 1,
-      branch: slot.branch,
+      branch: cabangPublik(slot.branch),
       studio: slot.studio,
       room: slot.room,
       classType: slot.classType,
-      instructor: slot.instructor,
+      instructor: instrukturPublik(slot.instructor),
       instructorAttendance: slot.instructorAttendance ?? null,
     };
   }
@@ -1038,6 +1039,10 @@ export class ClassSlotService {
           throw new ApiProblem('INVALID_STATE_TRANSITION', HttpStatus.CONFLICT);
         if (expectedVersion !== undefined && slot.version !== expectedVersion)
           throw new ApiProblem('STALE_VERSION', HttpStatus.CONFLICT);
+        // Menyelesaikan kelas memotong sesi semua peserta yang tidak hadir, jadi hanya boleh setelah
+        // kelas benar-benar berakhir.
+        if (slot.endAt.getTime() > now.getTime())
+          throw new ApiProblem('CLASS_NOT_ENDED', HttpStatus.CONFLICT);
 
         // Atomic lock guard: update status ke COMPLETED terlebih dahulu untuk mengunci baris secara eksklusif di MySQL
         const lockResult = await tx.slotKelas.updateMany({
@@ -1078,6 +1083,9 @@ export class ClassSlotService {
         let attendanceCount = 0;
         let noShowCount = 0;
         for (const booking of slot.bookings) {
+          // Booking batal tidak menempati kursi lagi: tidak boleh berubah jadi NO_SHOW atau
+          // memotong sesi (termasuk pembatalan terlambat yang sudah disetujui dan sesinya dikembalikan).
+          if (booking.status === 'CANCELLED') continue;
           const wasAttended = booking.status === 'ATTENDED' || Boolean(booking.attendance);
           const newStatus = wasAttended ? 'ATTENDED' : 'NO_SHOW';
           if (wasAttended) attendanceCount += 1;

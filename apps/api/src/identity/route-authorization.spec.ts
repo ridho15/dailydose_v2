@@ -145,9 +145,13 @@ describe('PaymentProofService ownership', () => {
   const build = () => {
     const db = {
       pembelian: {
-        findFirst: jest.fn(async ({ where }: { where: { userId: string } }) =>
-          where.userId === 'owner-1' ? { id: 'purchase-1', userId: 'owner-1' } : null,
-        ),
+        findUnique: jest.fn(async () => ({
+          id: 'purchase-1',
+          userId: 'owner-1',
+          branchId: 'branch-1',
+          status: 'PENDING',
+          paymentExpiresAt: null,
+        })),
       },
       buktiPembayaran: {
         upsert: jest.fn().mockResolvedValue({}),
@@ -163,7 +167,13 @@ describe('PaymentProofService ownership', () => {
     };
     const service = new PaymentProofService(
       db as never,
-      { catalog: jest.fn() } as never,
+      {
+        catalog: jest.fn(),
+        // Pelanggan lain tidak punya izin cabang mana pun.
+        scope: jest.fn(() => {
+          throw Object.assign(new Error('nf'), { code: 'RESOURCE_NOT_FOUND' });
+        }),
+      } as never,
       {} as never,
       { record: jest.fn() } as never,
     );
@@ -173,10 +183,10 @@ describe('PaymentProofService ownership', () => {
   it('does not let another user attach or replace the proof of a purchase', async () => {
     const { db, service } = build();
     await expect(
-      service.finalize(other, 'proof-2', { purchaseId: 'purchase-1' }, 'c'),
+      service.finalize(other, 'proof-0002', { purchaseId: 'purchase-1' }, 'c'),
     ).rejects.toMatchObject({ code: 'RESOURCE_NOT_FOUND' });
     expect(db.buktiPembayaran.upsert).not.toHaveBeenCalled();
-    await service.finalize(owner, 'proof-2', { purchaseId: 'purchase-1' }, 'c');
+    await service.finalize(owner, 'proof-0002', { purchaseId: 'purchase-1' }, 'c');
     expect(db.buktiPembayaran.upsert).toHaveBeenCalledTimes(1);
   });
 

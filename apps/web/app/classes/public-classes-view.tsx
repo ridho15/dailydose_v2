@@ -702,7 +702,7 @@ export function PublicClassesView({
                   </button>
                 )}
                 <a
-                  href="https://wa.me/6281234567890?text=Halo%20Daily%20Dose,%20saya%20ingin%20tanya%20jadwal%20kelas"
+                  href={`https://wa.me/${process.env.NEXT_PUBLIC_OFFICIAL_WHATSAPP || '62895329736127'}?text=Halo%20Daily%20Dose,%20saya%20ingin%20tanya%20jadwal%20kelas`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="min-h-[44px] inline-flex items-center justify-center rounded-dd-md bg-dd-forest px-4 py-2 text-sm font-bold text-white shadow-xs hover:bg-dd-forest-hover"

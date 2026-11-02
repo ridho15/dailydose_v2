@@ -8,7 +8,17 @@ import type { SessionPrincipal } from '../identity/identity.service';
 import { ApiProblem, newId } from '../identity/security';
 import { PackageAccessService } from './package-access.service';
 import { ConfigGatedObjectStorageProvider, type ObjectStorageProvider } from './proof-providers';
+import {
+  alamatBukti,
+  bolehTerimaBukti,
+  catatPemilik,
+  idUnggahan,
+  jenisBukti,
+  pastikanPemilik,
+  teksPendek,
+} from './bukti-aman';
 
+const MAKS_BUKTI_BYTE = 10_000_000;
 const digest = (v: string) => createHash('sha256').update(v).digest('hex');
 
 @Injectable()
@@ -40,16 +50,12 @@ export class PaymentProofService {
     if (!branch?.active) throw new ApiProblem('RESOURCE_NOT_FOUND', HttpStatus.NOT_FOUND);
 
     if (input.orderId) {
-      const isStaff =
-        principal.roles.some((r) => ['ADMIN', 'SUPER_OWNER', 'OWNER', 'MANAGER', 'FINANCE'].includes(r.role as any)) ||
-        principal.capabilities.some((c) => ['payment:review', 'payment:decide', 'purchase:review', 'purchase:decide'].includes(c));
-      const order = await this.db.pembelian.findFirst({
-        where: isStaff ? { id: input.orderId } : { id: input.orderId, userId: principal.userId },
-      });
-      if (!order) throw new ApiProblem('RESOURCE_NOT_FOUND', HttpStatus.NOT_FOUND);
+      const order = await this.pesananBoleh(principal, String(input.orderId));
+      if (!bolehTerimaBukti(order)) throw new ApiProblem('INVALID_STATE_TRANSITION', HttpStatus.CONFLICT);
     }
 
     const id = newId();
+    await catatPemilik(this.storage, id, principal.userId);
     this.auditService.record({
       action: 'PAYMENT_PROOF_ISSUED',
       resourceType: 'PaymentProof',
@@ -70,8 +76,13 @@ export class PaymentProofService {
 
   async uploadContent(principal: SessionPrincipal, id: string, bytes: Buffer) {
     this.access.catalog(principal);
-    if (!Buffer.isBuffer(bytes) || bytes.length === 0)
+    idUnggahan(id);
+    if (!Buffer.isBuffer(bytes) || bytes.length === 0 || bytes.length > MAKS_BUKTI_BYTE)
       throw new ApiProblem('VALIDATION_ERROR', HttpStatus.BAD_REQUEST);
+    // Hanya pemulai unggahan yang boleh mengisi isinya, dan isinya harus gambar atau PDF sungguhan.
+    await pastikanPemilik(this.storage, id, principal.userId);
+    if (!jenisBukti(bytes))
+      throw new ApiProblem('PAYMENT_PROOF_MIME_MISMATCH', HttpStatus.UNPROCESSABLE_ENTITY);
 
     const objectKey = `payment-proofs/${id}`;
     if (this.storage) {
@@ -91,39 +102,33 @@ export class PaymentProofService {
     input: { sha256?: string; sizeBytes?: number; purchaseId?: string; orderId?: string; bankName?: string; accountHolder?: string },
     correlationId: string,
   ) {
+    idUnggahan(id);
     const targetPurchaseId = input.purchaseId ?? input.orderId;
     if (targetPurchaseId) {
-      const isStaff =
-        principal.roles.some((r) => ['ADMIN', 'SUPER_OWNER', 'OWNER', 'MANAGER', 'FINANCE'].includes(r.role as any)) ||
-        principal.capabilities.some((c) => ['payment:review', 'payment:decide', 'purchase:review', 'purchase:decide'].includes(c));
-      const purchase = await this.db.pembelian.findFirst({
-        where: isStaff ? { id: targetPurchaseId } : { id: targetPurchaseId, userId: principal.userId },
-      });
-      if (!purchase) throw new ApiProblem('RESOURCE_NOT_FOUND', HttpStatus.NOT_FOUND);
+      const purchase = await this.pesananBoleh(principal, String(targetPurchaseId));
+      if (!bolehTerimaBukti(purchase)) throw new ApiProblem('INVALID_STATE_TRANSITION', HttpStatus.CONFLICT);
+      await pastikanPemilik(this.storage, id, principal.userId);
+      const isStaff = purchase.userId !== principal.userId;
+      const bankName = teksPendek(input.bankName);
+      const accountHolder = teksPendek(input.accountHolder);
       await this.db.buktiPembayaran.upsert({
         where: { purchaseId: purchase.id },
         create: {
           id,
           purchaseId: purchase.id,
-          fileUrl: `/uploads/payment-proofs/${id}`,
-          bankName: input.bankName ?? null,
-          accountHolder: input.accountHolder ?? null,
+          fileUrl: alamatBukti(id),
+          bankName,
+          accountHolder,
           notes: isStaff ? 'Uploaded manually by staff' : 'Uploaded by customer',
         },
         update: {
-          fileUrl: `/uploads/payment-proofs/${id}`,
-          bankName: input.bankName ?? undefined,
-          accountHolder: input.accountHolder ?? undefined,
+          fileUrl: alamatBukti(id),
+          bankName: bankName ?? undefined,
+          accountHolder: accountHolder ?? undefined,
           notes: isStaff ? 'Uploaded manually by staff' : 'Uploaded by customer',
           uploadedAt: new Date(),
         },
       });
-      if (isStaff && ['AWAITING_PAYMENT', 'ACTION_REQUIRED'].includes(purchase.status)) {
-        await this.db.pembelian.update({
-          where: { id: purchase.id },
-          data: { status: 'PENDING' },
-        });
-      }
     }
 
     this.auditService.record({
@@ -187,24 +192,28 @@ export class PaymentProofService {
     correlationId: string,
   ) {
     this.access.catalog(principal);
-    const nextId = input.paymentProofId ?? input.newPaymentProofUploadId ?? newId();
+    const nextId = idUnggahan(input.paymentProofId ?? input.newPaymentProofUploadId);
     const current = await this.db.pembelian.findUnique({ where: { id: purchaseId } });
     if (!current || current.userId !== principal.userId)
       throw new ApiProblem('RESOURCE_NOT_FOUND', HttpStatus.NOT_FOUND);
+    if (!bolehTerimaBukti(current)) throw new ApiProblem('INVALID_STATE_TRANSITION', HttpStatus.CONFLICT);
+    await pastikanPemilik(this.storage, nextId, principal.userId);
+    const bankName = teksPendek(input.bankName);
+    const accountHolder = teksPendek(input.accountHolder);
 
     await this.db.buktiPembayaran.upsert({
       where: { purchaseId: current.id },
       create: {
         id: nextId,
         purchaseId: current.id,
-        fileUrl: `/uploads/payment-proofs/${nextId}`,
-        bankName: input.bankName ?? null,
-        accountHolder: input.accountHolder ?? null,
+        fileUrl: alamatBukti(nextId),
+        bankName,
+        accountHolder,
       },
       update: {
-        fileUrl: `/uploads/payment-proofs/${nextId}`,
-        bankName: input.bankName ?? undefined,
-        accountHolder: input.accountHolder ?? undefined,
+        fileUrl: alamatBukti(nextId),
+        bankName: bankName ?? undefined,
+        accountHolder: accountHolder ?? undefined,
         uploadedAt: new Date(),
       },
     });
@@ -219,5 +228,14 @@ export class PaymentProofService {
     });
 
     return current;
+  }
+
+  /** Pesanan milik peminta, atau pesanan di cabang yang boleh ditangani staf peminta. */
+  private async pesananBoleh(principal: SessionPrincipal, orderId: string) {
+    const order = await this.db.pembelian.findUnique({ where: { id: orderId } });
+    if (!order) throw new ApiProblem('RESOURCE_NOT_FOUND', HttpStatus.NOT_FOUND);
+    if (order.userId !== principal.userId)
+      this.access.scope(principal, order.branchId, ['payment:review', 'purchase:review', 'purchase:record']);
+    return order;
   }
 }

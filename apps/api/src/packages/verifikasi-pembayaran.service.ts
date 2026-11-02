@@ -1,7 +1,6 @@
 import { HttpStatus, Injectable, Optional } from '@nestjs/common';
 import { Prisma, PurchaseStatus, SessionMutationType } from '@prisma/client';
 import { readFile, stat } from 'node:fs/promises';
-import { resolve } from 'node:path';
 import { PrismaService } from '../database/prisma.service';
 import { IdempotencyService } from '../foundation/idempotency.service';
 import type { SessionPrincipal } from '../identity/identity.service';
@@ -11,6 +10,7 @@ import { buildPhoneSearchVariants } from '../identity/manajemen-pelanggan.servic
 import { NotificationWriterService } from '../notifications/notification-writer.service';
 import { EmailNotificationService } from '../email/email-notification.service';
 import { ConfigGatedObjectStorageProvider } from './proof-providers';
+import { escapeXml, jalurBuktiLokal, jenisBukti } from './bukti-aman';
 
 @Injectable()
 export class PaymentReviewService {
@@ -489,52 +489,36 @@ export class PaymentReviewService {
       this.access.scope(principal, proof.purchase.branchId, ['payment:review', 'purchase:review']);
     }
 
+    // Isi bukti hanya dikirim bila benar-benar gambar/PDF (dicek dari byte awal), dan jenisnya
+    // ditentukan dari isi, bukan dari alamat atau tipe yang tersimpan.
+    const kirim = (bytes: Buffer | null | undefined) => {
+      const mimeType = bytes && bytes.length > 0 ? jenisBukti(bytes) : null;
+      return mimeType ? { bytes: bytes!, mimeType } : null;
+    };
+
     if (proof.fileUrl.startsWith('data:')) {
-      const parts = proof.fileUrl.split(',');
-      const mime = parts[0]?.match(/:(.*?);/)?.[1] || 'image/jpeg';
-      const buffer = Buffer.from(parts[1] || '', 'base64');
-      return { bytes: buffer, mimeType: mime };
+      const hasil = kirim(Buffer.from(proof.fileUrl.split(',')[1] || '', 'base64'));
+      if (hasil) return hasil;
     }
 
     if (this.storage) {
-      try {
-        const bytes = await this.storage.readPrivateObject(`payment-proofs/${proof.id}`);
-        if (bytes && bytes.length > 0) {
-          return { bytes, mimeType: this.detectMime(bytes) };
-        }
-      } catch {}
+      const hasil = kirim(
+        await this.storage.readPrivateObject(`payment-proofs/${proof.id}`).catch(() => null),
+      );
+      if (hasil) return hasil;
+    }
 
-      if (proof.fileUrl && !proof.fileUrl.startsWith('http') && !proof.fileUrl.startsWith('data:')) {
-        const cleanPath = proof.fileUrl.replace(/^\//, '');
-        try {
-          const bytes = await this.storage.readPrivateObject(cleanPath);
-          if (bytes && bytes.length > 0) {
-            return { bytes, mimeType: this.detectMime(bytes) };
-          }
-        } catch {}
-        if (cleanPath.includes('%')) {
-          try {
-            const decodedPath = decodeURIComponent(cleanPath);
-            const bytes = await this.storage.readPrivateObject(decodedPath);
-            if (bytes && bytes.length > 0) {
-              return { bytes, mimeType: this.detectMime(bytes) };
-            }
-          } catch {}
+    // Bukti lama hasil migrasi V1: berkas gambar di bawah folder kerja, tanpa keluar dari sana.
+    if (proof.fileUrl && !/^(https?:|data:)/.test(proof.fileUrl)) {
+      const jalur = jalurBuktiLokal(proof.fileUrl);
+      if (jalur) {
+        const exists = await stat(jalur).then((s) => s.isFile()).catch(() => false);
+        if (exists) {
+          const hasil = kirim(await readFile(jalur).catch(() => null));
+          if (hasil) return hasil;
         }
       }
     }
-
-    try {
-      if (proof.fileUrl && !proof.fileUrl.startsWith('http')) {
-        const cleanPath = proof.fileUrl.replace(/^\//, '');
-        const fullPath = resolve(process.cwd(), cleanPath);
-        const exists = await stat(fullPath).then((s) => s.isFile()).catch(() => false);
-        if (exists) {
-          const bytes = await readFile(fullPath);
-          return { bytes, mimeType: this.detectMime(bytes) };
-        }
-      }
-    } catch {}
 
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="400" viewBox="0 0 600 400">
   <rect width="600" height="400" fill="#f8fafc" rx="8"/>
@@ -543,10 +527,10 @@ export class PaymentReviewService {
     Bukti Pembayaran Terlampir
   </text>
   <text x="300" y="205" dominant-baseline="middle" text-anchor="middle" font-family="sans-serif" font-size="13" fill="#64748b">
-    ID: ${proof.id}
+    ID: ${escapeXml(proof.id)}
   </text>
   <text x="300" y="235" dominant-baseline="middle" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#94a3b8">
-    ${proof.bankName ? `Bank: ${proof.bankName}` : ''}${proof.accountHolder ? ` · A/N: ${proof.accountHolder}` : ''}
+    ${proof.bankName ? `Bank: ${escapeXml(proof.bankName)}` : ''}${proof.accountHolder ? ` · A/N: ${escapeXml(proof.accountHolder)}` : ''}
   </text>
 </svg>`.trim();
     return {

@@ -10,6 +10,7 @@ import { IdempotencyService } from '../foundation/idempotency.service';
 import type { SessionPrincipal } from '../identity/identity.service';
 import { PolicyService } from '../identity/policy.service';
 import { ApiProblem, ENTITY_ID_REGEX } from '../identity/security';
+import { cabangPublik } from '../foundation/tampilan-publik';
 import { paketBerlakuDi } from './cabang-paket';
 import { bookingTeman, maksTemanPaket } from '../packages/bawa-teman';
 
@@ -174,7 +175,7 @@ export class BookingsService {
       source: booking.source ?? 'SELF',
       version: 1,
       idempotentReplay: false,
-      branch: slot?.branch ?? null,
+      branch: cabangPublik(slot?.branch),
       customer: booking.user
         ? {
             id: booking.user.id,

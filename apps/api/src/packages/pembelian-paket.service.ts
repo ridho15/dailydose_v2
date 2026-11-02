@@ -1,4 +1,4 @@
-import { HttpStatus, Injectable } from '@nestjs/common';
+import { HttpStatus, Injectable, Optional } from '@nestjs/common';
 import { Prisma, PurchaseStatus } from '@prisma/client';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { RuntimeConfigService } from '../configuration/runtime-config.service';
@@ -9,6 +9,8 @@ import type { SessionPrincipal } from '../identity/identity.service';
 import { ApiProblem, ENTITY_ID_REGEX } from '../identity/security';
 import { PackageAccessService } from './package-access.service';
 import { PackagePricingService } from './kalkulasi-harga-paket.service';
+import { alamatBukti, bolehTerimaBukti, idUnggahan, pastikanPemilik, teksPendek } from './bukti-aman';
+import { ConfigGatedObjectStorageProvider } from './proof-providers';
 import {
   VoucherService,
   calculateVoucherDiscount,
@@ -35,6 +37,7 @@ export class CustomerOrderService {
     private readonly idempotency: IdempotencyService,
     private readonly config: RuntimeConfigService,
     private readonly auditService: AuditService,
+    @Optional() private readonly storage?: ConfigGatedObjectStorageProvider,
   ) {}
 
   private orderView(order: any, _revealAccount = false) {
@@ -605,40 +608,42 @@ export class CustomerOrderService {
   async attachOrderProof(
     principal: SessionPrincipal,
     orderId: string,
-    input: { paymentProofId?: string; fileUrl?: string; bankName?: string; accountHolder?: string },
+    input: { paymentProofId?: string; bankName?: string; accountHolder?: string },
     correlationId: string,
   ) {
     const order = await this.db.pembelian.findUnique({
       where: { id: orderId },
     });
-    const isOwner = order?.userId === principal.userId;
-    const isStaff =
-      principal.roles.some((r) => ['ADMIN', 'SUPER_OWNER', 'OWNER', 'MANAGER', 'FINANCE'].includes(r.role as any)) ||
-      principal.capabilities.some((c) => ['payment:review', 'payment:decide', 'purchase:review', 'purchase:decide'].includes(c));
+    if (!order) throw new ApiProblem('RESOURCE_NOT_FOUND', HttpStatus.NOT_FOUND);
+    // Staf hanya untuk pesanan di cabangnya (bukan sekadar berperan staf).
+    if (order.userId !== principal.userId)
+      this.access.scope(principal, order.branchId, ['payment:review', 'purchase:review', 'purchase:record']);
+    if (!bolehTerimaBukti(order))
+      throw new ApiProblem('INVALID_STATE_TRANSITION', HttpStatus.CONFLICT);
 
-    if (!order || (!isOwner && !isStaff))
-      throw new ApiProblem('RESOURCE_NOT_FOUND', HttpStatus.NOT_FOUND);
+    // Alamat berkas selalu dibentuk dari id unggahan milik peminta, tidak pernah dari isian body.
+    const proofId = idUnggahan(input.paymentProofId);
+    await pastikanPemilik(this.storage, proofId, principal.userId);
+    const fileUrl = alamatBukti(proofId);
+    const bankName = teksPendek(input.bankName);
+    const accountHolder = teksPendek(input.accountHolder);
 
-    const proofId = input.paymentProofId ?? randomUUID();
-    const fileUrl = input.fileUrl ?? `/uploads/payment-proofs/${proofId}`;
-
-    const proof = await this.db.buktiPembayaran.upsert({
+    await this.db.buktiPembayaran.upsert({
       where: { purchaseId: order.id },
       create: {
         id: proofId,
         purchaseId: order.id,
         fileUrl,
-        bankName: input.bankName ?? null,
-        accountHolder: input.accountHolder ?? null,
+        bankName,
+        accountHolder,
       },
       update: {
         fileUrl,
-        bankName: input.bankName ?? undefined,
-        accountHolder: input.accountHolder ?? undefined,
+        bankName: bankName ?? undefined,
+        accountHolder: accountHolder ?? undefined,
         uploadedAt: new Date(),
       },
     });
-
     this.auditService.record({
       action: 'PAYMENT_PROOF_ATTACHED',
       resourceType: 'Purchase',

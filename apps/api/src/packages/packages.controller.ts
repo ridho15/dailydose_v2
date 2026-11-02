@@ -518,6 +518,9 @@ export class PackagesController {
     response.setHeader('Content-Type', result.mimeType);
     response.setHeader('Cache-Control', 'private, no-store');
     response.setHeader('Content-Disposition', 'inline');
+    // Gambar pengganti SVG tidak boleh menjalankan skrip bila dibuka langsung di tab.
+    if (result.mimeType === 'image/svg+xml')
+      response.setHeader('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; sandbox");
     response.setHeader('X-Content-Type-Options', 'nosniff');
     response.setHeader('Referrer-Policy', 'no-referrer');
     response.send(result.bytes);
