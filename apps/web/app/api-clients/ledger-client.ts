@@ -66,8 +66,25 @@ export type SharedUtilizationItem = {
   totalBookings: number;
 };
 
+export type PackageBookingHistoryItem = {
+  id: string;
+  bookingStatus: string;
+  bookedAt: Date;
+  className: string;
+  branchName: string | null;
+  startsAt: Date | null;
+  instructorName?: string | null;
+  bookedByUser?: {
+    id: string;
+    displayName: string;
+    phoneMasked: string | null;
+    isOwner: boolean;
+  } | null;
+};
+
 export type LedgerHistory = {
   sharedUtilization?: SharedUtilizationItem[];
+  bookingHistory?: PackageBookingHistoryItem[];
   balance: LedgerBalance;
   reservations: {
     activeQuantity: number;
@@ -310,6 +327,11 @@ export const browserLedgerClient: LedgerClient = {
     return {
       balance: mapLedgerBalance(result.balance as Parameters<typeof mapLedgerBalance>[0]),
       sharedUtilization: (result as any).sharedUtilization,
+      bookingHistory: ((result as any).bookingHistory ?? []).map((b: any) => ({
+        ...b,
+        bookedAt: new Date(b.bookedAt),
+        startsAt: b.startsAt ? new Date(b.startsAt) : null,
+      })),
       reservations: {
         activeQuantity: result.reservations?.activeQuantity ?? 0,
         items: (result.reservations?.items ?? []).map((reservation) => ({
@@ -587,6 +609,64 @@ const packageActionMessages: Record<string, string> = {
   FORBIDDEN: 'Anda tidak memiliki izin mengelola paket pelanggan.',
   RESOURCE_NOT_FOUND: 'Paket tidak ditemukan atau berada di luar cakupan cabang Anda.',
 };
+
+export type PackageSyncPreview = {
+  packageId: string;
+  packageName: string;
+  customerName: string;
+  totalSessions: number;
+  current: {
+    remainingSessions: number;
+    usedSessions: number;
+    reservedSessions: number;
+    availableSessions: number;
+    status: string;
+  };
+  calculated: {
+    remainingSessions: number;
+    usedSessions: number;
+    reservedSessions: number;
+    availableSessions: number;
+    status: string;
+  };
+  breakdown: {
+    attendedCount: number;
+    noShowCount: number;
+    bookedCount: number;
+    cancelledCount: number;
+    approvedAdjustmentsDelta: number;
+  };
+  drift: number;
+  hasDrift: boolean;
+};
+
+export async function getPackageSyncPreview(customerPackageId: string): Promise<PackageSyncPreview> {
+  return apiFetch<PackageSyncPreview>(
+    `/customer-packages/${encodeURIComponent(customerPackageId)}/sync-preview`,
+    { label: "Memeriksa sinkronisasi riwayat sesi…" },
+  );
+}
+
+export async function syncCustomerPackage(
+  customerPackageId: string,
+  input: { reason: string },
+) {
+  return apiFetch<{
+    balance: unknown;
+    ledgerEntry: unknown;
+    drift: number;
+    breakdown: unknown;
+    previous: unknown;
+    calculated: unknown;
+  }>(
+    `/customer-packages/${encodeURIComponent(customerPackageId)}/sync`,
+    {
+      method: "POST",
+      body: JSON.stringify(input),
+      label: "Menerapkan sinkronisasi riwayat sesi…",
+    },
+  );
+}
 
 export function packageActionFailure(error: unknown): string {
   notifySessionFailure(error);

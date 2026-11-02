@@ -63,7 +63,11 @@ function setup() {
       findUniqueOrThrow: jest.fn().mockResolvedValue(pkgRow()),
       update: jest.fn().mockResolvedValue({}),
     },
-    pemesananKelas: { count: jest.fn().mockResolvedValue(0) },
+    pemesananKelas: {
+      count: jest.fn().mockResolvedValue(0),
+      groupBy: jest.fn().mockResolvedValue([]),
+      aggregate: jest.fn().mockResolvedValue({ _sum: { sessionCount: 0 } }),
+    },
     sessionAdjustRequest: {
       count: jest.fn().mockResolvedValue(0),
       create: jest.fn().mockImplementation(async ({ data }) =>
@@ -76,6 +80,7 @@ function setup() {
       findUnique: jest.fn().mockResolvedValue(requestRow()),
       findUniqueOrThrow: jest.fn().mockResolvedValue(requestRow({ status: 'APPROVED', version: 2 })),
       updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      aggregate: jest.fn().mockResolvedValue({ _sum: { sessionCount: 0 } }),
     },
     sessionLedger: {
       create: jest.fn().mockImplementation(async ({ data }) => ({
@@ -88,8 +93,14 @@ function setup() {
   const db = {
     ...tx,
     $transaction: jest.fn(async (fn: (t: typeof tx) => unknown) => fn(tx)),
+    sessionLedger: {
+      ...tx.sessionLedger,
+      findMany: jest.fn().mockResolvedValue([]),
+      groupBy: jest.fn().mockResolvedValue([]),
+    },
     pemesananKelas: {
       ...tx.pemesananKelas,
+      findMany: jest.fn().mockResolvedValue([]),
       groupBy: jest.fn().mockResolvedValue([]),
     },
     sessionAdjustRequest: {
@@ -400,15 +411,86 @@ describe('LedgerService reads', () => {
       ...pkgRow(),
       bookings: [],
     });
-    (db as unknown as { sessionLedger: { findMany: jest.Mock } }).sessionLedger = {
-      findMany: jest.fn().mockResolvedValue([]),
-    } as never;
     await expect(service.getPackageLedger(owner, packageId)).resolves.toMatchObject({
       page: { hasMore: false },
     });
     await expect(service.getPackageLedger(stranger, packageId)).rejects.toMatchObject({
       code: 'RESOURCE_NOT_FOUND',
     });
+  });
+
+  it('QA-LEDGER-DETAIL: returns accurate balance.usage and full bookingHistory for package', async () => {
+    const { service, db } = setup();
+    const owner = principalFor(id(200), ['ledger:read'], []);
+    (db.paketPelanggan as unknown as { findUnique: jest.Mock }).findUnique.mockResolvedValue({
+      ...pkgRow({
+        totalSessions: 20,
+        usedSessions: 1,
+        remainingSessions: 19,
+      }),
+      bookings: [],
+    });
+    db.pemesananKelas.findMany = jest.fn().mockResolvedValue([
+      {
+        id: id(301),
+        status: "ATTENDED",
+        bookedAt: new Date("2025-01-01T10:00:00Z"),
+        user: { id: id(200), displayName: "Maya", phone: "081234567890" },
+        classSlot: {
+          startAt: new Date("2025-01-02T10:00:00Z"),
+          classType: { name: "Private Class" },
+          branch: { name: "Green Garden" },
+          instructor: { id: id(401), displayName: "Coach Sarah" },
+        },
+      },
+      {
+        id: id(302),
+        status: "CANCELLED",
+        bookedAt: new Date("2024-12-15T10:00:00Z"),
+        user: { id: id(200), displayName: "Maya", phone: "081234567890" },
+        classSlot: null,
+      },
+    ]);
+
+    const result = await service.getPackageLedger(owner, packageId);
+
+    // Verify balance.usage contains initialSessions and usedSessions
+    expect(result.balance).toMatchObject({
+      sessionCountSnapshot: 20,
+      usage: {
+        initialSessions: 20,
+        usedSessions: 1,
+      },
+    });
+
+    // Verify bookingHistory returns both attended and cancelled
+    expect(result.bookingHistory).toHaveLength(2);
+    expect(result.bookingHistory[0]).toMatchObject({
+      id: id(301),
+      bookingStatus: "ATTENDED",
+      className: "Private Class",
+      branchName: "Green Garden",
+      instructorName: "Coach Sarah",
+    });
+    expect(result.bookingHistory[1]).toMatchObject({
+      id: id(302),
+      bookingStatus: "CANCELLED",
+      className: "Kelas",
+    });
+  });
+
+  it('NON-HAPPY-LEDGER-DETAIL: gracefully handles package with 0 bookings', async () => {
+    const { service, db } = setup();
+    const owner = principalFor(id(200), ['ledger:read'], []);
+    (db.paketPelanggan as unknown as { findUnique: jest.Mock }).findUnique.mockResolvedValue({
+      ...pkgRow({ totalSessions: 10, usedSessions: 0 }),
+      bookings: [],
+    });
+    db.pemesananKelas.findMany = jest.fn().mockResolvedValue([]);
+
+    const result = await service.getPackageLedger(owner, packageId);
+    expect(result.bookingHistory).toEqual([]);
+    expect(result.balance.usage.usedSessions).toBe(0);
   });
 });
 
@@ -579,3 +661,303 @@ describe('LedgerService.directAdjustment (Non-Happy Path & Direct Execution)', (
   });
 });
 
+
+describe("LedgerService.syncCustomerPackage & previewSyncCustomerPackage (Super Admin QA & Non-Happy Path)", () => {
+  const superOwner = {
+    sessionId: "s-super",
+    userId: id(999),
+    roles: [{ role: "SUPER_OWNER" as const, branchId: null }],
+    capabilities: ["ledger:read", "ledger:adjust:read", "ledger:adjust:decide", "customer-package:manage"],
+    branchIds: [],
+  };
+
+  const staffAdmin = {
+    sessionId: "s-admin",
+    userId: id(100),
+    roles: [{ role: "ADMIN" as const, branchId: branchA }],
+    capabilities: ["ledger:read", "ledger:adjust:read", "customer-package:manage"],
+    branchIds: [branchA],
+  };
+
+  describe("previewSyncCustomerPackage", () => {
+    it("QA-SYNC-1: calculates preview metrics accurately from booking history and adjustments", async () => {
+      const { service, db } = setup();
+      db.paketPelanggan.findUnique = jest.fn().mockResolvedValue(
+        pkgRow({
+          totalSessions: 10,
+          remainingSessions: 5, // currently recorded 5
+          usedSessions: 2,      // currently recorded 2
+          status: "ACTIVE",
+        }),
+      );
+      db.pemesananKelas.groupBy = jest.fn().mockResolvedValue([
+        { status: "ATTENDED", _count: { _all: 3 } },
+        { status: "NO_SHOW", _count: { _all: 1 } },
+        { status: "BOOKED", _count: { _all: 2 } },
+        { status: "CANCELLED", _count: { _all: 4 } },
+      ]);
+      db.sessionAdjustRequest.aggregate = jest.fn().mockResolvedValue({
+        _sum: { sessionCount: 1 }, // +1 approved adjustment
+      });
+
+      const preview = await service.previewSyncCustomerPackage(superOwner, packageId);
+
+      // calculatedUsed = 3 (ATTENDED) + 1 (NO_SHOW) = 4
+      // calculatedRemaining = 10 - 4 + 1 = 7
+      // drift = 7 - 5 = +2
+      // reserved = 2 (BOOKED)
+      // available = 7 - 2 = 5
+      expect(preview).toEqual({
+        packageId,
+        packageName: "Paket 4",
+        customerName: "Maya",
+        totalSessions: 10,
+        current: {
+          remainingSessions: 5,
+          usedSessions: 2,
+          reservedSessions: 2,
+          availableSessions: 3, // 5 - 2
+          status: "ACTIVE",
+        },
+        calculated: {
+          remainingSessions: 7,
+          usedSessions: 4,
+          reservedSessions: 2,
+          availableSessions: 5, // 7 - 2
+          status: "ACTIVE",
+        },
+        breakdown: {
+          attendedCount: 3,
+          noShowCount: 1,
+          bookedCount: 2,
+          cancelledCount: 4,
+          approvedAdjustmentsDelta: 1,
+        },
+        drift: 2,
+        hasDrift: true,
+      });
+    });
+
+    it("NON-HAPPY-1: rejects non-SUPER_OWNER caller with 403 FORBIDDEN", async () => {
+      const { service } = setup();
+      await expect(service.previewSyncCustomerPackage(staffAdmin, packageId)).rejects.toMatchObject({
+        status: 403,
+        code: "FORBIDDEN",
+      });
+      await expect(service.previewSyncCustomerPackage(customer, packageId)).rejects.toMatchObject({
+        status: 403,
+        code: "FORBIDDEN",
+      });
+    });
+
+    it("NON-HAPPY-2: rejects invalid UUID package id with 404 RESOURCE_NOT_FOUND", async () => {
+      const { service } = setup();
+      await expect(service.previewSyncCustomerPackage(superOwner, "invalid-uuid")).rejects.toMatchObject({
+        status: 404,
+        code: "RESOURCE_NOT_FOUND",
+      });
+    });
+
+    it("NON-HAPPY-3: throws 404 RESOURCE_NOT_FOUND when package does not exist", async () => {
+      const { service, db } = setup();
+      db.paketPelanggan.findUnique = jest.fn().mockResolvedValue(null);
+      await expect(service.previewSyncCustomerPackage(superOwner, packageId)).rejects.toMatchObject({
+        status: 404,
+        code: "RESOURCE_NOT_FOUND",
+      });
+    });
+  });
+
+  describe("syncCustomerPackage", () => {
+    it("QA-SYNC-2: executes sync, writes session ledger and audit log, and updates package", async () => {
+      const { service, tx, audit } = setup();
+      tx.paketPelanggan.findUnique = jest.fn().mockResolvedValue(
+        pkgRow({
+          totalSessions: 10,
+          remainingSessions: 5,
+          usedSessions: 2,
+          status: "ACTIVE",
+        }),
+      );
+      tx.pemesananKelas.groupBy = jest.fn().mockResolvedValue([
+        { status: "ATTENDED", _count: { _all: 3 } },
+        { status: "NO_SHOW", _count: { _all: 1 } },
+        { status: "BOOKED", _count: { _all: 1 } },
+      ]);
+      tx.sessionAdjustRequest.aggregate = jest.fn().mockResolvedValue({
+        _sum: { sessionCount: 0 },
+      });
+      tx.paketPelanggan.findUniqueOrThrow = jest.fn().mockResolvedValue(
+        pkgRow({
+          totalSessions: 10,
+          remainingSessions: 6,
+          usedSessions: 4,
+          status: "ACTIVE",
+        }),
+      );
+
+      const result = await service.syncCustomerPackage(superOwner, packageId, {
+        reason: "Koreksi riwayat kehadiran member oleh Super Admin",
+      });
+
+      // calculatedRemaining: 10 - 4 = 6. drift: 6 - 5 = 1
+      expect(tx.paketPelanggan.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: packageId },
+          data: {
+            remainingSessions: 6,
+            usedSessions: 4,
+            status: "ACTIVE",
+          },
+        }),
+      );
+
+      expect(tx.sessionLedger.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            customerPackageId: packageId,
+            type: "ADJUST_MANUAL",
+            amount: 1,
+            balanceAfter: 6,
+            createdById: superOwner.userId,
+            notes: expect.stringContaining("Sinkronisasi riwayat sesi Super Admin (drift: +1)"),
+          }),
+        }),
+      );
+
+      expect(audit.catat).toHaveBeenCalledWith(
+        null,
+        expect.objectContaining({
+          action: "CUSTOMER_PACKAGE_SYNC",
+          objectId: packageId,
+          objectType: "PaketPelanggan",
+          actorId: superOwner.userId,
+        }),
+      );
+
+      expect(result.drift).toBe(1);
+      expect(result.calculated.remainingSessions).toBe(6);
+      expect(result.calculated.usedSessions).toBe(4);
+    });
+
+    it("NON-HAPPY-4: rejects non-SUPER_OWNER caller with 403 FORBIDDEN", async () => {
+      const { service } = setup();
+      await expect(
+        service.syncCustomerPackage(staffAdmin, packageId, { reason: "Valid reason here" }),
+      ).rejects.toMatchObject({
+        status: 403,
+        code: "FORBIDDEN",
+      });
+    });
+
+    it("NON-HAPPY-5: rejects missing, empty, or short (< 5 chars) reason with 422 VALIDATION_ERROR", async () => {
+      const { service } = setup();
+      await expect(
+        service.syncCustomerPackage(superOwner, packageId, { reason: "" }),
+      ).rejects.toMatchObject({
+        status: 422,
+        code: "VALIDATION_ERROR",
+      });
+      await expect(
+        service.syncCustomerPackage(superOwner, packageId, { reason: "abc" }),
+      ).rejects.toMatchObject({
+        status: 422,
+        code: "VALIDATION_ERROR",
+      });
+      await expect(
+        service.syncCustomerPackage(superOwner, packageId, {} as never),
+      ).rejects.toMatchObject({
+        status: 422,
+        code: "VALIDATION_ERROR",
+      });
+    });
+
+    it("NON-HAPPY-6: rejects reason exceeding 500 characters with 422 VALIDATION_ERROR", async () => {
+      const { service } = setup();
+      const longReason = "A".repeat(501);
+      await expect(
+        service.syncCustomerPackage(superOwner, packageId, { reason: longReason }),
+      ).rejects.toMatchObject({
+        status: 422,
+        code: "VALIDATION_ERROR",
+      });
+    });
+
+    it("NON-HAPPY-7: sets status to DEPLETED when remaining sessions reach 0", async () => {
+      const { service, tx } = setup();
+      tx.paketPelanggan.findUnique = jest.fn().mockResolvedValue(
+        pkgRow({
+          totalSessions: 2,
+          remainingSessions: 1,
+          usedSessions: 1,
+          status: "ACTIVE",
+        }),
+      );
+      tx.pemesananKelas.groupBy = jest.fn().mockResolvedValue([
+        { status: "ATTENDED", _count: { _all: 2 } },
+      ]);
+      tx.sessionAdjustRequest.aggregate = jest.fn().mockResolvedValue({
+        _sum: { sessionCount: 0 },
+      });
+      tx.paketPelanggan.findUniqueOrThrow = jest.fn().mockResolvedValue(
+        pkgRow({
+          totalSessions: 2,
+          remainingSessions: 0,
+          usedSessions: 2,
+          status: "DEPLETED",
+        }),
+      );
+
+      await service.syncCustomerPackage(superOwner, packageId, {
+        reason: "Sinkronisasi sesi habis",
+      });
+
+      expect(tx.paketPelanggan.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            remainingSessions: 0,
+            usedSessions: 2,
+            status: "DEPLETED",
+          }),
+        }),
+      );
+    });
+
+    it("NON-HAPPY-8: preserves FROZEN status when package is frozen", async () => {
+      const { service, tx } = setup();
+      tx.paketPelanggan.findUnique = jest.fn().mockResolvedValue(
+        pkgRow({
+          totalSessions: 5,
+          remainingSessions: 5,
+          usedSessions: 0,
+          status: "FROZEN",
+        }),
+      );
+      tx.pemesananKelas.groupBy = jest.fn().mockResolvedValue([]);
+      tx.sessionAdjustRequest.aggregate = jest.fn().mockResolvedValue({
+        _sum: { sessionCount: 0 },
+      });
+      tx.paketPelanggan.findUniqueOrThrow = jest.fn().mockResolvedValue(
+        pkgRow({
+          totalSessions: 5,
+          remainingSessions: 5,
+          usedSessions: 0,
+          status: "FROZEN",
+        }),
+      );
+
+      const res = await service.syncCustomerPackage(superOwner, packageId, {
+        reason: "Sinkronisasi paket beku",
+      });
+
+      expect(tx.paketPelanggan.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            status: "FROZEN",
+          }),
+        }),
+      );
+      expect(res.calculated.status).toBe("FROZEN");
+    });
+  });
+});

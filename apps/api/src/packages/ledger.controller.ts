@@ -48,6 +48,23 @@ export class LedgerController {
     return this.ledger.getPackageLedger(req.principal, id, cursor);
   }
 
+  @Get('customer-packages/:id/sync-preview')
+  previewSyncCustomerPackage(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') id: string,
+  ) {
+    return this.ledger.previewSyncCustomerPackage(req.principal, id);
+  }
+
+  @Post('customer-packages/:id/sync')
+  syncCustomerPackage(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Body() body: { reason?: string },
+  ) {
+    return this.ledger.syncCustomerPackage(req.principal, id, body);
+  }
+
   // Perpanjang masa berlaku, bekukan, atau buka kembali paket pelanggan (izin `customer-package:manage`).
   @Post('customer-packages/:id/:action')
   manageCustomerPackage(

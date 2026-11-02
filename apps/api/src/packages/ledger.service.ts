@@ -400,25 +400,33 @@ export class LedgerService {
       ]),
     );
 
-    const relatedBookings =
-      bookingIds.length > 0 && this.db.pemesananKelas?.findMany
-        ? await this.db.pemesananKelas.findMany({
-            where: { id: { in: bookingIds } },
-            include: {
-              user: { select: { id: true, displayName: true, phone: true } },
-              classSlot: { include: { classType: true, branch: true } },
-            },
-          })
-        : [];
-    const bookingMap = new Map(relatedBookings.map((b) => [b.id, b]));
+    const movementSum = await this.db.sessionLedger.groupBy({
+      by: ["type"],
+      where: { customerPackageId: id },
+      _sum: { amount: true },
+    });
+    const reversedSessions = movementSum.find((m) => m.type === "REFUND_AUTOCANCEL")?._sum.amount ?? 0;
+    const adjustmentDelta = movementSum.find((m) => m.type === "ADJUST_MANUAL")?._sum.amount ?? 0;
 
-    const allPackageBookings =
+    const packageBookings =
       this.db.pemesananKelas?.findMany
         ? await this.db.pemesananKelas.findMany({
             where: { customerPackageId: id },
-            select: { id: true, userId: true, status: true },
+            include: {
+              user: { select: { id: true, displayName: true, phone: true } },
+              classSlot: {
+                include: {
+                  classType: true,
+                  branch: true,
+                  instructor: { select: { id: true, displayName: true } },
+                },
+              },
+            },
+            orderBy: { bookedAt: "desc" },
           })
         : [];
+
+    const bookingMap = new Map(packageBookings.map((b) => [b.id, b]));
 
     const membersList = [
       {
@@ -438,7 +446,7 @@ export class LedgerService {
     ];
 
     const sharedUtilization = membersList.map((m) => {
-      const userBookings = allPackageBookings.filter((b) => b.userId === m.userId);
+      const userBookings = packageBookings.filter((b) => b.userId === m.userId);
       return {
         userId: m.userId,
         displayName: m.displayName,
@@ -454,7 +462,33 @@ export class LedgerService {
     });
 
     return {
-      balance: this.balanceView(pkg, pkg.bookings.length),
+      balance: {
+        ...this.balanceView(pkg, pkg.bookings.length),
+        sessionCountSnapshot: pkg.totalSessions,
+        usage: {
+          initialSessions: pkg.totalSessions,
+          usedSessions: pkg.usedSessions,
+          reversedSessions,
+          adjustmentDelta,
+        },
+      },
+      bookingHistory: packageBookings.map((b) => ({
+        id: b.id,
+        bookingStatus: b.status,
+        bookedAt: b.bookedAt.toISOString(),
+        className: b.classSlot?.classType?.name ?? "Kelas",
+        branchName: b.classSlot?.branch?.name ?? null,
+        startsAt: b.classSlot?.startAt ? b.classSlot.startAt.toISOString() : null,
+        instructorName: b.classSlot?.instructor?.displayName ?? null,
+        bookedByUser: b.user
+          ? {
+              id: b.user.id,
+              displayName: b.user.displayName,
+              phoneMasked: maskPhone(b.user.phone),
+              isOwner: b.user.id === pkg.userId,
+            }
+          : null,
+      })),
       sharedUtilization,
       reservations: {
         activeQuantity: (pkg.bookings ?? []).length,
@@ -1180,6 +1214,256 @@ export class LedgerService {
     return {
       balance: this.balanceView(outcome.updated, reserved),
       ledgerEntry: this.ledgerEntryView(outcome.entry),
+    };
+  }
+
+  private assertSuperOwner(principal: SessionPrincipal) {
+    const isSuperOwner = principal.roles.some((r) => r.role === "SUPER_OWNER");
+    if (!isSuperOwner) {
+      throw new ApiProblem("FORBIDDEN", HttpStatus.FORBIDDEN);
+    }
+  }
+
+  async previewSyncCustomerPackage(principal: SessionPrincipal, id: string) {
+    this.assertSuperOwner(principal);
+    if (!UUID.test(id)) throw new ApiProblem("RESOURCE_NOT_FOUND", HttpStatus.NOT_FOUND);
+
+    const pkg = await this.db.paketPelanggan.findUnique({
+      where: { id },
+      include: packageInclude,
+    });
+    if (!pkg) throw new ApiProblem("RESOURCE_NOT_FOUND", HttpStatus.NOT_FOUND);
+
+    const bookingCounts = await this.db.pemesananKelas.groupBy({
+      by: ["status"],
+      where: { customerPackageId: id },
+      _count: { _all: true },
+    });
+    let attendedCount = 0;
+    let noShowCount = 0;
+    let bookedCount = 0;
+    let cancelledCount = 0;
+    for (const b of bookingCounts) {
+      if (b.status === "ATTENDED") attendedCount = b._count._all;
+      else if (b.status === "NO_SHOW") noShowCount = b._count._all;
+      else if (b.status === "BOOKED") bookedCount = b._count._all;
+      else if (b.status === "CANCELLED") cancelledCount = b._count._all;
+    }
+
+    const adjSum = await this.db.sessionAdjustRequest.aggregate({
+      where: { customerPackageId: id, status: AdjustRequestStatus.APPROVED },
+      _sum: { sessionCount: true },
+    });
+    const approvedAdjustmentsDelta = adjSum._sum.sessionCount ?? 0;
+
+    const calculatedUsed = attendedCount + noShowCount;
+    const calculatedRemaining = Math.max(
+      0,
+      pkg.totalSessions - calculatedUsed + approvedAdjustmentsDelta,
+    );
+    const calculatedReserved = bookedCount;
+
+    const now = new Date();
+    let calculatedStatus = pkg.status;
+    if (pkg.status !== "FROZEN") {
+      if (pkg.validUntil <= now) {
+        calculatedStatus = "EXPIRED";
+      } else if (calculatedRemaining <= 0) {
+        calculatedStatus = "DEPLETED";
+      } else {
+        calculatedStatus = "ACTIVE";
+      }
+    }
+
+    const currentReserved = bookedCount;
+    const currentAvailable =
+      pkg.status === "FROZEN"
+        ? 0
+        : Math.max(0, pkg.remainingSessions - currentReserved);
+    const calculatedAvailable =
+      calculatedStatus === "FROZEN"
+        ? 0
+        : Math.max(0, calculatedRemaining - calculatedReserved);
+
+    const drift = calculatedRemaining - pkg.remainingSessions;
+    const hasDrift =
+      drift !== 0 ||
+      calculatedUsed !== pkg.usedSessions ||
+      calculatedStatus !== pkg.status;
+
+    return {
+      packageId: pkg.id,
+      packageName: pkg.package?.name ?? "Paket",
+      customerName: pkg.user?.displayName ?? "Pelanggan",
+      totalSessions: pkg.totalSessions,
+      current: {
+        remainingSessions: pkg.remainingSessions,
+        usedSessions: pkg.usedSessions,
+        reservedSessions: currentReserved,
+        availableSessions: currentAvailable,
+        status: pkg.status,
+      },
+      calculated: {
+        remainingSessions: calculatedRemaining,
+        usedSessions: calculatedUsed,
+        reservedSessions: calculatedReserved,
+        availableSessions: calculatedAvailable,
+        status: calculatedStatus,
+      },
+      breakdown: {
+        attendedCount,
+        noShowCount,
+        bookedCount,
+        cancelledCount,
+        approvedAdjustmentsDelta,
+      },
+      drift,
+      hasDrift,
+    };
+  }
+
+  async syncCustomerPackage(
+    principal: SessionPrincipal,
+    id: string,
+    body: { reason?: string },
+  ) {
+    this.assertSuperOwner(principal);
+    if (!UUID.test(id)) throw new ApiProblem("RESOURCE_NOT_FOUND", HttpStatus.NOT_FOUND);
+
+    const reason = typeof body?.reason === "string" ? body.reason.trim() : "";
+    if (reason.length < 5 || reason.length > 500) {
+      throw problem("VALIDATION_ERROR", HttpStatus.UNPROCESSABLE_ENTITY, "reason");
+    }
+
+    const outcome = await this.db.$transaction(
+      async (tx) => {
+        const pkg = await tx.paketPelanggan.findUnique({
+          where: { id },
+          include: packageInclude,
+        });
+        if (!pkg) throw new ApiProblem("RESOURCE_NOT_FOUND", HttpStatus.NOT_FOUND);
+
+        const bookingCounts = await tx.pemesananKelas.groupBy({
+          by: ["status"],
+          where: { customerPackageId: id },
+          _count: { _all: true },
+        });
+        let attendedCount = 0;
+        let noShowCount = 0;
+        let bookedCount = 0;
+        let cancelledCount = 0;
+        for (const b of bookingCounts) {
+          if (b.status === "ATTENDED") attendedCount = b._count._all;
+          else if (b.status === "NO_SHOW") noShowCount = b._count._all;
+          else if (b.status === "BOOKED") bookedCount = b._count._all;
+          else if (b.status === "CANCELLED") cancelledCount = b._count._all;
+        }
+
+        const adjSum = await tx.sessionAdjustRequest.aggregate({
+          where: { customerPackageId: id, status: AdjustRequestStatus.APPROVED },
+          _sum: { sessionCount: true },
+        });
+        const approvedAdjustmentsDelta = adjSum._sum.sessionCount ?? 0;
+
+        const calculatedUsed = attendedCount + noShowCount;
+        const calculatedRemaining = Math.max(
+          0,
+          pkg.totalSessions - calculatedUsed + approvedAdjustmentsDelta,
+        );
+        const calculatedReserved = bookedCount;
+        const drift = calculatedRemaining - pkg.remainingSessions;
+
+        const now = new Date();
+        let calculatedStatus = pkg.status;
+        if (pkg.status !== "FROZEN") {
+          if (pkg.validUntil <= now) {
+            calculatedStatus = "EXPIRED";
+          } else if (calculatedRemaining <= 0) {
+            calculatedStatus = "DEPLETED";
+          } else {
+            calculatedStatus = "ACTIVE";
+          }
+        }
+
+        await tx.paketPelanggan.update({
+          where: { id },
+          data: {
+            remainingSessions: calculatedRemaining,
+            usedSessions: calculatedUsed,
+            status: calculatedStatus,
+          },
+        });
+
+        const ledgerEntry = await tx.sessionLedger.create({
+          data: {
+            customerPackageId: id,
+            type: SessionMutationType.ADJUST_MANUAL,
+            amount: drift,
+            balanceAfter: calculatedRemaining,
+            referenceId: id,
+            notes: `Sinkronisasi riwayat sesi Super Admin (drift: ${drift > 0 ? "+" : ""}${drift}): ${reason}`.slice(0, 255),
+            createdById: principal.userId,
+          },
+        });
+
+        const updated = await tx.paketPelanggan.findUniqueOrThrow({
+          where: { id },
+          include: packageInclude,
+        });
+
+        return {
+          updated,
+          ledgerEntry,
+          previous: {
+            remainingSessions: pkg.remainingSessions,
+            usedSessions: pkg.usedSessions,
+            status: pkg.status,
+          },
+          calculated: {
+            remainingSessions: calculatedRemaining,
+            usedSessions: calculatedUsed,
+            reservedSessions: calculatedReserved,
+            availableSessions:
+              calculatedStatus === "FROZEN"
+                ? 0
+                : Math.max(0, calculatedRemaining - calculatedReserved),
+            status: calculatedStatus,
+          },
+          breakdown: {
+            attendedCount,
+            noShowCount,
+            bookedCount,
+            cancelledCount,
+            approvedAdjustmentsDelta,
+          },
+          drift,
+        };
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
+
+    await this.audit.catat(null, {
+      actorId: principal.userId,
+      branchId: outcome.updated.purchase?.branchId ?? null,
+      action: "CUSTOMER_PACKAGE_SYNC",
+      objectType: "PaketPelanggan",
+      objectId: id,
+      afterMasked: {
+        previous: outcome.previous,
+        calculated: outcome.calculated,
+        drift: outcome.drift,
+        reason,
+      },
+    });
+
+    const reserved = (await this.reservedByPackage([id])).get(id) ?? 0;
+    return {
+      balance: this.balanceView(outcome.updated, reserved),
+      ledgerEntry: this.ledgerEntryView(outcome.ledgerEntry),
+      drift: outcome.drift,
+      breakdown: outcome.breakdown,
+      previous: outcome.previous,
+      calculated: outcome.calculated,
     };
   }
 
