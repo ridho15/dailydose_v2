@@ -26,6 +26,7 @@
     "sharp": "^0.35.0"
   },
   "devDependencies": {
+    "@e2e-dev/web": "^0.15.4",
     "@playwright/test": "^1.61.1",
     "@tailwindcss/postcss": "^4.3.3",
     "@testing-library/jest-dom": "^6.9.1",
@@ -37,6 +38,7 @@
     "@types/react": "^19.1.12",
     "@types/react-dom": "^19.1.9",
     "axe-core": "^4.12.1",
+    "e2e": "^0.22.0",
     "jsdom": "^29.1.1",
     "postcss": "^8.5.22",
     "tailwindcss": "^4.3.3",
