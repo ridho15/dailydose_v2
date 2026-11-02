@@ -105,6 +105,7 @@ export function ClassSlotView({
   const canOperate = Boolean(branch && canManage);
   const canOperateAttendance = Boolean(branch && canManageAttendance);
   const canCreateSlot = Boolean((branch || (globalMode && branches.length > 0)) && canManage);
+  const isSuperOwner = Boolean(sessionContext?.session?.roles?.includes('SUPER_OWNER'));
   const [reference, setReference] = useState(new Date());
   const [slots, setSlots] = useState<ClassSlot[]>([]);
   const [classTypes, setClassTypes] = useState<ClassTypeOption[]>([]);
@@ -922,6 +923,7 @@ export function ClassSlotView({
         ) : panel?.kind === 'detail' ? (
           <DetailPanel
             slot={panel.slot}
+            isSuperOwner={isSuperOwner}
             branchCode={branch?.code ?? branches.find((b) => b.id === panel.slot.branchId)?.code}
             instructorName={instructorName(panel.slot.instructorUserId, panel.slot)}
             classTypes={classTypes}
@@ -982,11 +984,14 @@ export function ClassSlotView({
                 );
             }}
             onUpdate={async (input) => {
+              const hasBookings = (panel.slot.bookedCount ?? 0) > 0;
               const accepted = await feedback.confirm({
                 tone: 'warning',
                 title: 'Simpan perubahan kelas?',
                 message:
-                  'Jadwal dan konfigurasi kapasitas akan dihitung ulang. Perubahan dicatat dalam audit.',
+                  hasBookings
+                    ? `Perhatian: Ada ${panel.slot.bookedCount} peserta yang sudah terdaftar di kelas ini. Perubahan jadwal atau tipe kelas akan memengaruhi tiket peserta tersebut. Lanjutkan penyimpanan?`
+                    : 'Jadwal dan konfigurasi kapasitas akan dihitung ulang. Perubahan dicatat dalam audit.',
                 confirmLabel: 'Simpan perubahan',
               });
               if (accepted)

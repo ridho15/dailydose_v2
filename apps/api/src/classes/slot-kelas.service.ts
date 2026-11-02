@@ -516,7 +516,11 @@ export class ClassSlotService {
         const slot = await tx.slotKelas.findUnique({ where: { id } });
         if (!slot) throw new ApiProblem('RESOURCE_NOT_FOUND', HttpStatus.NOT_FOUND);
         this.scope(principal, slot.branchId, 'class-slot:manage');
-        this.assertClaimable(slot, expectedVersion, STATUS_ALLOWED.assign);
+        const isSuperOwner = principal.roles.some((r) => r.role === 'SUPER_OWNER');
+        const allowedStatuses = isSuperOwner
+          ? [...STATUS_ALLOWED.assign, ClassSlotStatus.COMPLETED]
+          : STATUS_ALLOWED.assign;
+        this.assertClaimable(slot, expectedVersion, allowedStatuses);
 
         const instructorCollision = await tx.slotKelas.findFirst({
           where: {
@@ -533,7 +537,7 @@ export class ClassSlotService {
         });
         if (instructorCollision) throw bentrokJadwal(instructorCollision, input.instructorUserId);
 
-        await this.claim(tx, id, expectedVersion, STATUS_ALLOWED.assign, {
+        await this.claim(tx, id, expectedVersion, allowedStatuses, {
           instructorId: input.instructorUserId,
         });
         await this.auditSlot(
@@ -593,7 +597,11 @@ export class ClassSlotService {
         });
         if (!slot) throw new ApiProblem('RESOURCE_NOT_FOUND', HttpStatus.NOT_FOUND);
         this.scope(principal, slot.branchId, 'class-slot:manage');
-        this.assertClaimable(slot, expectedVersion, STATUS_ALLOWED.update);
+        const isSuperOwner = principal.roles.some((r) => r.role === 'SUPER_OWNER');
+        const allowedStatuses = isSuperOwner
+          ? [...STATUS_ALLOWED.update, ClassSlotStatus.COMPLETED]
+          : STATUS_ALLOWED.update;
+        this.assertClaimable(slot, expectedVersion, allowedStatuses);
 
         const targetStudioId =
           input.studioId !== undefined && input.studioId !== '' ? input.studioId : slot.studioId;
@@ -615,6 +623,7 @@ export class ClassSlotService {
           !scheduleOrTypeChanged;
 
         if (
+          !isSuperOwner &&
           (slot.status === ClassSlotStatus.PUBLISHED || slot.status === ClassSlotStatus.CONFIRMED) &&
           hasBookings &&
           !isCapacityAdjustment
@@ -711,7 +720,7 @@ export class ClassSlotService {
         });
         if (updateCollision) throw bentrokJadwal(updateCollision, targetInstructorId ?? null);
 
-        await this.claim(tx, id, expectedVersion, STATUS_ALLOWED.update, {
+        await this.claim(tx, id, expectedVersion, allowedStatuses, {
           classTypeId: input.classTypeId,
           instructorId: targetInstructorId,
           studioId: targetStudioId,
@@ -722,8 +731,16 @@ export class ClassSlotService {
           endAt,
           notes: input.reason ?? slot.notes,
         });
+        const isOverrideBySuperOwner =
+          isSuperOwner && (hasBookings || slot.status === ClassSlotStatus.COMPLETED);
         await this.auditSlot(
-          tx, principal, _correlationId, 'class_slot.updated', slot,
+          tx,
+          principal,
+          _correlationId,
+          isOverrideBySuperOwner
+            ? 'class_slot.override_updated_by_super_owner'
+            : 'class_slot.updated',
+          slot,
           {
             classTypeId: slot.classTypeId,
             instructorId: slot.instructorId,
@@ -731,6 +748,8 @@ export class ClassSlotService {
             roomId: slot.roomId,
             startAt: slot.startAt.toISOString(),
             endAt: slot.endAt.toISOString(),
+            status: slot.status,
+            bookedCount: slot.bookedCount,
           },
           {
             classTypeId: input.classTypeId,
@@ -739,6 +758,7 @@ export class ClassSlotService {
             roomId: targetRoomId,
             startAt: startAt.toISOString(),
             endAt: endAt.toISOString(),
+            ...(isOverrideBySuperOwner ? { overrideBySuperOwner: true } : {}),
           },
           input.reason,
         );

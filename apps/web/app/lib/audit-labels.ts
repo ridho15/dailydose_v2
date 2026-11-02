@@ -46,6 +46,7 @@ const auditActionLabels: Record<string, string> = {
   'instructor.hours_adjusted': 'Jam mengajar instruktur dikoreksi',
   'master.public_profile_updated': 'Profil publik studio diperbarui',
   'class_slot.updated': 'Jadwal kelas diubah',
+  'class_slot.override_updated_by_super_owner': 'Jadwal kelas diubah via override Super Admin',
   'class_slot.published': 'Kelas dipublikasikan',
   'class_slot.completed': 'Kelas diselesaikan',
   'class_slot.instructor_assigned': 'Instruktur kelas ditetapkan',

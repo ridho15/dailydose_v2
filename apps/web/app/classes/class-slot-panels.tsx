@@ -18,6 +18,7 @@ import { Feedback, StatusBadge } from '../ui';
 import { Button, ButtonLink } from '../components/actions';
 import { SearchSelect, SelectInput, DateInput, Textarea, TextInput } from '../components/forms';
 import { useAppFeedback } from '../components/app-feedback';
+import { useSessionContext } from '../session-context';
 import {
   cancellationLabels,
   cancellationReasonLabel,
@@ -305,6 +306,7 @@ export function DetailPanel({
   canManageAttendance,
   canReadBookings,
   canVerifyInstructor = false,
+  isSuperOwner: isSuperOwnerProp,
   bookingClient = browserBookingClient,
   busy,
   onVerifyInstructor,
@@ -329,6 +331,7 @@ export function DetailPanel({
   canManageAttendance: boolean;
   canReadBookings: boolean;
   canVerifyInstructor?: boolean;
+  isSuperOwner?: boolean;
   bookingClient?: Pick<BookingClient, 'list'> &
     Partial<
       Pick<
@@ -361,6 +364,8 @@ export function DetailPanel({
   onComplete(reason: string): Promise<void>;
 }) {
   const feedback = useAppFeedback();
+  const sessionContext = useSessionContext();
+  const isSuperOwner = isSuperOwnerProp ?? Boolean(sessionContext?.session?.roles?.includes('SUPER_OWNER'));
   const [instructorId, setInstructorId] = useState(slot.instructorUserId ?? '');
   const [reason, setReason] = useState<CancellationReason | ''>('');
   const [cancelNote, setCancelNote] = useState('');
@@ -378,7 +383,7 @@ export function DetailPanel({
   const sudahBerakhir = new Date(slot.endAt).getTime() <= Date.now();
   const isClosed = ['COMPLETED', 'CANCELLED', 'AUTO_CANCELLED'].includes(slot.status);
   const canRunClass = isConfirmed && (canComplete || canManageAttendance || canVerifyInstructor);
-  const hasActions = canManage ? !isClosed : canRunClass;
+  const hasActions = isSuperOwner ? canManage : (canManage ? !isClosed : canRunClass);
   const cancelReasonLabel = cancellationReasonLabel(slot.cancellationReasonCode);
   const location = [details.studio?.name, details.room?.name].filter(Boolean).join(' · ');
   const assignRow = (
@@ -513,14 +518,60 @@ export function DetailPanel({
         </DetailSection>
       )}
 
-      {(isPublished || isConfirmed) && canManage && (
+      {(isPublished || isConfirmed || (isSuperOwner && slot.status === 'COMPLETED')) && canManage && (
         <DetailSection
           id="class-instructor-title"
           title="Instruktur kelas"
-          description="Instruktur dapat diganti selama kelas belum berjalan. Tipe kelas dan jadwal dapat diubah jika belum ada peserta yang memesan."
+          description={
+            isSuperOwner
+              ? "Sebagai Super Admin, Anda dapat mengganti instruktur dan mengubah jadwal atau tipe kelas meskipun sudah ada peserta atau kelas sudah selesai."
+              : "Instruktur dapat diganti selama kelas belum berjalan. Tipe kelas dan jadwal dapat diubah jika belum ada peserta yang memesan."
+          }
         >
           {assignRow}
-          {(isPublished || isConfirmed) && (slot.bookedCount ?? 0) === 0 ? (
+          {isSuperOwner ? (
+            <ActionRow
+              title={
+                (slot.bookedCount ?? 0) > 0
+                  ? 'Edit jadwal, tipe kelas & kapasitas (Super Admin)'
+                  : slot.status === 'COMPLETED'
+                  ? 'Koreksi jadwal kelas selesai (Super Admin)'
+                  : 'Jadwal dan tipe kelas'
+              }
+              description={
+                (slot.bookedCount ?? 0) > 0
+                  ? `Kelas ini memiliki ${slot.bookedCount} peserta terdaftar. Sebagai Super Admin, Anda dapat mengubah jadwal, tipe kelas, instruktur, studio/ruangan, maupun kapasitas.`
+                  : slot.status === 'COMPLETED'
+                  ? 'Kelas sudah selesai. Sebagai Super Admin, Anda dapat mengoreksi data jadwal, tipe kelas, atau catatan historis kelas ini.'
+                  : 'Ubah waktu, tipe kelas, studio, atau ruangan sebelum ada peserta yang memesan. Kapasitas dihitung ulang dari konfigurasi.'
+              }
+            >
+              <div>
+                <Button
+                  variant="secondary"
+                  className="w-full sm:w-auto"
+                  disabled={busy}
+                  onClick={() => setEditOpen((current) => !current)}
+                >
+                  {editOpen ? 'Tutup edit' : 'Edit kelas (Super Admin)'}
+                </Button>
+              </div>
+              {editOpen && (
+                <DraftEditForm
+                  slot={slot}
+                  classTypes={classTypes}
+                  instructors={instructors}
+                  studios={studios}
+                  busy={busy}
+                  isSuperOwner={isSuperOwner}
+                  onSubmit={async (input) => {
+                    await onUpdate(input);
+                    setEditOpen(false);
+                  }}
+                />
+              )}
+            </ActionRow>
+          ) : (slot.bookedCount ?? 0) === 0 ? (
             <ActionRow
               title="Jadwal dan tipe kelas"
               description="Ubah waktu, tipe kelas, studio, atau ruangan sebelum ada peserta yang memesan. Kapasitas dihitung ulang dari konfigurasi."
@@ -542,6 +593,7 @@ export function DetailPanel({
                   instructors={instructors}
                   studios={studios}
                   busy={busy}
+                  isSuperOwner={isSuperOwner}
                   onSubmit={async (input) => {
                     await onUpdate(input);
                     setEditOpen(false);
@@ -549,7 +601,7 @@ export function DetailPanel({
                 />
               )}
             </ActionRow>
-          ) : (isPublished || isConfirmed) && (slot.bookedCount ?? 0) > 0 ? (
+          ) : (slot.bookedCount ?? 0) > 0 ? (
             <ActionRow
               title="Kapasitas & penyesuaian kelas"
               description={`${slot.bookedCount} peserta sudah memesan kelas ini. Jadwal dan tipe kelas terkunci, namun Anda dapat menyesuaikan kapasitas slot atau batas cutoff.`}
@@ -571,6 +623,7 @@ export function DetailPanel({
                   instructors={instructors}
                   studios={studios}
                   busy={busy}
+                  isSuperOwner={isSuperOwner}
                   onSubmit={async (input) => {
                     await onUpdate(input);
                     setEditOpen(false);
@@ -862,6 +915,7 @@ function DraftEditForm({
   instructors,
   studios = [],
   busy,
+  isSuperOwner = false,
   onSubmit,
 }: {
   slot: ClassSlot;
@@ -869,6 +923,7 @@ function DraftEditForm({
   instructors: InstructorOption[];
   studios?: StudioOption[];
   busy: boolean;
+  isSuperOwner?: boolean;
   onSubmit(input: {
     classTypeId: string;
     studioId?: string;
@@ -910,6 +965,7 @@ function DraftEditForm({
   const [selectedRoomId, setSelectedRoomId] = useState(slot.roomId ?? '');
   const rooms = branchStudios.find((studio) => studio.id === selectedStudioId)?.rooms ?? [];
   const hasBookings = (slot.status === 'PUBLISHED' || slot.status === 'CONFIRMED') && (slot.bookedCount ?? 0) > 0;
+  const isLockedForNormalStaff = !isSuperOwner && hasBookings;
 
   return (
     <form
@@ -918,7 +974,7 @@ function DraftEditForm({
       onSubmit={(event) => {
         event.preventDefault();
         const data = new FormData(event.currentTarget);
-        if (hasBookings) {
+        if (isLockedForNormalStaff) {
           setFailure('');
           const rawCap = String(data.get('capacity') ?? '').trim();
           const parsedCap = rawCap ? Number(rawCap) : undefined;
@@ -971,12 +1027,12 @@ function DraftEditForm({
           const parsedCutoff = rawCutoff === 'default' || rawCutoff === '' ? null : Number(rawCutoff);
 
           void onSubmit({
-            classTypeId: hasBookings ? slot.classTypeId : String(data.get('classTypeId') || slot.classTypeId),
-            studioId: hasBookings ? (slot.studioId || undefined) : (selectedStudioId || undefined),
-            roomId: hasBookings ? (slot.roomId || null) : (selectedRoomId || null),
-            instructorUserId: hasBookings ? (slot.instructorUserId || null) : (String(data.get('instructorUserId') ?? '').trim() || null),
-            startAt: hasBookings ? slot.startAt : startAt,
-            endAt: hasBookings ? slot.endAt : endAt,
+            classTypeId: String(data.get('classTypeId') || slot.classTypeId),
+            studioId: selectedStudioId || undefined,
+            roomId: selectedRoomId || null,
+            instructorUserId: String(data.get('instructorUserId') ?? '').trim() || null,
+            startAt,
+            endAt,
             capacity: parsedCap,
             bookingCutoffHours: parsedCutoff,
             reason: String(data.get('reason') ?? '').trim() || undefined,
@@ -986,7 +1042,17 @@ function DraftEditForm({
         }
       }}
     >
-      {hasBookings && (
+      {isSuperOwner && (slot.bookedCount ?? 0) > 0 && (
+        <Feedback kind="warning">
+          <strong>Mode Super Admin:</strong> Kelas ini memiliki {slot.bookedCount} peserta terdaftar. Anda memiliki wewenang untuk mengubah jadwal, tipe kelas, atau ruangan. Perubahan jadwal akan otomatis memengaruhi jadwal tiket peserta.
+        </Feedback>
+      )}
+      {isSuperOwner && slot.status === 'COMPLETED' && (
+        <Feedback kind="info">
+          <strong>Mode Super Admin:</strong> Anda mengoreksi data jadwal, tipe kelas, atau ruangan untuk kelas yang statusnya sudah selesai.
+        </Feedback>
+      )}
+      {isLockedForNormalStaff && (
         <Feedback kind="warning">
           Kelas ini sudah memiliki {slot.bookedCount} peserta yang booking. Jadwal, tipe kelas, dan ruangan dikunci untuk kenyamanan peserta, namun kapasitas tempat/bed dapat disesuaikan (minimal {slot.bookedCount} peserta).
         </Feedback>
@@ -996,7 +1062,7 @@ function DraftEditForm({
         name="classTypeId"
         defaultValue={slot.classTypeId}
         required
-        disabled={hasBookings}
+        disabled={isLockedForNormalStaff}
         options={classTypes.map((item) => ({
           id: item.id,
           label: item.name,
@@ -1009,7 +1075,7 @@ function DraftEditForm({
             label="Area Studio"
             name="studioId"
             value={selectedStudioId}
-            disabled={hasBookings}
+            disabled={isLockedForNormalStaff}
             placeholder="Pilih area studio"
             options={branchStudios.map((item) => ({
               id: item.id,
@@ -1025,7 +1091,7 @@ function DraftEditForm({
             label="Ruangan"
             name="roomId"
             value={selectedRoomId}
-            disabled={hasBookings || !selectedStudioId || rooms.length === 0}
+            disabled={isLockedForNormalStaff || !selectedStudioId || rooms.length === 0}
             placeholder={rooms.length ? 'Opsional' : 'Tidak ada ruangan aktif'}
             options={rooms.map((item) => ({
               id: item.id,
@@ -1041,13 +1107,13 @@ function DraftEditForm({
         name="instructorUserId"
         defaultValue={slot.instructorUserId ?? ''}
         placeholder="Tetapkan nanti"
-        disabled={hasBookings}
+        disabled={isLockedForNormalStaff}
         options={instructors.map((item) => ({ id: item.id, label: item.displayName }))}
       />
       <div className="grid gap-3 sm:grid-cols-3">
-        <DateInput label="Tanggal" name="date" defaultValue={start.date} disabled={hasBookings} required={!hasBookings} />
-        <TextInput label="Mulai" name="startTime" type="time" defaultValue={start.time} disabled={hasBookings} required={!hasBookings} />
-        <TextInput label="Selesai" name="endTime" type="time" defaultValue={end.time} disabled={hasBookings} required={!hasBookings} />
+        <DateInput label="Tanggal" name="date" defaultValue={start.date} disabled={isLockedForNormalStaff} required={!isLockedForNormalStaff} />
+        <TextInput label="Mulai" name="startTime" type="time" defaultValue={start.time} disabled={isLockedForNormalStaff} required={!isLockedForNormalStaff} />
+        <TextInput label="Selesai" name="endTime" type="time" defaultValue={end.time} disabled={isLockedForNormalStaff} required={!isLockedForNormalStaff} />
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
         <TextInput

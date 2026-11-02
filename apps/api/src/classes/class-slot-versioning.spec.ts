@@ -13,6 +13,10 @@ const principal = {
   capabilities: ['class-slot:read', 'class-slot:manage'],
   branchIds: [branchId],
 };
+const superOwner = {
+  ...principal,
+  roles: [{ role: 'SUPER_OWNER' as const, branchId: null }],
+};
 
 type Row = Record<string, unknown>;
 
@@ -234,6 +238,59 @@ describe('class slot status guards', () => {
         'c',
       ),
     ).rejects.toMatchObject({ code: 'CLASS_SLOT_HAS_BOOKINGS' });
+  });
+
+  it('allows SUPER_OWNER to edit a confirmed/published class even if it already has bookings', async () => {
+    const { service, tx } = build(slotRow({ status: 'CONFIRMED', bookedCount: 2 }));
+    await service.update(
+      superOwner,
+      slotId,
+      {
+        classTypeId,
+        startAt: '2026-10-12T21:00:00+07:00',
+        endAt: '2026-10-12T21:50:00+07:00',
+        expectedVersion: 4,
+      },
+      key,
+      'c',
+    );
+    expect(tx.slotKelas.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ classTypeId }) }),
+    );
+  });
+
+  it('allows SUPER_OWNER to edit a COMPLETED class (historical schedule correction)', async () => {
+    const { service, tx } = build(slotRow({ status: 'COMPLETED', bookedCount: 4 }));
+    await service.update(
+      superOwner,
+      slotId,
+      {
+        classTypeId,
+        startAt: '2026-10-12T21:00:00+07:00',
+        endAt: '2026-10-12T21:50:00+07:00',
+        expectedVersion: 4,
+      },
+      key,
+      'c',
+    );
+    expect(tx.slotKelas.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ classTypeId }) }),
+    );
+  });
+
+  it('allows SUPER_OWNER to reassign an instructor to a COMPLETED class', async () => {
+    const { service, tx } = build(slotRow({ status: 'COMPLETED', instructorId }));
+    const newInstructorId = '00000000-0000-4000-8000-000000000055';
+    await service.assign(
+      superOwner,
+      slotId,
+      { instructorUserId: newInstructorId, expectedVersion: 4 },
+      key,
+      'c',
+    );
+    expect(tx.slotKelas.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ instructorId: newInstructorId }) }),
+    );
   });
 
   it('allows increasing capacity on a published class that already has bookings', async () => {
