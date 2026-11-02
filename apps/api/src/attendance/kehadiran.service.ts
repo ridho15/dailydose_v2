@@ -289,7 +289,8 @@ export class AttendanceService {
         });
         if (!slot || !this.policy.hasCapability(principal, 'attendance:manage', slot.branchId))
           throw new ApiProblem('RESOURCE_NOT_FOUND', HttpStatus.NOT_FOUND);
-        if (!slot.instructorId || slot.status !== 'CONFIRMED')
+        // Kelas Terbit juga berjalan (konfirmasi kuota otomatis tidak selalu aktif).
+        if (!slot.instructorId || !['PUBLISHED', 'CONFIRMED'].includes(slot.status))
           throw new ApiProblem('INVALID_STATE_TRANSITION', HttpStatus.CONFLICT);
         const window = checkInWindowState(slot.startAt, slot.endAt, now);
         if (window === 'TOO_EARLY') throw new ApiProblem('CHECK_IN_TOO_EARLY', HttpStatus.CONFLICT);
@@ -384,7 +385,7 @@ export class AttendanceService {
           throw new ApiProblem('CHECK_IN_WINDOW_CLOSED', HttpStatus.GONE);
         if (
           token.booking.status !== 'BOOKED' ||
-          token.booking.classSlot.status !== 'CONFIRMED'
+          !['PUBLISHED', 'CONFIRMED'].includes(token.booking.classSlot.status)
         )
           throw new ApiProblem('INVALID_STATE_TRANSITION', HttpStatus.CONFLICT);
 
@@ -456,7 +457,7 @@ export class AttendanceService {
           throw new ApiProblem('ATTENDANCE_ALREADY_RECORDED', HttpStatus.CONFLICT);
         if (!['BOOKED', 'NO_SHOW'].includes(booking.status))
           throw new ApiProblem('INVALID_STATE_TRANSITION', HttpStatus.CONFLICT);
-        if (!['CONFIRMED', 'COMPLETED'].includes(booking.classSlot.status))
+        if (!['PUBLISHED', 'CONFIRMED', 'COMPLETED'].includes(booking.classSlot.status))
           throw new ApiProblem('INVALID_STATE_TRANSITION', HttpStatus.CONFLICT);
         if (checkInWindowState(booking.classSlot.startAt, booking.classSlot.endAt, now) === 'TOO_EARLY')
           throw new ApiProblem('CHECK_IN_TOO_EARLY', HttpStatus.CONFLICT);
@@ -707,7 +708,7 @@ export class AttendanceService {
     const slot = token.classSlot;
     if (slot.instructorId !== principal.userId)
       throw new ApiProblem('RESOURCE_NOT_FOUND', HttpStatus.NOT_FOUND);
-    if (slot.status !== 'CONFIRMED')
+    if (!['PUBLISHED', 'CONFIRMED'].includes(slot.status))
       throw new ApiProblem('INVALID_STATE_TRANSITION', HttpStatus.CONFLICT);
     const window = checkInWindowState(slot.startAt, slot.endAt, now);
     if (window === 'TOO_EARLY') throw new ApiProblem('CHECK_IN_TOO_EARLY', HttpStatus.CONFLICT);
@@ -809,7 +810,7 @@ export class AttendanceService {
     });
     if (!slot || !this.policy.hasCapability(principal, 'attendance:manage', slot.branchId))
       throw new ApiProblem('RESOURCE_NOT_FOUND', HttpStatus.NOT_FOUND);
-    if (!slot.instructorId || !['CONFIRMED', 'COMPLETED'].includes(slot.status))
+    if (!slot.instructorId || !['PUBLISHED', 'CONFIRMED', 'COMPLETED'].includes(slot.status))
       throw new ApiProblem('INVALID_STATE_TRANSITION', HttpStatus.CONFLICT);
     if (checkInWindowState(slot.startAt, slot.endAt, now) === 'TOO_EARLY')
       throw new ApiProblem('CHECK_IN_TOO_EARLY', HttpStatus.CONFLICT);

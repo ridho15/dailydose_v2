@@ -751,7 +751,9 @@ export const browserBookingClient: BookingClient = {
             customerUserId: customer.id,
             pageSize: '20',
           }).toString()}`,
-        ).catch(() => ({ items: [] })),
+        ),
+        // Galat tidak lagi ditelan: dulu kegagalan server tampil sebagai "Belum punya paket",
+        // sehingga staf mengira paketnya memang tidak ada.
       ),
     );
     return {
