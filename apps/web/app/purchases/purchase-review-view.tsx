@@ -370,6 +370,34 @@ export function PurchaseReviewView({
 
   const approve = async (item: ReviewPurchase) => {
     if (!canDecideItem(item) || !isPendingDecision(item.status)) return;
+    const isExpired =
+      item.paymentExpiresAt &&
+      new Date(item.paymentExpiresAt).getTime() < Date.now() &&
+      (!item.paymentProof || (item.paymentProof.finalizedAt && new Date(item.paymentProof.finalizedAt).getTime() > new Date(item.paymentExpiresAt).getTime()));
+    if (item.paymentMethod === "BANK_TRANSFER" && isExpired) {
+      if (feedback) {
+        feedback.showAlert({
+          tone: "danger",
+          title: "Batas waktu transfer kedaluwarsa",
+          message: `Batas waktu pembayaran untuk ${item.customer.displayName} telah berakhir pada ${safeFormatDateTime(item.paymentExpiresAt)}. Pesanan transfer bank yang kedaluwarsa tidak dapat disetujui.`,
+        });
+      } else {
+        setError("Batas waktu pembayaran telah kedaluwarsa. Transaksi ini tidak dapat disetujui.");
+      }
+      return;
+    }
+    if (item.paymentMethod === "BANK_TRANSFER" && !item.paymentProof) {
+      if (feedback) {
+        feedback.showAlert({
+          tone: "warning",
+          title: "Bukti transfer belum diunggah",
+          message: `Pelanggan ${item.customer.displayName} belum mengunggah bukti transfer bank. Buka "Periksa detail" untuk mengunggah bukti manual staf jika pembayaran diterima langsung.`,
+        });
+      } else {
+        setError("Bukti transfer belum diunggah oleh pelanggan. Buka \"Periksa detail\" untuk mengunggah bukti manual staf.");
+      }
+      return;
+    }
     const confirmed = feedback
       ? await feedback.confirm({
           tone: 'warning',
@@ -503,7 +531,9 @@ export function PurchaseReviewView({
           title={
             item.paymentProof && !viewedProofIds.has(item.id)
               ? 'Buka "Preview bukti" terlebih dahulu sebelum menyetujui.'
-              : undefined
+              : item.paymentMethod === 'BANK_TRANSFER' && !item.paymentProof
+                ? 'Bukti transfer belum diunggah. Klik untuk melihat instruksi.'
+                : undefined
           }
           onClick={() => void approve(item)}
         >

@@ -338,6 +338,18 @@ export function PaymentReviewDetailView({
         'Transaksi ditolak tanpa mengaktifkan paket atau ledger.',
       ],
     } as const;
+    if (action === "APPROVE" && purchase.paymentMethod === "BANK_TRANSFER" && !purchase.paymentProof) {
+      if (feedback) {
+        feedback.showAlert({
+          tone: "warning",
+          title: "Bukti transfer belum diunggah",
+          message: "Pelanggan belum mengunggah bukti transfer bank. Jika pembayaran telah diterima secara manual atau di kasir, silakan gunakan formulir \"Simpan Bukti Manual\" di sebelah kiri sebelum menyetujui transaksi ini.",
+        });
+      } else {
+        setError("Pelanggan belum mengunggah bukti transfer bank. Unggah bukti manual di sebelah kiri sebelum menyetujui.");
+      }
+      return;
+    }
     const confirmed = feedback
       ? await feedback.confirm({
           tone: action === 'APPROVE' ? 'warning' : 'danger',
@@ -824,6 +836,13 @@ export function PaymentReviewDetailView({
                           >
                             {previewLoading ? 'Memuat bukti…' : 'Buka & Periksa Bukti Sekarang'}
                           </Button>
+                        </div>
+                      )}
+
+                      {purchase.paymentMethod === "BANK_TRANSFER" && !purchase.paymentProof && !separationOfDutiesBlocked && (
+                        <div className="rounded-dd-md border border-dd-warning/30 bg-dd-warning-soft p-3 text-xs text-dd-warning leading-relaxed">
+                          <strong className="block font-semibold">Menunggu Bukti Transfer:</strong>
+                          Pelanggan belum mengunggah bukti transfer bank. Silakan unggah bukti manual pada formulir di sebelah kiri sebelum menyetujui.
                         </div>
                       )}
 

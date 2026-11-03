@@ -600,14 +600,25 @@ export async function sha256File(file: File) {
 
 export function purchaseFailure(error: unknown): string {
   notifySessionFailure(error);
-  const response = (
-    error as {
-      response?: { status?: number; data?: { error?: { code?: string } } };
-    }
-  )?.response;
-  const code = response?.data?.error?.code;
+  const typed = error as {
+    status?: number;
+    code?: string;
+    data?: { error?: { code?: string; message?: string }; code?: string; message?: string };
+    response?: { status?: number; data?: { error?: { code?: string } } };
+  };
+  const code =
+    typed?.code ??
+    typed?.data?.error?.code ??
+    typed?.data?.code ??
+    typed?.response?.data?.error?.code;
+  const status = typed?.status ?? typed?.response?.status;
+
   const messages: Record<string, string> = {
     CONFIGURATION_REQUIRED: 'Bukti pembayaran sementara belum dapat diproses.',
+    PAYMENT_PROOF_REQUIRED:
+      'Bukti transfer belum diunggah oleh pelanggan. Minta pelanggan mengunggah bukti atau unggah bukti manual melalui menu Periksa Detail sebelum menyetujui.',
+    PAYMENT_EXPIRED:
+      'Batas waktu pembayaran telah kedaluwarsa. Transaksi transfer bank ini tidak dapat disetujui.',
     PAYMENT_PROOF_NOT_CLEAN: 'Bukti belum dinyatakan bersih dan belum dapat digunakan.',
     PAYMENT_PROOF_UNSAFE: 'Bukti ditolak karena hasil pemeriksaan keamanan.',
     PAYMENT_PROOF_SCAN_UNAVAILABLE:
@@ -616,19 +627,23 @@ export function purchaseFailure(error: unknown): string {
     VALIDATION_ERROR: 'File atau data purchase belum valid.',
     IDEMPOTENCY_KEY_REUSED: 'Intent yang sama sudah digunakan dengan data berbeda.',
     IDEMPOTENCY_IN_PROGRESS: 'Permintaan sebelumnya masih diproses. Coba lagi tanpa mengubah data.',
-    PURCHASE_ALREADY_DECIDED: 'Purchase ini sudah memiliki keputusan.',
+    IDEMPOTENCY_PAYLOAD_MISMATCH:
+      'Terjadi benturan data pada persetujuan transaksi ini. Silakan muat ulang halaman.',
+    PURCHASE_ALREADY_DECIDED: 'Purchase ini sudah memiliki keputusan atau sudah disetujui sebelumnya.',
     STALE_VERSION: 'Data purchase berubah. Muat ulang sebelum mengambil keputusan.',
     SEPARATION_OF_DUTIES_VIOLATION: 'Penjualan tidak boleh disetujui oleh orang yang mencatatnya.',
     DIRECT_PAYMENT_APPROVER_REQUIRED: 'Penjualan tunai/kartu hanya bisa disetujui Manager atau Super Owner.',
     RESOURCE_NOT_FOUND: 'Data tidak tersedia dalam cabang yang dipilih.',
+    CONCURRENCY_CONFLICT: 'Terjadi konflik transaksi bersamaan. Silakan coba kembali.',
+    DUPLICATE_REQUEST: 'Permintaan persetujuan sedang diproses atau sudah dikirim.',
   };
   if (code && messages[code]) return messages[code];
-  if (response?.status === 503) return messages.CONFIGURATION_REQUIRED!;
-  if (response?.status === 409) return 'Purchase atau bukti mengalami konflik. Muat ulang.';
-  if (response?.status === 404) return messages.RESOURCE_NOT_FOUND!;
-  if (response?.status === 403) return 'Anda tidak memiliki izin untuk tindakan ini.';
-  if (response?.status === 401) return 'Sesi berakhir. Silakan masuk kembali.';
-  if (response?.status === 400 || response?.status === 422) return messages.VALIDATION_ERROR!;
+  if (status === 503) return messages.CONFIGURATION_REQUIRED!;
+  if (status === 409) return 'Purchase atau bukti mengalami konflik. Muat ulang.';
+  if (status === 404) return messages.RESOURCE_NOT_FOUND!;
+  if (status === 403) return 'Anda tidak memiliki izin untuk tindakan ini.';
+  if (status === 401) return 'Sesi berakhir. Silakan masuk kembali.';
+  if (status === 400 || status === 422) return messages.VALIDATION_ERROR!;
   return 'Layanan purchase tidak dapat dijangkau. Periksa koneksi lalu coba lagi.';
 }
 

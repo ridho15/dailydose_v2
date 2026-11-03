@@ -9,6 +9,7 @@ import {
   mapPurchase,
   mapReviewDetail,
   mapReviewItem,
+  purchaseFailure,
   toDate,
   toOptionalDate,
 } from './purchase-client';
@@ -300,6 +301,64 @@ describe('Purchase client Date hydration and mappings (Tahap 3)', () => {
       expect(result.timeline.decidedAt).toBeInstanceOf(Date);
       expect(result.activation?.activationDate).toBeInstanceOf(Date);
       expect(result.activation?.expiryAt).toBeInstanceOf(Date);
+    });
+  });
+  describe("purchaseFailure error translation", () => {
+    it("maps PAYMENT_PROOF_REQUIRED accurately from ApiError", () => {
+      const error = {
+        name: "ApiError",
+        status: 409,
+        code: "PAYMENT_PROOF_REQUIRED",
+        data: { error: { code: "PAYMENT_PROOF_REQUIRED" } },
+      };
+      expect(purchaseFailure(error)).toBe(
+        "Bukti transfer belum diunggah oleh pelanggan. Minta pelanggan mengunggah bukti atau unggah bukti manual melalui menu Periksa Detail sebelum menyetujui.",
+      );
+    });
+
+    it("maps PAYMENT_EXPIRED accurately from ApiError", () => {
+      const error = {
+        name: "ApiError",
+        status: 409,
+        code: "PAYMENT_EXPIRED",
+        data: { error: { code: "PAYMENT_EXPIRED" } },
+      };
+      expect(purchaseFailure(error)).toBe(
+        "Batas waktu pembayaran telah kedaluwarsa. Transaksi transfer bank ini tidak dapat disetujui.",
+      );
+    });
+
+    it("maps PURCHASE_ALREADY_DECIDED accurately", () => {
+      const error = {
+        name: "ApiError",
+        status: 409,
+        code: "PURCHASE_ALREADY_DECIDED",
+        data: { error: { code: "PURCHASE_ALREADY_DECIDED" } },
+      };
+      expect(purchaseFailure(error)).toBe(
+        "Purchase ini sudah memiliki keputusan atau sudah disetujui sebelumnya.",
+      );
+    });
+
+    it("maps CONCURRENCY_CONFLICT accurately", () => {
+      const error = {
+        name: "ApiError",
+        status: 409,
+        code: "CONCURRENCY_CONFLICT",
+        data: { error: { code: "CONCURRENCY_CONFLICT" } },
+      };
+      expect(purchaseFailure(error)).toBe(
+        "Terjadi konflik transaksi bersamaan. Silakan coba kembali.",
+      );
+    });
+
+    it("falls back to generic 409 message when code is unrecognized", () => {
+      const error = {
+        name: "ApiError",
+        status: 409,
+        code: "UNKNOWN_CONFLICT",
+      };
+      expect(purchaseFailure(error)).toBe("Purchase atau bukti mengalami konflik. Muat ulang.");
     });
   });
 });

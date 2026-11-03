@@ -153,12 +153,16 @@ export const browserSessionClient: SessionClient = {
 export function sessionFailure(
   error: unknown,
 ): Exclude<SessionStatus, 'loading' | 'authenticated'> {
-  const status = (error as { response?: { status?: number } })?.response?.status;
+  const status =
+    (error as { status?: number; response?: { status?: number } })?.status ??
+    (error as { response?: { status?: number } })?.response?.status;
   return status === 401 ? 'unauthenticated' : 'dependency-error';
 }
 
 export function notifySessionFailure(error: unknown): void {
-  const status = (error as { response?: { status?: number } })?.response?.status;
+  const status =
+    (error as { status?: number; response?: { status?: number } })?.status ??
+    (error as { response?: { status?: number } })?.response?.status;
   if (status === 401 && typeof window !== 'undefined') {
     clearSessionHint();
     window.dispatchEvent(new CustomEvent('dd-session-revoked'));
