@@ -17,6 +17,7 @@ import { useSessionContext } from '../session-context';
 import { isInstructorOnlySession } from '@/lib/session-audience';
 import { DetailSection, MetricTile } from './class-slot-detail-parts';
 import { BatalkanPeserta, type BatalClient } from './batalkan-peserta';
+import { KoreksiStatusBooking } from './koreksi-status-booking';
 import type { PengajuanPembatalan } from '@/api-clients/booking-client';
 
 const bookingStatusLabels: Record<string, string> = {
@@ -47,7 +48,7 @@ export function ClassRosterSection({
   showAvailable?: boolean;
   canReadBookings: boolean;
   bookingClient: Pick<BookingClient, 'list'> &
-    Partial<BatalClient & Pick<BookingClient, 'pembatalanTertunda'>>;
+    Partial<BatalClient & Pick<BookingClient, 'pembatalanTertunda' | 'koreksiStatus'>>;
 }) {
   const sessionContext = useSessionContext();
   const isInstructor = isInstructorOnlySession(sessionContext?.session);
@@ -67,6 +68,7 @@ export function ClassRosterSection({
     !isInstructor &&
     Boolean(sessionContext?.session?.capabilities.includes('booking:cancel:assisted')) &&
     Boolean(bookingClient.cancelAsStaff);
+  const superOwner = Boolean(sessionContext?.session?.roles.includes('SUPER_OWNER'));
   const bolehPutus =
     !isInstructor &&
     Boolean(
@@ -219,7 +221,10 @@ export function ClassRosterSection({
                           <ButtonLink size="sm" variant="secondary" href={bookingHref(item.id)}>
                             Lihat booking
                           </ButtonLink>
-                          {(bolehBatal || (bolehPutus && pengajuan[item.id])) && (
+                          {superOwner && (
+                            <KoreksiStatusBooking booking={item} client={bookingClient} onBerubah={() => void loadRoster()} />
+                          )}
+                      {(bolehBatal || (bolehPutus && pengajuan[item.id])) && (
                             <BatalkanPeserta
                               booking={item}
                               kelasMulai={slot.startAt}
@@ -259,6 +264,9 @@ export function ClassRosterSection({
                       <ButtonLink size="sm" variant="secondary" href={bookingHref(item.id)}>
                         Lihat booking
                       </ButtonLink>
+                      {superOwner && (
+                        <KoreksiStatusBooking booking={item} client={bookingClient} onBerubah={() => void loadRoster()} />
+                      )}
                       {(bolehBatal || (bolehPutus && pengajuan[item.id])) && (
                         <BatalkanPeserta
                           booking={item}

@@ -653,7 +653,7 @@ export class BookingsService {
       throw new ApiProblem('VALIDATION_ERROR', HttpStatus.UNPROCESSABLE_ENTITY);
 
     const classSlotFilter: Prisma.SlotKelasWhereInput = {};
-    let resolvedBranchId: Prisma.StringNullableFilter | string | undefined = undefined;
+    let resolvedBranchId: Prisma.StringFilter | string | undefined = undefined;
     if (customerFlow) {
       if (query.branchId) resolvedBranchId = query.branchId;
     } else if (instructorFlow) {
@@ -668,6 +668,9 @@ export class BookingsService {
       const branchScope = this.staffBranchScope(principal, query.branchId);
       if (branchScope) resolvedBranchId = branchScope;
     }
+    // Cabang diukur dari slot kelas: `PemesananKelas.branchId` nullable (data lama/impor) dan
+    // menyembunyikan peserta yang kuotanya tetap terhitung di kartu jadwal.
+    if (resolvedBranchId) classSlotFilter.branchId = resolvedBranchId;
     if (query.from || query.until) {
       classSlotFilter.startAt = {
         ...(query.from ? { gte: new Date(query.from) } : {}),
@@ -700,7 +703,6 @@ export class BookingsService {
     }
     const baseWhere: Prisma.PemesananKelasWhereInput = {
       ...(targetUserId ? { userId: targetUserId } : {}),
-      ...(resolvedBranchId ? { branchId: resolvedBranchId } : {}),
       ...(query.classSlotId ? { classSlotId: query.classSlotId } : {}),
       ...(Object.keys(classSlotFilter).length > 0 ? { classSlot: classSlotFilter } : {}),
       ...(conditions.length > 0 ? { AND: conditions } : {}),
@@ -720,7 +722,7 @@ export class BookingsService {
     const where: Prisma.PemesananKelasWhereInput = {
       ...baseWhere,
       ...(query.timeline === 'UPCOMING'
-        ? { status: 'BOOKED' }
+        ? { status: { in: ['BOOKED', 'ATTENDED'] } }
         : query.status
           ? { status: query.status as BookingStatus }
           : {}),

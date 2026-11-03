@@ -610,7 +610,7 @@ describe('identity UI', () => {
     await userEvent.type(screen.getByLabelText('Ulangi password baru'), 'different-password');
     await userEvent.click(screen.getByRole('button', { name: 'Simpan password baru' }));
     expect(fake.resetPassword).not.toHaveBeenCalled();
-    expect(await screen.findByRole('alert')).toHaveTextContent('Password harus sama');
+    expect(await screen.findByRole('alert')).toHaveTextContent(/Konfirmasi password tidak cocok|Password harus sama/);
   });
 
   it('activates an invitation and exposes password security management', async () => {

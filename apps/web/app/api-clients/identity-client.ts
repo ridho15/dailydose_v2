@@ -1,7 +1,7 @@
-
 import { notifySessionFailure } from './session-client';
 import { appLoading, foregroundFetch } from '../components/app-loading';
 import type { IdentityVerificationReviewCase } from './identity-verification-client';
+import { ApiError, parseApiError } from '../lib/api-client';
 
 export type UiFailure =
   | 'AUTHENTICATION_REQUIRED'
@@ -197,8 +197,6 @@ export interface IdentityClient {
   reactivate(id: string, expectedVersion?: number, reason?: string): Promise<void>;
 }
 
-
-
 async function request(path: string, init: RequestInit = {}) {
   const response = await foregroundFetch(
     `/api/v1${path}`,
@@ -219,6 +217,7 @@ async function request(path: string, init: RequestInit = {}) {
           code?: string;
           correlationId?: string;
           retryable?: boolean;
+          message?: string;
         }
       | undefined;
     try {
@@ -226,18 +225,25 @@ async function request(path: string, init: RequestInit = {}) {
         code?: string;
         correlationId?: string;
         retryable?: boolean;
-        error?: { code?: string; correlationId?: string; retryable?: boolean };
+        message?: string;
+        error?: { code?: string; correlationId?: string; retryable?: boolean; message?: string };
       };
       problem = payload.error ?? payload;
     } catch {
       problem = undefined;
     }
-    throw {
-      response,
-      code: problem?.code,
-      correlationId: problem?.correlationId ?? correlationHeader,
-      retryable: problem?.retryable,
-    };
+
+    const message =
+      problem?.message ??
+      (problem as any)?.error?.message ??
+      `Request failed with status ${response.status}`;
+    const code = problem?.code ?? (problem as any)?.error?.code;
+
+    const error = new ApiError(message, response.status, problem, code);
+    (error as any).response = response;
+    (error as any).correlationId = problem?.correlationId ?? correlationHeader;
+    (error as any).retryable = problem?.retryable;
+    throw error;
   }
   if (response.status === 204) return undefined;
   return response.json();
@@ -486,15 +492,12 @@ export const browserIdentityClient: IdentityClient = {
       });
       return mapUser(user);
     } catch (error) {
-      const response = (error as { response?: Response }).response;
-      if (response?.status === 409) {
-        const problem = (await response
-          .clone()
-          .json()
-          .catch(() => ({}))) as { code?: string; error?: { code?: string } };
+      const parsed = parseApiError(error);
+      if (parsed.status === 409 || parsed.code) {
         throw {
-          response,
-          code: problem.code ?? problem.error?.code,
+          ...(typeof error === 'object' && error !== null ? error : {}),
+          status: parsed.status,
+          code: parsed.code,
         };
       }
       throw error;
@@ -516,24 +519,24 @@ export const browserIdentityClient: IdentityClient = {
 
 export const failureCode = (error: unknown): UiFailure => {
   notifySessionFailure(error);
-  const status = (error as { response?: { status?: number } })?.response?.status;
-  const code = (error as { code?: string })?.code;
+  const { status, code } = parseApiError(error);
   if (code === 'STALE_VERSION') return 'STALE_VERSION';
   if (code === 'AUTHENTICATION_REQUIRED') return 'AUTHENTICATION_REQUIRED';
   if (code === 'CONFIGURATION_REQUIRED') return 'CONFIGURATION_REQUIRED';
   if (code === 'INTERNAL_ERROR') return 'INTERNAL_ERROR';
   if (code === 'NOT_IMPLEMENTED' || status === 501) return 'NOT_IMPLEMENTED';
   if (status === 403) return 'FORBIDDEN';
-  if (status === 409) return 'IDENTITY_CONFLICT';
+  if (status === 409 || code === 'IDENTITY_CONFLICT') return 'IDENTITY_CONFLICT';
   if (status === 429) return 'RATE_LIMITED';
   if (status === 401) return 'AUTHENTICATION_REQUIRED';
   if (status === 500) return 'INTERNAL_ERROR';
-  if (status === 502 || status === 504 || status === undefined) return 'SERVICE_UNAVAILABLE';
-  if (status === 503) return 'SERVICE_UNAVAILABLE';
+  if (status === 502 || status === 504 || status === 503 || status === undefined) return 'SERVICE_UNAVAILABLE';
   return 'INTERNAL_ERROR';
 };
 
 export const failureReference = (error: unknown): string | null => {
-  const reference = (error as { correlationId?: unknown })?.correlationId;
+  const reference =
+    (error as { correlationId?: unknown })?.correlationId ??
+    ((error as { data?: { correlationId?: unknown } })?.data?.correlationId);
   return typeof reference === 'string' && reference.trim() ? reference.trim().slice(0, 128) : null;
 };

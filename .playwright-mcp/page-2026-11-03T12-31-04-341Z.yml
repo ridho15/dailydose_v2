@@ -1,0 +1,7 @@
+- generic [active] [ref=e1]:
+  - main [ref=e2]:
+    - status "Mengarahkan ke halaman masuk" [ref=e3]
+  - region "Pesan aplikasi"
+  - alert [ref=e7]
+  - progressbar "Memuat halaman…"
+  - status [ref=e8]: Memuat halaman…

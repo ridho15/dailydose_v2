@@ -1,4 +1,5 @@
 import { foregroundFetch } from '../components/app-loading';
+import { ApiError, parseApiError } from '../lib/api-client';
 
 export type PackagePromotionRecord = {
   id: string;
@@ -107,7 +108,23 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     { credentials: 'include', ...init },
     'Memuat promo paket…',
   );
-  if (!response.ok) throw { response };
+  if (!response.ok) {
+    let data: unknown;
+    try {
+      data = await response.clone().json();
+    } catch {
+      data = undefined;
+    }
+    const message =
+      (data as any)?.error?.message ??
+      (data as any)?.message ??
+      (data as any)?.detail ??
+      `Request failed with status ${response.status}`;
+    const code = (data as any)?.error?.code ?? (data as any)?.code;
+    const error = new ApiError(message, response.status, data, code);
+    (error as any).response = response;
+    throw error;
+  }
   return response.json() as Promise<T>;
 }
 
@@ -233,18 +250,25 @@ const promotionMessages: Record<string, string> = {
 
 /** Pesan Indonesia untuk kegagalan promo; membaca kode dari respons problem-details. */
 export async function promotionFailure(error: unknown, fallback: string): Promise<string> {
-  const response = (error as { response?: Response })?.response;
-  if (!response) return fallback;
-  const body = (await response
-    .clone()
-    .json()
-    .catch(() => ({}))) as {
-    error?: { code?: string; details?: Array<{ field?: string; issue?: string }> };
-    code?: string;
-    details?: Array<{ field?: string; issue?: string }>;
-  };
-  const code = body.error?.code ?? body.code;
-  const issue = body.error?.details?.[0]?.issue ?? body.details?.[0]?.issue;
+  let errObj = error;
+  const res = (error as { response?: unknown })?.response;
+  if (res && typeof (res as any).clone === 'function') {
+    try {
+      const clonedData = await (res as Response).clone().json();
+      errObj = {
+        status: (res as Response).status,
+        data: clonedData,
+        response: { status: (res as Response).status, data: clonedData },
+      };
+    } catch {
+      errObj = { status: (res as Response).status };
+    }
+  }
+
+  const parsed = parseApiError(errObj);
+  const code = parsed.code;
+  const detailsArray = Array.isArray(parsed.details) ? parsed.details : [];
+  const issue = (detailsArray[0] as { issue?: string } | undefined)?.issue;
 
   if (code === 'VALIDATION_ERROR') {
     if (issue === 'TOO_LARGE') return 'Nilai diskon terlalu besar (persen maks. 90; nominal harus di bawah harga paket).';
@@ -254,7 +278,22 @@ export async function promotionFailure(error: unknown, fallback: string): Promis
   }
   if (issue) return issue;
   if (code && promotionMessages[code]) return promotionMessages[code]!;
-  if (response.status === 403) return promotionMessages.FORBIDDEN!;
-  if (response.status === 404) return promotionMessages.RESOURCE_NOT_FOUND!;
+
+  if (parsed.status === 403) return promotionMessages.FORBIDDEN!;
+  if (parsed.status === 404) return promotionMessages.RESOURCE_NOT_FOUND!;
+  if (parsed.status === 409) {
+    if (code && promotionMessages[code]) return promotionMessages[code]!;
+    return promotionMessages.PROMOTION_OVERLAP!;
+  }
+
+  if (
+    parsed.message &&
+    !parsed.message.startsWith('Request failed') &&
+    !parsed.message.startsWith('offline') &&
+    !parsed.message.startsWith('Http error')
+  ) {
+    return parsed.message;
+  }
+
   return fallback;
 }

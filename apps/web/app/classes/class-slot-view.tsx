@@ -78,6 +78,7 @@ export function ClassSlotView({
         | 'ajukanPembatalanTerlambat'
         | 'pembatalanTertunda'
         | 'putuskanPembatalan'
+        | 'koreksiStatus'
       >
     >;
 }) {
@@ -103,7 +104,7 @@ export function ClassSlotView({
   const canViewAllBranches = !isInstructor && capabilities.includes('branch:all');
   const globalMode = !branch && (canViewAllBranches || isInstructor);
   const canOperate = Boolean(branch && canManage);
-  const canOperateAttendance = Boolean(branch && canManageAttendance);
+  const canOperateAttendance = Boolean((branch || canViewAllBranches) && canManageAttendance);
   const canCreateSlot = Boolean((branch || (globalMode && branches.length > 0)) && canManage);
   const isSuperOwner = Boolean(sessionContext?.session?.roles?.includes('SUPER_OWNER'));
   const [reference, setReference] = useState(new Date());
@@ -700,6 +701,33 @@ export function ClassSlotView({
                 canAdd={canAddToRoster}
                 canRemove={canRemoveFromRoster}
                 canManageClass
+                canVerifyInstructor={
+                  canOperateAttendance &&
+                  Boolean(client.verifyInstructorAttendance) &&
+                  ['PUBLISHED', 'CONFIRMED', 'COMPLETED'].includes(selectedSlot.status) &&
+                  Boolean(selectedSlot.instructorUserId)
+                }
+                onVerifyInstructor={
+                  client.verifyInstructorAttendance
+                    ? async (notes) => {
+                        const accepted = await feedback.confirm({
+                          tone: 'warning',
+                          title: 'Verifikasi presensi instruktur?',
+                          message:
+                            'Instruktur dicatat hadir pada kelas ini dan honornya dihitung sebagai terverifikasi. Tindakan ini tercatat atas nama Anda.',
+                          confirmLabel: 'Verifikasi',
+                        });
+                        if (!accepted) return;
+                        await run(async () => {
+                          const result = await client.verifyInstructorAttendance!(selectedSlot.id, notes);
+                          return {
+                            ...selectedSlot,
+                            instructorAttendance: { checkedInAt: result.checkedInAt, method: result.method },
+                          };
+                        }, 'Presensi instruktur berhasil dicatat.');
+                      }
+                    : undefined
+                }
                 dalamLaci
                 onManage={() => {
                   setSelectedId(null);

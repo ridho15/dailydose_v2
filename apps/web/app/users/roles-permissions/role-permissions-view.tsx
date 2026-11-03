@@ -32,6 +32,7 @@ import {
 import { browserMasterClient, type MasterClient } from '@/api-clients/master-client';
 import { EmptyState, Feedback, Skeleton, StatusBadge } from '../../ui';
 import { AdminPageHeader } from '../../components/admin/admin-page-header';
+import { useSessionContext } from '@/session-context';
 
 type RoleDraft = {
   code: string;
@@ -99,9 +100,16 @@ function errorMessage(code: string) {
     PROTECTED_CAPABILITY: 'Izin inti hanya dapat dimiliki SUPER_OWNER.',
     LAST_SUPER_OWNER: 'Perubahan ditolak karena akan menghilangkan Super Owner aktif terakhir.',
     SELF_ACCESS_CHANGE_FORBIDDEN: 'Super Owner tidak boleh mengubah akses akunnya sendiri.',
+    CANNOT_MODIFY_OWN_ACCESS: 'Super Owner tidak boleh mengubah akses akunnya sendiri.',
+    PROTECTED_ACCOUNT: 'Akun terproteksi tidak dapat diubah.',
+    ROLE_NOT_ASSIGNABLE: 'Peran yang dipilih tidak dapat diberikan.',
+    BRANCH_REQUIRED: 'Cabang wajib dipilih untuk peran yang terikat cabang.',
+    BRANCH_NOT_FOUND: 'Cabang yang dipilih tidak ditemukan.',
+    NOT_FOUND: 'Data pengguna atau peran tidak ditemukan.',
     PERMISSION_OVERRIDE_EXISTS: 'Override aktif untuk user, izin, dan cakupan itu sudah ada.',
     STALE_VERSION: 'Data telah berubah. Muat ulang sebelum menyimpan kembali.',
     IDEMPOTENCY_KEY_REUSED: 'Intent penyimpanan telah berubah. Ulangi dari data terbaru.',
+    REQUEST_FAILED: 'Permintaan gagal. Periksa koneksi lalu coba lagi.',
   };
   return messages[code] ?? `Perubahan gagal (${code}).`;
 }
@@ -129,6 +137,7 @@ export function RolePermissionsView({
   client?: IdentityClient;
   masterClient?: MasterClient;
 }) {
+  const sessionContext = useSessionContext();
   const resolvedIdentityClient = identityClient ?? client ?? browserIdentityClient;
   const feedback = useAppFeedback();
   const [urlState, setUrlState] = useState(initialUrlState);
@@ -151,6 +160,10 @@ export function RolePermissionsView({
   const [selectedUserId, setSelectedUserId] = useState('');
   const [userAccess, setUserAccess] = useState<UserAccess | null>(null);
   const [roleAssignments, setRoleAssignments] = useState<RoleAssignmentDraft[]>([]);
+
+  const isSelf = Boolean(
+    sessionContext?.session?.id && userAccess?.user?.id === sessionContext.session.id,
+  );
 
   const selectedRole = roles.find(({ id }) => id === selectedRoleId) ?? null;
   const categories = useMemo(
@@ -335,6 +348,10 @@ export function RolePermissionsView({
 
   async function saveUserRoles() {
     if (!userAccess) return;
+    if (isSelf) {
+      setFailure('CANNOT_MODIFY_OWN_ACCESS');
+      return;
+    }
     const accepted = await feedback.confirm({
       tone: 'warning',
       title: 'Ganti role langsung user?',
@@ -756,6 +773,7 @@ export function RolePermissionsView({
                                   className="size-4"
                                   aria-label={`${role.displayName} ${role.code}`}
                                   checked={assignments.some(({ branchId }) => branchId === null)}
+                                  disabled={isSelf}
                                   onChange={(event) =>
                                     toggleAssignment(role, event.target.checked, null)
                                   }
@@ -779,6 +797,7 @@ export function RolePermissionsView({
                                       checked={assignments.some(
                                         ({ branchId }) => branchId === branch.id,
                                       )}
+                                      disabled={isSelf}
                                       onChange={(event) =>
                                         toggleAssignment(role, event.target.checked, branch.id)
                                       }
@@ -806,13 +825,26 @@ export function RolePermissionsView({
                         </ul>
                       </div>
                     )}
+                    {isSelf && (
+                      <div className="mt-4">
+                        <AlertBanner
+                          tone="warning"
+                          title="Peran Akun Sendiri Terproteksi"
+                          message="Anda sedang membuka akun Anda sendiri. Sesuai kebijakan keamanan, perubahan peran Super Owner pada akun sendiri harus dilakukan oleh Super Owner lainnya untuk mencegah kehilangan akses sistem."
+                        />
+                      </div>
+                    )}
                     <Button
                       className="mt-4"
                       leadingIcon={<ShieldCheck className="size-4" aria-hidden="true" />}
-                      disabled={roleAssignments.some(
-                        ({ roleId, branchId }) =>
-                          roles.find((role) => role.id === roleId)?.scope === 'BRANCH' && !branchId,
-                      )}
+                      disabled={
+                        isSelf ||
+                        roleAssignments.some(
+                          ({ roleId, branchId }) =>
+                            roles.find((role) => role.id === roleId)?.scope === 'BRANCH' && !branchId,
+                        )
+                      }
+                      title={isSelf ? 'Peran akun sendiri tidak dapat diubah' : undefined}
                       onClick={() => void saveUserRoles()}
                     >
                       Review perubahan role

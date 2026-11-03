@@ -1,4 +1,5 @@
 import { appLoading } from '../components/app-loading';
+import { ApiError, parseApiError } from '../lib/api-client';
 import { notifySessionFailure } from './session-client';
 
 export type AssignmentFailure =
@@ -80,7 +81,13 @@ async function assignmentFetch<T>(path: string, init?: RequestInit): Promise<T> 
     } catch {
       data = undefined;
     }
-    const error = new Error(`Assignment request failed: ${response.status}`);
+    const message =
+      data?.error?.message ??
+      data?.message ??
+      data?.detail ??
+      `Assignment request failed: ${response.status}`;
+    const code = data?.error?.code ?? data?.code;
+    const error = new ApiError(message, response.status, data, code);
     (error as any).response = { status: response.status, data };
     throw error;
   }
@@ -175,12 +182,32 @@ export const browserAssignmentClient: AssignmentClient = {
 
 export function assignmentFailure(error: unknown): AssignmentFailure {
   notifySessionFailure(error);
-  const response = (error as { response?: { status?: number; data?: { code?: string } } })
-    ?.response;
-  if (response?.data?.code === 'STALE_VERSION') return 'STALE_VERSION';
-  if (response?.status === 404) return 'RESOURCE_NOT_FOUND';
-  if (response?.status === 422 || response?.status === 400) return 'VALIDATION_ERROR';
-  if (response?.status === 409) return 'EFFECTIVE_PERIOD_OVERLAP';
-  if (response?.status === 403) return 'FORBIDDEN';
+  const parsed = parseApiError(error);
+
+  // Check explicit error codes first (both top-level and inside problem data)
+  if (parsed.code === 'STALE_VERSION') return 'STALE_VERSION';
+  if (parsed.code === 'EFFECTIVE_PERIOD_OVERLAP') return 'EFFECTIVE_PERIOD_OVERLAP';
+  if (parsed.code === 'RESOURCE_NOT_FOUND' || parsed.code === 'NOT_FOUND') return 'RESOURCE_NOT_FOUND';
+  if (parsed.code === 'FORBIDDEN' || parsed.code === 'UNAUTHORIZED') return 'FORBIDDEN';
+  if (parsed.code === 'VALIDATION_ERROR') return 'VALIDATION_ERROR';
+
+  // Disambiguate HTTP status codes
+  if (parsed.status === 404) return 'RESOURCE_NOT_FOUND';
+  if (parsed.status === 403 || parsed.status === 401) return 'FORBIDDEN';
+  if (parsed.status === 409) return 'EFFECTIVE_PERIOD_OVERLAP';
+  if (parsed.status === 422 || parsed.status === 400) return 'VALIDATION_ERROR';
+
   return 'API_UNAVAILABLE';
+}
+
+export function assignmentFailureDetail(error: unknown): string | undefined {
+  const parsed = parseApiError(error);
+  if (!parsed.message) return undefined;
+  if (
+    parsed.message.startsWith('Assignment request failed') ||
+    parsed.message.startsWith('Request failed')
+  ) {
+    return undefined;
+  }
+  return parsed.message;
 }

@@ -1,0 +1,93 @@
+- generic [active] [ref=f2e1]:
+  - generic [ref=f2e2]:
+    - link "Langsung ke konten utama" [ref=f2e3] [cursor=pointer]:
+      - /url: "#main-content"
+    - navigation "Navigasi utama" [ref=f2e4]:
+      - generic [ref=f2e6]:
+        - link "Daily Dose Pilates — Dashboard" [ref=f2e7] [cursor=pointer]:
+          - /url: /workspace
+          - img "Daily Dose Pilates" [ref=f2e8]
+        - generic [ref=f2e9]: Super Owner
+      - generic [ref=f2e10]:
+        - region [ref=f2e11]:
+          - heading "Operasional Studio" [level=2] [ref=f2e12]
+          - link "Beranda" [ref=f2e13] [cursor=pointer]:
+            - /url: /workspace
+          - link "Antrean" [ref=f2e21] [cursor=pointer]:
+            - /url: /workspace/antrean
+          - link "Timetable kelas" [ref=f2e27] [cursor=pointer]:
+            - /url: /workspace/classes
+          - link "Booking" [ref=f2e32] [cursor=pointer]:
+            - /url: /workspace/bookings
+          - link "Check-in" [ref=f2e38] [cursor=pointer]:
+            - /url: /workspace/check-in
+          - link "Ulasan" [ref=f2e44] [cursor=pointer]:
+            - /url: /workspace/ulasan
+        - region [ref=f2e50]:
+          - heading "Member & Pelanggan" [level=2] [ref=f2e51]
+          - link "Paket habis & renewal" [ref=f2e52] [cursor=pointer]:
+            - /url: /workspace/renewal
+          - link "Member & Paket" [ref=f2e60] [cursor=pointer]:
+            - /url: /customers
+          - link "Paket & Sesi" [ref=f2e68] [cursor=pointer]:
+            - /url: /ledger
+          - link "Verifikasi ID" [ref=f2e74] [cursor=pointer]:
+            - /url: /identity-verifications
+          - link "Penyesuaian Sesi" [ref=f2e80] [cursor=pointer]:
+            - /url: /ledger/adjustments
+        - region [ref=f2e86]:
+          - heading "Penjualan & Keuangan" [level=2] [ref=f2e87]
+          - link "Jurnal kas" [ref=f2e88] [cursor=pointer]:
+            - /url: /workspace/kas
+          - link "Koreksi jam" [ref=f2e94] [cursor=pointer]:
+            - /url: /workspace/koreksi-jam
+          - link "Pembayaran" [ref=f2e101] [cursor=pointer]:
+            - /url: /workspace/payments
+          - link "Kelola Paket" [ref=f2e106] [cursor=pointer]:
+            - /url: /workspace/packages
+          - link "Voucher" [ref=f2e113] [cursor=pointer]:
+            - /url: /workspace/vouchers
+          - link "Keuangan" [ref=f2e119] [cursor=pointer]:
+            - /url: /finance
+          - link "Performa Cabang" [ref=f2e124] [cursor=pointer]:
+            - /url: /workspace/branch-performance
+        - region [ref=f2e129]:
+          - heading "Pengaturan & Sistem" [level=2] [ref=f2e130]
+          - link "Studio/Cabang" [ref=f2e131] [cursor=pointer]:
+            - /url: /workspace/branches
+          - link "Instruktur" [ref=f2e138] [cursor=pointer]:
+            - /url: /instructors
+          - link "Staf" [ref=f2e145] [cursor=pointer]:
+            - /url: /users
+        - region "Alat dan sistem lanjutan" [ref=f2e160]:
+          - button "Alat & Sistem Lanjutan" [ref=f2e161] [cursor=pointer]
+      - generic [ref=f2e167]:
+        - generic [aria-hidden] [ref=f2e168]: RA
+        - generic [ref=f2e169]:
+          - generic [ref=f2e170]: Ridho Al Amzah
+          - generic [ref=f2e171]: Super Owner · semua cabang
+    - generic [ref=f2e172]:
+      - banner [ref=f2e173]:
+        - generic [ref=f2e174]:
+          - navigation "Breadcrumb" [ref=f2e176]:
+            - link "Daily Dose" [ref=f2e177] [cursor=pointer]:
+              - /url: /workspace
+            - link "Pembayaran" [ref=f2e178] [cursor=pointer]:
+              - /url: /workspace/payments
+            - text: · Detail
+          - generic [ref=f2e179]:
+            - generic [ref=f2e181]:
+              - generic [ref=f2e182]: Cabang aktif
+              - generic [ref=f2e184]:
+                - generic [aria-hidden]: "Cabang:"
+                - combobox "Cabang aktif" [ref=f2e185]
+            - generic [ref=f2e186]: Jakarta · WIB
+            - button "Cari halaman" [ref=f2e187] [cursor=pointer]
+            - link "Panduan operasional (SOP)" [ref=f2e193] [cursor=pointer]:
+              - /url: /help?role=admin
+            - button "Notifikasi" [ref=f2e198] [cursor=pointer]
+            - button "Menu profil Ridho Al Amzah" [ref=f2e205] [cursor=pointer]
+      - main [ref=f2e211]:
+        - status "Memuat detail pembayaran" [ref=f2e212]
+  - region "Pesan aplikasi"
+  - alert [ref=f2e216]

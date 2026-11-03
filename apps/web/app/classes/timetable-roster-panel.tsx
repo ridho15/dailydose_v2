@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Search } from 'lucide-react';
+import { Check, Search } from 'lucide-react';
 import {
   bookingFailure,
   type BookingClient,
@@ -123,6 +123,8 @@ export function TimetableRosterPanel({
   canAdd,
   canRemove,
   canManageClass,
+  canVerifyInstructor = false,
+  onVerifyInstructor,
   onManage,
   onChanged,
   dalamLaci = false,
@@ -135,6 +137,8 @@ export function TimetableRosterPanel({
   canAdd: boolean;
   canRemove: boolean;
   canManageClass: boolean;
+  canVerifyInstructor?: boolean;
+  onVerifyInstructor?(notes?: string): Promise<void>;
   onManage(): void;
   /** Dipanggil setelah peserta bertambah atau berkurang, agar angka keterisian ikut berubah. */
   onChanged(): void;
@@ -148,6 +152,21 @@ export function TimetableRosterPanel({
   const [busyId, setBusyId] = useState<string | null>(null);
   const [failure, setFailure] = useState('');
   const [loading, setLoading] = useState(true);
+  const [verifyingInstructor, setVerifyingInstructor] = useState(false);
+
+  const handleVerifyInstructor = async () => {
+    if (!onVerifyInstructor) return;
+    setVerifyingInstructor(true);
+    setFailure('');
+    try {
+      await onVerifyInstructor();
+      onChanged();
+    } catch (error) {
+      setFailure(error instanceof Error ? error.message : 'Gagal mencatat presensi instruktur.');
+    } finally {
+      setVerifyingInstructor(false);
+    }
+  };
   const intentKeys = useRef(new Map<string, string>());
 
   /** Satu kunci per niat, supaya klik ganda tidak membuat dua booking. */
@@ -160,7 +179,7 @@ export function TimetableRosterPanel({
   };
 
   const muatPeserta = useCallback(async () => {
-    const page = await client.list({ classSlotId: slot.id, limit: 50 });
+    const page = await client.list({ classSlotId: slot.id, branchId: slot.branchId, limit: 50 });
     setPeserta(page.items.filter((b) => b.status !== 'CANCELLED'));
   }, [client, slot.id]);
 
@@ -282,6 +301,44 @@ export function TimetableRosterPanel({
               .filter(Boolean)
               .join(' · ')}
           </p>
+          <div className="mt-2.5 flex flex-wrap items-center gap-2">
+            <span className="text-xs font-medium text-dd-muted">Status instruktur:</span>
+            {slot.instructorAttendance?.checkedInAt ? (
+              <span
+                className="inline-flex items-center gap-1.5 rounded-full bg-dd-success-soft px-2.5 py-0.5 text-xs font-semibold text-dd-forest"
+                title={`Metode: ${slot.instructorAttendance.method === 'QR_SCAN' ? 'Scan QR' : 'Verifikasi Manual'}`}
+              >
+                <Check className="size-3.5 stroke-[2.5]" aria-hidden="true" />
+                <span>
+                  Hadir pk{' '}
+                  {formatBranchTime(
+                    new Date(slot.instructorAttendance.checkedInAt),
+                    slot.timezone,
+                  )}{' '}
+                  ({slot.instructorAttendance.method === 'QR_SCAN' ? 'scan QR' : 'manual'})
+                </span>
+              </span>
+            ) : (
+              <div className="inline-flex items-center gap-2">
+                <span className="inline-flex items-center gap-1 rounded-full bg-dd-surface-sunken px-2 py-0.5 text-xs font-medium text-dd-muted">
+                  <span className="size-1.5 rounded-full bg-amber-500" aria-hidden="true" />
+                  Belum check-in
+                </span>
+                {canVerifyInstructor && onVerifyInstructor && slot.status !== 'CANCELLED' && (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    className="min-h-[32px] px-2.5 py-1 text-xs font-medium"
+                    disabled={verifyingInstructor}
+                    onClick={handleVerifyInstructor}
+                  >
+                    {verifyingInstructor ? 'Memverifikasi...' : 'Tandai hadir'}
+                  </Button>
+                )}
+              </div>
+            )}
+          </div>
         </div>
         {canManageClass && (
           <Button variant="secondary" onClick={onManage}>

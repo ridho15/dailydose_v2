@@ -639,7 +639,7 @@ export function DetailPanel({
         </DetailSection>
       )}
 
-      {(isConfirmed || slot.status === 'COMPLETED') && slot.instructorUserId && (
+      {(isPublished || isConfirmed || slot.status === 'COMPLETED') && slot.instructorUserId && (
         <DetailSection id="instructor-attendance-title" title="Presensi instruktur">
           {slot.instructorAttendance ? (
             <Feedback kind="status">

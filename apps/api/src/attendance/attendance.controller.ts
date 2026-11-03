@@ -1,5 +1,7 @@
 import { Body, Controller, Get, Headers, Param, Post, Req, UseGuards } from '@nestjs/common';
 import { AuthGuard, type AuthenticatedRequest } from '../identity/auth.guard';
+import { Roles } from '../identity/roles.decorator';
+import { RolesGuard } from '../identity/roles.guard';
 import { AttendanceService } from './kehadiran.service';
 import { buildPass } from './check-in-pass';
 import { SelfService } from '../identity/route-access';
@@ -110,6 +112,25 @@ export class AttendanceController {
   ) {
     const result = await this.attendance.backfillCustomer(
       request.principal,
+      body,
+      idempotencyKey,
+      request.correlationId ?? 'unknown',
+    );
+    return { ...(result.body as object), idempotentReplay: result.replay };
+  }
+
+  @Post('bookings/:id/status-correction')
+  @UseGuards(RolesGuard)
+  @Roles('SUPER_OWNER')
+  async correctStatus(
+    @Req() request: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Headers('idempotency-key') idempotencyKey: string,
+    @Body() body: { toStatus?: string; reason?: string },
+  ) {
+    const result = await this.attendance.correctStatus(
+      request.principal,
+      id,
       body,
       idempotencyKey,
       request.correlationId ?? 'unknown',

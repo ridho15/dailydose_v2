@@ -1,8 +1,9 @@
 'use client';
 
 import { useState, type KeyboardEvent } from 'react';
-import { Lock } from 'lucide-react';
+import { Check, Lock } from 'lucide-react';
 import type { ClassSlot } from '@/api-clients/class-slot-client';
+import { formatBranchTime } from '@/lib/class-time';
 import { geserDenganPanah, nadaKeterisian, type PosisiKalender } from './class-slot-presenters';
 
 /** Kelas yang ditampilkan di satu sel sebelum sisanya diringkas jadi "+N kelas lagi". */
@@ -144,13 +145,21 @@ export function TimetableWeekGrid({
           : 'belum ada peserta, bisa dipindah'
         : `${slot.bookedCount} peserta sudah booking, jadwal terkunci`;
 
+    const isCheckedIn = Boolean(slot.instructorAttendance?.checkedInAt);
+    const checkedInTime = slot.instructorAttendance?.checkedInAt
+      ? formatBranchTime(new Date(slot.instructorAttendance.checkedInAt), slot.timezone)
+      : null;
+    const instructorStatus = isCheckedIn
+      ? `instruktur hadir pk ${checkedInTime}`
+      : 'instruktur belum check-in';
+
     return (
       <button
         type="button"
         key={slot.id}
         draggable={bebas}
         aria-pressed={dipilih}
-        aria-label={`${namaTipe(slot)}, ${namaInstruktur(slot)}. ${angka}, ${status}`}
+        aria-label={`${namaTipe(slot)}, ${namaInstruktur(slot)}. ${instructorStatus}. ${angka}, ${status}`}
         title={status}
         onClick={() => onSelect(slot)}
         onKeyDown={(event) => tekanTombol(slot, event)}
@@ -178,7 +187,18 @@ export function TimetableWeekGrid({
           )}
           <span className="truncate text-[13px] font-bold text-dd-ink">{namaTipe(slot)}</span>
         </span>
-        <span className="truncate text-[13px] text-dd-muted">{namaInstruktur(slot)}</span>
+        <span className="flex min-w-0 items-center justify-between gap-1 text-[13px] text-dd-muted">
+          <span className="truncate">{namaInstruktur(slot)}</span>
+          {isCheckedIn && (
+            <span
+              className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-dd-success-soft px-1 text-[10px] font-semibold text-dd-forest"
+              title={`Instruktur hadir pk ${checkedInTime}`}
+            >
+              <Check className="size-2.5 stroke-[3]" aria-hidden="true" />
+              <span>Hadir</span>
+            </span>
+          )}
+        </span>
         <div className="flex items-center justify-between gap-1">
           <span
             className={`text-[13px] font-bold ${

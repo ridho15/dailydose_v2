@@ -889,6 +889,13 @@ async function main() {
     'PemesananKelas'
   );
 
+  // Booking v1 tidak membawa cabang; tanpa ini roster staf (yang disaring per cabang) kosong.
+  await prisma.$executeRawUnsafe(`
+    UPDATE pemesanan_kelas b JOIN slot_kelas sk ON sk.id = b.classSlotId
+    SET b.branchId = sk.branchId
+    WHERE b.branchId IS NULL
+  `);
+
   await chunkInsert(
     attendancesToInsert,
     2500,

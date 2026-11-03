@@ -561,6 +561,13 @@ export interface BookingClient {
   cancel?(bookingId: string, reason?: string, idempotencyKey?: string): Promise<void>;
   /** Pembatalan atas nama pelanggan oleh staf (Aturan Bisnis #6: batas H-24, alasan wajib). */
   cancelAsStaff?(bookingId: string, reason: string, idempotencyKey: string): Promise<void>;
+  /** Koreksi status booking (BOOKED/ATTENDED/NO_SHOW) oleh Super Owner, alasan wajib. */
+  koreksiStatus?(
+    bookingId: string,
+    toStatus: 'BOOKED' | 'ATTENDED' | 'NO_SHOW',
+    reason: string,
+    idempotencyKey: string,
+  ): Promise<void>;
   cancellationOptions?(bookingId: string): Promise<{
     canCancel: boolean;
     unavailableReason: string | null;
@@ -957,6 +964,19 @@ export const browserBookingClient: BookingClient = {
     );
     if (!response.ok) throw { response };
   },
+  async koreksiStatus(bookingId, toStatus, reason, idempotencyKey) {
+    const response = await foregroundFetch(
+      `/api/v1/bookings/${encodeURIComponent(bookingId)}/status-correction`,
+      {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'content-type': 'application/json', 'idempotency-key': idempotencyKey },
+        body: JSON.stringify({ toStatus, reason }),
+      },
+      'Menyimpan koreksi status…',
+    );
+    if (!response.ok) throw { response };
+  },
   ajukanPembatalanTerlambat(bookingId, reason, options) {
     return apiFetch<PengajuanPembatalan>(
       `/bookings/${encodeURIComponent(bookingId)}/late-cancellation`,
@@ -1210,6 +1230,8 @@ const messages: Record<string, string> = {
   STALE_VERSION: 'Data berubah sejak terakhir dimuat. Muat ulang sebelum melanjutkan.',
   CHECK_IN_TOO_EARLY: 'QR belum aktif. Check-in dibuka 30 menit sebelum kelas.',
   CHECK_IN_WINDOW_CLOSED: 'QR sudah kedaluwarsa karena jadwal kelas telah selesai.',
+  BOOKING_SESSION_ALREADY_SETTLED:
+    'Kelas sudah selesai atau sesi paket sudah dipotong. Koreksi lewat Penyesuaian Sesi agar saldo tidak selisih.',
   INVALID_STATE_TRANSITION:
     'Status kelas atau booking saat ini tidak mengizinkan tindakan tersebut. Pastikan kelas sudah dipublikasikan.',
   PACKAGE_CLASS_TYPE_MISMATCH: 'Paket yang Anda pilih tidak sesuai dengan jenis kelas ini. Silakan pilih kelas dengan tipe yang cocok.',

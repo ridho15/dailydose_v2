@@ -1,0 +1,5 @@
+- generic [active] [ref=f6e1]:
+  - main [ref=f6e2]:
+    - status "Memuat sesi" [ref=f6e3]
+  - region "Pesan aplikasi"
+  - alert [ref=f6e7]

@@ -1,0 +1,24 @@
+- generic [active] [ref=e1]:
+  - main [ref=e2]:
+    - generic [ref=e3]:
+      - generic [ref=e4]: Error 404 · Halaman Tidak Ditemukan
+      - generic [ref=e9]:
+        - heading "Ups! Halaman belum tersedia" [level=1] [ref=e10]
+        - paragraph [ref=e11]: Tautan yang Anda tuju mungkin salah ketik, sudah dipindahkan, atau tidak lagi aktif. Mari kembali ke jalur latihan Anda.
+      - generic [ref=e12]:
+        - link [ref=e13] [cursor=pointer]:
+          - /url: /classes
+          - generic [ref=e17]:
+            - paragraph [ref=e18]: Jadwal Kelas
+            - paragraph [ref=e19]: Cek jadwal 14 hari studio
+        - link [ref=e20] [cursor=pointer]:
+          - /url: /packages
+          - generic [ref=e25]:
+            - paragraph [ref=e26]: Paket & Harga
+            - paragraph [ref=e27]: Pilihan sesi reformer & privat
+      - generic [ref=e28]:
+        - link "Kembali ke Beranda" [ref=e29] [cursor=pointer]:
+          - /url: /
+        - link "Bantuan WhatsApp" [ref=e34] [cursor=pointer]:
+          - /url: /contact
+  - region "Pesan aplikasi"

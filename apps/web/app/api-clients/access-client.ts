@@ -1,4 +1,5 @@
 import { foregroundFetch } from '../components/app-loading';
+import { ApiError, parseApiError } from '../lib/api-client';
 import { notifySessionFailure } from './session-client';
 
 export type AccessScope = 'GLOBAL' | 'BRANCH';
@@ -116,8 +117,21 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     init.method && init.method !== 'GET' ? 'Menyimpan pengaturan akses…' : 'Memuat akses…',
   );
   if (!response.ok) {
-    const problem = await response.json().catch(() => undefined);
-    const error = { response: { status: response.status, data: problem } };
+    const problem = (await response.json().catch(() => undefined)) as Record<string, unknown> | undefined;
+    const errObj =
+      problem?.error && typeof problem.error === 'object'
+        ? (problem.error as Record<string, unknown>)
+        : null;
+    const code =
+      (typeof errObj?.code === 'string' ? errObj.code : undefined) ??
+      (typeof problem?.code === 'string' ? problem.code : undefined);
+    const message =
+      (typeof errObj?.message === 'string' ? errObj.message : undefined) ??
+      (typeof problem?.message === 'string' ? problem.message : undefined) ??
+      `Request failed with status ${response.status}`;
+
+    const error = new ApiError(message, response.status, problem, code);
+    (error as any).response = { status: response.status, data: problem };
     notifySessionFailure(error);
     throw error;
   }
@@ -160,17 +174,11 @@ export const browserAccessClient: AccessClient = {
 };
 
 export function accessFailureCode(error: unknown): string {
-  const response = (
-    error as {
-      response?: {
-        status?: number;
-        data?: { error?: { code?: string }; code?: string };
-      };
-    }
-  ).response;
-  return (
-    response?.data?.error?.code ??
-    response?.data?.code ??
-    (response?.status === 403 ? 'FORBIDDEN' : 'REQUEST_FAILED')
-  );
+  notifySessionFailure(error);
+  const parsed = parseApiError(error);
+  if (parsed.code) return parsed.code;
+  if (parsed.status === 403) return 'FORBIDDEN';
+  if (parsed.status === 409) return 'ROLE_CODE_CONFLICT';
+  if (parsed.status === 404) return 'NOT_FOUND';
+  return 'REQUEST_FAILED';
 }

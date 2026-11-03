@@ -19,6 +19,7 @@ import {
   type LedgerBalance,
   type LedgerClient,
 } from '@/api-clients/ledger-client';
+import { parseApiError } from '../../lib/api-client';
 import { Button, ButtonLink } from '../../components/actions';
 import { LifecycleDialog } from '../../components/admin/lifecycle-dialog';
 import { AdminPageState, Badge, Panel } from '../../components/admin/admin-ui';
@@ -37,7 +38,7 @@ const failureCopy: Record<UiFailure, string> = {
   INTERNAL_ERROR: 'Layanan identitas mengalami gangguan internal.',
   RATE_LIMITED: 'Terlalu banyak permintaan. Coba kembali nanti.',
   SERVICE_UNAVAILABLE: 'Layanan identitas tidak dapat dihubungi.',
-  FORBIDDEN: 'Anda tidak memiliki izin untuk membuka pengguna ini.',
+  FORBIDDEN: 'Anda tidak memiliki izin untuk membuka atau mengelola pengguna ini.',
   IDENTITY_CONFLICT: 'Data pengguna berubah atau tindakan tidak dapat diterapkan.',
   STALE_VERSION: 'Data pengguna telah berubah. Muat ulang detail sebelum mencoba kembali.',
   SESSION_REVOKED: 'Sesi berakhir. Silakan masuk kembali.',
@@ -70,11 +71,12 @@ export function UserDetailView({
   capabilitiesOverride?: readonly string[];
 }) {
   const context = useSessionContext();
+  const isSelf = Boolean(context?.session?.id && context.session.id === id);
   const capabilities = capabilitiesOverride ?? context?.session?.capabilities ?? [];
   const sessionReady = Boolean(capabilitiesOverride || context?.session);
   const canAdmin = sessionReady && capabilities.includes('user:admin');
-  // Hapus akun hanya untuk Super Owner (server juga menegakkannya).
-  const canDelete = Boolean(context?.session?.roles?.includes('SUPER_OWNER'));
+  // Hapus akun hanya untuk Super Owner (server juga menegakkannya), dan bukan akun sendiri.
+  const canDelete = Boolean(context?.session?.roles?.includes('SUPER_OWNER')) && !isSelf;
   const [removing, setRemoving] = useState(false);
   const [removed, setRemoved] = useState(false);
   const canAudit = sessionReady && capabilities.includes('audit:read');
@@ -95,6 +97,7 @@ export function UserDetailView({
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [failure, setFailure] = useState<UiFailure>();
+  const [customError, setCustomError] = useState<string>();
   const [notFound, setNotFound] = useState(false);
   const [message, setMessage] = useState<string>();
   const [action, setAction] = useState<DetailAction>(initialAction);
@@ -102,6 +105,7 @@ export function UserDetailView({
   const load = useCallback(async () => {
     setLoading(true);
     setFailure(undefined);
+    setCustomError(undefined);
     setNotFound(false);
     try {
       const nextUser = await client.getUser(id);
@@ -129,7 +133,8 @@ export function UserDetailView({
       setAudit(nextAudit);
       setVerification(nextVerification);
     } catch (error) {
-      if ((error as { response?: { status?: number } })?.response?.status === 404)
+      const parsed = parseApiError(error);
+      if (parsed.status === 404)
         setNotFound(true);
       else setFailure(failureCode(error));
     } finally {
@@ -147,12 +152,17 @@ export function UserDetailView({
   const runMutation = async (operation: () => Promise<void>, success: string) => {
     setSubmitting(true);
     setFailure(undefined);
+    setCustomError(undefined);
     try {
       await operation();
       setMessage(success);
       closeAction();
       await load();
     } catch (error) {
+      const parsed = parseApiError(error);
+      if (parsed.message && !parsed.message.startsWith('Request failed')) {
+        setCustomError(parsed.message);
+      }
       setFailure(failureCode(error));
     } finally {
       setSubmitting(false);
@@ -246,7 +256,7 @@ export function UserDetailView({
               <KeyRound className="size-4" /> Reset kata sandi
             </Button>
           )}
-          {canManageUser && user.status !== 'PENDING_ACTIVATION' && (
+          {canManageUser && user.status !== 'PENDING_ACTIVATION' && !isSelf && (
             <Button
               variant={user.status === 'ACTIVE' ? 'danger' : 'secondary'}
               onClick={() => setAction('status')}
@@ -273,7 +283,11 @@ export function UserDetailView({
         />
 
       {message && <Feedback kind="status">{message}</Feedback>}
-      {failure && <Feedback kind="error">{failureCopy[failure]}</Feedback>}
+      {customError ? (
+        <Feedback kind="error">{customError}</Feedback>
+      ) : failure ? (
+        <Feedback kind="error">{failureCopy[failure]}</Feedback>
+      ) : null}
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(320px,0.42fr)]">
         <div className="grid gap-6">

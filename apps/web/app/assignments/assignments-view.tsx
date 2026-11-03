@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Plus, RefreshCw, UserRoundCheck } from 'lucide-react';
 import {
   assignmentFailure,
+  assignmentFailureDetail,
   browserAssignmentClient,
   type AssignmentClient,
   type AssignmentFailure,
@@ -84,6 +85,7 @@ export function AssignmentsView({
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [failure, setFailure] = useState<AssignmentFailure>();
+  const [failureDetail, setFailureDetail] = useState<string>();
   const [createOpen, setCreateOpen] = useState(false);
   const [ending, setEnding] = useState<AssignmentManagementItem>();
   const [selectedUser, setSelectedUser] = useState<{
@@ -96,6 +98,7 @@ export function AssignmentsView({
     if (!canRead) return;
     setLoading(true);
     setFailure(undefined);
+    setFailureDetail(undefined);
     try {
       const result = await client.list({ ...filters, branchId: branchId || undefined, cursor });
       setItems(result.items);
@@ -103,6 +106,7 @@ export function AssignmentsView({
       setNextCursor(result.page?.nextCursor ?? null);
     } catch (error) {
       setFailure(assignmentFailure(error));
+      setFailureDetail(assignmentFailureDetail(error));
     } finally {
       setLoading(false);
     }
@@ -122,6 +126,13 @@ export function AssignmentsView({
     setCursor(undefined);
     setCursorHistory([]);
   };
+
+  const handleActionFailure = useCallback((error: unknown) => {
+    const fail = assignmentFailure(error);
+    const detail = assignmentFailureDetail(error);
+    setFailure(fail);
+    setFailureDetail(detail);
+  }, []);
 
   const columns = useMemo(
     () => [
@@ -290,7 +301,9 @@ export function AssignmentsView({
           kind={
             failure === 'FORBIDDEN' ? 'forbidden' : failure === 'STALE_VERSION' ? 'stale' : 'error'
           }
-          description={failureCopy[failure]}
+          description={
+            failureDetail ? `${failureCopy[failure]} (${failureDetail})` : failureCopy[failure]
+          }
           action={<Button onClick={() => void load()}>Coba lagi</Button>}
         />
       ) : (
@@ -374,7 +387,7 @@ export function AssignmentsView({
           });
           await load();
         }}
-        onFailure={setFailure}
+        onFailure={handleActionFailure}
       />
 
       <EndAssignmentDialog
@@ -391,7 +404,7 @@ export function AssignmentsView({
           });
           await load();
         }}
-        onFailure={setFailure}
+        onFailure={handleActionFailure}
       />
     </div>
   );
@@ -418,7 +431,7 @@ function CreateAssignmentDrawer({
   onSelectedUser(value?: { id: string; label: string; description?: string }): void;
   onClose(): void;
   onCreated(): Promise<void>;
-  onFailure(value: AssignmentFailure): void;
+  onFailure(error: unknown): void;
 }) {
   const feedback = useOptionalAppFeedback();
   const [busy, setBusy] = useState(false);
@@ -520,7 +533,7 @@ function CreateAssignmentDrawer({
             onSelectedUser(undefined);
             await onCreated();
           } catch (error) {
-            onFailure(assignmentFailure(error));
+            onFailure(error);
           } finally {
             setBusy(false);
           }
@@ -586,7 +599,7 @@ function EndAssignmentDialog({
   feedback: ReturnType<typeof useOptionalAppFeedback>;
   onClose(): void;
   onEnded(): Promise<void>;
-  onFailure(value: AssignmentFailure): void;
+  onFailure(error: unknown): void;
 }) {
   const [busy, setBusy] = useState(false);
   const [dirty, setDirty] = useState(false);
@@ -654,7 +667,7 @@ function EndAssignmentDialog({
             setDirty(false);
             await onEnded();
           } catch (error) {
-            onFailure(assignmentFailure(error));
+            onFailure(error);
           } finally {
             setBusy(false);
           }

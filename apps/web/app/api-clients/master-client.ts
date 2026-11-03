@@ -1,4 +1,4 @@
-import { apiFetch } from '../lib/api-client';
+import { apiFetch, parseApiError } from '../lib/api-client';
 import { notifySessionFailure } from './session-client';
 
 export interface Studio {
@@ -440,13 +440,15 @@ export const browserMasterClient: MasterClient = {
 
 export function masterFailure(error: unknown): string {
   notifySessionFailure(error);
-  const status = (error as { status?: number; response?: { status?: number } })?.status ??
-    (error as { response?: { status?: number } })?.response?.status;
-  if (status === 403) return 'FORBIDDEN';
-  if (status === 404) return 'RESOURCE_NOT_FOUND';
-  if (status === 409) return 'EFFECTIVE_PERIOD_OVERLAP_OR_STALE_VERSION';
-  if (status === 422 || status === 400) return 'VALIDATION_ERROR';
-  if (status === 503) return 'CONFIGURATION_REQUIRED';
+  const parsed = parseApiError(error);
+
+  if (parsed.code === 'STALE_VERSION') return 'STALE_VERSION';
+  if (parsed.code === 'EFFECTIVE_PERIOD_OVERLAP') return 'EFFECTIVE_PERIOD_OVERLAP';
+  if (parsed.status === 403) return 'FORBIDDEN';
+  if (parsed.status === 404) return 'RESOURCE_NOT_FOUND';
+  if (parsed.status === 409) return 'EFFECTIVE_PERIOD_OVERLAP_OR_STALE_VERSION';
+  if (parsed.status === 422 || parsed.status === 400) return 'VALIDATION_ERROR';
+  if (parsed.status === 503) return 'CONFIGURATION_REQUIRED';
   return 'REQUEST_FAILED';
 }
 
@@ -459,6 +461,14 @@ const masterMessages: Record<string, string> = {
   RESOURCE_NOT_FOUND: 'Data tidak ditemukan atau berada di luar cakupan Anda.',
   EFFECTIVE_PERIOD_OVERLAP_OR_STALE_VERSION:
     'Data berubah atau periode berlaku bertabrakan. Muat ulang lalu coba lagi.',
+  STALE_VERSION:
+    'Data telah diubah oleh pengguna lain. Muat ulang halaman untuk mendapatkan data terbaru.',
+  EFFECTIVE_PERIOD_OVERLAP:
+    'Periode berlaku bertabrakan dengan pengaturan lain yang sudah ada.',
+  BRANCH_CODE_EXISTS: 'Kode cabang sudah terdaftar. Gunakan kode unik lain.',
+  STUDIO_CODE_EXISTS: 'Kode studio sudah digunakan pada cabang ini.',
+  ROOM_CODE_EXISTS: 'Kode ruangan sudah digunakan pada studio ini.',
+  CLASS_TYPE_CODE_EXISTS: 'Kode tipe kelas sudah terdaftar.',
   VALIDATION_ERROR: 'Data belum valid. Periksa isian lalu coba lagi.',
   CONFIGURATION_REQUIRED: 'Fitur ini belum dikonfigurasi di server.',
   CANNOT_DELETE_BRANCH_WITH_DEPENDENCIES:
@@ -474,18 +484,38 @@ const masterMessages: Record<string, string> = {
 
 /** Pesan Indonesia untuk pengguna; pesan rinci dari server (mis. rincian dependensi) diprioritaskan. */
 export function masterFailureMessage(error: unknown): string {
-  const data = (error as {
-    data?: {
-      code?: string;
-      details?: Array<{ issue?: string }>;
-      error?: { code?: string; details?: Array<{ issue?: string }> };
-    };
-  })?.data;
-  const issue = data?.details?.[0]?.issue ?? data?.error?.details?.[0]?.issue;
+  const parsed = parseApiError(error);
+
+  const detailsArray = Array.isArray(parsed.details) ? parsed.details : [];
+  const issue = (detailsArray[0] as { issue?: string } | undefined)?.issue;
   if (issue) return issue;
 
-  const code = data?.code ?? data?.error?.code;
+  const code = parsed.code;
+  // Specific domain codes take precedence
+  if (code && code !== 'VALIDATION_ERROR' && masterMessages[code]) {
+    return masterMessages[code]!;
+  }
+
+  // If server provided a specific message and it's not generic
+  if (
+    parsed.message &&
+    !parsed.message.startsWith('Request failed') &&
+    !parsed.message.startsWith('offline') &&
+    !parsed.message.startsWith('Http error') &&
+    !parsed.message.startsWith('Master request failed') &&
+    parsed.message.toLowerCase() !== 'validation error' &&
+    parsed.message.toLowerCase() !== 'bad request'
+  ) {
+    return parsed.message;
+  }
+
   if (code && masterMessages[code]) return masterMessages[code]!;
+
+  if (parsed.status === 409 && code) {
+    if (code === 'STALE_VERSION') return masterMessages.STALE_VERSION!;
+    if (code === 'EFFECTIVE_PERIOD_OVERLAP') return masterMessages.EFFECTIVE_PERIOD_OVERLAP!;
+  }
+
   const generic = masterFailure(error);
   return masterMessages[generic] ?? masterMessages.REQUEST_FAILED!;
 }

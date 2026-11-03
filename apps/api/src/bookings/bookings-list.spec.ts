@@ -58,7 +58,7 @@ describe('staff booking list authorization and scope', () => {
   it('limits branch-scoped staff to their branches', async () => {
     const { service, findMany } = createService();
     await service.list(principal(['booking:read'], [branchA]), {});
-    expect(findMany.mock.calls[0]![0].where.branchId).toEqual({ in: [branchA] });
+    expect(findMany.mock.calls[0]![0].where.classSlot.branchId).toEqual({ in: [branchA] });
   });
 
   it('hides other branches from branch-scoped staff', async () => {
@@ -71,9 +71,9 @@ describe('staff booking list authorization and scope', () => {
   it('allows global staff to read any branch without a branch filter', async () => {
     const { service, findMany } = createService();
     await service.list(principal(['booking:read', 'branch:all'], []), {});
-    expect(findMany.mock.calls[0]![0].where.branchId).toBeUndefined();
+    expect(findMany.mock.calls[0]![0].where.classSlot).toBeUndefined();
     await service.list(principal(['booking:read', 'branch:all'], []), { branchId: branchB });
-    expect(findMany.mock.calls[1]![0].where.branchId).toEqual(branchB);
+    expect(findMany.mock.calls[1]![0].where.classSlot.branchId).toEqual(branchB);
   });
 
   it('rejects malformed cursors', async () => {
@@ -147,7 +147,7 @@ describe('booking list pagination and summary', () => {
       { classSlot: { startAt: 'asc' } },
       { id: 'asc' },
     ]);
-    expect(findMany.mock.calls[0]![0].where.status).toBe('BOOKED');
+    expect(findMany.mock.calls[0]![0].where.status).toEqual({ in: ['BOOKED', 'ATTENDED'] });
   });
 
   it('keeps timeline and search filters from overwriting each other', async () => {

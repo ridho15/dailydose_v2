@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, MessageSquare, ScanLine, Sparkles, UserPlus } from 'lucide-react';
+import { AlertTriangle, Check, MessageSquare, ScanLine, Sparkles, UserPlus } from 'lucide-react';
 import { WalkInDrawer } from './walk-in-drawer';
 import { WhatsAppReminderDialog } from './whatsapp-reminder-dialog';
 import type { WhatsAppReminderContext, WhatsAppPreset } from './whatsapp-reminder-presets';
@@ -100,6 +100,7 @@ export function FrontDeskTodayView({
     defaultPresetId?: WhatsAppPreset['id'];
   } | null>(null);
   const [walkInOpen, setWalkInOpen] = useState(false);
+  const [verifyingInstructor, setVerifyingInstructor] = useState(false);
 
   useEffect(() => {
     if (initialNow) return;
@@ -231,6 +232,52 @@ export function FrontDeskTodayView({
   const time = (slot: ClassSlot) =>
     `${formatBranchTime(slot.startAt, timezone)} – ${formatBranchTime(slot.endAt, timezone)}`;
 
+  const confirmVerifyInstructor = async (slot: ClassSlot) => {
+    if (!client.verifyInstructorAttendance) return;
+    const accepted = await feedback.confirm({
+      tone: 'warning',
+      title: 'Verifikasi presensi instruktur?',
+      message:
+        'Instruktur dicatat hadir pada kelas ini dan honornya dihitung sebagai terverifikasi. Tindakan ini tercatat atas nama Anda.',
+      confirmLabel: 'Verifikasi',
+    });
+    if (!accepted) return;
+    setVerifyingInstructor(true);
+    try {
+      const result = await client.verifyInstructorAttendance(slot.id);
+      setWorkspace((current) => {
+        if (!current) return current;
+        return {
+          ...current,
+          slots: current.slots.map((s) =>
+            s.id === slot.id
+              ? {
+                  ...s,
+                  instructorAttendance: {
+                    checkedInAt: result.checkedInAt,
+                    method: result.method,
+                  },
+                }
+              : s,
+          ),
+        };
+      });
+      feedback.showToast({
+        tone: 'success',
+        title: 'Presensi dicatat',
+        message: 'Presensi instruktur berhasil diverifikasi.',
+      });
+    } catch (err) {
+      feedback.showToast({
+        tone: 'danger',
+        title: 'Gagal mencatat presensi',
+        message: err instanceof Error ? err.message : 'Terjadi kendala saat memverifikasi.',
+      });
+    } finally {
+      setVerifyingInstructor(false);
+    }
+  };
+
   const window = selected ? attendanceWindow(selected, now) : { open: false };
 
   const confirmMark = async () => {
@@ -305,6 +352,7 @@ export function FrontDeskTodayView({
   );
   const queueTotal = (queues ?? []).reduce((sum, queue) => sum + queue.count, 0);
   const canReadRenewal = Boolean(sessionContext?.hasCapability('package:read'));
+  const canManageAttendance = Boolean(sessionContext?.hasCapability('attendance:manage'));
 
   const slotRow = (slot: ClassSlot) => {
     const ended = slotPhase(slot, now) === 'Selesai';
@@ -325,6 +373,20 @@ export function FrontDeskTodayView({
             {studioName(slot)} · {slot.bookedCount} dari {slot.capacity} peserta
             {ended ? ' · Selesai' : ''}
           </span>
+          <div className="mt-1 flex items-center justify-between gap-1 text-xs text-dd-muted">
+            <span className="truncate">{instructorName(slot)}</span>
+            {slot.instructorAttendance?.checkedInAt ? (
+              <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-dd-success-soft px-1.5 py-0.5 text-[11px] font-semibold text-dd-forest">
+                <Check className="size-3 stroke-[3]" aria-hidden="true" />
+                Hadir
+              </span>
+            ) : (
+              <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-dd-surface-sunken px-1.5 py-0.5 text-[11px] font-medium text-dd-muted">
+                <span className="size-1.5 rounded-full bg-amber-500" aria-hidden="true" />
+                Belum check-in
+              </span>
+            )}
+          </div>
           {belowQuota && !ended && (
             <span className="mt-1 block text-sm font-semibold text-dd-warning">
               Di bawah kuota minimum ({slot.bookedCount} dari {slot.minimumQuota}). Diputuskan di
@@ -479,6 +541,44 @@ export function FrontDeskTodayView({
                     {selected.bookedCount} dari {selected.capacity}
                     {selected.bookedCount >= selected.capacity ? ' (penuh)' : ''}
                   </p>
+                  <div className="mt-2.5 flex flex-wrap items-center gap-2">
+                    <span className="text-xs font-medium text-dd-muted">Status instruktur:</span>
+                    {selected.instructorAttendance?.checkedInAt ? (
+                      <span
+                        className="inline-flex items-center gap-1.5 rounded-full bg-dd-success-soft px-2.5 py-0.5 text-xs font-semibold text-dd-forest"
+                        title={`Metode: ${selected.instructorAttendance.method === 'QR_SCAN' ? 'Scan QR' : 'Verifikasi Manual'}`}
+                      >
+                        <Check className="size-3.5 stroke-[2.5]" aria-hidden="true" />
+                        <span>
+                          Hadir pk{' '}
+                          {formatBranchTime(
+                            new Date(selected.instructorAttendance.checkedInAt),
+                            timezone,
+                          )}{' '}
+                          ({selected.instructorAttendance.method === 'QR_SCAN' ? 'scan QR' : 'manual'})
+                        </span>
+                      </span>
+                    ) : (
+                      <div className="inline-flex items-center gap-2">
+                        <span className="inline-flex items-center gap-1 rounded-full bg-dd-surface-sunken px-2 py-0.5 text-xs font-medium text-dd-muted">
+                          <span className="size-1.5 rounded-full bg-amber-500" aria-hidden="true" />
+                          Belum check-in
+                        </span>
+                        {canManageAttendance && Boolean(client.verifyInstructorAttendance) && (
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            size="sm"
+                            className="min-h-[30px] px-2.5 py-0.5 text-xs font-medium"
+                            disabled={verifyingInstructor}
+                            onClick={() => void confirmVerifyInstructor(selected)}
+                          >
+                            {verifyingInstructor ? 'Memverifikasi...' : 'Tandai hadir'}
+                          </Button>
+                        )}
+                      </div>
+                    )}
+                  </div>
 
                   <h3 id="attendance-heading" className="m-0 mt-5 text-[15px] font-semibold">
                     Presensi peserta

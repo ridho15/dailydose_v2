@@ -524,6 +524,13 @@ async function main() {
     `   ✅ Berhasil menyinkronkan ${insertedBookingCount} pemesanan kelas dan ${insertedAttendanceCount} riwayat presensi.\n`,
   );
 
+  // Booking v1 tidak membawa cabang; tanpa ini roster staf (yang disaring per cabang) kosong.
+  await prisma.$executeRawUnsafe(`
+    UPDATE pemesanan_kelas b JOIN slot_kelas sk ON sk.id = b.classSlotId
+    SET b.branchId = sk.branchId
+    WHERE b.branchId IS NULL
+  `);
+
   // Angka terisi dihitung ulang dari booking yang benar-benar ada (aman dijalankan berulang).
   const diperbarui = await prisma.$executeRawUnsafe(`
     UPDATE slot_kelas sk

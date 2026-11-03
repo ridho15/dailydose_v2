@@ -556,6 +556,89 @@ export class AttendanceService {
     );
   }
 
+  /**
+   * Koreksi status booking oleh Super Admin (salah catat hadir/tidak hadir). Hanya BOOKED, ATTENDED,
+   * NO_SHOW; kursi tidak berubah. Ditolak bila kelas sudah COMPLETED atau sudah ada potongan sesi:
+   * di sana koreksi harus lewat penyesuaian sesi supaya saldo dan laporan tidak selisih.
+   */
+  async correctStatus(
+    principal: SessionPrincipal,
+    bookingId: string,
+    input: { toStatus?: string; reason?: string },
+    idempotencyKey: string,
+    correlationId: string,
+  ) {
+    if (!principal.roles.some((r) => r.role === 'SUPER_OWNER'))
+      throw new ApiProblem('FORBIDDEN', HttpStatus.FORBIDDEN);
+    const reason = input.reason?.trim() ?? '';
+    const toStatus = input.toStatus as 'BOOKED' | 'ATTENDED' | 'NO_SHOW';
+    if (
+      !UUID.test(bookingId) ||
+      !['BOOKED', 'ATTENDED', 'NO_SHOW'].includes(toStatus) ||
+      !idempotencyKey ||
+      idempotencyKey.length < 16 ||
+      idempotencyKey.length > 128 ||
+      reason.length < 3 ||
+      reason.length > 500
+    )
+      throw new ApiProblem('VALIDATION_ERROR', HttpStatus.UNPROCESSABLE_ENTITY);
+    return this.idempotency.execute(
+      {
+        scope: `booking:status-correction:${bookingId}`,
+        key: idempotencyKey,
+        payload: { toStatus, reason },
+        ttlMs: 86_400_000,
+        leaseMs: 30_000,
+      },
+      async (tx) => {
+        await tx.$queryRaw`SELECT \`id\` FROM \`pemesanan_kelas\` WHERE \`id\` = ${bookingId} FOR UPDATE`;
+        const booking = await tx.pemesananKelas.findUnique({
+          where: { id: bookingId },
+          include: { attendance: true, classSlot: { select: { status: true, branchId: true } } },
+        });
+        if (!booking) throw new ApiProblem('RESOURCE_NOT_FOUND', HttpStatus.NOT_FOUND);
+        if (!['BOOKED', 'ATTENDED', 'NO_SHOW'].includes(booking.status) || booking.status === toStatus)
+          throw new ApiProblem('INVALID_STATE_TRANSITION', HttpStatus.CONFLICT);
+        const potongan = await tx.sessionLedger.findFirst({
+          where: { referenceId: booking.id, type: SessionMutationType.ATTEND },
+        });
+        if (booking.classSlot.status === 'COMPLETED' || potongan)
+          throw new ApiProblem('BOOKING_SESSION_ALREADY_SETTLED', HttpStatus.CONFLICT);
+
+        if (toStatus === 'ATTENDED') {
+          await tx.kehadiranPelanggan.create({
+            data: {
+              id: randomUUID(),
+              bookingId: booking.id,
+              method: CheckInMethod.MANUAL_FRONTDESK,
+              recordedById: principal.userId,
+              notes: reason,
+            },
+          });
+        } else if (booking.attendance) {
+          await tx.kehadiranPelanggan.delete({ where: { bookingId: booking.id } });
+        }
+        await tx.pemesananKelas.update({ where: { id: booking.id }, data: { status: toStatus } });
+        await this.audit?.catat(tx, {
+          actorId: principal.userId,
+          branchId: booking.classSlot.branchId,
+          correlationId,
+          action: 'booking.status_corrected',
+          objectType: 'Booking',
+          objectId: booking.id,
+          targetUserId: booking.userId,
+          reason,
+          beforeMasked: { bookingStatus: booking.status },
+          afterMasked: { bookingStatus: toStatus },
+        });
+        return {
+          status: HttpStatus.OK,
+          body: { id: booking.id, status: toStatus } as Prisma.InputJsonValue,
+        };
+      },
+    );
+  }
+
   private attendanceView(
     booking: {
       userId: string;
