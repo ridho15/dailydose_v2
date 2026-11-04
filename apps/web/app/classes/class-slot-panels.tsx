@@ -16,7 +16,7 @@ import type {
 import { formatBranchTime, zonedLocalDateTime } from '@/lib/class-time';
 import { Feedback, StatusBadge } from '../ui';
 import { Button, ButtonLink } from '../components/actions';
-import { SearchSelect, SelectInput, DateInput, Textarea, TextInput } from '../components/forms';
+import { CheckboxInput, SearchSelect, SelectInput, DateInput, Textarea, TextInput } from '../components/forms';
 import { useAppFeedback } from '../components/app-feedback';
 import { useSessionContext } from '../session-context';
 import {
@@ -28,6 +28,7 @@ import {
   timezoneLabel,
   type CancellationReason,
 } from './class-slot-presenters';
+import { HapusPresensiInstruktur } from './koreksi-presensi-instruktur';
 import { ActionRow, CapacityMeter, DetailSection, InfoItem } from './class-slot-detail-parts';
 import { ClassRosterSection } from './class-roster-section';
 
@@ -314,6 +315,7 @@ export function DetailPanel({
   bookingClient = browserBookingClient,
   busy,
   onVerifyInstructor,
+  onRemoveInstructor,
   onAssign,
   onUpdate,
   onPublish,
@@ -351,6 +353,8 @@ export function DetailPanel({
     >;
   busy: boolean;
   onVerifyInstructor?(notes: string): Promise<void>;
+  /** Hanya diisi untuk Super Owner. Mengembalikan true bila presensi terhapus. */
+  onRemoveInstructor?(alasan: string): Promise<boolean>;
   onAssign(id: string): Promise<void>;
   onUpdate(input: {
     classTypeId: string;
@@ -365,7 +369,8 @@ export function DetailPanel({
   }): Promise<boolean | void>;
   onPublish(): Promise<void>;
   onCancel(reason: CancellationReason, note?: string): Promise<void>;
-  onComplete(reason: string): Promise<void>;
+  /** `catatInstruktur`: sekaligus verifikasi manual presensi instruktur sebelum kelas diselesaikan. */
+  onComplete(reason: string, catatInstruktur?: boolean): Promise<void>;
 }) {
   const feedback = useAppFeedback();
   const sessionContext = useSessionContext();
@@ -375,6 +380,7 @@ export function DetailPanel({
   const [cancelNote, setCancelNote] = useState('');
   const [completionReason, setCompletionReason] = useState('');
   const [attendanceNote, setAttendanceNote] = useState('');
+  const [catatInstruktur, setCatatInstruktur] = useState(true);
   const [editOpen, setEditOpen] = useState(false);
   const [issuing, setIssuing] = useState(false);
   const [issues, setIssues] = useState<CheckInIssue[]>([]);
@@ -385,6 +391,8 @@ export function DetailPanel({
   const isConfirmed = slot.status === 'CONFIRMED';
   // Kelas baru bisa diselesaikan setelah jam selesainya; sistem juga menyelesaikannya otomatis.
   const sudahBerakhir = new Date(slot.endAt).getTime() <= Date.now();
+  const tawarkanCatatInstruktur =
+    canVerifyInstructor && Boolean(onVerifyInstructor) && Boolean(slot.instructorUserId) && !slot.instructorAttendance;
   const isClosed = ['COMPLETED', 'CANCELLED', 'AUTO_CANCELLED'].includes(slot.status);
   const canRunClass = isConfirmed && (canComplete || canManageAttendance || canVerifyInstructor);
   const hasActions = isSuperOwner ? canManage : (canManage ? !isClosed : canRunClass);
@@ -648,6 +656,11 @@ export function DetailPanel({
               melalui{' '}
               {slot.instructorAttendance.method === 'QR_SCAN' ? 'scan QR' : 'verifikasi manual admin'}
               .
+              {onRemoveInstructor && (
+                <span className="ml-3 inline-block">
+                  <HapusPresensiInstruktur onHapus={onRemoveInstructor} />
+                </span>
+              )}
             </Feedback>
           ) : (
             <>
@@ -809,11 +822,19 @@ export function DetailPanel({
             placeholder="Tulis alasan penyelesaian (minimal 3 karakter)"
             onChange={(event) => setCompletionReason(event.target.value)}
           />
+          {tawarkanCatatInstruktur && (
+            <CheckboxInput
+              label="Catat juga presensi instruktur (verifikasi manual)"
+              description={`${slot.instructorAttendance ? '' : 'Presensi instruktur belum tercatat. '}Tanpa ini honor kelas tetap "belum terverifikasi" di payroll.`}
+              checked={catatInstruktur}
+              onChange={(event) => setCatatInstruktur(event.target.checked)}
+            />
+          )}
           <div>
             <Button
               className="w-full sm:w-auto"
               disabled={busy || completionReason.trim().length < 3}
-              onClick={() => void onComplete(completionReason.trim())}
+              onClick={() => void onComplete(completionReason.trim(), tawarkanCatatInstruktur && catatInstruktur)}
             >
               Tinjau dan selesaikan kelas
             </Button>

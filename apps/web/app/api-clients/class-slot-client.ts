@@ -161,6 +161,41 @@ export interface ClassSlotClient {
     reason: string,
   ): Promise<CompletionResult>;
   verifyInstructorAttendance?(id: string, notes?: string): Promise<InstructorAttendanceResult>;
+  /** Khusus Super Owner: hapus presensi instruktur yang salah catat. */
+  removeInstructorAttendance?(id: string, reason: string): Promise<void>;
+  riwayat?(params: RiwayatKelasParams): Promise<RiwayatKelasResult>;
+}
+
+export interface RiwayatKelasParams {
+  branchId?: string;
+  from?: string;
+  until?: string;
+  status?: string;
+  tanpaPresensi?: boolean;
+}
+
+export interface RiwayatKelasItem {
+  id: string;
+  branchId: string;
+  branchName: string;
+  timezone: string;
+  classTypeName: string;
+  instructorId: string | null;
+  instructorName: string | null;
+  startAt: string;
+  endAt: string;
+  status: ClassSlotStatus;
+  capacity: number;
+  attendedCount: number;
+  noShowCount: number;
+  bookedCount: number;
+  cancelledCount: number;
+  instructorAttendance: { checkedInAt: string; method: string } | null;
+}
+
+export interface RiwayatKelasResult {
+  items: RiwayatKelasItem[];
+  truncated: boolean;
 }
 
 const key = () => crypto.randomUUID();
@@ -515,6 +550,23 @@ export const browserClassSlotClient: ClassSlotClient = {
         label: 'Mencatat presensi instruktur…',
       },
     );
+  },
+
+  async removeInstructorAttendance(id, reason) {
+    await apiFetch(`/class-slots/${encodeURIComponent(id)}/instructor-attendance/correction`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+      label: 'Menghapus presensi instruktur…',
+    });
+  },
+
+  riwayat(params) {
+    const query = new URLSearchParams();
+    for (const [name, value] of Object.entries(params))
+      if (value !== undefined && value !== '' && value !== false) query.set(name, String(value));
+    return apiFetch<RiwayatKelasResult>(`/class-slots/riwayat?${query.toString()}`, {
+      label: 'Memuat riwayat kelas…',
+    });
   },
 };
 

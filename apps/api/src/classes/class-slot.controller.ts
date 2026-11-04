@@ -42,6 +42,26 @@ export class ClassSlotController {
     });
   }
 
+  @Get('riwayat')
+  riwayat(
+    @Req() req: AuthenticatedRequest,
+    @Query('branchId') branchId?: string,
+    @Query('from') from?: string,
+    @Query('until') until?: string,
+    @Query('status') status?: string,
+    @Query('tanpaPresensi') tanpaPresensi?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.slots.riwayat(req.principal, {
+      branchId,
+      from,
+      until,
+      status,
+      tanpaPresensi: tanpaPresensi === 'true',
+      limit: limit ? Number(limit) : undefined,
+    });
+  }
+
   @Post()
   create(
     @Req() req: AuthenticatedRequest,

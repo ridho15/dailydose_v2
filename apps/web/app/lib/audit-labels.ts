@@ -39,6 +39,7 @@ const auditActionLabels: Record<string, string> = {
   'attendance.customer_backfilled': 'Kehadiran pelanggan dicatat manual',
   'attendance.token_revoked': 'Token kehadiran dicabut',
   'attendance.instructor_verified': 'Kehadiran instruktur diverifikasi',
+  'attendance.instructor_removed': 'Presensi instruktur dihapus',
   'attendance.studio_scan': 'Kehadiran tercatat dari pindaian tablet studio',
   'attendance.studio_scan_rejected': 'Pindaian tablet studio ditolak',
   'class.below_quota_continued': 'Kelas tetap dijalankan di bawah kuota minimum',

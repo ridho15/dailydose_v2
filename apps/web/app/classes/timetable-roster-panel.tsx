@@ -13,6 +13,7 @@ import type { ClassSlot } from '@/api-clients/class-slot-client';
 import { formatBranchTime } from '@/lib/class-time';
 import { Button } from '../components/actions';
 import { Feedback } from '../ui';
+import { HapusPresensiInstruktur } from './koreksi-presensi-instruktur';
 import { BatalkanPeserta, type BatalClient } from './batalkan-peserta';
 
 type RosterClient = Pick<BookingClient, 'list'> &
@@ -125,6 +126,7 @@ export function TimetableRosterPanel({
   canManageClass,
   canVerifyInstructor = false,
   onVerifyInstructor,
+  onRemoveInstructor,
   onManage,
   onChanged,
   dalamLaci = false,
@@ -139,6 +141,8 @@ export function TimetableRosterPanel({
   canManageClass: boolean;
   canVerifyInstructor?: boolean;
   onVerifyInstructor?(notes?: string): Promise<void>;
+  /** Hanya diisi untuk Super Owner. Mengembalikan true bila presensi terhapus. */
+  onRemoveInstructor?(alasan: string): Promise<boolean>;
   onManage(): void;
   /** Dipanggil setelah peserta bertambah atau berkurang, agar angka keterisian ikut berubah. */
   onChanged(): void;
@@ -337,6 +341,9 @@ export function TimetableRosterPanel({
                   </Button>
                 )}
               </div>
+            )}
+            {slot.instructorAttendance?.checkedInAt && onRemoveInstructor && (
+              <HapusPresensiInstruktur onHapus={onRemoveInstructor} />
             )}
           </div>
         </div>

@@ -65,6 +65,7 @@ const routeCapabilities: Array<[string, string[]]> = [
   ['/ledger/adjustments', ['ledger:adjust:read']],
   ['/ledger', ['ledger:read']],
   ['/health', ['operations:read']],
+  ['/workspace/classes/riwayat', ['class-slot:manage']],
   ['/workspace/classes/salin', ['class-slot:manage']],
   ['/workspace/classes/rutin', ['class-slot:manage']],
   ['/workspace/classes', ['class-slot:read']],

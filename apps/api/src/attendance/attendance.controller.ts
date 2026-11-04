@@ -76,6 +76,22 @@ export class AttendanceController {
     return this.attendance.verifyInstructorAttendance(request.principal, id, body);
   }
 
+  @Post('class-slots/:id/instructor-attendance/correction')
+  @UseGuards(RolesGuard)
+  @Roles('SUPER_OWNER')
+  removeInstructorAttendance(
+    @Req() request: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Body() body: { reason?: string },
+  ) {
+    return this.attendance.removeInstructorAttendance(
+      request.principal,
+      id,
+      body,
+      request.correlationId ?? 'unknown',
+    );
+  }
+
   @Get('check-in-tokens/:id')
   status(@Req() request: AuthenticatedRequest, @Param('id') id: string) {
     return this.attendance.status(request.principal, id);

@@ -242,6 +242,15 @@ export function ClassSlotView({
       setBusy(false);
     }
   };
+  // Hanya Super Owner; server tetap menolak peran lain.
+  const removeInstructorHandler = (target: ClassSlot) =>
+    isSuperOwner && client.removeInstructorAttendance
+      ? (alasan: string) =>
+          run(async () => {
+            await client.removeInstructorAttendance!(target.id, alasan);
+            return { ...target, instructorAttendance: null };
+          }, 'Presensi instruktur dihapus.')
+      : undefined;
   // API sudah menyertakan nama tipe kelas/instruktur/cabang pada slot; daftar lokal hanya cadangan.
   const classTypeName = (id: string, slot?: ClassSlot) =>
     (slot as SlotNames | undefined)?.classType?.name ??
@@ -544,6 +553,9 @@ export function ClassSlotView({
             <ButtonLink href="/workspace/classes/salin" variant="secondary">
               Salin minggu
             </ButtonLink>
+            <ButtonLink href="/workspace/classes/riwayat" variant="secondary">
+              Riwayat kelas
+            </ButtonLink>
           </div>
         )}
         {!isInstructor && (
@@ -728,6 +740,7 @@ export function ClassSlotView({
                       }
                     : undefined
                 }
+                onRemoveInstructor={removeInstructorHandler(selectedSlot)}
                 dalamLaci
                 onManage={() => {
                   setSelectedId(null);
@@ -1001,6 +1014,7 @@ export function ClassSlotView({
                 };
               }, 'Presensi instruktur berhasil dicatat.');
             }}
+            onRemoveInstructor={removeInstructorHandler(panel.slot)}
             onAssign={async (instructorId) => {
               const accepted = await feedback.confirm({
                 tone: 'warning',
@@ -1070,7 +1084,7 @@ export function ClassSlotView({
                   'Kelas berhasil dibatalkan.',
                 );
             }}
-            onComplete={async (reason) => {
+            onComplete={async (reason, catatInstruktur) => {
               setBusy(true);
               setFailure(undefined);
               try {
@@ -1082,6 +1096,9 @@ export function ClassSlotView({
                   confirmLabel: 'Selesaikan kelas',
                 });
                 if (!accepted) return;
+                const presensi = catatInstruktur
+                  ? await client.verifyInstructorAttendance!(panel.slot.id, reason)
+                  : undefined;
                 const result = await client.complete(
                   panel.slot.id,
                   control.expectedVersion,
@@ -1090,6 +1107,9 @@ export function ClassSlotView({
                 );
                 const updated = {
                   ...panel.slot,
+                  ...(presensi
+                    ? { instructorAttendance: { checkedInAt: presensi.checkedInAt, method: presensi.method } }
+                    : {}),
                   status: 'COMPLETED' as const,
                   bookedCount: 0,
                   version: panel.slot.version + 1,

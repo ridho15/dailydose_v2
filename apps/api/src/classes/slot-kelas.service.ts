@@ -351,6 +351,96 @@ export class ClassSlotService {
     };
   }
 
+  /**
+   * Riwayat kelas yang sudah lewat untuk staf: hitungan peserta per status, presensi instruktur,
+   * dan honor, supaya kelas yang belum selesai atau belum terverifikasi mudah ditemukan.
+   */
+  async riwayat(
+    principal: SessionPrincipal,
+    input: {
+      branchId?: string;
+      from?: string;
+      until?: string;
+      status?: string;
+      tanpaPresensi?: boolean;
+      limit?: number;
+    },
+    now = new Date(),
+  ) {
+    this.manage(principal);
+    if (input.branchId) this.scope(principal, input.branchId, 'class-slot:manage');
+    const global = principal.capabilities.includes('branch:all');
+    if (!input.branchId && !global && principal.branchIds.length === 0)
+      throw new ApiProblem('FORBIDDEN', HttpStatus.FORBIDDEN);
+    const until = input.until ? instant(input.until) : now;
+    const from = input.from ? instant(input.from) : new Date(until.getTime() - 30 * 86_400_000);
+    if (from >= until) throw new ApiProblem('VALIDATION_ERROR', HttpStatus.BAD_REQUEST);
+    if (input.status && !(input.status in ClassSlotStatus))
+      throw new ApiProblem('VALIDATION_ERROR', HttpStatus.BAD_REQUEST);
+    const limit = Math.min(Math.max(1, Number(input.limit ?? 200)), 500);
+
+    const slots = await this.db.slotKelas.findMany({
+      where: {
+        ...(input.branchId
+          ? { branchId: input.branchId }
+          : global
+            ? {}
+            : { branchId: { in: principal.branchIds } }),
+        startAt: { gte: from },
+        endAt: { lt: until < now ? until : now },
+        ...(input.status ? { status: input.status as ClassSlotStatus } : {}),
+        ...(input.tanpaPresensi
+          ? { instructorId: { not: null }, instructorAttendance: { is: null } }
+          : {}),
+      },
+      include: {
+        branch: { select: { name: true, timezone: true } },
+        classType: { select: { name: true } },
+        instructor: { select: { displayName: true } },
+        instructorAttendance: { select: { checkedInAt: true, method: true } },
+      },
+      orderBy: [{ startAt: 'desc' }, { id: 'desc' }],
+      take: limit,
+    });
+
+    const grup = slots.length
+      ? await this.db.pemesananKelas.groupBy({
+          by: ['classSlotId', 'status'],
+          where: { classSlotId: { in: slots.map((slot) => slot.id) } },
+          _count: { _all: true },
+        })
+      : [];
+    const hitung = (id: string, status: string) =>
+      grup.find((g) => g.classSlotId === id && g.status === status)?._count._all ?? 0;
+
+    return {
+      items: slots.map((slot) => ({
+        id: slot.id,
+        branchId: slot.branchId,
+        branchName: slot.branch.name,
+        timezone: slot.branch.timezone,
+        classTypeName: slot.classType.name,
+        instructorId: slot.instructorId,
+        instructorName: slot.instructor?.displayName ?? null,
+        startAt: slot.startAt.toISOString(),
+        endAt: slot.endAt.toISOString(),
+        status: slot.status,
+        capacity: slot.capacity,
+        attendedCount: hitung(slot.id, 'ATTENDED'),
+        noShowCount: hitung(slot.id, 'NO_SHOW'),
+        bookedCount: hitung(slot.id, 'BOOKED'),
+        cancelledCount: hitung(slot.id, 'CANCELLED'),
+        instructorAttendance: slot.instructorAttendance
+          ? {
+              checkedInAt: slot.instructorAttendance.checkedInAt.toISOString(),
+              method: slot.instructorAttendance.method,
+            }
+          : null,
+      })),
+      truncated: slots.length === limit,
+    };
+  }
+
   async create(
     principal: SessionPrincipal,
     input: {

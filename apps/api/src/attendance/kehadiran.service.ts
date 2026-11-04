@@ -639,6 +639,44 @@ export class AttendanceService {
     );
   }
 
+  /**
+   * Hapus presensi instruktur yang salah catat (mis. diverifikasi manual padahal tidak hadir).
+   * Khusus Super Owner; alasan wajib dan masuk audit. Honor kelas itu kembali "belum terverifikasi".
+   */
+  async removeInstructorAttendance(
+    principal: SessionPrincipal,
+    classSlotId: string,
+    input: { reason?: string },
+    correlationId: string,
+  ) {
+    if (!principal.roles.some((r) => r.role === 'SUPER_OWNER'))
+      throw new ApiProblem('FORBIDDEN', HttpStatus.FORBIDDEN);
+    const reason = input?.reason?.trim() ?? '';
+    if (!UUID.test(classSlotId) || reason.length < 3 || reason.length > 500)
+      throw new ApiProblem('VALIDATION_ERROR', HttpStatus.UNPROCESSABLE_ENTITY);
+
+    return this.db.$transaction(async (tx) => {
+      const row = await tx.kehadiranInstruktur.findUnique({
+        where: { classSlotId },
+        include: { classSlot: { select: { branchId: true } } },
+      });
+      if (!row) throw new ApiProblem('RESOURCE_NOT_FOUND', HttpStatus.NOT_FOUND);
+      await tx.kehadiranInstruktur.delete({ where: { classSlotId } });
+      await this.audit?.catat(tx, {
+        actorId: principal.userId,
+        branchId: row.classSlot.branchId,
+        correlationId,
+        action: 'attendance.instructor_removed',
+        objectType: 'ClassSlot',
+        objectId: classSlotId,
+        targetUserId: row.instructorId,
+        reason,
+        beforeMasked: { method: row.method, checkedInAt: row.checkedInAt.toISOString() },
+      });
+      return { classSlotId, removed: true };
+    });
+  }
+
   private attendanceView(
     booking: {
       userId: string;
