@@ -1,0 +1,41 @@
+H1     LULUS  harapan=a0a0a0a0-3333-4000-8000-000000000001 hasil=['a0a0a0a0-3333-4000-8000-000000000001']  | U1 opsi booking kelas +3h (paket habis +5h)
+H2     LULUS  harapan=[]                               hasil=[]  | U1 opsi kelas +10h: paket TIDAK ditawarkan (habis sebelum kelas)
+H3     LULUS  harapan=OK                               hasil=OK BK-MW2WJK4X-7D9F6E  | U1 booking kelas +3h dengan paket yang masih berlaku
+H4     LULUS  harapan=a0a0a0a0-3333-4000-8000-000000000002 hasil=['a0a0a0a0-3333-4000-8000-000000000002']  | U2 opsi kelas +10h: paket 60 hari ditawarkan
+H5     LULUS  harapan=OK                               hasil=OK BK-MW2WJK7M-B7B2AD  | U2 booking kelas +10h
+H6     LULUS  harapan=OK                               hasil=OK BK-MW2WJK7V-05DEE8  | U10 paket multi-cabang booking di cabang MK
+N1     LULUS  harapan=PACKAGE_EXPIRED_FOR_SLOT         hasil=PACKAGE_EXPIRED_FOR_SLOT  | U1 booking kelas SETELAH paket habis (kode baru, bukan INSUFFICIENT)
+N2     LULUS  harapan=IDENTITY_VERIFICATION_REQUIRED   hasil=IDENTITY_VERIFICATION_REQUIRED  | U3 tanpa selfie: opsi menolak
+N3     LULUS  harapan=IDENTITY_VERIFICATION_REQUIRED   hasil=IDENTITY_VERIFICATION_REQUIRED  | U3 tanpa selfie: booking ditolak (konsisten dengan opsi)
+N4     LULUS  harapan=[]                               hasil=[]  | U4 paket beku: tidak ada paket ditawarkan
+N5     LULUS  harapan=PACKAGE_NOT_ACTIVE               hasil=PACKAGE_NOT_ACTIVE  | U4 paket beku: booking ditolak
+N6     LULUS  harapan=[]                               hasil=[]  | U5 pembelian PENDING: tidak ditawarkan
+N7     LULUS  harapan=PURCHASE_NOT_PAID                hasil=PURCHASE_NOT_PAID  | U5 pembelian PENDING: booking ditolak
+N8     LULUS  harapan=PACKAGE_BRANCH_MISMATCH          hasil=PACKAGE_BRANCH_MISMATCH  | U9 paket cabang GG dipakai di MK
+N9     LULUS  harapan=PACKAGE_CLASS_TYPE_MISMATCH      hasil=PACKAGE_CLASS_TYPE_MISMATCH  | U11 paket Private untuk kelas Group
+N10    LULUS  harapan=DUPLICATE_ACTIVE_BOOKING         hasil=DUPLICATE_ACTIVE_BOOKING  | U2 booking ganda di kelas yang sama
+N11    LULUS  harapan=SCHEDULE_CONFLICT                hasil=SCHEDULE_CONFLICT  | U2 booking kelas bentrok jam (kelas C sama jam dgn A)
+N12    LULUS  harapan=BOOKING_CUTOFF_PASSED            hasil=BOOKING_CUTOFF_PASSED  | U2 booking di dalam cutoff 2 jam
+N13a   LULUS  harapan=OK                               hasil=OK BK-MW2WJKGQ-A3AFD8  | U6 (sisa 1 sesi) booking pertama
+N13    LULUS  harapan=INSUFFICIENT_AVAILABLE_SESSIONS  hasil=INSUFFICIENT_AVAILABLE_SESSIONS  | U6 booking kedua: sesi habis terpakai reservasi
+N14a   LULUS  harapan=OK                               hasil=OK BK-MW2WJKH2-1A785C  | U2 ambil kursi terakhir kelas kapasitas 1
+N14    LULUS  harapan=CLASS_CAPACITY_FULL              hasil=CLASS_CAPACITY_FULL  | U10 booking kelas penuh
+N15    LULUS  harapan=RESOURCE_NOT_FOUND               hasil=RESOURCE_NOT_FOUND  | U1 pakai paket milik orang lain
+N16    LULUS  harapan=VALIDATION_ERROR                 hasil=VALIDATION_ERROR  | input rusak (id bukan UUID)
+K1     LULUS  harapan=True                             hasil=True  | U1: opsi dan booking sepakat (opsi kosong = booking ditolak)
+K4     LULUS  harapan=True                             hasil=True  | U4: opsi dan booking sepakat (opsi kosong = booking ditolak)
+K5     LULUS  harapan=True                             hasil=True  | U5: opsi dan booking sepakat (opsi kosong = booking ditolak)
+K9     LULUS  harapan=True                             hasil=True  | U9: opsi dan booking sepakat (opsi kosong = booking ditolak)
+K11    LULUS  harapan=True                             hasil=True  | U11: opsi dan booking sepakat (opsi kosong = booking ditolak)
+A1     LULUS  harapan=OK                               hasil=OK BK-MW2WJKVO-02657D  | Admin booking-kan U10 (paket multi-cabang) di GG
+A2     LULUS  harapan=PACKAGE_BRANCH_MISMATCH          hasil=PACKAGE_BRANCH_MISMATCH  | Admin booking U1 di GG: paket dibeli di MK dan paket tanpa cabang = hanya MK (aturan ca
+A3     LULUS  harapan=True                             hasil=True  | Daftar paket staf untuk U10 di GG memuat paket multi-cabang
+W1     LULUS  harapan=PAID                             hasil=PAID  | Walk-in tunai: pembelian langsung PAID
+W2     LULUS  harapan=SCHEDULE_CONFLICT                hasil=SCHEDULE_CONFLICT  | Walk-in: paket baru langsung bisa dipakai booking (kelas bentrok jam → harus ditolak jadwal
+W3     LULUS  harapan=DUPLICATE_ACTIVE_BOOKING         hasil=DUPLICATE_ACTIVE_BOOKING  | Walk-in ke kelas yang sama dua kali
+W4     LULUS  harapan=SCHEDULE_CONFLICT                hasil=SCHEDULE_CONFLICT  | Walk-in ke kelas lain yang bentrok jam dengan booking sebelumnya
+W5     LULUS  harapan=PACKAGE_CLASS_TYPE_MISMATCH      hasil=PACKAGE_CLASS_TYPE_MISMATCH  | Walk-in paket cabang lain (GG-bound ke kelas OK) tetap cek tipe kelas
+W6     LULUS  harapan=SCHEDULE_CONFLICT                hasil=SCHEDULE_CONFLICT  | Walk-in paket multi-cabang tidak ditolak karena cabang (hanya jadwal bentrok)
+T1     LULUS  harapan=200                              hasil=200  | Timetable member memuat paket dgn pageSize=100
+
+TOTAL 39 skenario, LULUS 39, GAGAL 0
