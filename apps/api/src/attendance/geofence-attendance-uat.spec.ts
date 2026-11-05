@@ -186,15 +186,15 @@ describe('UAT & Non-Happy Path: Geofencing, Absensi Instruktur & Modal Manual', 
       });
     });
 
-    it('[Non-Happy Path] Menolak jika kelas telah selesai (CHECK_IN_WINDOW_CLOSED)', async () => {
+    it('[Non-Happy Path] Menolak bila lewat 10 menit setelah kelas selesai (CHECK_IN_WINDOW_CLOSED)', async () => {
       const { db, service } = setupService();
       // Token valid hingga 11:30, tetapi kelas selesai pukul 11:00
       db.instructorCheckInToken.findUnique.mockResolvedValue(
         tokenRecord({}, { expiresAt: new Date('2026-10-21T11:30:00.000Z') }),
       );
 
-      // Kelas selesai pukul 11:00. Instruktur scan pukul 11:05
-      const pastEnd = new Date('2026-10-21T11:05:00.000Z');
+      // Kelas selesai pukul 11:00; kelonggaran 10 menit. Instruktur scan pukul 11:11
+      const pastEnd = new Date('2026-10-21T11:11:00.000Z');
 
       await expect(
         service.consumeInstructor(

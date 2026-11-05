@@ -1111,22 +1111,23 @@ export function FinanceView({
               loading={reconLoading}
               rowKey={(item) => item.purchaseId}
               emptyTitle="Tidak Ada Anomali Rekonsiliasi"
-              emptyDescription="Semua transaksi pembayaran pada periode ini telah terverifikasi."
+              emptyDescription="Tidak ada pembayaran tertahan dan tidak ada instruktur yang terlambat check-in."
               mobileCard={(item: any) => (
                 <div className="space-y-1 text-xs">
                   <div className="flex items-center justify-between">
                     <Badge tone={item.severity === 'ERROR' ? 'danger' : 'warning'}>
                       {formatSeverity(item.severity)}
                     </Badge>
-                    <span className="font-bold text-dd-ink">{formatRupiah(item.amountRp)}</span>
+                    <span className="font-bold text-dd-ink">{item.code === 'INSTRUKTUR_TERLAMBAT' ? '—' : formatRupiah(item.amountRp)}</span>
                   </div>
                   <div className="font-semibold text-dd-ink">
                     {formatAnomalyType(item.code)}
                   </div>
+                  {item.message && <div className="text-dd-muted">{item.message}</div>}
                   <div className="flex items-center justify-between text-[11px] text-dd-muted pt-1 border-t border-dd-line/40">
                     <span>{branches.find((b) => b.code === item.branchCode)?.name || formatStudioName(item.branchCode, 'short')} · {new Date(item.submittedAt).toLocaleDateString('id-ID')}</span>
                     <Link href={item.href || '#'} className="font-semibold text-dd-forest hover:underline">
-                      Buka Pembayaran →
+                      {item.code === 'INSTRUKTUR_TERLAMBAT' ? 'Buka Jadwal →' : 'Buka Pembayaran →'}
                     </Link>
                   </div>
                 </div>
@@ -1153,17 +1154,18 @@ export function FinanceView({
                   cell: (item: any) => (
                     <span className="text-xs font-medium text-dd-ink">
                       {formatAnomalyType(item.code)}
+                      {item.message && <span className="block font-normal text-dd-muted">{item.message}</span>}
                     </span>
                   ),
                 },
                 {
                   id: 'amount',
                   header: 'Nominal',
-                  cell: (item: any) => formatRupiah(item.amountRp),
+                  cell: (item: any) => (item.code === 'INSTRUKTUR_TERLAMBAT' ? '—' : formatRupiah(item.amountRp)),
                 },
                 {
                   id: 'date',
-                  header: 'Waktu Submit',
+                  header: 'Waktu',
                   cell: (item: any) =>
                     new Date(item.submittedAt).toLocaleDateString('id-ID'),
                 },
@@ -1175,7 +1177,7 @@ export function FinanceView({
                       href={item.href || '#'}
                       className="text-xs font-semibold text-dd-forest hover:underline"
                     >
-                      Buka Pembayaran
+                      {item.code === 'INSTRUKTUR_TERLAMBAT' ? 'Buka Jadwal' : 'Buka Pembayaran'}
                     </Link>
                   ),
                 },

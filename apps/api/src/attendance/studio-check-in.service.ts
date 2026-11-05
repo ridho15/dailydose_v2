@@ -7,6 +7,7 @@ import type { SessionPrincipal } from '../identity/identity.service';
 import { PolicyService } from '../identity/policy.service';
 import { ApiProblem } from '../identity/security';
 import { StudioScanService, type ScanResult } from './studio-scan.service';
+import { menitTerlambat } from './check-in-pass';
 
 /**
  * Mencatat kehadiran dari pindaian di meja check-in.
@@ -104,6 +105,7 @@ export class StudioCheckInService {
           }
 
           if (orang!.peran === 'INSTRUKTUR') {
+            const terlambat = menitTerlambat(new Date(kelas!.mulai), now);
             const ada = await tx.kehadiranInstruktur.findUnique({
               where: { classSlotId: kelas!.classSlotId },
               select: { id: true },
@@ -118,7 +120,7 @@ export class StudioCheckInService {
                 checkedInAt: now,
                 // Dipindai staf di meja cabang itu, jadi instruktur memang berada di studionya.
                 isWithinGeofence: true,
-                notes: 'Dipindai di meja check-in',
+                notes: terlambat > 0 ? `Dipindai di meja check-in, terlambat ${terlambat} menit` : 'Dipindai di meja check-in',
               },
             });
             return false;

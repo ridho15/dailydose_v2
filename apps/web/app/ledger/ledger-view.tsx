@@ -66,10 +66,10 @@ const adjustmentReasonLabels: Record<string, string> = {
   ATTENDANCE_CORRECTION: 'Koreksi kehadiran',
   PACKAGE_COMPENSATION: 'Kompensasi paket',
   SUPPORT_RECONCILIATION: 'Rekonsiliasi bantuan',
-  // Pembatalan booking setelah batas H-24, diajukan admin dari timetable.
-  LATE_CANCELLATION: 'Pembatalan H-24',
-  LATE_CANCELLATION_APPROVED: 'Pembatalan H-24 disetujui',
-  LATE_CANCELLATION_REJECTED: 'Pembatalan H-24 ditolak',
+  // Pembatalan booking setelah batas H-12, diajukan admin dari timetable.
+  LATE_CANCELLATION: 'Pembatalan terlambat',
+  LATE_CANCELLATION_APPROVED: 'Pembatalan terlambat disetujui',
+  LATE_CANCELLATION_REJECTED: 'Pembatalan terlambat ditolak',
   CORRECTION_VERIFIED: 'Koreksi telah diverifikasi',
   INVALID_EVIDENCE: 'Bukti tidak valid',
   DUPLICATE_REQUEST: 'Permintaan duplikat',

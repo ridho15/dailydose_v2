@@ -29,7 +29,7 @@ Serah terima pekerjaan per **1 November 2026**, branch `perbaikan_arsitektur`. B
 - Kerangka workspace, timetable (laci peserta di samping), meja check-in, halaman Hari ini, Antrean,
   Paket habis & renewal, sesuai mockup.
 - Check-in: staf memindai QR di halaman Check-in (kiosk ber-PIN dihapus). QR bisa dikirim lewat WhatsApp.
-- Tombol X batalkan peserta; kurang dari H-24 lewat persetujuan Manager/Owner. Kelas Dikonfirmasi bisa
+- Tombol X batalkan peserta; kurang dari H-12 lewat persetujuan Manager/Owner. Kelas Dikonfirmasi bisa
   dibatalkan.
 - Booking admin lintas cabang, paket berlaku di cabang paket atau cabang pembelian, pesan bentrok jadwal
   yang jelas, angka terisi dari booking nyata.
@@ -65,7 +65,7 @@ Riwayat lengkap: `git log --author=Claude --since=2026-10-20 --oneline`.
    `ulasan_instruktur`, `porsi_owner_cabang`, `pembayar_pengeluaran`, `rekening_instruktur`,
    `modal_sesi`, `kapasitas_kelas_cabang`, `paket_bawa_teman`, `booking_teman`, ditambah dari developer:
    `paket_pelanggan_anggota` dan kolom `paket.is_shareable` (lihat 5.1). Cek dulu dengan `SHOW TABLES`.
-3. Pastikan `.env.production` memuat `BOOKING_CANCELLATION_CUTOFF_HOURS=24` (batas pembatalan H-24
+3. Pastikan `.env.production` memuat `BOOKING_CANCELLATION_CUTOFF_HOURS=12` dan `RESCHEDULE_CUTOFF_HOURS=12` (batas H-12
    yang diputuskan pemilik).
 4. Deploy lewat GitHub Actions "Deploy production" dari `perbaikan_arsitektur`.
 5. Google Cloud Console: Authorized JavaScript origins memuat `https://v2.dailydosepilates.com`, consent

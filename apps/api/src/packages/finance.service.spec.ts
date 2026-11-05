@@ -523,12 +523,38 @@ describe('FinanceService.overview dan anomalies: lingkup cabang', () => {
 
   it('tanpa branchId, anomali dibatasi ke cabang milik staf', async () => {
     const { service, db } = setup();
+    const kehadiran = jest.fn().mockResolvedValue([]);
+    (db as unknown as Record<string, unknown>).kehadiranInstruktur = { findMany: kehadiran };
     await service.anomalies(staf, {});
+    expect(kehadiran).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ classSlot: { branchId: { in: [branchA] } } }),
+      }),
+    );
     expect(db.pembelian.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({ branchId: { in: [branchA] } }),
       }),
     );
+  });
+
+  it('instruktur yang check-in setelah jam mulai masuk anomali, yang tepat waktu tidak', async () => {
+    const { service, db } = setup();
+    const mulai = new Date('2026-11-05T03:00:00Z');
+    const baris = (menit: number, nama: string) => ({
+      classSlotId: `slot-${nama}`,
+      checkedInAt: new Date(mulai.getTime() + menit * 60_000),
+      method: 'QR_SCAN',
+      instructor: { displayName: nama },
+      classSlot: { startAt: mulai, branchId: branchA, branch: { code: 'GG' }, classType: { name: 'Group Class' } },
+    });
+    (db as unknown as Record<string, unknown>).kehadiranInstruktur = {
+      findMany: jest.fn().mockResolvedValue([baris(8, 'Dina'), baris(-10, 'Naoki')]),
+    };
+    const hasil = await service.anomalies(principal(['finance:read', 'branch:all'], 'SUPER_OWNER', id(1), []), {});
+    expect(hasil.items).toHaveLength(1);
+    expect(hasil.items[0]).toMatchObject({ code: 'INSTRUKTUR_TERLAMBAT' });
+    expect(hasil.items[0]!.message).toContain('Dina check-in terlambat 8 menit');
   });
 
   it('overview memakai cabang milik staf dan menyaring paidAt menurut from/until', async () => {

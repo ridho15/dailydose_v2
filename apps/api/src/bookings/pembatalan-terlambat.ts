@@ -4,7 +4,7 @@ import { Prisma, SessionMutationType } from '@prisma/client';
 import { ApiProblem } from '../identity/security';
 
 /**
- * Pembatalan booking yang tidak lagi boleh dibatalkan langsung: kurang dari H-24, atau booking yang
+ * Pembatalan booking yang tidak lagi boleh dibatalkan langsung: kurang dari batas pembatalan (H-12), atau booking yang
  * sudah terkunci "Hadir" sebelum kelasnya berjalan (data V1 menandai booking lewat H-24 sebagai hadir).
  *
  * Admin mengajukan, Manager atau Owner memutuskan. Pengajuan disimpan di `session_adjust_request`
@@ -67,7 +67,7 @@ export async function jalankanPembatalanTerlambat(
       data: {
         status: 'CANCELLED',
         cancelledAt: now,
-        cancellationReason: `Pembatalan H-24 disetujui: ${pengajuan.reason}`.slice(0, 1000),
+        cancellationReason: `Pembatalan terlambat disetujui: ${pengajuan.reason}`.slice(0, 1000),
         cancelledById: actorId,
       },
     });
@@ -100,7 +100,7 @@ export async function jalankanPembatalanTerlambat(
         amount: sesiKembali,
         balanceAfter: resultingBalance,
         referenceId: pengajuan.id,
-        notes: `Pembatalan H-24 disetujui, sesi dikembalikan: ${pengajuan.reason}`.slice(0, 1000),
+        notes: `Pembatalan terlambat disetujui, sesi dikembalikan: ${pengajuan.reason}`.slice(0, 1000),
         createdById: actorId,
       },
     });

@@ -134,7 +134,7 @@ dengan mock lama tetap berjalan.
 alasan `ALREADY_BOOKED` bila tidak ada.
 
 ### 5.4 Pembatalan terlambat
-`pembatalan-terlambat.ts/.service.ts`: pembatalan kurang dari H-24 disimpan sebagai
+`pembatalan-terlambat.ts/.service.ts`: pembatalan kurang dari batas H-12 disimpan sebagai
 `session_adjust_request` dengan reasonCode `LATE_CANCELLATION`, diputus pemegang
 `booking:late-cancel:decide`. Pengaju tidak boleh memutus pengajuannya sendiri (kecuali Super Owner).
 

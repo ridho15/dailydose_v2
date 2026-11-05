@@ -93,10 +93,10 @@ export const HELP_GLOSSARY: HelpGlossaryItem[] = [
       'Batas akhir pemesanan kelas secara mandiri, yaitu maksimal 2 jam sebelum kelas dimulai.',
   },
   {
-    term: 'Cutoff Reschedule & Cancel H-24 Jam',
+    term: 'Cutoff Reschedule & Cancel H-12 Jam',
     category: 'Member',
     definition:
-      'Batas akhir perubahan jadwal atau pembatalan kelas, yaitu maksimal 24 jam sebelum jadwal kelas dimulai.',
+      'Batas akhir perubahan jadwal atau pembatalan kelas, yaitu maksimal 12 jam sebelum jadwal kelas dimulai.',
   },
   {
     term: 'Jendela Presensi (Check-in Window)',
@@ -182,8 +182,8 @@ export const HELP_ERROR_CATALOG: HelpErrorCodeItem[] = [
     code: 'RESCHEDULE_CUTOFF_PASSED',
     httpStatus: 409,
     audience: 'customer',
-    meaning: 'Batas pengajuan reschedule H-24 terlewati',
-    commonCause: 'Pengajuan perubahan jadwal dilakukan kurang dari 24 jam sebelum kelas dimulai',
+    meaning: 'Batas pengajuan reschedule H-12 terlewati',
+    commonCause: 'Pengajuan perubahan jadwal dilakukan kurang dari 12 jam sebelum kelas dimulai',
     resolution:
       'Untuk alasan darurat medis mendesak, hubungi admin studio cabang terkait untuk pengajuan bantuan khusus.',
   },
@@ -866,7 +866,7 @@ export const HELP_SECTIONS_CUSTOMER: HelpSection[] = [
         number: 4,
         title: 'Ketentuan Reschedule (Ubah Jadwal)',
         description:
-          'Jika berhalangan hadir, tombol "Ubah Jadwal" dapat ditekan paling lambat 24 jam sebelum kelas dimulai (H-24).',
+          'Jika berhalangan hadir, tombol "Ubah Jadwal" dapat ditekan paling lambat 12 jam sebelum kelas dimulai (H-12).',
       },
     ],
     successState: {
@@ -889,8 +889,8 @@ export const HELP_SECTIONS_CUSTOMER: HelpSection[] = [
       },
       {
         code: 'RESCHEDULE_CUTOFF_PASSED',
-        title: 'Batas Reschedule Terlewati (H-24 Jam)',
-        message: 'Batas pengajuan reschedule mandiri H-24 jam sudah terlewati.',
+        title: 'Batas Reschedule Terlewati (H-12 Jam)',
+        message: 'Batas pengajuan reschedule mandiri H-12 jam sudah terlewati.',
         cause:
           'Sistem mengunci perubahan jadwal dalam 24 jam sebelum kelas dimulai demi menjaga kuota minimal kelas bagi member lain.',
         stepsToResolve: [
@@ -916,7 +916,7 @@ export const HELP_SECTIONS_CUSTOMER: HelpSection[] = [
       },
       {
         label: 'Cutoff Perubahan Jadwal (Reschedule)',
-        limit: '24 Jam sebelum kelas dimulai (H-24)',
+        limit: '12 Jam sebelum kelas dimulai (H-12)',
         reason: 'Mencegah pembatalan mendadak yang merugikan kuota peserta lain.',
         alternative: 'Pengajuan bantuan darurat medis via admin meja depan dengan surat dokter.',
       },

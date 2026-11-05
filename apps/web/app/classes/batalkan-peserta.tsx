@@ -26,7 +26,7 @@ const MIN_ALASAN = 10;
 /**
  * Tombol X untuk membatalkan booking satu peserta, dengan konfirmasi.
  *
- * Lebih dari H-24: langsung batal, kursi terbuka, sesi member utuh. Kurang dari H-24 (atau booking
+ * Lebih dari H-12: langsung batal, kursi terbuka, sesi member utuh. Kurang dari H-12 (atau booking
  * yang sudah terkunci Hadir sebelum kelas berjalan): menjadi pengajuan yang harus disetujui Manager
  * atau Owner; setelah disetujui, sesi yang sudah terpotong dikembalikan.
  */
@@ -207,7 +207,7 @@ export function BatalkanPeserta({
         description={
           mode === 'langsung'
             ? 'Kursinya terbuka lagi dan sesi member tetap utuh.'
-            : 'Kelas mulai kurang dari 24 jam lagi, jadi pembatalan perlu disetujui Manager atau Owner. Setelah disetujui, sesi yang sudah terpotong dikembalikan ke paket member.'
+            : 'Kelas mulai kurang dari 12 jam lagi, jadi pembatalan perlu disetujui Manager atau Owner. Setelah disetujui, sesi yang sudah terpotong dikembalikan ke paket member.'
         }
         busy={sibuk}
         onClose={() => setMode(null)}

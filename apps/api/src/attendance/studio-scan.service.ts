@@ -5,6 +5,7 @@ import {
   passBelongsTo,
   scanWindowFor,
   SCAN_OPENS_MINUTES_BEFORE,
+  scanWindowInstruktur,
 } from './check-in-pass';
 
 /**
@@ -84,7 +85,8 @@ export class StudioScanService {
 
     if (!kelas) return { diterima: false, alasan: 'TIDAK_ADA_KELAS', orang };
 
-    const jendela = scanWindowFor(kelas.startAt, kelas.endAt, now);
+    const jendelaFn = orang.peran === 'INSTRUKTUR' ? scanWindowInstruktur : scanWindowFor;
+    const jendela = jendelaFn(kelas.startAt, kelas.endAt, now);
     if (jendela !== 'OPEN') {
       return {
         diterima: false,
@@ -156,6 +158,7 @@ export class StudioScanService {
         sudahTercatat: tercatat.has(slot.id),
       })),
       now,
+      scanWindowInstruktur,
     );
   }
 
@@ -207,8 +210,9 @@ export class StudioScanService {
 export function pilihKelas<T extends { startAt: Date; endAt: Date; sudahTercatat: boolean }>(
   kandidat: readonly T[],
   now: Date,
+  jendela: typeof scanWindowFor = scanWindowFor,
 ): T | null {
-  const terbuka = kandidat.filter((k) => scanWindowFor(k.startAt, k.endAt, now) === 'OPEN');
+  const terbuka = kandidat.filter((k) => jendela(k.startAt, k.endAt, now) === 'OPEN');
   const berikutnya = kandidat
     .filter((k) => k.startAt > now)
     .sort((a, b) => a.startAt.getTime() - b.startAt.getTime());
