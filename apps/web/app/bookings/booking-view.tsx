@@ -282,11 +282,14 @@ export function BookingView({
     [customerId, packages],
   );
   const selectedPackage = packages.find(({ id }) => id === packageId);
+  // Dialog ini hanya menawarkan kelas yang belum dimulai; booking mundur tidak lewat sini.
   const eligibleSlots = useMemo(
     () =>
       slots.filter(
         (slot) =>
-          !selectedPackage?.classTypeId || slot.classTypeId === selectedPackage.classTypeId,
+          (!selectedPackage?.classTypeId || slot.classTypeId === selectedPackage.classTypeId) &&
+          // Paket harus masih berlaku saat kelas dimulai; server menolak bila tidak.
+          (!selectedPackage || new Date(selectedPackage.expiryAt).getTime() > slot.startAt.getTime()),
       ),
     [selectedPackage, slots],
   );

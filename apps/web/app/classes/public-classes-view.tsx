@@ -22,6 +22,7 @@ import {
 import {
   browserLedgerClient,
   paketBerlakuDiCabang,
+  paketBisaDipakaiUntukKelas,
   type LedgerBalance,
   type LedgerClient,
 } from '@/api-clients/ledger-client';
@@ -135,7 +136,7 @@ export function PublicClassesView({
     let active = true;
     if (session && inCustomerShell) {
       ledgerClient
-        .list(undefined, undefined, undefined, 'ACTIVE')
+        .list(undefined, undefined, undefined, 'ACTIVE', undefined, undefined, 100)
         .then((res) => {
           if (!active) return;
           setCustomerPackages(
@@ -171,16 +172,13 @@ export function PublicClassesView({
     void loadBookedSlots();
   }, [loadBookedSlots]);
 
-  const findMatchingPackage = (slot: PublicClassSlot) => {
-    if (!customerPackages.length) return null;
-    return customerPackages.find((pkg) => {
-      const branchMatches = paketBerlakuDiCabang(pkg, slot.branchId);
-      const classTypeMatches = !pkg.classTypeId || pkg.classTypeId === slot.classType.id;
-      const hasAvailable = pkg.available > 0;
-      const notExpired = new Date(pkg.expiryAt) > new Date();
-      return branchMatches && classTypeMatches && hasAvailable && notExpired;
-    });
-  };
+  const kelasUntukPaket = (slot: PublicClassSlot) => ({
+    branchId: slot.branchId,
+    classTypeId: slot.classType.id,
+    startAt: slot.startAt,
+  });
+  const findMatchingPackage = (slot: PublicClassSlot) =>
+    customerPackages.find((pkg) => paketBisaDipakaiUntukKelas(pkg, kelasUntukPaket(slot))) ?? null;
 
   useEffect(() => {
     let active = true;
@@ -1022,12 +1020,9 @@ export function PublicClassesView({
         packageItem={bookingSlot ? (findMatchingPackage(bookingSlot) ?? null) : null}
         availablePackages={
           bookingSlot
-            ? customerPackages.filter((pkg) => {
-                const branchMatches = paketBerlakuDiCabang(pkg, bookingSlot.branchId);
-                const classTypeMatches =
-                  !pkg.classTypeId || pkg.classTypeId === bookingSlot.classType.id;
-                return branchMatches && classTypeMatches && pkg.available > 0;
-              })
+            ? customerPackages.filter((pkg) =>
+                paketBisaDipakaiUntukKelas(pkg, kelasUntukPaket(bookingSlot)),
+              )
             : []
         }
         isVerified={session?.identityVerificationStatus === 'APPROVED'}

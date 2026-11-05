@@ -10,6 +10,7 @@ import {
   type CustomerPackageBalance,
 } from '@/api-clients/booking-client';
 import type { ClassSlot } from '@/api-clients/class-slot-client';
+import { paketBerlakuDiCabang } from '@/api-clients/ledger-client';
 import { formatBranchTime } from '@/lib/class-time';
 import { Button } from '../components/actions';
 import { Feedback } from '../ui';
@@ -57,11 +58,7 @@ export function pilihCalon(
   );
   // Paket harus berlaku di cabang kelas ini (cabang paket atau cabang tempat dibeli).
   const cocokTipe = cocokTipeSemua.filter(
-    (item) =>
-      !slot.branchId ||
-      !item.allowedBranchIds ||
-      item.allowedBranchIds === 'SEMUA' ||
-      item.allowedBranchIds.includes(slot.branchId),
+    (item) => !slot.branchId || paketBerlakuDiCabang(item, slot.branchId),
   );
   const layak = cocokTipe
     .filter(

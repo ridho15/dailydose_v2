@@ -163,9 +163,9 @@ describe('BookingsService.walkIn (Fase 3: Alur Cepat Walk-In & Booking Kasir)', 
     expect(body.booking.status).toBe('BOOKED');
     expect(body.booking.source).toBe('ADMIN_ASSISTED');
 
-    // 2. Pembelian kasir tercatat berstatus PENDING (menunggu rekap/verifikasi Manager)
+    // 2. Pembelian kasir langsung lunas
     expect(body.purchase).toBeDefined();
-    expect(body.purchase.status).toBe('PENDING');
+    expect(body.purchase.status).toBe('PAID');
     expect(body.purchase.paymentMethod).toBe('CASH');
     expect(body.purchase.totalAmountRp).toBe(150_000);
     expect(tx.pembelian.create).toHaveBeenCalledWith(
@@ -173,7 +173,7 @@ describe('BookingsService.walkIn (Fase 3: Alur Cepat Walk-In & Booking Kasir)', 
         data: expect.objectContaining({
           recordedById: staffUserId,
           recordNote: 'Uang pas diterima kasir',
-          status: 'PENDING',
+          status: 'PAID',
         }),
       }),
     );

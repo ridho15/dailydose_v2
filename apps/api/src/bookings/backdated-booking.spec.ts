@@ -333,7 +333,7 @@ describe('Backdated Booking & Member Enrollment into Past Schedules (Solusi 1)',
           'corr-admin-expired-1',
         ),
       ).rejects.toMatchObject({
-        code: 'INSUFFICIENT_AVAILABLE_SESSIONS',
+        code: 'PACKAGE_EXPIRED_FOR_SLOT',
         status: HttpStatus.CONFLICT,
       });
     });

@@ -12,6 +12,7 @@ import { PolicyService } from '../identity/policy.service';
 import { ApiProblem, ENTITY_ID_REGEX } from '../identity/security';
 import { cabangPublik } from '../foundation/tampilan-publik';
 import { paketBerlakuDi } from './cabang-paket';
+import { alasanPaketDitolak } from './kelayakan-paket';
 import { bookingTeman, maksTemanPaket } from '../packages/bawa-teman';
 import { MEMEGANG_SESI } from '../packages/sesi-terpesan';
 import { berlakuSampai } from '../foundation/masa-berlaku';
@@ -438,7 +439,7 @@ export class BookingsService {
     if (!slot) throw new ApiProblem('RESOURCE_NOT_FOUND', HttpStatus.NOT_FOUND);
 
     const now = new Date();
-    const cutoffHours = slot.bookingCutoffHours ?? this.config.value?.booking?.cutoffHours ?? 2;
+    const cutoffHours = slot.bookingCutoffHours ?? this.syntheticPolicy().cutoffHours;
     const cutoffAt = new Date(slot.startAt.getTime() - cutoffHours * 3_600_000);
 
     // Ambil paket aktif pelanggan (milik sendiri atau paket bersama/duet di mana pelanggan terdaftar)
@@ -447,8 +448,6 @@ export class BookingsService {
       where: {
         status: 'ACTIVE',
         remainingSessions: { gt: 0 },
-        // Masih berlaku saat kelas dimulai, bukan hanya hari ini.
-        validUntil: { gt: slot.startAt > now ? slot.startAt : now },
         AND: [
           {
             OR: [
@@ -459,12 +458,7 @@ export class BookingsService {
               },
             ],
           },
-          {
-            OR: [{ purchaseId: null }, { purchase: { status: 'PAID' } }],
-          },
         ],
-        // Cabang diperiksa di bawah (cabang paket atau cabang pembelian), tidak di query ini.
-        package: { OR: [{ classTypeId: null }, { classTypeId: slot.classTypeId }] },
       },
       include: {
         package: true,
@@ -472,14 +466,13 @@ export class BookingsService {
       },
     });
 
-    // Filter paket: jika paket bukan multi-branch, pastikan cabang paket/pembelian cocok dengan slot
-    const matchingPackages = packages.filter((pkg) => paketBerlakuDi(pkg, slot.branchId));
+    // Aturan yang sama dengan create: pembelian, status, masa berlaku saat kelas mulai, cabang, tipe kelas.
+    const matchingPackages = packages.filter((pkg) => !alasanPaketDitolak(pkg, slot));
+    const reserved = await this.reservedByPackage(matchingPackages.map((pkg) => pkg.id));
 
     const items = await Promise.all(
       matchingPackages.map(async (pkg) => {
-        const activeBookingsCount = await this.db.pemesananKelas.count({
-          where: { customerPackageId: pkg.id, ...MEMEGANG_SESI },
-        });
+        const activeBookingsCount = reserved.get(pkg.id) ?? 0;
         const availableSessions = Math.max(0, pkg.remainingSessions - activeBookingsCount);
         return {
           id: pkg.id,
@@ -568,22 +561,16 @@ export class BookingsService {
       }
     }
 
-    if (canBook) {
-      try {
-        const unverifiedDoc = await (this.db as any).dokumenVerifikasiIdentitas?.findFirst?.({
-          where: {
-            userId: principal.userId,
-            kind: { in: ['KTP_FRONT', 'SELFIE'] },
-            status: { not: 'APPROVED' },
-          },
-        });
-        if (unverifiedDoc) {
-          canBook = false;
-          reasonCode = 'IDENTITY_VERIFICATION_REQUIRED';
-          requiredAction = 'COMPLETE_IDENTITY_VERIFICATION';
-        }
-      } catch {
-        // Abaikan jika tabel tidak aktif
+    // Sama dengan create: member wajib punya foto selfie sebelum booking.
+    if (canBook && !isStaff) {
+      const user = await this.db.user.findUnique({
+        where: { id: principal.userId },
+        include: { profile: true },
+      });
+      if (!user || user.status !== 'ACTIVE' || !punyaSelfie(user.profile)) {
+        canBook = false;
+        reasonCode = 'IDENTITY_VERIFICATION_REQUIRED';
+        requiredAction = 'COMPLETE_IDENTITY_VERIFICATION';
       }
     }
 
@@ -944,12 +931,6 @@ export class BookingsService {
 
         if (!isOwner && !isAuthorizedSharedMember)
           throw new ApiProblem('RESOURCE_NOT_FOUND', HttpStatus.NOT_FOUND);
-        if (
-          (customerPackage.purchase && customerPackage.purchase.status !== 'PAID') ||
-          (customerPackage.purchaseId && (!customerPackage.purchase || customerPackage.purchase.status !== 'PAID'))
-        ) {
-          throw new ApiProblem('PURCHASE_NOT_PAID', HttpStatus.CONFLICT);
-        }
         const now = new Date();
         const slotPast = slot.endAt <= now;
         const isPrivilegedStaff =
@@ -957,23 +938,10 @@ export class BookingsService {
             ['SUPER_OWNER', 'ADMIN', 'OWNER', 'MANAGER'].includes(r.role as any),
           ) || principal.capabilities?.includes('class-slot:manage');
 
-        // Paket harus masih berlaku saat kelasnya dimulai: kelas setelah paket habis tidak boleh
-        // dibooking walaupun hari ini paketnya masih aktif (sesinya akan dipotong dari paket
-        // kedaluwarsa). Ini juga berlaku untuk booking mundur oleh Admin/Super Owner.
-        const packageExpired = customerPackage.validUntil <= slot.startAt;
-        if (customerPackage.status !== 'ACTIVE' || packageExpired)
-          throw new ApiProblem('INSUFFICIENT_AVAILABLE_SESSIONS', HttpStatus.CONFLICT);
-
-        // Validasi kecocokan cabang & jenis kelas paket (Integritas Aturan Bisnis)
-        if (!paketBerlakuDi(customerPackage, slot.branchId)) {
-          throw new ApiProblem('PACKAGE_BRANCH_MISMATCH', HttpStatus.CONFLICT);
-        }
-        if (
-          customerPackage.package?.classTypeId &&
-          customerPackage.package.classTypeId !== slot.classTypeId
-        ) {
-          throw new ApiProblem('PACKAGE_CLASS_TYPE_MISMATCH', HttpStatus.CONFLICT);
-        }
+        // Satu aturan bersama (pembelian, status, masa berlaku saat kelas mulai, cabang, tipe kelas).
+        // Ini juga berlaku untuk booking mundur oleh Admin/Super Owner.
+        const ditolak = alasanPaketDitolak(customerPackage, slot);
+        if (ditolak) throw new ApiProblem(ditolak, HttpStatus.CONFLICT);
 
         // Periksa sisa sesi dikurangi booking aktif (Rule #1 & #2: sesi fisik belum dipotong)
         const activeBookingsCount = await tx.pemesananKelas.count({
@@ -1214,6 +1182,17 @@ export class BookingsService {
           throw new ApiProblem('DUPLICATE_ACTIVE_BOOKING', HttpStatus.CONFLICT);
         }
 
+        // Sama seperti booking biasa: satu member tidak boleh ada di dua kelas yang waktunya bertabrakan.
+        const scheduleConflict = await tx.pemesananKelas.findFirst({
+          where: {
+            userId: customer.id,
+            status: { in: ['BOOKED', 'ATTENDED'] },
+            classSlotId: { not: slot.id },
+            classSlot: { startAt: { lt: slot.endAt }, endAt: { gt: slot.startAt } },
+          },
+        });
+        if (scheduleConflict) throw new ApiProblem('SCHEDULE_CONFLICT', HttpStatus.CONFLICT);
+
         const activeBookingsOnSlot =
           typeof tx.pemesananKelas?.count === 'function'
             ? await tx.pemesananKelas.count({
@@ -1233,14 +1212,15 @@ export class BookingsService {
         if (!pkg || pkg.status !== 'ACTIVE') {
           throw new ApiProblem('RESOURCE_NOT_FOUND', HttpStatus.NOT_FOUND);
         }
-        if (pkg.branchId && pkg.branchId !== input.branchId) {
+        // Aturan cabang yang sama dengan booking biasa (paket multi-cabang berlaku di semua cabang).
+        if (!paketBerlakuDi({ package: pkg }, input.branchId)) {
           throw new ApiProblem('PACKAGE_BRANCH_MISMATCH', HttpStatus.UNPROCESSABLE_ENTITY);
         }
         if (pkg.classTypeId && pkg.classTypeId !== slot.classTypeId) {
           throw new ApiProblem('PACKAGE_CLASS_TYPE_MISMATCH', HttpStatus.UNPROCESSABLE_ENTITY);
         }
 
-        // 1. Catat Pembelian Kasir (Status PENDING untuk antrean Maker-Checker Manager)
+        // 1. Catat Pembelian Kasir (langsung lunas)
         const invoiceNumber = `INV-${Date.now().toString(36).toUpperCase()}-${randomBytes(3).toString('hex').toUpperCase()}`;
         const note =
           (typeof input.paymentNote === 'string' ? input.paymentNote.trim() : '') ||
@@ -1255,7 +1235,11 @@ export class BookingsService {
             subtotalRp: pkg.priceRp,
             discountRp: 0,
             totalAmountRp: pkg.priceRp,
-            status: 'PENDING',
+            // Dibayar di meja dan dicatat staf: langsung lunas, member bisa langsung booking.
+            status: 'PAID',
+            paidAt: now,
+            verifiedById: principal.userId,
+            verifiedAt: now,
             paymentMethod,
             paymentExpiresAt: null,
             recordedById: principal.userId,

@@ -98,8 +98,12 @@ describe('BookingsService.customerOptions', () => {
       paketPelanggan: {
         findMany: jest.fn().mockResolvedValue([matchingPackage]),
       },
+      user: {
+        findUnique: jest.fn().mockResolvedValue({ status: 'ACTIVE', profile: { selfieUrl: 'selfie.jpg' } }),
+      },
       pemesananKelas: {
         count: jest.fn().mockResolvedValue(0),
+        groupBy: jest.fn().mockResolvedValue([]),
       },
     };
 
@@ -137,6 +141,38 @@ describe('BookingsService.customerOptions', () => {
     expect(result.eligibility.reasonCode).toBeNull();
   });
 
+  it('menolak member tanpa selfie dan paket yang habis sebelum kelas, sama seperti create', async () => {
+    const mockDb = {
+      slotKelas: { findUnique: jest.fn().mockResolvedValue(baseSlot) },
+      paketPelanggan: {
+        findMany: jest.fn().mockResolvedValue([
+          { ...matchingPackage, validUntil: new Date(baseSlot.startAt.getTime() - 1000) },
+        ]),
+      },
+      user: { findUnique: jest.fn().mockResolvedValue({ status: 'ACTIVE', profile: null }) },
+      pemesananKelas: {
+        count: jest.fn().mockResolvedValue(0),
+        groupBy: jest.fn().mockResolvedValue([]),
+      },
+    };
+    const service = new BookingsService(
+      mockDb as any,
+      {} as any,
+      {} as any,
+      { value: { booking: { enabled: true, cutoffHours: 2 } } } as any,
+    );
+    const result = await service.customerOptions(mockPrincipal as any, baseSlot.id);
+    expect(result.packages).toHaveLength(0);
+    expect(result.eligibility.canBook).toBe(false);
+
+    mockDb.paketPelanggan.findMany.mockResolvedValue([matchingPackage]);
+    const tanpaSelfie = await service.customerOptions(mockPrincipal as any, baseSlot.id);
+    expect(tanpaSelfie.eligibility).toMatchObject({
+      canBook: false,
+      reasonCode: 'IDENTITY_VERIFICATION_REQUIRED',
+    });
+  });
+
   it('filters out packages from other branches and sets canBook=false when no matching package found', async () => {
     const mockDb = {
       slotKelas: {
@@ -146,8 +182,12 @@ describe('BookingsService.customerOptions', () => {
         // Database filter will return empty if package is for another branch
         findMany: jest.fn().mockResolvedValue([]),
       },
+      user: {
+        findUnique: jest.fn().mockResolvedValue({ status: 'ACTIVE', profile: { selfieUrl: 'selfie.jpg' } }),
+      },
       pemesananKelas: {
         count: jest.fn().mockResolvedValue(0),
+        groupBy: jest.fn().mockResolvedValue([]),
       },
     };
 
@@ -186,8 +226,12 @@ describe('BookingsService.customerOptions', () => {
       paketPelanggan: {
         findMany: jest.fn().mockResolvedValue([matchingPackage]),
       },
+      user: {
+        findUnique: jest.fn().mockResolvedValue({ status: 'ACTIVE', profile: { selfieUrl: 'selfie.jpg' } }),
+      },
       pemesananKelas: {
         count: jest.fn().mockResolvedValue(0),
+        groupBy: jest.fn().mockResolvedValue([]),
       },
     };
 
@@ -226,8 +270,12 @@ describe('BookingsService.customerOptions', () => {
       paketPelanggan: {
         findMany: jest.fn().mockResolvedValue([matchingPackage]),
       },
+      user: {
+        findUnique: jest.fn().mockResolvedValue({ status: 'ACTIVE', profile: { selfieUrl: 'selfie.jpg' } }),
+      },
       pemesananKelas: {
         count: jest.fn().mockResolvedValue(0),
+        groupBy: jest.fn().mockResolvedValue([]),
       },
     };
 
@@ -271,8 +319,12 @@ describe('BookingsService.customerOptions', () => {
       paketPelanggan: {
         findMany: jest.fn().mockResolvedValue([matchingPackage]),
       },
+      user: {
+        findUnique: jest.fn().mockResolvedValue({ status: 'ACTIVE', profile: { selfieUrl: 'selfie.jpg' } }),
+      },
       pemesananKelas: {
         count: jest.fn().mockResolvedValue(0),
+        groupBy: jest.fn().mockResolvedValue([]),
       },
     };
 
@@ -316,8 +368,12 @@ describe('BookingsService.customerOptions', () => {
       paketPelanggan: {
         findMany: jest.fn().mockResolvedValue([matchingPackage]),
       },
+      user: {
+        findUnique: jest.fn().mockResolvedValue({ status: 'ACTIVE', profile: { selfieUrl: 'selfie.jpg' } }),
+      },
       pemesananKelas: {
         count: jest.fn().mockResolvedValue(0),
+        groupBy: jest.fn().mockResolvedValue([]),
       },
     };
 

@@ -2,6 +2,7 @@ import { apiFetch } from '../lib/api-client';
 import { foregroundFetch } from '../components/app-loading';
 import { notifySessionFailure } from './session-client';
 import type { ClassSlot } from './class-slot-client';
+import { paketBerlakuDiCabang } from './ledger-client';
 
 export type { ClassSlot };
 
@@ -594,6 +595,13 @@ export interface BookingClient {
   walkIn?(input: WalkInCommand, idempotencyKey: string): Promise<WalkInResult>;
 }
 
+/** Kelas 14 hari ke depan, terdekat dulu. Tanpa rentang, server hanya mengirim 20 kelas terjauh. */
+function jendelaKelas() {
+  const from = new Date();
+  const until = new Date(from.getTime() + 14 * 86_400_000);
+  return `from=${encodeURIComponent(from.toISOString())}&until=${encodeURIComponent(until.toISOString())}&limit=200`;
+}
+
 export const browserBookingClient: BookingClient = {
   async getCustomerPackages(customerId, branchId) {
     const query = new URLSearchParams();
@@ -679,11 +687,11 @@ export const browserBookingClient: BookingClient = {
         { label: 'Memuat saldo paket…' },
       ),
       apiFetch<{ items: Array<any> }>(
-        `/class-slots?branchId=${encodeURIComponent(branchId)}&status=PUBLISHED`,
+        `/class-slots?branchId=${encodeURIComponent(branchId)}&status=PUBLISHED&${jendelaKelas()}`,
         { label: 'Memuat jadwal kelas…' },
       ),
       apiFetch<{ items: Array<any> }>(
-        `/class-slots?branchId=${encodeURIComponent(branchId)}&status=CONFIRMED`,
+        `/class-slots?branchId=${encodeURIComponent(branchId)}&status=CONFIRMED&${jendelaKelas()}`,
         { label: 'Memuat jadwal kelas…' },
       ),
     ]);
@@ -699,7 +707,7 @@ export const browserBookingClient: BookingClient = {
         .map(normalizePackageBalance)
         .filter(
           (item) =>
-            (item.branchId === branchId || item.branchId === 'global' || !item.branchId) &&
+            paketBerlakuDiCabang(item, branchId) &&
             item.status === 'ACTIVE' &&
             item.available >= 1 &&
             new Date(item.expiryAt).getTime() > now,
@@ -1234,6 +1242,8 @@ const messages: Record<string, string> = {
     'Kelas sudah selesai atau sesi paket sudah dipotong. Koreksi lewat Penyesuaian Sesi agar saldo tidak selisih.',
   INVALID_STATE_TRANSITION:
     'Status kelas atau booking saat ini tidak mengizinkan tindakan tersebut. Pastikan kelas sudah dipublikasikan.',
+  PACKAGE_EXPIRED_FOR_SLOT: 'Masa berlaku paket ini berakhir sebelum kelas dimulai. Pilih kelas yang lebih awal atau perpanjang paket.',
+  PACKAGE_NOT_ACTIVE: 'Paket ini sedang tidak aktif (dibekukan atau sudah tidak berlaku).',
   PACKAGE_CLASS_TYPE_MISMATCH: 'Paket yang Anda pilih tidak sesuai dengan jenis kelas ini. Silakan pilih kelas dengan tipe yang cocok.',
   PACKAGE_BRANCH_MISMATCH: 'Paket ini hanya berlaku untuk cabang studio tertentu. Silakan pilih jadwal di cabang yang sesuai.',
   PACKAGE_EXHAUSTED: 'Sisa sesi paket Anda sudah habis. Silakan beli paket baru untuk melanjutkan booking.',

@@ -55,6 +55,25 @@ export function paketBerlakuDiCabang(
   if (Array.isArray(pkg.allowedBranchIds)) return pkg.allowedBranchIds.includes(branchId);
   return !pkg.packageBranchId || pkg.packageBranchId === 'global' || pkg.packageBranchId === branchId;
 }
+/**
+ * Aturan satu paket untuk satu kelas, sama dengan yang dipakai server saat booking: aktif, masih
+ * punya sesi, berlaku saat kelas dimulai (bukan hanya hari ini), cabang dan tipe kelas cocok.
+ */
+export function paketBisaDipakaiUntukKelas(
+  pkg: Pick<
+    LedgerBalance,
+    'isMultiBranch' | 'packageBranchId' | 'allowedBranchIds' | 'classTypeId' | 'expiryAt' | 'available' | 'status'
+  >,
+  slot: { branchId: string; classTypeId: string; startAt: Date | string },
+): boolean {
+  return (
+    pkg.status === 'ACTIVE' &&
+    pkg.available > 0 &&
+    new Date(pkg.expiryAt).getTime() > new Date(slot.startAt).getTime() &&
+    paketBerlakuDiCabang(pkg, slot.branchId) &&
+    (!pkg.classTypeId || pkg.classTypeId === slot.classTypeId)
+  );
+}
 export type SharedUtilizationItem = {
   userId: string;
   displayName: string;

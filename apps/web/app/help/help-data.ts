@@ -205,6 +205,22 @@ export const HELP_ERROR_CATALOG: HelpErrorCodeItem[] = [
       'Beli paket sesi baru di menu Paket (/packages) atau batalkan reservasi kelas lain yang tidak dihadiri.',
   },
   {
+    code: 'PACKAGE_EXPIRED_FOR_SLOT',
+    httpStatus: 409,
+    audience: 'customer',
+    meaning: 'Masa berlaku paket berakhir sebelum kelas dimulai',
+    commonCause: 'Paket masih aktif hari ini tetapi kedaluwarsa sebelum jam kelas yang dipilih',
+    resolution: 'Pilih kelas yang jadwalnya sebelum paket berakhir, atau perpanjang paket.',
+  },
+  {
+    code: 'PACKAGE_NOT_ACTIVE',
+    httpStatus: 409,
+    audience: 'customer',
+    meaning: 'Paket tidak aktif',
+    commonCause: 'Paket sedang dibekukan atau statusnya bukan aktif',
+    resolution: 'Hubungi studio untuk mengaktifkan kembali paket.',
+  },
+  {
     code: 'PACKAGE_BRANCH_MISMATCH',
     httpStatus: 409,
     audience: 'customer',

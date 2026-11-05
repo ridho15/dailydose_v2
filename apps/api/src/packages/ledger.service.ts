@@ -69,6 +69,19 @@ const maskPhone = (phone?: string | null) => (phone ? `${phone.slice(0, 4)}****`
 const problem = (code: string, status: HttpStatus, field?: string) =>
   new ApiProblem(code, status, false, field ? [{ field, issue: code }] : []);
 
+/**
+ * Paket yang boleh dipakai di satu cabang; sama dengan `cabangPaket`: cabang pembelian, cabang paket,
+ * paket multi-cabang, dan paket tanpa cabang sama sekali (mis. hasil migrasi V1) yang berlaku di semua cabang.
+ */
+const cabangWhere = (branchId: string): Prisma.PaketPelangganWhereInput => ({
+  OR: [
+    { purchase: { is: { branchId } } },
+    { package: { isMultiBranch: true } },
+    { package: { branchId } },
+    { AND: [{ purchaseId: null }, { package: { branchId: null } }] },
+  ],
+});
+
 @Injectable()
 export class LedgerService {
   constructor(
@@ -96,13 +109,7 @@ export class LedgerService {
         ? !scope.excluded.includes(requestedBranchId)
         : scope.included.includes(requestedBranchId);
       if (!allowed) throw new ApiProblem('RESOURCE_NOT_FOUND', HttpStatus.NOT_FOUND);
-      return {
-        OR: [
-          { purchase: { is: { branchId: requestedBranchId } } },
-          { package: { isMultiBranch: true } },
-          { package: { branchId: requestedBranchId } },
-        ],
-      };
+      return cabangWhere(requestedBranchId);
     }
     if (scope.all) {
       return scope.excluded.length > 0
@@ -155,7 +162,7 @@ export class LedgerService {
     }
     const scopeWhere: Prisma.PaketPelangganWhereInput = isCustomer
       ? filters.branchId
-        ? { purchase: { is: { branchId: filters.branchId } } }
+        ? cabangWhere(filters.branchId)
         : {}
       : this.packageScopeWhere(principal, 'ledger:read', filters.branchId);
     const search = filters.search?.trim();

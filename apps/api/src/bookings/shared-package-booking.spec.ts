@@ -165,6 +165,11 @@ describe('BookingsService - Shared / Family Package Booking', () => {
           // Cek "sudah terdaftar di kelas ini" (paket bawa teman): pada skenario ini belum.
           where?.userId && where?.classSlotId ? 0 : options.activeBookingsCount,
         ),
+        groupBy: jest.fn(async () =>
+          options.activeBookingsCount
+            ? [{ customerPackageId, _count: { _all: options.activeBookingsCount } }]
+            : [],
+        ),
       },
     };
 
@@ -363,7 +368,7 @@ describe('BookingsService - Shared / Family Package Booking', () => {
     });
   });
 
-  it('anggota terdaftar ditolak jika masa berlaku paket sudah habis (INSUFFICIENT_AVAILABLE_SESSIONS 409)', async () => {
+  it('anggota terdaftar ditolak jika masa berlaku paket sudah habis (PACKAGE_EXPIRED_FOR_SLOT 409)', async () => {
     const { service } = createTestContext({
       isShareable: true,
       sharedMembers: [{ userId: friendUserId }],
@@ -390,7 +395,7 @@ describe('BookingsService - Shared / Family Package Booking', () => {
         'corr-7',
       ),
     ).rejects.toMatchObject({
-      code: 'INSUFFICIENT_AVAILABLE_SESSIONS',
+      code: 'PACKAGE_EXPIRED_FOR_SLOT',
       status: HttpStatus.CONFLICT,
     });
   });
