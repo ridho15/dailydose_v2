@@ -21,21 +21,27 @@ const row = (overrides: Record<string, unknown> = {}) => ({
 });
 
 function createService(rows: ReturnType<typeof row>[]) {
-  const groupBy = jest.fn().mockImplementation(async (args: { by: string[] }) =>
-    args.by.includes('customerPackageId')
-      ? [{ customerPackageId: 'pkg-1', _count: { _all: 3 } }]
-      : [{ status: 'BOOKED', _count: { _all: rows.length } }],
-  );
+  // Pencarian booking yang menahan sesi (where.AND) menemukan 3 booking untuk pkg-1; pemanggilan lain memberi baris daftar.
+  const tertahan = Array.from({ length: 3 }, (_, i) => ({
+    id: `held-${i}`,
+    status: 'BOOKED',
+    customerPackageId: 'pkg-1',
+  }));
+  const findMany = jest
+    .fn()
+    .mockImplementation(async (args: { where?: { AND?: unknown } }) => (args?.where?.AND ? tertahan : rows));
+  const groupBy = jest.fn().mockResolvedValue([{ status: 'BOOKED', _count: { _all: rows.length } }]);
   const db = {
     pemesananKelas: {
-      findMany: jest.fn().mockResolvedValue(rows),
+      findMany,
       findUnique: jest.fn().mockResolvedValue(rows[0]),
       count: jest.fn().mockResolvedValue(rows.length),
       groupBy,
     },
+    sessionLedger: { findMany: jest.fn().mockResolvedValue([]) },
     ubahJadwal: { count: jest.fn().mockResolvedValue(0) },
   };
-  return { service: new BookingsService(db as never, {} as never, new PolicyService(), {} as never), groupBy };
+  return { service: new BookingsService(db as never, {} as never, new PolicyService(), {} as never), findMany };
 }
 
 describe('booking session balance', () => {
@@ -47,11 +53,11 @@ describe('booking session balance', () => {
 
   it('asks for the reservations of all packages in the page with one query', async () => {
     const other = row({ id: '00000000-0000-4000-8000-000000000002', customerPackageId: 'pkg-2' });
-    const { service, groupBy } = createService([row(), other]);
+    const { service, findMany } = createService([row(), other]);
     await service.list(principal, {});
-    const perPackage = groupBy.mock.calls.filter(([args]) => args.by.includes('customerPackageId'));
+    const perPackage = findMany.mock.calls.filter(([args]) => args?.where?.AND);
     expect(perPackage).toHaveLength(1);
-    expect(perPackage[0]![0].where.customerPackageId.in.sort()).toEqual(['pkg-1', 'pkg-2']);
+    expect(perPackage[0]![0].where.AND[1].customerPackageId.in.sort()).toEqual(['pkg-1', 'pkg-2']);
   });
 
   it('never shows more available sessions than the package has, and none for a frozen package', async () => {

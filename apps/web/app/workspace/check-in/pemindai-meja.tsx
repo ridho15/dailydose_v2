@@ -129,6 +129,13 @@ export function PemindaiMeja({
   const ketikan = useRef('');
   const timer = useRef<number | undefined>(undefined);
 
+  // Pemanggil biasanya mengirim fungsi baru di tiap render (layar ini memuat ulang data tiap 5 detik).
+  // Disimpan di ref supaya `kirim` stabil dan kamera tidak dimatikan lalu dinyalakan lagi setiap kali.
+  const pindaiRef = useRef(pindai);
+  const onTercatatRef = useRef(onTercatat);
+  pindaiRef.current = pindai;
+  onTercatatRef.current = onTercatat;
+
   const [isi, setIsi] = useState('');
   const [hasil, setHasil] = useState<HasilPindai | null>(null);
   const [gangguan, setGangguan] = useState('');
@@ -145,11 +152,11 @@ export function PemindaiMeja({
       sibuk.current = true;
       setGangguan('');
       try {
-        const jawaban = await pindai(bersih);
+        const jawaban = await pindaiRef.current(bersih);
         window.clearTimeout(timer.current);
         setHasil(jawaban);
         timer.current = window.setTimeout(() => setHasil(null), DURASI_HASIL_MS);
-        if (jawaban.tercatat) onTercatat(jawaban);
+        if (jawaban.tercatat) onTercatatRef.current(jawaban);
       } catch {
         setGangguan('Pindaian belum terkirim. Periksa koneksi internet, lalu pindai lagi.');
         terakhir.current = null;
@@ -159,7 +166,7 @@ export function PemindaiMeja({
         kolom.current?.focus({ preventScroll: true });
       }
     },
-    [onTercatat, pindai],
+    [],
   );
 
   // Ketikan pemindai saat fokus tidak berada di kolom isian mana pun (mis. setelah menekan tombol).

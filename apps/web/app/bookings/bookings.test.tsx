@@ -158,6 +158,46 @@ describe('BookingView', () => {
     );
   });
 
+  it('paket pelanggan yang dipilih tidak tertimpa saat data dialog selesai dimuat belakangan', async () => {
+    let selesai!: (v: unknown) => void;
+    const discover = vi.fn().mockImplementation(
+      () => new Promise((resolve) => { selesai = resolve; }),
+    );
+    const searchCustomers = vi.fn().mockResolvedValue([{ id: 'cust-9', displayName: 'Member Sembilan' }]);
+    const getCustomerPackages = vi.fn().mockResolvedValue([{ ...customerPackage, customerUserId: 'cust-9' }]);
+    render(<BookingView client={client({ discover, searchCustomers, getCustomerPackages })} activeBranchId={branchId} />);
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Buat booking manual' }));
+    await user.type(await screen.findByRole('combobox', { name: /Pelanggan/ }), 'Sembilan');
+    await user.click(await screen.findByRole('option', { name: /Member Sembilan/ }));
+    await waitFor(() => expect(getCustomerPackages).toHaveBeenCalled());
+
+    // Pemuatan awal baru selesai setelah staf memilih pelanggan; hasilnya tidak berisi paket pelanggan itu.
+    selesai({ customers: [], packages: [], slots: [slot] });
+    await waitFor(() => expect(discover).toHaveBeenCalledTimes(1));
+    await user.click(screen.getByRole('combobox', { name: /Paket pelanggan/ }));
+    expect(await screen.findByRole('option', { name: /Paket aktif/i })).toBeInTheDocument();
+    expect(screen.queryByText(/belum memiliki paket aktif/)).not.toBeInTheDocument();
+  });
+
+  it('menjelaskan tetap tampil mengapa kolom kelas kosong, tidak hilang setelah beberapa detik', async () => {
+    const discover = vi.fn().mockResolvedValue({
+      customers: [{ id: customerId, displayName: 'Customer Synthetic' }],
+      packages: [customerPackage],
+      slots: [],
+    });
+    render(<BookingView client={client({ discover })} activeBranchId={branchId} />);
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Buat booking manual' }));
+    await user.click(await screen.findByRole('combobox', { name: /Pelanggan/ }));
+    await user.click(await screen.findByRole('option', { name: /Customer Synthetic/ }));
+    await user.click(screen.getByRole('combobox', { name: /Paket pelanggan/ }));
+    await user.click(await screen.findByRole('option', { name: /Paket aktif/i }));
+    expect(await screen.findByText(/Belum ada kelas terbuka di cabang ini dalam 14 hari/)).toBeInTheDocument();
+    await new Promise((r) => setTimeout(r, 5400));
+    expect(screen.getByText(/Belum ada kelas terbuka di cabang ini dalam 14 hari/)).toBeInTheDocument();
+  }, 15000);
+
   it('keeps the same intent key for a safe retry and maps the failure', async () => {
     const create = vi
       .fn()

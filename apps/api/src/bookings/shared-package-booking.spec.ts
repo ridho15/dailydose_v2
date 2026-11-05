@@ -77,6 +77,13 @@ describe('BookingsService - Shared / Family Package Booking', () => {
           // Cek "sudah terdaftar di kelas ini" (paket bawa teman): pada skenario ini belum.
           where?.userId && where?.classSlotId ? 0 : options.activeBookingsCount,
         ),
+        findMany: jest.fn(async () =>
+          Array.from({ length: options.activeBookingsCount }, (_, i) => ({
+            id: `tertahan-${i}`,
+            status: 'BOOKED',
+            customerPackageId,
+          })),
+        ),
         findFirst: jest.fn(async () => null),
         create: jest.fn(async ({ data }: any) => ({
           ...data,
@@ -165,10 +172,12 @@ describe('BookingsService - Shared / Family Package Booking', () => {
           // Cek "sudah terdaftar di kelas ini" (paket bawa teman): pada skenario ini belum.
           where?.userId && where?.classSlotId ? 0 : options.activeBookingsCount,
         ),
-        groupBy: jest.fn(async () =>
-          options.activeBookingsCount
-            ? [{ customerPackageId, _count: { _all: options.activeBookingsCount } }]
-            : [],
+        findMany: jest.fn(async () =>
+          Array.from({ length: options.activeBookingsCount }, (_, i) => ({
+            id: `tertahan-${i}`,
+            status: 'BOOKED',
+            customerPackageId,
+          })),
         ),
       },
     };

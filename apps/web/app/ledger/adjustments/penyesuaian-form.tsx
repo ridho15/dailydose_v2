@@ -117,14 +117,23 @@ export function PenyesuaianForm({
   }, [client, member]);
 
   const dipilih = paket.find((p) => p.id === paketId);
-  const sisa = dipilih?.remainingSessions ?? dipilih?.available ?? 0;
+  // Saldo buku besar, bukan "tersedia": server menghitung hasil penyesuaian dari saldo ini dan menolak
+  // pengurangan yang membuatnya lebih kecil dari sesi yang sedang tertahan booking.
+  const sisa = dipilih?.ledgerBalance ?? dipilih?.remainingSessions ?? dipilih?.available ?? 0;
+  const tertahan = dipilih?.reserved ?? 0;
   const sesudah = sisa + jumlah;
-  const siap =
-    Boolean(dipilih) &&
-    jumlah !== 0 &&
-    sesudah >= 0 &&
-    alasan.trim().length >= MIN_ALASAN &&
-    Boolean(bukti);
+  const kurangiBerlebih = Boolean(dipilih) && jumlah < 0 && (sesudah < 0 || sesudah < tertahan);
+  const panjangAlasan = alasan.trim().length;
+  // Alasan tombol belum aktif, supaya tidak perlu menebak syarat mana yang kurang.
+  const kendala = [
+    !member && 'pilih member',
+    member && !dipilih && 'pilih paket member',
+    jumlah === 0 && 'jumlah sesi tidak boleh 0',
+    kurangiBerlebih && 'pengurangan melebihi sisa sesi',
+    panjangAlasan < MIN_ALASAN && `alasan kurang ${MIN_ALASAN - panjangAlasan} karakter`,
+    !bukti && 'pilih berkas bukti',
+  ].filter((item): item is string => Boolean(item));
+  const siap = kendala.length === 0;
 
   const ubahJumlah = (arah: 1 | -1) =>
     setJumlah((kini) => {
@@ -242,7 +251,7 @@ export function PenyesuaianForm({
                     onChange={() => setPaketId(p.id)}
                     className="size-4 accent-[#0d5132]"
                   />
-                  {p.packageName ?? p.name} · sisa {p.remainingSessions ?? p.available} · berakhir{' '}
+                  {p.packageName ?? p.name} · sisa {p.ledgerBalance ?? p.remainingSessions ?? p.available} · berakhir{' '}
                   {tanggal(p.expiryAt)}
                 </label>
               ))}
@@ -255,7 +264,10 @@ export function PenyesuaianForm({
             </p>
           )}
           {member && paket.length === 0 && (
-            <p className="m-0 mt-2 text-[15px] text-dd-muted">Member ini belum punya paket.</p>
+            <p className="m-0 mt-2 text-[15px] text-dd-muted">
+              Tidak ada paket member ini yang bisa Anda sesuaikan. Member belum punya paket, atau
+              paketnya dibeli di cabang yang di luar akses akun Anda.
+            </p>
           )}
           {bookingId && (
             <p className="m-0 mt-2 text-[15px] text-dd-muted">
@@ -297,9 +309,10 @@ export function PenyesuaianForm({
               </span>
             )}
           </div>
-          {dipilih && sesudah < 0 && (
+          {kurangiBerlebih && (
             <p className="m-0 mt-2 text-sm text-dd-danger">
-              Sisa sesi tidak cukup untuk dikurangi sebanyak itu.
+              Sisa sesi tidak cukup untuk dikurangi sebanyak itu
+              {tertahan > 0 ? ` (${tertahan} sesi sedang tertahan booking)` : ''}.
             </p>
           )}
         </div>
@@ -355,7 +368,11 @@ export function PenyesuaianForm({
           <Button disabled={!siap || busy} onClick={() => void kirim()}>
             {busy ? 'Mengirim…' : 'Kirim penyesuaian'}
           </Button>
-          <span className="text-[15px] text-dd-muted">Berlaku langsung setelah dikirim.</span>
+          <span className="text-[15px] text-dd-muted">
+            {kendala.length > 0 && !busy
+              ? `Belum bisa dikirim: ${kendala.join(', ')}.`
+              : 'Berlaku langsung setelah dikirim.'}
+          </span>
         </div>
       </section>
 

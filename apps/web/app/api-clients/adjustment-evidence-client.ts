@@ -36,7 +36,7 @@ export const browserAdjustmentEvidenceClient: AdjustmentEvidenceClient = {
   },
   async paketMember(customerUserId) {
     const data = await apiFetch<{ items: unknown[] }>(
-      `/customer-packages?${new URLSearchParams({ customerUserId, pageSize: '20' }).toString()}`,
+      `/customer-packages?${new URLSearchParams({ customerUserId, pageSize: '50' }).toString()}`,
     );
     return (data.items ?? []).map(normalizePackageBalance);
   },

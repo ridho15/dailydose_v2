@@ -106,6 +106,8 @@ export interface CustomerPackageBalance {
   status: string;
   totalSessions?: number;
   remainingSessions?: number;
+  /** Saldo buku besar sesi (sebelum dikurangi sesi tertahan). */
+  ledgerBalance?: number;
   available: number;
   reserved?: number;
   expiryAt: Date;

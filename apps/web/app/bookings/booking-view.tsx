@@ -251,24 +251,37 @@ export function BookingView({
     resetIntent();
   }, [branchId]);
 
+  // Data dialog dimuat sekali tiap dialog dibuka (atau cabang berganti). Sebelumnya efek ini jalan lagi
+  // selama daftar kelas kosong dan MENIMPA daftar paket, sehingga paket pelanggan yang baru dipilih hilang.
+  const dialogDimuatUntuk = useRef('');
   useEffect(() => {
-    if (createOpen && branchId && (slots.length === 0 || packages.length === 0)) {
-      client
-        .discover(branchId)
-        .then((discovery) => {
-          setCustomers((prev) => {
-            const map = new Map(prev.map((c) => [c.id, c]));
-            for (const c of discovery.customers) {
-              if (!map.has(c.id)) map.set(c.id, c);
-            }
-            return Array.from(map.values());
-          });
-          setPackages(discovery.packages);
-          setSlots(discovery.slots);
-        })
-        .catch(() => {});
+    if (!createOpen || !branchId) {
+      dialogDimuatUntuk.current = '';
+      return;
     }
-  }, [createOpen, branchId, slots.length, packages.length, client]);
+    if (dialogDimuatUntuk.current === branchId) return;
+    dialogDimuatUntuk.current = branchId;
+    client
+      .discover(branchId)
+      .then((discovery) => {
+        setCustomers((prev) => {
+          const map = new Map(prev.map((c) => [c.id, c]));
+          for (const c of discovery.customers) {
+            if (!map.has(c.id)) map.set(c.id, c);
+          }
+          return Array.from(map.values());
+        });
+        // Gabungkan, jangan timpa: paket pelanggan yang dipilih staf bisa sudah termuat lebih dulu.
+        setPackages((prev) => {
+          const ada = new Set(prev.map((item) => item.id));
+          return [...prev, ...discovery.packages.filter((item) => !ada.has(item.id))];
+        });
+        setSlots(discovery.slots);
+      })
+      .catch(() => {
+        dialogDimuatUntuk.current = '';
+      });
+  }, [createOpen, branchId, client]);
 
   const customerPackages = useMemo(
     () =>
@@ -1054,6 +1067,7 @@ export function BookingView({
           />
           <SearchSelect
             label="Kelas"
+            description="Kelas yang masih terbuka dalam 14 hari ke depan."
             value={slotId}
             disabled={busy || !packageId || eligibleSlots.length === 0}
             placeholder="Pilih jadwal kelas"
@@ -1077,12 +1091,18 @@ export function BookingView({
             }}
           />
           {customerId && customerPackages.length === 0 && (
-            <Feedback kind="status">
-              Pelanggan ini belum memiliki paket aktif dengan saldo sesi tersedia untuk cabang ini. Silakan catat pembelian paket terlebih dahulu melalui menu Pembayaran.
+            <Feedback kind="status" autoDismiss={false}>
+              Pelanggan ini belum memiliki paket aktif dengan saldo sesi yang bisa dipakai di cabang ini.
+              Paketnya mungkin sudah habis, dibekukan, atau dibeli untuk cabang lain. Bila memang belum
+              ada, catat pembelian paket lebih dulu melalui menu Pembayaran.
             </Feedback>
           )}
           {packageId && eligibleSlots.length === 0 && (
-            <Feedback kind="status">Tidak ada jadwal kelas yang sesuai dengan tipe paket ini.</Feedback>
+            <Feedback kind="status" autoDismiss={false}>
+              {slots.length === 0
+                ? 'Belum ada kelas terbuka di cabang ini dalam 14 hari ke depan.'
+                : 'Tidak ada kelas yang cocok: tipe kelasnya harus sama dengan paket, dan kelas harus dimulai sebelum paket berakhir.'}
+            </Feedback>
           )}
           {selectedPackage && selectedSlot && selectedCustomer && (
             <Panel

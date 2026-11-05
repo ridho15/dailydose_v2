@@ -12,7 +12,13 @@ import type { SessionPrincipal } from '../identity/identity.service';
 import { PolicyService } from '../identity/policy.service';
 import { ApiProblem, ENTITY_ID_REGEX } from '../identity/security';
 import { buildPhoneSearchVariants, normalizePhone } from '../identity/manajemen-pelanggan.service';
-import { MEMEGANG_SESI } from './sesi-terpesan';
+import {
+  bookingMenahanSesi,
+  MEMEGANG_SESI,
+  ringkasBookingPaket,
+  tanpaPotongan,
+  tertahanPerPaket,
+} from './sesi-terpesan';
 import { maskContactEmail } from '../identity/customer-visibility';
 
 export const ADJUSTMENT_REASON_CODES = [
@@ -220,10 +226,7 @@ export class LedgerService {
     const [rows, totalFiltered] = await Promise.all([
       this.db.paketPelanggan.findMany({
         where,
-        include: {
-          ...packageInclude,
-          bookings: { where: MEMEGANG_SESI, select: { id: true } },
-        },
+        include: packageInclude,
         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         take: pageNumber ? limit : limit + 1,
         ...(pageNumber ? { skip: (pageNumber - 1) * limit } : (filters.cursor ? { cursor: { id: filters.cursor }, skip: 1 } : {})),
@@ -250,8 +253,9 @@ export class LedgerService {
       movements.find((m) => m.customerPackageId === id && m.type === type)?._sum.amount ?? 0;
 
     const temanPaket = await maksTemanPaket(this.db, pageRows.map((row) => row.packageId));
+    const tertahan = await tertahanPerPaket(this.db, pageRows.map((row) => row.id));
     const items = pageRows.map((row) => {
-      const reserved = row.bookings.length;
+      const reserved = tertahan.get(row.id) ?? 0;
       const bawaTemanMaks = temanPaket.get(row.packageId) ?? 0;
       const isShareable = Boolean((row.package as any)?.isShareable);
       const maksTeman = isShareable && bawaTemanMaks < 1 ? 1 : bawaTemanMaks;
@@ -304,9 +308,7 @@ export class LedgerService {
           where: base,
           _sum: { remainingSessions: true, usedSessions: true },
         }),
-        this.db.pemesananKelas.count({
-          where: { ...MEMEGANG_SESI, customerPackage: { is: base } },
-        }),
+        bookingMenahanSesi(this.db, { customerPackage: { is: base } }).then((rows) => rows.length),
         this.db.sessionLedger.groupBy({
           by: ['type'],
           where: {
@@ -393,6 +395,8 @@ export class LedgerService {
       },
     });
     if (!pkg) throw new ApiProblem('RESOURCE_NOT_FOUND', HttpStatus.NOT_FOUND);
+    // Booking yang sesinya sudah dipotong dihitung sebagai terpakai, bukan tertahan.
+    const menahan = await tanpaPotongan(this.db, pkg.bookings ?? []);
     // Pemilik paket boleh melihat saldonya sendiri; selain itu wajib hak staf + cakupan cabang.
     if (pkg.userId !== principal.userId) this.assertPackageAccess(principal, 'ledger:read', pkg);
 
@@ -407,7 +411,7 @@ export class LedgerService {
 
     const bookingIds = Array.from(
       new Set([
-        ...(pkg.bookings ?? []).map((b) => b.id),
+        ...menahan.map((b) => b.id),
         ...pageRows
           .map((r) => r.referenceId)
           .filter((ref): ref is string => Boolean(ref && UUID.test(ref))),
@@ -477,7 +481,7 @@ export class LedgerService {
 
     return {
       balance: {
-        ...this.balanceView(pkg, pkg.bookings.length),
+        ...this.balanceView(pkg, menahan.length),
         sessionCountSnapshot: pkg.totalSessions,
         usage: {
           initialSessions: pkg.totalSessions,
@@ -505,8 +509,8 @@ export class LedgerService {
       })),
       sharedUtilization,
       reservations: {
-        activeQuantity: (pkg.bookings ?? []).length,
-        items: (pkg.bookings ?? []).map((booking) => {
+        activeQuantity: menahan.length,
+        items: menahan.map((booking) => {
           const bookedUser = (booking as any).user ?? bookingMap.get(booking.id)?.user;
           return {
             id: booking.id,
@@ -719,18 +723,8 @@ export class LedgerService {
     }
   }
 
-  private async reservedByPackage(packageIds: string[]) {
-    const result = new Map<string, number>();
-    if (packageIds.length === 0) return result;
-    const grouped = await this.db.pemesananKelas.groupBy({
-      by: ['customerPackageId'],
-      where: { customerPackageId: { in: packageIds }, ...MEMEGANG_SESI },
-      _count: { _all: true },
-    });
-    for (const g of grouped) {
-      if (g.customerPackageId) result.set(g.customerPackageId, g._count._all);
-    }
-    return result;
+  private reservedByPackage(packageIds: string[]) {
+    return tertahanPerPaket(this.db, packageIds);
   }
 
   async getAdjustment(principal: SessionPrincipal, id: string) {
@@ -785,9 +779,7 @@ export class LedgerService {
         if (!pkg) throw new ApiProblem('RESOURCE_NOT_FOUND', HttpStatus.NOT_FOUND);
         this.assertPackageAccess(principal, 'ledger:adjust:request', pkg);
 
-        const reserved = await tx.pemesananKelas.count({
-          where: { customerPackageId: pkg.id, ...MEMEGANG_SESI },
-        });
+        const reserved = (await tertahanPerPaket(tx, [pkg.id])).get(pkg.id) ?? 0;
         this.assertBalanceAllows(pkg.remainingSessions, reserved, quantity);
 
         const pending = await tx.sessionAdjustRequest.count({
@@ -866,9 +858,7 @@ export class LedgerService {
         if (!pkg) throw new ApiProblem('RESOURCE_NOT_FOUND', HttpStatus.NOT_FOUND);
         this.assertPackageAccess(principal, 'ledger:adjust:decide', pkg);
 
-        const reserved = await tx.pemesananKelas.count({
-          where: { customerPackageId: pkg.id, ...MEMEGANG_SESI },
-        });
+        const reserved = (await tertahanPerPaket(tx, [pkg.id])).get(pkg.id) ?? 0;
         this.assertBalanceAllows(pkg.remainingSessions, reserved, quantity);
 
         const pending = await tx.sessionAdjustRequest.count({
@@ -1026,9 +1016,7 @@ export class LedgerService {
           const pkg = await tx.paketPelanggan.findUniqueOrThrow({
             where: { id: row.customerPackageId },
           });
-          const reserved = await tx.pemesananKelas.count({
-            where: { customerPackageId: pkg.id, ...MEMEGANG_SESI },
-          });
+          const reserved = (await tertahanPerPaket(tx, [pkg.id])).get(pkg.id) ?? 0;
           this.assertBalanceAllows(pkg.remainingSessions, reserved, row.sessionCount);
 
           const balanceAfter = pkg.remainingSessions + row.sessionCount;
@@ -1249,21 +1237,11 @@ export class LedgerService {
     });
     if (!pkg) throw new ApiProblem("RESOURCE_NOT_FOUND", HttpStatus.NOT_FOUND);
 
-    const bookingCounts = await this.db.pemesananKelas.groupBy({
-      by: ["status"],
-      where: { customerPackageId: id },
-      _count: { _all: true },
-    });
-    let attendedCount = 0;
-    let noShowCount = 0;
-    let bookedCount = 0;
-    let cancelledCount = 0;
-    for (const b of bookingCounts) {
-      if (b.status === "ATTENDED") attendedCount = b._count._all;
-      else if (b.status === "NO_SHOW") noShowCount = b._count._all;
-      else if (b.status === "BOOKED") bookedCount = b._count._all;
-      else if (b.status === "CANCELLED") cancelledCount = b._count._all;
-    }
+    const ringkas = await ringkasBookingPaket(this.db, id);
+    const attendedCount = ringkas.hadir;
+    const noShowCount = ringkas.tidakHadir;
+    const bookedCount = ringkas.booked + ringkas.tertahanHadir;
+    const cancelledCount = ringkas.dibatalkan;
 
     const adjSum = await this.db.sessionAdjustRequest.aggregate({
       where: { customerPackageId: id, status: AdjustRequestStatus.APPROVED },
@@ -1358,21 +1336,11 @@ export class LedgerService {
         });
         if (!pkg) throw new ApiProblem("RESOURCE_NOT_FOUND", HttpStatus.NOT_FOUND);
 
-        const bookingCounts = await tx.pemesananKelas.groupBy({
-          by: ["status"],
-          where: { customerPackageId: id },
-          _count: { _all: true },
-        });
-        let attendedCount = 0;
-        let noShowCount = 0;
-        let bookedCount = 0;
-        let cancelledCount = 0;
-        for (const b of bookingCounts) {
-          if (b.status === "ATTENDED") attendedCount = b._count._all;
-          else if (b.status === "NO_SHOW") noShowCount = b._count._all;
-          else if (b.status === "BOOKED") bookedCount = b._count._all;
-          else if (b.status === "CANCELLED") cancelledCount = b._count._all;
-        }
+        const ringkas = await ringkasBookingPaket(tx, id);
+        const attendedCount = ringkas.hadir;
+        const noShowCount = ringkas.tidakHadir;
+        const bookedCount = ringkas.booked + ringkas.tertahanHadir;
+        const cancelledCount = ringkas.dibatalkan;
 
         const adjSum = await tx.sessionAdjustRequest.aggregate({
           where: { customerPackageId: id, status: AdjustRequestStatus.APPROVED },

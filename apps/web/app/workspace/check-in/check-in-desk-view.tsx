@@ -35,6 +35,7 @@ import { useSessionContext } from '../../session-context';
 export const DURASI_KARTU_MS = 8_000;
 /** Seberapa sering layar menanyakan kehadiran baru ke server. */
 const SELANG_PERBARUI_MS = 5_000;
+const SELANG_TIDAK_HADIR_MS = 30_000;
 const MIN_ALASAN = 10;
 
 const SELESAI = new Set(['COMPLETED', 'CANCELLED', 'AUTO_CANCELLED']);
@@ -86,6 +87,7 @@ export function CheckInDeskView({
   const [manualOpen, setManualOpen] = useState(false);
   const terlihat = useRef<Set<string> | null>(null);
   const timerKartu = useRef<number | undefined>(undefined);
+  const tidakHadirPada = useRef<{ tanggal: string; pada: number }>({ tanggal: '', pada: 0 });
 
   const tutupKartu = useCallback(() => {
     window.clearTimeout(timerKartu.current);
@@ -109,10 +111,18 @@ export function CheckInDeskView({
           timerKartu.current = window.setTimeout(() => setKartu(null), DURASI_KARTU_MS);
         }
       }
-      client
-        .tidakHadir(branchId, data.tanggal)
-        .then(setTidakHadir)
-        .catch(() => setTidakHadir([]));
+      // Daftar tidak hadir jarang berubah; memuatnya tiap 5 detik hanya membebani server.
+      const kini = Date.now();
+      if (
+        tidakHadirPada.current.tanggal !== data.tanggal ||
+        kini - tidakHadirPada.current.pada >= SELANG_TIDAK_HADIR_MS
+      ) {
+        tidakHadirPada.current = { tanggal: data.tanggal, pada: kini };
+        client
+          .tidakHadir(branchId, data.tanggal)
+          .then(setTidakHadir)
+          .catch(() => setTidakHadir([]));
+      }
     } catch (error) {
       setFailure(
         checkInDeskFailure(
@@ -125,6 +135,7 @@ export function CheckInDeskView({
 
   useEffect(() => {
     terlihat.current = null;
+    tidakHadirPada.current = { tanggal: '', pada: 0 };
     setMeja(null);
     tutupKartu();
     void muat();

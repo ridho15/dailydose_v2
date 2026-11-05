@@ -14,7 +14,7 @@ import { cabangPublik } from '../foundation/tampilan-publik';
 import { paketBerlakuDi } from './cabang-paket';
 import { alasanPaketDitolak } from './kelayakan-paket';
 import { bookingTeman, maksTemanPaket } from '../packages/bawa-teman';
-import { MEMEGANG_SESI } from '../packages/sesi-terpesan';
+import { tertahanPerPaket } from '../packages/sesi-terpesan';
 import { berlakuSampai } from '../foundation/masa-berlaku';
 
 export type BookingCancellationReasonCode =
@@ -141,16 +141,9 @@ export class BookingsService {
       throw new ApiProblem('IDENTITY_VERIFICATION_REQUIRED', HttpStatus.FORBIDDEN);
   }
 
-  /** Booking yang masih memesan satu sesi (BOOKED) per paket pelanggan; dasar "sisa sesi" yang tersedia. */
-  private async reservedByPackage(packageIds: Array<string | null | undefined>) {
-    const ids = [...new Set(packageIds.filter((id): id is string => Boolean(id)))];
-    if (ids.length === 0) return new Map<string, number>();
-    const groups = await this.db.pemesananKelas.groupBy({
-      by: ['customerPackageId'],
-      where: { customerPackageId: { in: ids }, ...MEMEGANG_SESI },
-      _count: { _all: true },
-    });
-    return new Map(groups.map((group) => [group.customerPackageId, group._count._all]));
+  /** Sesi yang masih tertahan per paket pelanggan; dasar "sisa sesi" yang tersedia. */
+  private reservedByPackage(packageIds: Array<string | null | undefined>) {
+    return tertahanPerPaket(this.db, packageIds);
   }
 
   bookingView(booking: any, reservedByPackage?: Map<string, number>) {
@@ -944,9 +937,8 @@ export class BookingsService {
         if (ditolak) throw new ApiProblem(ditolak, HttpStatus.CONFLICT);
 
         // Periksa sisa sesi dikurangi booking aktif (Rule #1 & #2: sesi fisik belum dipotong)
-        const activeBookingsCount = await tx.pemesananKelas.count({
-          where: { customerPackageId: customerPackage.id, ...MEMEGANG_SESI },
-        });
+        const activeBookingsCount =
+          (await tertahanPerPaket(tx, [customerPackage.id])).get(customerPackage.id) ?? 0;
         if (customerPackage.remainingSessions - activeBookingsCount <= 0)
           throw new ApiProblem('INSUFFICIENT_AVAILABLE_SESSIONS', HttpStatus.CONFLICT);
 

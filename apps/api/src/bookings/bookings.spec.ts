@@ -104,6 +104,7 @@ describe('BookingsService.customerOptions', () => {
       pemesananKelas: {
         count: jest.fn().mockResolvedValue(0),
         groupBy: jest.fn().mockResolvedValue([]),
+        findMany: jest.fn().mockResolvedValue([]),
       },
     };
 
@@ -153,6 +154,7 @@ describe('BookingsService.customerOptions', () => {
       pemesananKelas: {
         count: jest.fn().mockResolvedValue(0),
         groupBy: jest.fn().mockResolvedValue([]),
+        findMany: jest.fn().mockResolvedValue([]),
       },
     };
     const service = new BookingsService(
@@ -188,6 +190,7 @@ describe('BookingsService.customerOptions', () => {
       pemesananKelas: {
         count: jest.fn().mockResolvedValue(0),
         groupBy: jest.fn().mockResolvedValue([]),
+        findMany: jest.fn().mockResolvedValue([]),
       },
     };
 
@@ -232,6 +235,7 @@ describe('BookingsService.customerOptions', () => {
       pemesananKelas: {
         count: jest.fn().mockResolvedValue(0),
         groupBy: jest.fn().mockResolvedValue([]),
+        findMany: jest.fn().mockResolvedValue([]),
       },
     };
 
@@ -276,6 +280,7 @@ describe('BookingsService.customerOptions', () => {
       pemesananKelas: {
         count: jest.fn().mockResolvedValue(0),
         groupBy: jest.fn().mockResolvedValue([]),
+        findMany: jest.fn().mockResolvedValue([]),
       },
     };
 
@@ -325,6 +330,7 @@ describe('BookingsService.customerOptions', () => {
       pemesananKelas: {
         count: jest.fn().mockResolvedValue(0),
         groupBy: jest.fn().mockResolvedValue([]),
+        findMany: jest.fn().mockResolvedValue([]),
       },
     };
 
@@ -374,6 +380,7 @@ describe('BookingsService.customerOptions', () => {
       pemesananKelas: {
         count: jest.fn().mockResolvedValue(0),
         groupBy: jest.fn().mockResolvedValue([]),
+        findMany: jest.fn().mockResolvedValue([]),
       },
     };
 

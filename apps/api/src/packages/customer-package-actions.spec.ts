@@ -58,7 +58,7 @@ function setup(row = pkgRow(), upcomingBookings = 0) {
   };
   const db = {
     $transaction: jest.fn(async (fn: (t: typeof tx) => unknown) => fn(tx)),
-    pemesananKelas: { groupBy: jest.fn().mockResolvedValue([]) },
+    pemesananKelas: { groupBy: jest.fn().mockResolvedValue([]), findMany: jest.fn().mockResolvedValue([]) },
   };
   const audit = { catat: jest.fn().mockResolvedValue(undefined) };
   const service = new LedgerService(db as never, new PolicyService(), audit as never);

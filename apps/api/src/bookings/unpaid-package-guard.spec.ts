@@ -63,6 +63,7 @@ describe('BookingsService - Unpaid Package Guard (Poin 6)', () => {
       },
       pemesananKelas: {
         count: jest.fn(async () => 0),
+        findMany: jest.fn(async () => []),
         findFirst: jest.fn(async () => null),
         create: jest.fn(async ({ data }: any) => ({
           ...data,

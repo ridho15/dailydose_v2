@@ -57,6 +57,27 @@ const requestRow = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 });
 
+/** Booking yang menahan sesi (BOOKED), seperti hasil pencarian `bookingMenahanSesi`. */
+const menahan = (n: number) =>
+  Array.from({ length: n }, (_, i) => ({ id: id(900 + i), status: 'BOOKED', customerPackageId: packageId }));
+
+/** Booking satu paket untuk sinkronisasi saldo; kelas yang sudah selesai kecuali disebut lain. */
+const bookingRows = (c: { hadir?: number; tidakHadir?: number; booked?: number; batal?: number }) => {
+  const baris = (n: number, status: string, mulai: number) =>
+    Array.from({ length: n ?? 0 }, (_, i) => ({
+      id: id(mulai + i),
+      status,
+      bookingNumber: `BK-${mulai + i}`,
+      classSlot: { status: status === 'BOOKED' ? 'PUBLISHED' : 'COMPLETED' },
+    }));
+  return [
+    ...baris(c.hadir ?? 0, 'ATTENDED', 100),
+    ...baris(c.tidakHadir ?? 0, 'NO_SHOW', 200),
+    ...baris(c.booked ?? 0, 'BOOKED', 300),
+    ...baris(c.batal ?? 0, 'CANCELLED', 400),
+  ];
+};
+
 function setup() {
   const tx = {
     paketPelanggan: {
@@ -66,6 +87,7 @@ function setup() {
     },
     pemesananKelas: {
       count: jest.fn().mockResolvedValue(0),
+      findMany: jest.fn().mockResolvedValue([]),
       groupBy: jest.fn().mockResolvedValue([]),
       aggregate: jest.fn().mockResolvedValue({ _sum: { sessionCount: 0 } }),
     },
@@ -84,6 +106,7 @@ function setup() {
       aggregate: jest.fn().mockResolvedValue({ _sum: { sessionCount: 0 } }),
     },
     sessionLedger: {
+      findMany: jest.fn().mockResolvedValue([]),
       create: jest.fn().mockImplementation(async ({ data }) => ({
         id: id(50),
         createdAt: new Date('2026-02-02T00:00:00Z'),
@@ -157,7 +180,7 @@ describe('LedgerService.requestAdjustment', () => {
     await expect(
       service.requestAdjustment(admin, { ...input, quantity: -4 }),
     ).rejects.toMatchObject({ code: 'INSUFFICIENT_SESSION_BALANCE' });
-    tx.pemesananKelas.count.mockResolvedValue(3);
+    tx.pemesananKelas.findMany.mockResolvedValue(menahan(3));
     await expect(
       service.requestAdjustment(admin, { ...input, quantity: -1 }),
     ).rejects.toMatchObject({ code: 'INSUFFICIENT_SESSION_BALANCE' });
@@ -350,7 +373,7 @@ describe('LedgerService.decideAdjustment', () => {
   it('re-checks the balance at approval time', async () => {
     const { service, tx } = setup();
     tx.sessionAdjustRequest.findUnique.mockResolvedValue(requestRow({ sessionCount: -3 }));
-    tx.pemesananKelas.count.mockResolvedValue(1);
+    tx.pemesananKelas.findMany.mockResolvedValue(menahan(1));
     await expect(
       service.decideAdjustment(manager, requestId, 'approve', approve),
     ).rejects.toMatchObject({ code: 'INSUFFICIENT_SESSION_BALANCE' });
@@ -707,6 +730,32 @@ describe("LedgerService.syncCustomerPackage & previewSyncCustomerPackage (Super 
   };
 
   describe("previewSyncCustomerPackage", () => {
+    it("QA-SYNC-3: hadir di kelas yang belum selesai tidak dihitung terpakai (kasus sesi terhitung dua kali)", async () => {
+      const { service, db } = setup();
+      // Saldo tercatat 8 dan terpakai 2, padahal dua booking hadir itu kelasnya belum selesai.
+      db.paketPelanggan.findUnique = jest.fn().mockResolvedValue(
+        pkgRow({ totalSessions: 10, remainingSessions: 8, usedSessions: 2, status: "ACTIVE" }),
+      );
+      const belumSelesai = (n: number) => ({
+        id: id(600 + n),
+        status: "ATTENDED",
+        bookingNumber: `BK-${n}`,
+        classSlot: { status: "CONFIRMED" },
+      });
+      db.pemesananKelas.findMany = jest.fn().mockResolvedValue([belumSelesai(1), belumSelesai(2)]);
+      db.sessionAdjustRequest.aggregate = jest.fn().mockResolvedValue({ _sum: { sessionCount: 0 } });
+
+      const preview = await service.previewSyncCustomerPackage(superOwner, packageId);
+
+      expect(preview.calculated).toMatchObject({
+        usedSessions: 0,
+        remainingSessions: 10,
+        reservedSessions: 2,
+        availableSessions: 8,
+      });
+      expect(preview.drift).toBe(2);
+    });
+
     it("QA-SYNC-1: calculates preview metrics accurately from booking history and adjustments", async () => {
       const { service, db } = setup();
       db.paketPelanggan.findUnique = jest.fn().mockResolvedValue(
@@ -717,12 +766,9 @@ describe("LedgerService.syncCustomerPackage & previewSyncCustomerPackage (Super 
           status: "ACTIVE",
         }),
       );
-      db.pemesananKelas.groupBy = jest.fn().mockResolvedValue([
-        { status: "ATTENDED", _count: { _all: 3 } },
-        { status: "NO_SHOW", _count: { _all: 1 } },
-        { status: "BOOKED", _count: { _all: 2 } },
-        { status: "CANCELLED", _count: { _all: 4 } },
-      ]);
+      db.pemesananKelas.findMany = jest.fn().mockResolvedValue(
+        bookingRows({ hadir: 3, tidakHadir: 1, booked: 2, batal: 4 }),
+      );
       db.sessionAdjustRequest.aggregate = jest.fn().mockResolvedValue({
         _sum: { sessionCount: 1 }, // +1 approved adjustment
       });
@@ -806,11 +852,9 @@ describe("LedgerService.syncCustomerPackage & previewSyncCustomerPackage (Super 
           status: "ACTIVE",
         }),
       );
-      tx.pemesananKelas.groupBy = jest.fn().mockResolvedValue([
-        { status: "ATTENDED", _count: { _all: 3 } },
-        { status: "NO_SHOW", _count: { _all: 1 } },
-        { status: "BOOKED", _count: { _all: 1 } },
-      ]);
+      tx.pemesananKelas.findMany = jest.fn().mockResolvedValue(
+        bookingRows({ hadir: 3, tidakHadir: 1, booked: 1, batal: 0 }),
+      );
       tx.sessionAdjustRequest.aggregate = jest.fn().mockResolvedValue({
         _sum: { sessionCount: 0 },
       });
@@ -920,9 +964,9 @@ describe("LedgerService.syncCustomerPackage & previewSyncCustomerPackage (Super 
           status: "ACTIVE",
         }),
       );
-      tx.pemesananKelas.groupBy = jest.fn().mockResolvedValue([
-        { status: "ATTENDED", _count: { _all: 2 } },
-      ]);
+      tx.pemesananKelas.findMany = jest.fn().mockResolvedValue(
+        bookingRows({ hadir: 2, tidakHadir: 0, booked: 0, batal: 0 }),
+      );
       tx.sessionAdjustRequest.aggregate = jest.fn().mockResolvedValue({
         _sum: { sessionCount: 0 },
       });
@@ -960,7 +1004,9 @@ describe("LedgerService.syncCustomerPackage & previewSyncCustomerPackage (Super 
           status: "FROZEN",
         }),
       );
-      tx.pemesananKelas.groupBy = jest.fn().mockResolvedValue([]);
+      tx.pemesananKelas.findMany = jest.fn().mockResolvedValue(
+        bookingRows({ hadir: 0, tidakHadir: 0, booked: 0, batal: 0 }),
+      );
       tx.sessionAdjustRequest.aggregate = jest.fn().mockResolvedValue({
         _sum: { sessionCount: 0 },
       });

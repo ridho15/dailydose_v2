@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import type { HasilPindai } from '../../api-clients/check-in-desk-client';
+import { BrowserMultiFormatReader } from '@zxing/browser';
 import { kalimatHasil, PemindaiMeja } from './pemindai-meja';
 
 vi.mock('@zxing/browser', () => ({ BrowserMultiFormatReader: vi.fn() }));
@@ -103,5 +104,35 @@ describe('kalimatHasil', () => {
       alasan: 'KELAS_SUDAH_LEWAT',
     });
     expect(k.isi).toMatch(/Catat kehadiran manual/);
+  });
+
+  it('kamera tidak dinyalakan ulang saat layar induk render ulang dengan fungsi baru', async () => {
+    const decode = vi.fn().mockResolvedValue({ stop: vi.fn() });
+    vi.mocked(BrowserMultiFormatReader).mockImplementation(
+      () => ({ decodeFromConstraints: decode }) as never,
+    );
+    const user = userEvent.setup();
+    const { rerender } = render(
+      <PemindaiMeja pindai={vi.fn()} onTercatat={vi.fn()} />,
+    );
+    await user.click(screen.getByRole('button', { name: /Pakai kamera/ }));
+    await waitFor(() => expect(decode).toHaveBeenCalledTimes(1));
+
+    // Layar check-in memuat ulang data tiap 5 detik dan mengirim fungsi baru di tiap render.
+    for (let i = 0; i < 3; i += 1)
+      rerender(<PemindaiMeja pindai={vi.fn()} onTercatat={vi.fn()} />);
+    await new Promise((r) => setTimeout(r, 50));
+    expect(decode).toHaveBeenCalledTimes(1);
+  });
+
+  it('pindaian memakai fungsi pindai terbaru dari induk', async () => {
+    const user = userEvent.setup();
+    const lama = vi.fn().mockResolvedValue(tercatat);
+    const baru = vi.fn().mockResolvedValue(tercatat);
+    const { rerender } = render(<PemindaiMeja pindai={lama} onTercatat={vi.fn()} kameraTersedia={false} />);
+    rerender(<PemindaiMeja pindai={baru} onTercatat={vi.fn()} kameraTersedia={false} />);
+    await user.type(screen.getByLabelText('Isi QR'), 'dd-pass:abc{Enter}');
+    await waitFor(() => expect(baru).toHaveBeenCalledWith('dd-pass:abc'));
+    expect(lama).not.toHaveBeenCalled();
   });
 });

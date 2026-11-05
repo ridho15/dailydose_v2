@@ -109,4 +109,16 @@ describe('UlasanView', () => {
     expect(screen.getByText('Catatan ulasan nomor 15')).toBeVisible();
     expect(screen.queryByText('Catatan ulasan nomor 1')).toBeNull();
   });
+
+  it('memuat laporan satu kali, tidak berulang-ulang, bila tidak diberi waktu tetap', async () => {
+    // Jaringan sungguhan butuh waktu; tanpa jeda ini semua render jatuh di milidetik yang sama
+    // dan perulangan tidak terlihat.
+    const laporan = vi.fn().mockImplementation(
+      () => new Promise((r) => setTimeout(() => r({ from: '', until: '', instruktur: [], ulasan: [] }), 30)),
+    );
+    render(<UlasanView client={{ laporan }} />);
+    await screen.findByText(/Belum ada ulasan pada rentang ini/);
+    await new Promise((r) => setTimeout(r, 400));
+    expect(laporan).toHaveBeenCalledTimes(1);
+  });
 });

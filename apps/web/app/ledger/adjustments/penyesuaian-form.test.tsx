@@ -118,4 +118,55 @@ describe('PenyesuaianForm', () => {
     expect(c.cariMember).toHaveBeenCalledWith('Li');
     expect(await screen.findByText(/Terpilih: Lia Kusuma/)).toBeVisible();
   });
+
+  it('menyebut syarat yang masih kurang di samping tombol', async () => {
+    const user = userEvent.setup();
+    render(<PenyesuaianForm client={client()} awal={{ memberId: 'm-1', sesi: 1 }} />);
+    await screen.findByText(/sisa 3/);
+
+    expect(screen.getByText(/Belum bisa dikirim: alasan kurang 20 karakter, pilih berkas bukti/)).toBeVisible();
+    await user.type(screen.getByLabelText('Alasan, wajib diisi'), ALASAN);
+    expect(screen.getByText(/Belum bisa dikirim: pilih berkas bukti\./)).toBeVisible();
+    await user.upload(
+      screen.getByLabelText('Bukti pendukung'),
+      new File(['x'], 'a.png', { type: 'image/png' }),
+    );
+    expect(screen.queryByText(/Belum bisa dikirim/)).not.toBeInTheDocument();
+  });
+
+  it('pengurangan dihitung dari saldo dan sesi tertahan, bukan dari "tersedia"', async () => {
+    const c = client();
+    // Saldo 5, tertahan 3, tersedia 2: kurangi 2 boleh (menjadi 3), kurangi 3 tidak (menjadi 2 < 3 tertahan).
+    (c.paketMember as ReturnType<typeof vi.fn>).mockResolvedValue([
+      { ...paket, ledgerBalance: 5, remainingSessions: undefined, reserved: 3, available: 2 },
+    ]);
+    const { unmount } = render(<PenyesuaianForm client={c} awal={{ memberId: 'm-1', sesi: -2 }} />);
+    await screen.findByText(/sisa 5/);
+    expect(screen.getByText(/menjadi/)).toHaveTextContent('menjadi 3 sesi');
+    expect(screen.queryByText(/tidak cukup untuk dikurangi/)).not.toBeInTheDocument();
+    unmount();
+
+    render(<PenyesuaianForm client={c} awal={{ memberId: 'm-1', sesi: -3 }} />);
+    await screen.findByText(/sisa 5/);
+    expect(screen.getByText(/tidak cukup untuk dikurangi sebanyak itu \(3 sesi sedang tertahan booking\)/)).toBeVisible();
+  });
+
+  it('paket beku tetap bisa dikurangi selama saldo cukup', async () => {
+    const c = client();
+    (c.paketMember as ReturnType<typeof vi.fn>).mockResolvedValue([
+      { ...paket, status: 'FROZEN', ledgerBalance: 4, available: 0, reserved: 0 },
+    ]);
+    render(<PenyesuaianForm client={c} awal={{ memberId: 'm-1', sesi: -1 }} />);
+    await screen.findByText(/sisa 4/);
+    expect(screen.getByText(/menjadi/)).toHaveTextContent('menjadi 3 sesi');
+    expect(screen.queryByText(/tidak cukup untuk dikurangi/)).not.toBeInTheDocument();
+  });
+
+  it('member tanpa paket yang terlihat: menjelaskan kemungkinan paket di cabang lain', async () => {
+    const c = client();
+    (c.paketMember as ReturnType<typeof vi.fn>).mockResolvedValue([]);
+    render(<PenyesuaianForm client={c} awal={{ memberId: 'm-1' }} />);
+    expect(await screen.findByText(/dibeli di cabang yang di luar akses akun Anda/)).toBeVisible();
+    expect(screen.getByText(/Belum bisa dikirim: .*pilih paket member/)).toBeVisible();
+  });
 });

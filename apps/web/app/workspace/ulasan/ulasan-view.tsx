@@ -50,9 +50,10 @@ const tanggal = (iso: string, tz: string) => {
 /** Laporan internal: rata-rata bintang per instruktur dan catatan member terbaru. */
 export function UlasanView({
   client = browserUlasanInstrukturClient,
-  now = Date.now(),
+  now,
 }: {
   client?: Pick<UlasanInstrukturClient, 'laporan'>;
+  /** Hanya untuk tes. Jangan beri nilai bawaan `Date.now()`: berubah tiap render dan membuat efek memuat ulang tanpa henti. */
   now?: number;
 }) {
   const context = useSessionContext();
@@ -69,12 +70,13 @@ export function UlasanView({
     setData(null);
     setGalat('');
     setPilihan(null);
+    const sekarang = now ?? Date.now();
     Promise.resolve()
       .then(() =>
         client.laporan({
           branchId: branch?.id,
-          from: new Date(now - hari * 86_400_000).toISOString(),
-          until: new Date(now).toISOString(),
+          from: new Date(sekarang - hari * 86_400_000).toISOString(),
+          until: new Date(sekarang).toISOString(),
         }),
       )
       .then((hasil) => !batal && setData(hasil))
