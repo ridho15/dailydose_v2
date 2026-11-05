@@ -77,8 +77,8 @@ Aturan kerahasiaan per peran ada di [Rules.md](./Rules.md#2-kerahasiaan-data-keu
 - Member booking sendiri dari jadwal; admin bisa membantu dari roster kelas (tambah member satu tekan).
 - Sesi **dipotong saat kelas selesai dan member hadir**, bukan saat booking.
 - Pembatalan oleh staf (tombol X di roster/detail booking):
-  - lebih dari batas H-24: langsung batal, sesi utuh;
-  - kurang dari H-24 (atau booking yang terkunci Hadir sebelum kelas): menjadi **pengajuan** yang
+  - lebih dari batas H-12: langsung batal, sesi utuh;
+  - kurang dari H-12 (atau booking yang terkunci Hadir sebelum kelas): menjadi **pengajuan** yang
     diputus Manager, Owner, atau Super Owner. Disetujui berarti sesi dikembalikan.
 - Instruktur hanya melihat roster kelas yang ia ajar.
 
@@ -137,10 +137,10 @@ Aturan kerahasiaan per peran ada di [Rules.md](./Rules.md#2-kerahasiaan-data-keu
 4. Laba = omzet − modal sesi − pengeluaran. Modal sesi mengikuti pemakaian sesi sebelum paket
    kedaluwarsa, bukan honor instruktur.
 5. Admin hanya boleh melihat omzet cabangnya sendiri; instruktur hanya fee dirinya sendiri.
-6. Pembatalan kurang dari H-24 perlu persetujuan Manager atau Owner.
+6. Pembatalan kurang dari H-12 perlu persetujuan Manager atau Owner.
 7. Paket tertentu boleh membawa teman; member juga bisa booking kursi teman sendiri.
 8. Kursi teman memotong 1 sesi paket pemiliknya.
-9. Batas pembatalan H-24 jam (pembatalan staf kurang dari itu perlu persetujuan; member mengikuti
+9. Batas pembatalan dan reschedule H-12 jam, semua cabang (diubah dari H-24 pada 5 November 2026; pembatalan staf kurang dari itu perlu persetujuan; member mengikuti
    batas yang sama).
 10. Presensi member dilakukan dengan **staf memindai QR member**.
 11. Login foto: menunggu gambar baru dari pemilik (lihat HANDOFF).
@@ -149,6 +149,8 @@ Aturan kerahasiaan per peran ada di [Rules.md](./Rules.md#2-kerahasiaan-data-keu
 13. Kode unik transfer **tetap dihitung** sebagai omzet (2 November 2026).
 14. Paket N hari yang aktif tanggal D berlaku **sampai 23.59 WIB tanggal D + N** (contoh: aktif 1
     November, 120 hari, berakhir 1 Maret 23.59 WIB) (2 November 2026).
+15. Presensi instruktur lewat scan QR masih diterima sampai 10 menit setelah kelas selesai
+    (5 November 2026).
 
 ## 6. Perlu konfirmasi (asumsi saat membangun)
 

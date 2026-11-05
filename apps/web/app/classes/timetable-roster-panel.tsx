@@ -534,7 +534,7 @@ export function TimetableRosterPanel({
           )}
           {canRemove && (
             <p className="m-0 mt-3 text-sm text-dd-muted">
-              Tombol X membatalkan booking setelah konfirmasi. Lebih dari 24 jam sebelum kelas
+              Tombol X membatalkan booking setelah konfirmasi. Lebih dari 12 jam sebelum kelas
               langsung batal dan sesinya utuh; kurang dari itu perlu persetujuan Manager atau Owner.
             </p>
           )}

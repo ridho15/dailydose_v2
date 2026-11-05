@@ -48,8 +48,10 @@ Aturan teknis yang menyertainya:
    di kelas selesai bulan itu × modal per sesi; sesi hangus tidak punya modal. Payroll tidak mengurangi
    laba.
 4. Sesi member dipotong saat kelas selesai dan member hadir, bukan saat booking.
-5. Batas pembatalan H-24 jam. Pembatalan staf kurang dari H-24 menjadi pengajuan yang diputus
-   Manager, Owner, atau Super Owner. `BOOKING_CANCELLATION_CUTOFF_HOURS` di produksi harus 24.
+5. Batas pembatalan dan reschedule H-12 jam (semua cabang). Pembatalan staf kurang dari H-12 menjadi
+   pengajuan yang diputus Manager, Owner, atau Super Owner. Di produksi
+   `BOOKING_CANCELLATION_CUTOFF_HOURS=12` dan `RESCHEDULE_CUTOFF_HOURS=12`.
+   Scan QR instruktur diterima sampai 10 menit setelah kelas selesai (`TOLERANSI_INSTRUKTUR_MENIT`).
 6. Satu member satu kursi per kelas, kecuali paket "bawa teman" (1 kursi teman, memakai 1 sesi).
    Presensi member dan instruktur dilakukan dengan staf memindai QR.
 7. Kapasitas kelas dari Data Master > Kuota & Kapasitas berlaku untuk kelas baru dan kelas mendatang.

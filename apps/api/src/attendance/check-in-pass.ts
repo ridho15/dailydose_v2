@@ -63,7 +63,13 @@ export const SCAN_OPENS_MINUTES_BEFORE = 45;
 
 export type ScanWindow = 'TOO_EARLY' | 'OPEN' | 'CLOSED';
 
-export function scanWindowFor(startAt: Date, endAt: Date, now: Date): ScanWindow {
+/**
+ * Kelonggaran scan instruktur setelah kelas berakhir (keputusan pemilik, November 2026): instruktur
+ * yang lupa scan masih bisa scan QR sampai 10 menit setelah jam selesai, tanpa koreksi manual.
+ */
+export const TOLERANSI_INSTRUKTUR_MENIT = 10;
+
+export function scanWindowFor(startAt: Date, endAt: Date, now: Date, toleransiMenit = 0): ScanWindow {
   if (now < new Date(startAt.getTime() - SCAN_OPENS_MINUTES_BEFORE * 60_000)) return 'TOO_EARLY';
-  return now <= endAt ? 'OPEN' : 'CLOSED';
+  return now.getTime() <= endAt.getTime() + toleransiMenit * 60_000 ? 'OPEN' : 'CLOSED';
 }
