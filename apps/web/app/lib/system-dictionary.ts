@@ -75,6 +75,7 @@ const ORDER_STATUS_DICTIONARY: Record<string, string> = {
 
 const ANOMALY_DICTIONARY: Record<string, string> = {
   VERIFIKASI_TERTAHAN: 'Verifikasi Tertahan (> 24 Jam)',
+  INSTRUKTUR_TERLAMBAT: 'Instruktur Check-in Terlambat',
   UNMATCHED_MUTATION: 'Mutasi Belum Cocok',
   OVERPAID: 'Kelebihan Bayar',
   UNDERPAID: 'Kekurangan Bayar',

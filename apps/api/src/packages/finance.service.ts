@@ -863,7 +863,56 @@ export class FinanceService {
       href: `/workspace/payments/${p.id}`,
     }));
 
-    const allItems = purchaseItems.slice(0, limit);
+    // Instruktur yang check-in setelah jam mulai kelas (diizinkan sampai 10 menit, tetap dicatat).
+    const sampai = input.until ? new Date(input.until) : new Date();
+    const dari = input.from ? new Date(input.from) : new Date(sampai.getTime() - 31 * 86_400_000);
+    const presensi = await this.db.kehadiranInstruktur.findMany({
+      where: {
+        checkedInAt: { gte: dari, lte: new Date(sampai.getTime() + 86_400_000) },
+        classSlot: lingkupCabang,
+      },
+      select: {
+        classSlotId: true,
+        checkedInAt: true,
+        method: true,
+        instructor: { select: { displayName: true } },
+        classSlot: {
+          select: {
+            startAt: true,
+            branchId: true,
+            branch: { select: { code: true } },
+            classType: { select: { name: true } },
+          },
+        },
+      },
+      orderBy: { checkedInAt: 'desc' },
+      take: 500,
+    });
+    const terlambatItems = presensi
+      .filter((p) => p.checkedInAt.getTime() > p.classSlot.startAt.getTime() + 59_000)
+      .map((p) => {
+        const menit = Math.floor((p.checkedInAt.getTime() - p.classSlot.startAt.getTime()) / 60_000);
+        const jam = p.classSlot.startAt.toLocaleString('id-ID', {
+          timeZone: 'Asia/Jakarta',
+          day: 'numeric',
+          month: 'short',
+          hour: '2-digit',
+          minute: '2-digit',
+        });
+        return {
+          purchaseId: `presensi-${p.classSlotId}`,
+          branchId: p.classSlot.branchId,
+          branchCode: p.classSlot.branch?.code || '—',
+          amountRp: 0,
+          submittedAt: p.checkedInAt,
+          code: 'INSTRUKTUR_TERLAMBAT',
+          severity: 'WARNING' as const,
+          message: `${p.instructor?.displayName ?? 'Instruktur'} check-in terlambat ${menit} menit (${p.classSlot.classType?.name ?? 'kelas'} ${jam})`,
+          href: '/workspace/classes',
+        };
+      });
+
+    const allItems = [...terlambatItems, ...purchaseItems].slice(0, limit);
 
     return {
       items: allItems,

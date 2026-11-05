@@ -27,15 +27,16 @@ export function deriveCheckInToken(rowId: string): string {
 
 export type CheckInWindowState = 'TOO_EARLY' | 'OPEN' | 'EXPIRED';
 
-export function checkInWindowState(
-  startAt: Date,
-  endAt: Date,
-  now: Date,
-  toleransiMenit = 0,
-): CheckInWindowState {
+export function checkInWindowState(startAt: Date, endAt: Date, now: Date): CheckInWindowState {
   const opensAt = new Date(startAt.getTime() - 30 * 60_000);
   if (now < opensAt) return 'TOO_EARLY';
-  return now.getTime() < endAt.getTime() + toleransiMenit * 60_000 ? 'OPEN' : 'EXPIRED';
+  return now < endAt ? 'OPEN' : 'EXPIRED';
+}
+
+/** Check-in instruktur: dibuka 30 menit sebelum mulai, ditutup 10 menit setelah mulai. */
+export function checkInWindowInstruktur(startAt: Date, now: Date): CheckInWindowState {
+  if (now < new Date(startAt.getTime() - 30 * 60_000)) return 'TOO_EARLY';
+  return now.getTime() <= startAt.getTime() + TOLERANSI_INSTRUKTUR_MENIT * 60_000 ? 'OPEN' : 'EXPIRED';
 }
 
 export function isOwningCustomer(
@@ -298,7 +299,7 @@ export class AttendanceService {
         // Kelas Terbit juga berjalan (konfirmasi kuota otomatis tidak selalu aktif).
         if (!slot.instructorId || !['PUBLISHED', 'CONFIRMED'].includes(slot.status))
           throw new ApiProblem('INVALID_STATE_TRANSITION', HttpStatus.CONFLICT);
-        const window = checkInWindowState(slot.startAt, slot.endAt, now, TOLERANSI_INSTRUKTUR_MENIT);
+        const window = checkInWindowInstruktur(slot.startAt, now);
         if (window === 'TOO_EARLY') throw new ApiProblem('CHECK_IN_TOO_EARLY', HttpStatus.CONFLICT);
         if (window === 'EXPIRED') throw new ApiProblem('CHECK_IN_WINDOW_CLOSED', HttpStatus.GONE);
 
@@ -837,7 +838,7 @@ export class AttendanceService {
       throw new ApiProblem('RESOURCE_NOT_FOUND', HttpStatus.NOT_FOUND);
     if (!['PUBLISHED', 'CONFIRMED'].includes(slot.status))
       throw new ApiProblem('INVALID_STATE_TRANSITION', HttpStatus.CONFLICT);
-    const window = checkInWindowState(slot.startAt, slot.endAt, now, TOLERANSI_INSTRUKTUR_MENIT);
+    const window = checkInWindowInstruktur(slot.startAt, now);
     if (window === 'TOO_EARLY') throw new ApiProblem('CHECK_IN_TOO_EARLY', HttpStatus.CONFLICT);
     if (window === 'EXPIRED') throw new ApiProblem('CHECK_IN_WINDOW_CLOSED', HttpStatus.GONE);
 

@@ -51,7 +51,8 @@ Aturan teknis yang menyertainya:
 5. Batas pembatalan dan reschedule H-12 jam (semua cabang). Pembatalan staf kurang dari H-12 menjadi
    pengajuan yang diputus Manager, Owner, atau Super Owner. Di produksi
    `BOOKING_CANCELLATION_CUTOFF_HOURS=12` dan `RESCHEDULE_CUTOFF_HOURS=12`.
-   Scan QR instruktur diterima sampai 10 menit setelah kelas selesai (`TOLERANSI_INSTRUKTUR_MENIT`).
+   Scan QR instruktur diterima sampai 10 menit setelah kelas mulai (`TOLERANSI_INSTRUKTUR_MENIT`);
+   yang terlambat masuk laporan anomali.
 6. Satu member satu kursi per kelas, kecuali paket "bawa teman" (1 kursi teman, memakai 1 sesi).
    Presensi member dan instruktur dilakukan dengan staf memindai QR.
 7. Kapasitas kelas dari Data Master > Kuota & Kapasitas berlaku untuk kelas baru dan kelas mendatang.

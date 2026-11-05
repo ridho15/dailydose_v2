@@ -64,12 +64,24 @@ export const SCAN_OPENS_MINUTES_BEFORE = 45;
 export type ScanWindow = 'TOO_EARLY' | 'OPEN' | 'CLOSED';
 
 /**
- * Kelonggaran scan instruktur setelah kelas berakhir (keputusan pemilik, November 2026): instruktur
- * yang lupa scan masih bisa scan QR sampai 10 menit setelah jam selesai, tanpa koreksi manual.
+ * Batas terlambat instruktur (keputusan pemilik, 5 November 2026): scan QR instruktur masih diterima
+ * sampai 10 menit setelah kelas MULAI (kelas 10.00 masih bisa scan 10.10), dan setiap scan setelah
+ * jam mulai dicatat sebagai anomali di laporan Super Owner. Lewat dari itu presensinya dicatat
+ * manual oleh admin/manager.
  */
 export const TOLERANSI_INSTRUKTUR_MENIT = 10;
 
-export function scanWindowFor(startAt: Date, endAt: Date, now: Date, toleransiMenit = 0): ScanWindow {
+export function scanWindowFor(startAt: Date, endAt: Date, now: Date): ScanWindow {
   if (now < new Date(startAt.getTime() - SCAN_OPENS_MINUTES_BEFORE * 60_000)) return 'TOO_EARLY';
-  return now.getTime() <= endAt.getTime() + toleransiMenit * 60_000 ? 'OPEN' : 'CLOSED';
+  return now <= endAt ? 'OPEN' : 'CLOSED';
 }
+
+/** Jendela scan instruktur: dibuka 45 menit sebelum mulai, ditutup 10 menit setelah mulai. */
+export function scanWindowInstruktur(startAt: Date, _endAt: Date, now: Date): ScanWindow {
+  if (now < new Date(startAt.getTime() - SCAN_OPENS_MINUTES_BEFORE * 60_000)) return 'TOO_EARLY';
+  return now.getTime() <= startAt.getTime() + TOLERANSI_INSTRUKTUR_MENIT * 60_000 ? 'OPEN' : 'CLOSED';
+}
+
+/** Menit keterlambatan instruktur terhadap jam mulai (0 bila tepat waktu). */
+export const menitTerlambat = (startAt: Date, checkedInAt: Date) =>
+  Math.max(0, Math.floor((checkedInAt.getTime() - startAt.getTime()) / 60_000));

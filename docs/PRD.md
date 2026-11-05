@@ -149,8 +149,9 @@ Aturan kerahasiaan per peran ada di [Rules.md](./Rules.md#2-kerahasiaan-data-keu
 13. Kode unik transfer **tetap dihitung** sebagai omzet (2 November 2026).
 14. Paket N hari yang aktif tanggal D berlaku **sampai 23.59 WIB tanggal D + N** (contoh: aktif 1
     November, 120 hari, berakhir 1 Maret 23.59 WIB) (2 November 2026).
-15. Presensi instruktur lewat scan QR masih diterima sampai 10 menit setelah kelas selesai
-    (5 November 2026).
+15. Presensi instruktur lewat scan QR diterima mulai 45 menit sebelum kelas sampai 10 menit setelah
+    kelas **mulai** (kelas 10.00 masih bisa scan 10.10). Scan setelah jam mulai tercatat sebagai anomali
+    "Instruktur Check-in Terlambat" di Laporan Keuangan > Rekonsiliasi (5 November 2026).
 
 ## 6. Perlu konfirmasi (asumsi saat membangun)
 

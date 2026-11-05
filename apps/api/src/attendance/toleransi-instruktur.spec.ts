@@ -1,27 +1,34 @@
-import { scanWindowFor, TOLERANSI_INSTRUKTUR_MENIT } from './check-in-pass';
-import { checkInWindowState } from './kehadiran.service';
+import { menitTerlambat, scanWindowFor, scanWindowInstruktur, TOLERANSI_INSTRUKTUR_MENIT } from './check-in-pass';
+import { checkInWindowInstruktur } from './kehadiran.service';
 import { pilihKelas } from './studio-scan.service';
 
-const mulai = new Date('2026-11-05T11:00:00Z');
-const selesai = new Date('2026-11-05T11:50:00Z');
-const menit = (m: number) => new Date(selesai.getTime() + m * 60_000);
+// Kelas 10.00–10.50 WIB.
+const mulai = new Date('2026-11-05T03:00:00Z');
+const selesai = new Date('2026-11-05T03:50:00Z');
+const setelahMulai = (m: number) => new Date(mulai.getTime() + m * 60_000);
 
-describe('kelonggaran scan instruktur 10 menit setelah kelas selesai', () => {
-  it('instruktur masih bisa scan 10 menit setelah jam selesai, tidak lebih', () => {
+describe('instruktur boleh terlambat sampai 10 menit setelah kelas mulai', () => {
+  it('kelas 10.00: scan 10.10 masih diterima, 10.11 ditolak', () => {
     expect(TOLERANSI_INSTRUKTUR_MENIT).toBe(10);
-    expect(scanWindowFor(mulai, selesai, menit(9), TOLERANSI_INSTRUKTUR_MENIT)).toBe('OPEN');
-    expect(scanWindowFor(mulai, selesai, menit(10), TOLERANSI_INSTRUKTUR_MENIT)).toBe('OPEN');
-    expect(scanWindowFor(mulai, selesai, menit(11), TOLERANSI_INSTRUKTUR_MENIT)).toBe('CLOSED');
-    expect(checkInWindowState(mulai, selesai, menit(9), TOLERANSI_INSTRUKTUR_MENIT)).toBe('OPEN');
-    expect(checkInWindowState(mulai, selesai, menit(11), TOLERANSI_INSTRUKTUR_MENIT)).toBe('EXPIRED');
+    expect(scanWindowInstruktur(mulai, selesai, setelahMulai(-40))).toBe('OPEN');
+    expect(scanWindowInstruktur(mulai, selesai, setelahMulai(10))).toBe('OPEN');
+    expect(scanWindowInstruktur(mulai, selesai, setelahMulai(11))).toBe('CLOSED');
+    expect(checkInWindowInstruktur(mulai, setelahMulai(10))).toBe('OPEN');
+    expect(checkInWindowInstruktur(mulai, setelahMulai(11))).toBe('EXPIRED');
   });
 
-  it('member tidak ikut mendapat kelonggaran', () => {
-    expect(scanWindowFor(mulai, selesai, menit(5))).toBe('CLOSED');
+  it('menit terlambat dihitung dari jam mulai', () => {
+    expect(menitTerlambat(mulai, setelahMulai(-5))).toBe(0);
+    expect(menitTerlambat(mulai, setelahMulai(7))).toBe(7);
   });
 
-  it('pindaian instruktur 5 menit setelah selesai memilih kelas yang baru selesai itu', () => {
+  it('member tetap bisa di-scan sampai kelas selesai', () => {
+    expect(scanWindowFor(mulai, selesai, setelahMulai(30))).toBe('OPEN');
+  });
+
+  it('pindaian instruktur 10.20 tidak lagi memilih kelas 10.00', () => {
     const kelas = { startAt: mulai, endAt: selesai, sudahTercatat: false };
-    expect(pilihKelas([kelas], menit(5), TOLERANSI_INSTRUKTUR_MENIT)).toBe(kelas);
+    const berikut = { startAt: setelahMulai(60), endAt: setelahMulai(110), sudahTercatat: false };
+    expect(pilihKelas([kelas, berikut], setelahMulai(20), scanWindowInstruktur)).toBe(berikut);
   });
 });
