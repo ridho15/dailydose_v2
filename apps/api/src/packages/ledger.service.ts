@@ -384,7 +384,9 @@ export class LedgerService {
       include: {
         ...packageInclude,
         bookings: {
-          where: { status: 'BOOKED' },
+          // Aturan yang sama dengan daftar paket dan proses booking: yang sudah hadir di kelas yang
+          // belum diselesaikan juga masih menahan sesinya.
+          where: MEMEGANG_SESI,
           include: { classSlot: { include: { classType: true, branch: true } } },
           orderBy: { bookedAt: 'desc' },
         },

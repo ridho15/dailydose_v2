@@ -1,3 +1,4 @@
+import { MEMEGANG_SESI } from './sesi-terpesan';
 import { LedgerService } from './ledger.service';
 import { PolicyService } from '../identity/policy.service';
 
@@ -491,6 +492,32 @@ describe('LedgerService reads', () => {
     const result = await service.getPackageLedger(owner, packageId);
     expect(result.bookingHistory).toEqual([]);
     expect(result.balance.usage.usedSessions).toBe(0);
+  });
+});
+
+describe('LedgerService.getPackageLedger: sesi tertahan sama dengan daftar dan booking', () => {
+  it('memakai aturan MEMEGANG_SESI, sehingga yang sudah hadir di kelas belum selesai ikut menahan sesi', async () => {
+    const { service, db } = setup();
+    const owner = principalFor(id(200), ['ledger:read'], []);
+    const findUnique = (db.paketPelanggan as unknown as { findUnique: jest.Mock }).findUnique;
+    const booking = (n: number, status: string) => ({
+      id: id(500 + n),
+      status,
+      bookedAt: new Date('2026-11-01T10:00:00Z'),
+      classSlot: { startAt: new Date('2026-11-02T10:00:00Z'), classType: { name: 'Group' }, branch: { name: 'MK' } },
+    });
+    // Sisa buku 3: 1 BOOKED + 2 ATTENDED di kelas yang belum diselesaikan = 3 tertahan.
+    findUnique.mockResolvedValue({
+      ...pkgRow({ totalSessions: 22, usedSessions: 19, remainingSessions: 3 }),
+      bookings: [booking(1, 'BOOKED'), booking(2, 'ATTENDED'), booking(3, 'ATTENDED')],
+    });
+    db.pemesananKelas.findMany = jest.fn().mockResolvedValue([]);
+
+    const result = await service.getPackageLedger(owner, packageId);
+
+    expect(findUnique.mock.calls[0][0].include.bookings.where).toBe(MEMEGANG_SESI);
+    expect(result.balance).toMatchObject({ ledgerBalance: 3, reserved: 3, available: 0 });
+    expect(result.reservations.activeQuantity).toBe(3);
   });
 });
 

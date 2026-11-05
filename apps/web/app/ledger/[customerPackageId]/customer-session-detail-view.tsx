@@ -401,6 +401,11 @@ export function CustomerSessionDetailView({ id }: { id: string }) {
                       ? formatDate(reservation.startsAt, true)
                       : 'Jadwal tidak tersedia'}
                   </p>
+                  {reservation.bookingStatus === 'ATTENDED' && (
+                    <p className="mt-1 text-xs text-dd-muted">
+                      Sudah hadir. Sesi dipotong saat kelas diselesaikan.
+                    </p>
+                  )}
                   {reservation.bookedByUser && (
                     <div className="mt-1.5 flex items-center gap-1.5">
                       <span className="text-xs font-semibold text-dd-forest">
