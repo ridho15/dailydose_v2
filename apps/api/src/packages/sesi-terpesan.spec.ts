@@ -43,7 +43,7 @@ describe('ringkasBookingPaket (dasar sinkronisasi saldo)', () => {
   it('hadir di kelas yang belum selesai belum dihitung terpakai, tetapi tertahan', async () => {
     const db = fakeDb({ booking: [baris('a', 'ATTENDED', 'CONFIRMED'), baris('b', 'ATTENDED', 'CONFIRMED')] });
     expect(await ringkasBookingPaket(db as never, 'p1')).toEqual({
-      hadir: 0, tidakHadir: 0, booked: 0, dibatalkan: 0, tertahanHadir: 2,
+      hadir: 0, tidakHadir: 0, booked: 0, dibatalkan: 0, tertahanHadir: 2, v1: 0,
     });
   });
 
@@ -60,7 +60,7 @@ describe('ringkasBookingPaket (dasar sinkronisasi saldo)', () => {
       ledgerRefs: ['b'],
     });
     expect(await ringkasBookingPaket(db as never, 'p1')).toEqual({
-      hadir: 3, tidakHadir: 1, booked: 1, dibatalkan: 1, tertahanHadir: 0,
+      hadir: 3, tidakHadir: 1, booked: 1, dibatalkan: 1, tertahanHadir: 0, v1: 1,
     });
   });
 });

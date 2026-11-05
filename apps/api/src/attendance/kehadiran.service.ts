@@ -503,7 +503,7 @@ export class AttendanceService {
               where: { id: booking.customerPackageId },
             });
             if (customerPackage) {
-              const remainingAfter = customerPackage.remainingSessions - 1;
+              const remainingAfter = Math.max(0, customerPackage.remainingSessions - 1);
               await tx.sessionLedger.create({
                 data: {
                   customerPackageId: customerPackage.id,
@@ -519,7 +519,7 @@ export class AttendanceService {
                 where: { id: customerPackage.id },
                 data: {
                   usedSessions: { increment: 1 },
-                  remainingSessions: { decrement: 1 },
+                  remainingSessions: customerPackage.remainingSessions > 0 ? { decrement: 1 } : { set: 0 },
                   status: remainingAfter <= 0 ? 'DEPLETED' : customerPackage.status,
                 },
               });

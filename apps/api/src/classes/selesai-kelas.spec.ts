@@ -27,7 +27,7 @@ function build(bookings: unknown[], endAt: Date) {
     pemesananKelas: { update: jest.fn(async () => ({})) },
     sessionLedger: { create: jest.fn(async () => ({})), findFirst: async () => null },
     paketPelanggan: {
-      findUnique: async () => ({ id: 'p', remainingSessions: 5, status: 'ACTIVE' }),
+      findUnique: jest.fn(async () => ({ id: 'p', remainingSessions: 5, status: 'ACTIVE' })),
       update: jest.fn(async () => ({})),
     },
     checkInToken: { updateMany: async () => ({ count: 0 }) },
@@ -108,9 +108,28 @@ describe('menyelesaikan kelas', () => {
     const { svc, tx } = build([{ id: 'b1', status: 'BOOKED', attendance: { id: 'a1' }, customerPackageId: 'p' }], new Date(Date.now() - 3_600_000));
     (svc as any).db = { slotKelas: { findMany: async () => [{ id: slotId }] } };
     const hasil = await svc.selesaikanOtomatis(new Date());
-    expect(hasil).toEqual({ diperiksa: 1, selesai: 1, gagal: 0 });
+    expect(hasil).toEqual({ diperiksa: 1, selesai: 1, gagal: 0, kegagalan: [] });
     expect(tx.sessionLedger.create).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ createdById: null }) }),
     );
+  });
+
+  it('kelas yang gagal diselesaikan otomatis dicatat di hasil dan di log, bukan dibuang diam-diam', async () => {
+    const { svc } = build([], new Date(Date.now() - 3_600_000));
+    (svc as any).db = { slotKelas: { findMany: async () => [{ id: slotId }] } };
+    jest.spyOn(svc, 'complete').mockRejectedValue(Object.assign(new Error('x'), { code: 'STALE_VERSION' }));
+    const galat = jest.spyOn((svc as any).logger, 'error').mockImplementation(() => undefined);
+    const hasil = await svc.selesaikanOtomatis(new Date());
+    expect(hasil).toEqual({ diperiksa: 1, selesai: 0, gagal: 1, kegagalan: [{ id: slotId, sebab: 'STALE_VERSION' }] });
+    expect(galat).toHaveBeenCalledWith(expect.stringContaining(slotId));
+  });
+
+  it('saldo paket yang sudah nol tidak turun menjadi negatif saat kelas diselesaikan', async () => {
+    const { svc, tx } = build([{ id: 'b1', status: 'ATTENDED', attendance: { id: 'a1' }, customerPackageId: 'p' }], new Date(Date.now() - 1000));
+    tx.paketPelanggan.findUnique.mockResolvedValue({ id: 'p', remainingSessions: 0, status: 'DEPLETED' });
+    await svc.complete(principal, slotId, {}, KEY, 'c');
+    const data = (tx.paketPelanggan.update.mock.calls as unknown as Array<[{ data: Record<string, unknown> }]>)[0]![0].data;
+    expect(data.remainingSessions).toEqual({ set: 0 });
+    expect(data.usedSessions).toEqual({ increment: 1 });
   });
 });

@@ -118,6 +118,22 @@ describe('CheckInDeskView kartu check-in', () => {
     expect(screen.queryByText(/sudah check-in/)).toBeNull();
   });
 
+  it('memperingatkan kelas hari sebelumnya yang belum diselesaikan, dengan tautan ke riwayat kelas', async () => {
+    render(<CheckInDeskView client={deskClient([meja({ kelasTertinggal: 3 })])} branchIdOverride="gg" />);
+
+    expect(await screen.findByText(/3 kelas hari-hari sebelumnya belum diselesaikan/)).toBeVisible();
+    expect(screen.getByRole('link', { name: 'Buka riwayat kelas' })).toHaveAttribute(
+      'href',
+      '/workspace/classes/riwayat',
+    );
+  });
+
+  it('tidak menampilkan peringatan bila tidak ada kelas yang tertinggal', async () => {
+    render(<CheckInDeskView client={deskClient([meja({ kelasTertinggal: 0 })])} branchIdOverride="gg" />);
+    await screen.findByText(/Belum ada check-in baru/);
+    expect(screen.queryByText(/belum diselesaikan, jadi sesi pesertanya/)).toBeNull();
+  });
+
   it('memunculkan kartu dengan foto selfie untuk check-in baru lalu menutupnya setelah 8 detik', async () => {
     const baru = tercatat({ id: 't2', nama: 'Sari Dewi', fotoUrl: '/uploads/selfie-sari.jpg' });
     const client = deskClient([meja(), meja({ tercatat: [baru, tercatat()] })]);

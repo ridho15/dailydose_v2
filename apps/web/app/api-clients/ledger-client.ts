@@ -657,6 +657,9 @@ export type PackageSyncPreview = {
   };
   drift: number;
   hasDrift: boolean;
+  /** Sinkronisasi hanya aman untuk paket yang seluruh riwayatnya ada di sistem (bukan hasil migrasi V1). */
+  syncSafe?: boolean;
+  syncUnsafeReason?: string | null;
 };
 
 export async function getPackageSyncPreview(customerPackageId: string): Promise<PackageSyncPreview> {

@@ -107,6 +107,7 @@ function setup() {
     },
     sessionLedger: {
       findMany: jest.fn().mockResolvedValue([]),
+      count: jest.fn().mockResolvedValue(1), // ada catatan PURCHASE: paket buatan sistem ini
       create: jest.fn().mockImplementation(async ({ data }) => ({
         id: id(50),
         createdAt: new Date('2026-02-02T00:00:00Z'),
@@ -808,6 +809,8 @@ describe("LedgerService.syncCustomerPackage & previewSyncCustomerPackage (Super 
         },
         drift: 2,
         hasDrift: true,
+        syncSafe: true,
+        syncUnsafeReason: null,
       });
     });
 
@@ -838,6 +841,55 @@ describe("LedgerService.syncCustomerPackage & previewSyncCustomerPackage (Super 
         status: 404,
         code: "RESOURCE_NOT_FOUND",
       });
+    });
+  });
+
+  describe("sinkronisasi tidak aman untuk paket hasil migrasi V1", () => {
+    const paketV1 = (db: any) => {
+      db.paketPelanggan.findUnique = jest.fn().mockResolvedValue(
+        pkgRow({ totalSessions: 27, remainingSessions: 8, usedSessions: 19, status: "ACTIVE" }),
+      );
+      db.pemesananKelas.findMany = jest.fn().mockResolvedValue([
+        { id: id(700), status: "ATTENDED", bookingNumber: "BKG-V1-00000001", classSlot: { status: "CONFIRMED" } },
+      ]);
+      db.sessionAdjustRequest.aggregate = jest.fn().mockResolvedValue({ _sum: { sessionCount: 0 } });
+    };
+
+    it("pratinjau menandai paket dengan booking V1 sebagai tidak aman", async () => {
+      const { service, db } = setup();
+      paketV1(db);
+      const preview = await service.previewSyncCustomerPackage(superOwner, packageId);
+      expect(preview.syncSafe).toBe(false);
+      expect(preview.syncUnsafeReason).toMatch(/migrasi V1/);
+    });
+
+    it("pratinjau menandai paket tanpa catatan pembelian di buku besar sebagai tidak aman", async () => {
+      const { service, db } = setup();
+      db.paketPelanggan.findUnique = jest.fn().mockResolvedValue(pkgRow({ totalSessions: 27, remainingSessions: 8 }));
+      db.pemesananKelas.findMany = jest.fn().mockResolvedValue([]);
+      db.sessionAdjustRequest.aggregate = jest.fn().mockResolvedValue({ _sum: { sessionCount: 0 } });
+      db.sessionLedger.count = jest.fn().mockResolvedValue(0);
+      const preview = await service.previewSyncCustomerPackage(superOwner, packageId);
+      expect(preview.syncSafe).toBe(false);
+      expect(preview.syncUnsafeReason).toMatch(/catatan pembelian/);
+    });
+
+    it("menerapkan sinkronisasi ditolak dan saldo tidak berubah", async () => {
+      const { service, tx } = setup();
+      paketV1(tx);
+      await expect(
+        service.syncCustomerPackage(superOwner, packageId, { reason: "Koreksi saldo paket" }),
+      ).rejects.toMatchObject({ code: "SYNC_NOT_SAFE" });
+      expect(tx.paketPelanggan.update).not.toHaveBeenCalled();
+      expect(tx.sessionLedger.create).not.toHaveBeenCalled();
+    });
+
+    it("paket buatan sistem ini tetap aman", async () => {
+      const { service, db } = setup();
+      db.paketPelanggan.findUnique = jest.fn().mockResolvedValue(pkgRow({ totalSessions: 10, remainingSessions: 8 }));
+      db.pemesananKelas.findMany = jest.fn().mockResolvedValue([]);
+      db.sessionAdjustRequest.aggregate = jest.fn().mockResolvedValue({ _sum: { sessionCount: 0 } });
+      expect((await service.previewSyncCustomerPackage(superOwner, packageId)).syncSafe).toBe(true);
     });
   });
 

@@ -23,6 +23,7 @@ export function ReasonDialog({
   error,
   onCancel,
   onConfirm,
+  confirmDisabled = false,
   children,
 }: {
   open: boolean;
@@ -39,6 +40,8 @@ export function ReasonDialog({
   error?: string;
   onCancel(): void;
   onConfirm(reason: string): void;
+  /** Mematikan tombol konfirmasi, mis. saat aksinya terbukti tidak aman. */
+  confirmDisabled?: boolean;
   /** Isian tambahan di atas alasan (mis. jumlah hari perpanjangan). */
   children?: React.ReactNode;
 }) {
@@ -66,7 +69,7 @@ export function ReasonDialog({
           <Button
             type="button"
             variant={tone === 'danger' ? 'danger' : 'primary'}
-            disabled={!valid || busy}
+            disabled={!valid || busy || confirmDisabled}
             loading={busy}
             onClick={() => onConfirm(trimmed)}
           >

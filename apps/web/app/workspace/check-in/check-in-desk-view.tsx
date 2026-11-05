@@ -246,6 +246,17 @@ export function CheckInDeskView({
         Check-in hari ini{meja ? ` di ${meja.namaCabang}` : ''}
       </h1>
 
+      {(meja?.kelasTertinggal ?? 0) > 0 && (
+        <Feedback kind="warning" autoDismiss={false}>
+          {meja?.kelasTertinggal} kelas hari-hari sebelumnya belum diselesaikan, jadi sesi pesertanya masih
+          tertahan.{' '}
+          <a className="font-semibold underline" href="/workspace/classes/riwayat">
+            Buka riwayat kelas
+          </a>{' '}
+          untuk menyelesaikannya.
+        </Feedback>
+      )}
+
       <PemindaiMeja
         pindai={(pass) => client.pindai(branchId, pass)}
         onTercatat={() => void muat()}

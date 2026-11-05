@@ -1250,7 +1250,8 @@ export class ClassSlotService {
                 where: { id: customerPackage.id },
                 data: {
                   usedSessions: { increment: 1 },
-                  remainingSessions: { decrement: 1 },
+                  // Saldo tidak boleh negatif; ledger di atas juga mencatat saldo yang sudah dibatasi nol.
+                  remainingSessions: customerPackage.remainingSessions > 0 ? { decrement: 1 } : { set: 0 },
                   status: remainingAfter <= 0 ? 'DEPLETED' : customerPackage.status,
                 },
               });
@@ -1337,15 +1338,20 @@ export class ClassSlotService {
     } as unknown as SessionPrincipal;
     let selesai = 0;
     let gagal = 0;
+    const kegagalan: Array<{ id: string; sebab: string }> = [];
     for (const { id } of kelas) {
       try {
         await this.complete(sistem, id, { reason: 'Selesai otomatis setelah jam kelas' }, `auto-selesai-${id}`, 'penjadwal', now);
         selesai += 1;
-      } catch {
+      } catch (error) {
         gagal += 1;
+        // Tanpa catatan ini kelas yang gagal terus gagal diam-diam dan sesi pesertanya tertahan selamanya.
+        const sebab = (error as { code?: string })?.code ?? (error instanceof Error ? error.constructor.name : 'GALAT_TIDAK_DIKENAL');
+        this.logger.error(`Gagal menyelesaikan kelas ${id} otomatis (${sebab}).`);
+        if (kegagalan.length < 10) kegagalan.push({ id, sebab });
       }
     }
-    return { diperiksa: kelas.length, selesai, gagal };
+    return { diperiksa: kelas.length, selesai, gagal, kegagalan };
   }
 
   private validateKey(key: string) {

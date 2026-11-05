@@ -84,7 +84,9 @@ export async function ringkasBookingPaket(db: DbSesi, packageId: string) {
   let booked = 0;
   let dibatalkan = 0;
   let tertahanHadir = 0;
+  let v1 = 0;
   for (const row of rows) {
+    if (row.bookingNumber.startsWith('BKG-V1-')) v1 += 1;
     if (row.status === 'BOOKED') booked += 1;
     else if (row.status === 'CANCELLED') dibatalkan += 1;
     else if (row.status !== 'ATTENDED' && row.status !== 'NO_SHOW') continue;
@@ -93,5 +95,5 @@ export async function ringkasBookingPaket(db: DbSesi, packageId: string) {
     } else if (row.status === 'ATTENDED') hadir += 1;
     else tidakHadir += 1;
   }
-  return { hadir, tidakHadir, booked, dibatalkan, tertahanHadir };
+  return { hadir, tidakHadir, booked, dibatalkan, tertahanHadir, v1 };
 }

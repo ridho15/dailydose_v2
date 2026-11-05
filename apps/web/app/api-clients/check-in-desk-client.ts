@@ -48,6 +48,8 @@ export interface MejaCheckIn {
   tanggal: string;
   kelas: KelasMeja[];
   tercatat: TercatatMeja[];
+  /** Kelas hari-hari sebelumnya yang sudah berakhir tetapi belum diselesaikan. */
+  kelasTertinggal?: number;
 }
 
 export interface BarisTidakHadir {

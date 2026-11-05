@@ -1227,6 +1227,34 @@ export class LedgerService {
     }
   }
 
+  /**
+   * Sinkronisasi menghitung ulang saldo dari baris booking. Itu hanya benar untuk paket yang seluruh
+   * riwayatnya ada di sistem ini: ada catatan PURCHASE di buku besar dan tidak ada booking migrasi V1.
+   * Paket V1 menyimpan saldo langsung, riwayat pemakaiannya tidak lengkap, sehingga sinkronisasi bisa
+   * menambah atau mengurangi puluhan sesi tanpa dasar.
+   */
+  private async sinkronAman(
+    db: Pick<Prisma.TransactionClient, 'sessionLedger'>,
+    packageId: string,
+    jumlahBookingV1: number,
+  ): Promise<{ aman: boolean; alasan: string | null }> {
+    if (jumlahBookingV1 > 0)
+      return {
+        aman: false,
+        alasan: `Paket ini punya ${jumlahBookingV1} booking hasil migrasi V1. Riwayat V1 tidak lengkap, jadi saldo tidak boleh dihitung ulang dari booking. Koreksi lewat Penyesuaian sesi.`,
+      };
+    const dibeli = await db.sessionLedger.count({
+      where: { customerPackageId: packageId, type: SessionMutationType.PURCHASE },
+    });
+    if (dibeli === 0)
+      return {
+        aman: false,
+        alasan:
+          'Paket ini tidak punya catatan pembelian di buku besar sesi (kemungkinan hasil migrasi). Saldo tidak boleh dihitung ulang dari booking. Koreksi lewat Penyesuaian sesi.',
+      };
+    return { aman: true, alasan: null };
+  }
+
   async previewSyncCustomerPackage(principal: SessionPrincipal, id: string) {
     this.assertSuperOwner(principal);
     if (!UUID.test(id)) throw new ApiProblem("RESOURCE_NOT_FOUND", HttpStatus.NOT_FOUND);
@@ -1238,6 +1266,7 @@ export class LedgerService {
     if (!pkg) throw new ApiProblem("RESOURCE_NOT_FOUND", HttpStatus.NOT_FOUND);
 
     const ringkas = await ringkasBookingPaket(this.db, id);
+    const sinkron = await this.sinkronAman(this.db, id, ringkas.v1);
     const attendedCount = ringkas.hadir;
     const noShowCount = ringkas.tidakHadir;
     const bookedCount = ringkas.booked + ringkas.tertahanHadir;
@@ -1312,6 +1341,8 @@ export class LedgerService {
       },
       drift,
       hasDrift,
+      syncSafe: sinkron.aman,
+      syncUnsafeReason: sinkron.alasan,
     };
   }
 
@@ -1337,6 +1368,8 @@ export class LedgerService {
         if (!pkg) throw new ApiProblem("RESOURCE_NOT_FOUND", HttpStatus.NOT_FOUND);
 
         const ringkas = await ringkasBookingPaket(tx, id);
+        const sinkron = await this.sinkronAman(tx, id, ringkas.v1);
+        if (!sinkron.aman) throw problem("SYNC_NOT_SAFE", HttpStatus.CONFLICT);
         const attendedCount = ringkas.hadir;
         const noShowCount = ringkas.tidakHadir;
         const bookedCount = ringkas.booked + ringkas.tertahanHadir;

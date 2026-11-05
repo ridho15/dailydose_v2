@@ -689,6 +689,7 @@ export function CustomerSessionDetailView({ id }: { id: string }) {
           setSyncDialogOpen(false);
           setSyncError('');
         }}
+        confirmDisabled={syncPreview?.syncSafe === false}
         onConfirm={(reason) => void handleConfirmSync(reason)}
       >
         {syncLoading ? (
@@ -773,6 +774,13 @@ export function CustomerSessionDetailView({ id }: { id: string }) {
               </table>
             </div>
 
+            {syncPreview.syncSafe === false && (
+              <div role="alert" className="rounded-dd-sm bg-red-50 border border-red-200 p-2.5 text-red-900">
+                <strong>Sinkronisasi tidak aman untuk paket ini.</strong>{' '}
+                {syncPreview.syncUnsafeReason ??
+                  'Riwayatnya tidak lengkap di sistem, jadi saldo tidak boleh dihitung ulang dari booking.'}
+              </div>
+            )}
             {syncPreview.hasDrift ? (
               <div className="rounded-dd-sm bg-amber-50 border border-amber-200 p-2.5 text-amber-900">
                 <strong>Perhatian:</strong> Ditemukan selisih (drift) antara histori transaksi dan saldo paket. Konfirmasi sinkronisasi akan menyesuaikan saldo paket ke nilai terhitung dan mencatat mutasi ledger penyesuaian manual.

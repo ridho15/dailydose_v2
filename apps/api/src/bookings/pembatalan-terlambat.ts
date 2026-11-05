@@ -90,6 +90,8 @@ export async function jalankanPembatalanTerlambat(
       where: { id: pkg.id },
       data: {
         remainingSessions: resultingBalance,
+        // Sesi yang dikembalikan tidak lagi terpakai; tanpa ini "terpakai" lebih besar dari potongan nyata.
+        usedSessions: Math.max(0, pkg.usedSessions - sesiKembali),
         ...(pkg.status === 'DEPLETED' && pkg.validUntil > now ? { status: 'ACTIVE' } : {}),
       },
     });

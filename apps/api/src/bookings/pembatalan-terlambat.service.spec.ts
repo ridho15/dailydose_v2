@@ -57,6 +57,7 @@ function setup(status = 'ATTENDED', bookingNumber = 'BKG-V1-00000001') {
       findUniqueOrThrow: jest.fn(async () => ({
         id: 'pkg-1',
         remainingSessions: 0,
+        usedSessions: 4,
         status: 'DEPLETED',
         validUntil: new Date('2026-12-31T00:00:00Z'),
       })),
@@ -142,6 +143,8 @@ describe('PembatalanTerlambatService', () => {
     });
     expect(tx.paketPelanggan.update.mock.calls[0]![0].data).toMatchObject({
       remainingSessions: 1,
+      // satu sesi dikembalikan, jadi "terpakai" ikut turun (4 → 3)
+      usedSessions: 3,
       status: 'ACTIVE',
     });
   });

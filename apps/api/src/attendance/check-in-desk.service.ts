@@ -67,6 +67,8 @@ export interface MejaCheckIn {
   tanggal: string;
   kelas: KelasMeja[];
   tercatat: TercatatMeja[];
+  /** Kelas hari-hari sebelumnya (14 hari terakhir) yang sudah berakhir tetapi belum diselesaikan: sesi pesertanya masih menggantung. */
+  kelasTertinggal: number;
 }
 
 const SELESAI = new Set(['COMPLETED', 'CANCELLED', 'AUTO_CANCELLED']);
@@ -256,6 +258,21 @@ export class CheckInDeskService {
         }),
     ].sort((a, b) => b.tercatatPada.localeCompare(a.tercatatPada));
 
+    // Kelas sebelum hari ini yang belum ditutup: sesi peserta belum terpotong dan terus tertahan.
+    const kelasTertinggal = await this.db.slotKelas.count({
+      where: {
+        branchId,
+        endAt: { lt: awal, gte: new Date(awal.getTime() - 14 * 86_400_000) },
+        status: { in: ['PUBLISHED', 'CONFIRMED'] },
+        bookings: {
+          some: {
+            status: { in: ['BOOKED', 'ATTENDED'] },
+            NOT: { bookingNumber: { startsWith: 'BKG-V1-' } },
+          },
+        },
+      },
+    });
+
     return {
       branchId,
       namaCabang: cabang.name,
@@ -263,6 +280,7 @@ export class CheckInDeskService {
       tanggal,
       kelas,
       tercatat,
+      kelasTertinggal,
     };
   }
 

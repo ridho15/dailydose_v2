@@ -37,7 +37,7 @@ const slot = (over: Record<string, unknown> = {}) => ({
   ...over,
 });
 
-function setup(opts: { slots?: unknown[]; satu?: unknown; keputusan?: unknown[] } = {}) {
+function setup(opts: { slots?: unknown[]; satu?: unknown; keputusan?: unknown[]; tertinggal?: number } = {}) {
   const db = {
     cabang: {
       findUnique: jest.fn().mockResolvedValue({ name: 'Green Garden', timezone: 'Asia/Jakarta' }),
@@ -45,6 +45,7 @@ function setup(opts: { slots?: unknown[]; satu?: unknown; keputusan?: unknown[] 
     slotKelas: {
       findMany: jest.fn().mockResolvedValue(opts.slots ?? [slot()]),
       findUnique: jest.fn().mockResolvedValue(opts.satu === undefined ? slot() : opts.satu),
+      count: jest.fn().mockResolvedValue(opts.tertinggal ?? 0),
     },
     auditLog: { findMany: jest.fn().mockResolvedValue(opts.keputusan ?? []) },
     user: { findMany: jest.fn().mockResolvedValue([{ id: id(100), displayName: 'Rina' }]) },
@@ -81,6 +82,20 @@ describe('CheckInDeskService.meja', () => {
     expect(where.startAt.gte.toISOString()).toBe('2026-10-27T17:00:00.000Z');
     expect(where.startAt.lt.toISOString()).toBe('2026-10-28T17:00:00.000Z');
     expect(hasil.tanggal).toBe('2026-10-28');
+  });
+
+  it('melaporkan kelas hari-hari sebelumnya yang belum ditutup, hanya booking non-V1 dalam 14 hari', async () => {
+    const { service, db } = setup({ tertinggal: 3 });
+
+    const hasil = await service.meja(admin, { branchId: cabangA }, NOW);
+
+    expect(hasil.kelasTertinggal).toBe(3);
+    const where = db.slotKelas.count.mock.calls[0]![0].where;
+    expect(where.branchId).toBe(cabangA);
+    expect(where.status).toEqual({ in: ['PUBLISHED', 'CONFIRMED'] });
+    expect(where.endAt.lt.toISOString()).toBe('2026-10-27T17:00:00.000Z'); // sebelum awal hari ini
+    expect(where.endAt.gte.toISOString()).toBe('2026-10-13T17:00:00.000Z'); // 14 hari ke belakang
+    expect(where.bookings.some.NOT).toEqual({ bookingNumber: { startsWith: 'BKG-V1-' } });
   });
 
   it('menghitung terdaftar dan hadir dari booking kelas itu', async () => {
