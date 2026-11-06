@@ -1,3 +1,4 @@
+import { nomorWajib, perluLengkapiNomor } from './nomor-wajib';
 import { HttpStatus, Inject, Injectable, Optional } from '@nestjs/common';
 export type SessionChannel = 'WEB' | 'MOBILE' | string;
 import { PrismaService } from '../database/prisma.service';
@@ -172,10 +173,12 @@ export class IdentityService {
     // Member tanpa nomor WhatsApp (biasanya daftar lewat Google) diminta melengkapinya lebih dulu.
     let phoneRequired = false;
     if (isCustomerOnly) {
-      const pemilik = this.db.user?.findUnique
-        ? await this.db.user.findUnique({ where: { id: userId }, select: { phone: true } })
-        : null;
-      phoneRequired = Boolean(pemilik) && !pemilik?.phone;
+      // Nomor wajib hanya bila PHONE_REQUIRED=true (lihat nomor-wajib.ts); bawaannya tidak.
+      const pemilik =
+        nomorWajib() && this.db.user?.findUnique
+          ? await this.db.user.findUnique({ where: { id: userId }, select: { phone: true } })
+          : null;
+      phoneRequired = Boolean(pemilik) && perluLengkapiNomor(pemilik?.phone);
       const profile = (this.db as any).profilPengguna?.findUnique
         ? await (this.db as any).profilPengguna.findUnique({ where: { userId } })
         : null;

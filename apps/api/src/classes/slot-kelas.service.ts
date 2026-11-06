@@ -1320,15 +1320,31 @@ export class ClassSlotService {
    */
   async selesaikanOtomatis(now = new Date(), jedaMenit = 30) {
     const batasAkhir = new Date(now.getTime() - jedaMenit * 60_000);
-    const kelas = await this.db.slotKelas.findMany({
+    const kandidat = await this.db.slotKelas.findMany({
       where: {
         status: { in: [...STATUS_ALLOWED.complete] },
         endAt: { lte: batasAkhir, gte: new Date(now.getTime() - 90 * 86_400_000) },
       },
-      select: { id: true },
+      select: {
+        id: true,
+        bookings: { select: { status: true, bookingNumber: true, attendance: { select: { id: true } } } },
+      },
       orderBy: { endAt: 'desc' },
-      take: 200,
+      take: 500,
     });
+    // Aturan pengaman: kelas yang punya peserta tetapi tidak ada satu pun yang tercatat hadir tidak
+    // diselesaikan otomatis. Besar kemungkinan presensinya belum dicatat; menyelesaikannya akan
+    // menghanguskan sesi semua pesertanya. Kelas itu tetap muncul di peringatan "belum diselesaikan"
+    // sampai staf memeriksa kehadiran lalu menyelesaikannya.
+    const kelas = kandidat.filter((k) => {
+      const aktif = k.bookings.filter(
+        (b) => ['BOOKED', 'ATTENDED'].includes(b.status) && !b.bookingNumber?.startsWith('BKG-V1-'),
+      );
+      return aktif.length === 0 || aktif.some((b) => b.status === 'ATTENDED' || b.attendance);
+    });
+    const dilewati = kandidat.length - kelas.length;
+    if (dilewati > 0)
+      this.logger.warn(`${dilewati} kelas dilewati penjadwal karena tidak ada presensi peserta; perlu diselesaikan manual.`);
     const sistem = {
       sessionId: 'penjadwal',
       userId: '',
@@ -1351,7 +1367,7 @@ export class ClassSlotService {
         if (kegagalan.length < 10) kegagalan.push({ id, sebab });
       }
     }
-    return { diperiksa: kelas.length, selesai, gagal, kegagalan };
+    return { diperiksa: kelas.length, selesai, gagal, dilewati, kegagalan };
   }
 
   private validateKey(key: string) {

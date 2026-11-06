@@ -106,9 +106,9 @@ describe('menyelesaikan kelas', () => {
 
   it('penjadwal menyelesaikan kelas yang sudah lewat jeda tanpa akun pengguna', async () => {
     const { svc, tx } = build([{ id: 'b1', status: 'BOOKED', attendance: { id: 'a1' }, customerPackageId: 'p' }], new Date(Date.now() - 3_600_000));
-    (svc as any).db = { slotKelas: { findMany: async () => [{ id: slotId }] } };
+    (svc as any).db = { slotKelas: { findMany: async () => [{ id: slotId, bookings: [{ status: 'ATTENDED', bookingNumber: 'BK-1', attendance: { id: 'a' } }] }] } };
     const hasil = await svc.selesaikanOtomatis(new Date());
-    expect(hasil).toEqual({ diperiksa: 1, selesai: 1, gagal: 0, kegagalan: [] });
+    expect(hasil).toEqual({ diperiksa: 1, selesai: 1, gagal: 0, dilewati: 0, kegagalan: [] });
     expect(tx.sessionLedger.create).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ createdById: null }) }),
     );
@@ -116,11 +116,11 @@ describe('menyelesaikan kelas', () => {
 
   it('kelas yang gagal diselesaikan otomatis dicatat di hasil dan di log, bukan dibuang diam-diam', async () => {
     const { svc } = build([], new Date(Date.now() - 3_600_000));
-    (svc as any).db = { slotKelas: { findMany: async () => [{ id: slotId }] } };
+    (svc as any).db = { slotKelas: { findMany: async () => [{ id: slotId, bookings: [{ status: 'ATTENDED', bookingNumber: 'BK-1', attendance: { id: 'a' } }] }] } };
     jest.spyOn(svc, 'complete').mockRejectedValue(Object.assign(new Error('x'), { code: 'STALE_VERSION' }));
     const galat = jest.spyOn((svc as any).logger, 'error').mockImplementation(() => undefined);
     const hasil = await svc.selesaikanOtomatis(new Date());
-    expect(hasil).toEqual({ diperiksa: 1, selesai: 0, gagal: 1, kegagalan: [{ id: slotId, sebab: 'STALE_VERSION' }] });
+    expect(hasil).toEqual({ diperiksa: 1, selesai: 0, gagal: 1, dilewati: 0, kegagalan: [{ id: slotId, sebab: 'STALE_VERSION' }] });
     expect(galat).toHaveBeenCalledWith(expect.stringContaining(slotId));
   });
 
@@ -131,5 +131,45 @@ describe('menyelesaikan kelas', () => {
     const data = (tx.paketPelanggan.update.mock.calls as unknown as Array<[{ data: Record<string, unknown> }]>)[0]![0].data;
     expect(data.remainingSessions).toEqual({ set: 0 });
     expect(data.usedSessions).toEqual({ increment: 1 });
+  });
+
+  describe('aturan pengaman: kelas tanpa satu pun presensi peserta tidak diselesaikan otomatis', () => {
+    const jalankan = async (bookings: unknown[]) => {
+      const { svc } = build([], new Date(Date.now() - 3_600_000));
+      (svc as any).db = { slotKelas: { findMany: async () => [{ id: slotId, bookings }] } };
+      const selesai = jest.spyOn(svc, 'complete').mockResolvedValue({} as never);
+      jest.spyOn((svc as any).logger, 'warn').mockImplementation(() => undefined);
+      const hasil = await svc.selesaikanOtomatis(new Date());
+      return { hasil, selesai };
+    };
+
+    it('dilewati bila ada peserta tetapi tidak ada yang tercatat hadir', async () => {
+      const { hasil, selesai } = await jalankan([
+        { status: 'BOOKED', bookingNumber: 'BK-1', attendance: null },
+        { status: 'BOOKED', bookingNumber: 'BK-2', attendance: null },
+      ]);
+      expect(selesai).not.toHaveBeenCalled();
+      expect(hasil).toMatchObject({ diperiksa: 0, selesai: 0, dilewati: 1 });
+    });
+
+    it('diselesaikan bila minimal satu peserta tercatat hadir', async () => {
+      const { hasil, selesai } = await jalankan([
+        { status: 'ATTENDED', bookingNumber: 'BK-1', attendance: { id: 'a' } },
+        { status: 'BOOKED', bookingNumber: 'BK-2', attendance: null },
+      ]);
+      expect(selesai).toHaveBeenCalledTimes(1);
+      expect(hasil).toMatchObject({ selesai: 1, dilewati: 0 });
+    });
+
+    it('diselesaikan bila tidak ada peserta aktif (semua batal atau kelas kosong)', async () => {
+      const { hasil, selesai } = await jalankan([{ status: 'CANCELLED', bookingNumber: 'BK-1', attendance: null }]);
+      expect(selesai).toHaveBeenCalledTimes(1);
+      expect(hasil).toMatchObject({ dilewati: 0 });
+    });
+
+    it('booking V1 tidak dihitung sebagai peserta aktif', async () => {
+      const { selesai } = await jalankan([{ status: 'BOOKED', bookingNumber: 'BKG-V1-0001', attendance: null }]);
+      expect(selesai).toHaveBeenCalledTimes(1);
+    });
   });
 });
