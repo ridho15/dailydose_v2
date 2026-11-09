@@ -1,7 +1,7 @@
 'use client';
 
 import { ArrowLeft, CheckCircle2, Clock, Eye, Filter, RefreshCw, UploadCloud } from 'lucide-react';
-import { browserOrderClient, sha256Upload } from '@/api-clients/order-client';
+import { browserOrderClient, orderError, sha256Upload } from '@/api-clients/order-client';
 import { compressImageIfNeeded } from '@/lib/image-compression';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -231,8 +231,10 @@ export function PaymentReviewDetailView({
       feedback?.showToast({ tone: 'success', title: 'Bukti transfer manual berhasil diunggah', message: 'Status pesanan diperbarui.' });
       await load();
     } catch (err: any) {
-      setManualUploadError(err.message || 'Gagal mengunggah bukti manual.');
-      feedback?.showToast({ tone: 'danger', title: 'Gagal mengunggah bukti manual', message: err.message });
+      // Kode galat diterjemahkan, bukan ditampilkan mentah (mis. INVALID_STATE_TRANSITION).
+      const pesan = orderError(err) || 'Gagal mengunggah bukti manual.';
+      setManualUploadError(pesan);
+      feedback?.showToast({ tone: 'danger', title: 'Gagal mengunggah bukti manual', message: pesan });
     } finally {
       setManualUploading(false);
     }

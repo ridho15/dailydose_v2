@@ -26,11 +26,24 @@ export function idUnggahan(id: unknown): string {
   return id;
 }
 
-export function bolehTerimaBukti(order: { status: string; paymentExpiresAt?: Date | null }, now = new Date()) {
+export function bolehTerimaBukti(
+  order: { status: string; paymentExpiresAt?: Date | null },
+  olehStaf = false,
+  now = new Date(),
+) {
   if (!(STATUS_TERIMA_BUKTI as readonly string[]).includes(order.status)) return false;
-  // Pesanan transfer yang batas bayarnya lewat tidak lagi menerima bukti; pekerja kedaluwarsa
-  // hanya menutup pesanan tanpa bukti, jadi bukti terlambat tidak boleh "menghidupkan" pesanan.
+  // Staf cabang boleh mengunggah bukti manual walau batas bayar lewat (member sudah transfer tetapi
+  // gagal/lupa mengunggah); persetujuan tetap lewat pemeriksaan mutasi oleh Manager/Finance.
+  if (olehStaf) return true;
+  // Pelanggan: setelah batas bayar lewat, bukti tidak lagi diterima dari aplikasi.
   return !order.paymentExpiresAt || order.paymentExpiresAt.getTime() > now.getTime();
+}
+
+/** Kode penolakan yang bisa dijelaskan ke pengguna: pesanan sudah diputus, atau batas bayar lewat. */
+export function buktiDitolak(order: { status: string }) {
+  return (STATUS_TERIMA_BUKTI as readonly string[]).includes(order.status)
+    ? 'PAYMENT_PROOF_DEADLINE_PASSED'
+    : 'PAYMENT_PROOF_ORDER_CLOSED';
 }
 
 /** Teks bebas dari pelanggan (nama bank, pemilik rekening): dipangkas dan dibatasi panjangnya. */

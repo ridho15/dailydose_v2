@@ -628,15 +628,10 @@ export class PaymentReviewService {
             throw new ApiProblem('PURCHASE_ALREADY_DECIDED', HttpStatus.CONFLICT);
 
           const decidedAt = new Date();
-          // Transfer bank hanya boleh disetujui bila bukti ada. Lewat batas bayar tetap sah bila buktinya
-          // diunggah sebelum batas (staf baru sempat memeriksa sesudahnya); menolak selalu boleh.
-          if (decision === 'APPROVED' && purchase.paymentMethod === 'BANK_TRANSFER') {
-            const batas = purchase.paymentExpiresAt;
-            const bukti = purchase.paymentProof;
-            if (batas && decidedAt.getTime() > batas.getTime() && (!bukti || bukti.uploadedAt.getTime() > batas.getTime()))
-              throw new ApiProblem('PAYMENT_EXPIRED', HttpStatus.CONFLICT);
-            if (!bukti) throw new ApiProblem('PAYMENT_PROOF_REQUIRED', HttpStatus.CONFLICT);
-          }
+          // Transfer bank hanya boleh disetujui bila bukti ada; menolak selalu boleh. Bukti yang
+          // diunggah staf setelah batas bayar tetap sah: penyetuju memeriksa mutasi rekeningnya.
+          if (decision === 'APPROVED' && purchase.paymentMethod === 'BANK_TRANSFER' && !purchase.paymentProof)
+            throw new ApiProblem('PAYMENT_PROOF_REQUIRED', HttpStatus.CONFLICT);
           const nextStatus = decision === 'APPROVED' ? PurchaseStatus.PAID : PurchaseStatus.REJECTED;
 
           const updated = await tx.pembelian.update({

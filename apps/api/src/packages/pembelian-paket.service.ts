@@ -9,7 +9,7 @@ import type { SessionPrincipal } from '../identity/identity.service';
 import { ApiProblem, ENTITY_ID_REGEX } from '../identity/security';
 import { PackageAccessService } from './package-access.service';
 import { PackagePricingService } from './kalkulasi-harga-paket.service';
-import { alamatBukti, bolehTerimaBukti, idUnggahan, pastikanPemilik, teksPendek } from './bukti-aman';
+import { alamatBukti, bolehTerimaBukti, buktiDitolak, idUnggahan, pastikanPemilik, teksPendek } from './bukti-aman';
 import { ConfigGatedObjectStorageProvider } from './proof-providers';
 import {
   VoucherService,
@@ -624,8 +624,8 @@ export class CustomerOrderService {
     // Staf hanya untuk pesanan di cabangnya (bukan sekadar berperan staf).
     if (order.userId !== principal.userId)
       this.access.scope(principal, order.branchId, ['payment:review', 'purchase:review', 'purchase:record']);
-    if (!bolehTerimaBukti(order))
-      throw new ApiProblem('INVALID_STATE_TRANSITION', HttpStatus.CONFLICT);
+    if (!bolehTerimaBukti(order, order.userId !== principal.userId))
+      throw new ApiProblem(buktiDitolak(order), HttpStatus.CONFLICT);
 
     // Alamat berkas selalu dibentuk dari id unggahan milik peminta, tidak pernah dari isian body.
     const proofId = idUnggahan(input.paymentProofId);

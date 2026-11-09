@@ -85,7 +85,7 @@ describe('persetujuan pembayaran: bukti, masa berlaku, penolakan', () => {
     await expect(reject(service)).resolves.toBeDefined();
   });
 
-  it('lewat batas bayar: sah bila bukti diunggah sebelum batas, ditolak bila sesudah atau tanpa bukti', async () => {
+  it('lewat batas bayar: sah selama ada bukti (termasuk bukti manual staf), ditolak tanpa bukti', async () => {
     const batas = new Date(Date.now() - 3_600_000);
     const sebelum = setup(
       purchase({ paymentExpiresAt: batas, paymentProof: { uploadedAt: new Date(batas.getTime() - 60_000) } }),
@@ -95,9 +95,9 @@ describe('persetujuan pembayaran: bukti, masa berlaku, penolakan', () => {
     const sesudah = setup(
       purchase({ paymentExpiresAt: batas, paymentProof: { uploadedAt: new Date(batas.getTime() + 60_000) } }),
     );
-    await expect(approve(sesudah.service)).rejects.toMatchObject({ code: 'PAYMENT_EXPIRED' });
+    await expect(approve(sesudah.service)).resolves.toBeDefined();
     const tanpa = setup(purchase({ paymentExpiresAt: batas, paymentProof: null }));
-    await expect(approve(tanpa.service)).rejects.toMatchObject({ code: 'PAYMENT_EXPIRED' });
+    await expect(approve(tanpa.service)).rejects.toMatchObject({ code: 'PAYMENT_PROOF_REQUIRED' });
   });
 
   it('persetujuan ganda yang kalah balapan (P2002) menjadi 409, bukan 500', async () => {

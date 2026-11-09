@@ -11,6 +11,7 @@ import { ConfigGatedObjectStorageProvider, type ObjectStorageProvider } from './
 import {
   alamatBukti,
   bolehTerimaBukti,
+  buktiDitolak,
   catatPemilik,
   idUnggahan,
   jenisBukti,
@@ -51,7 +52,8 @@ export class PaymentProofService {
 
     if (input.orderId) {
       const order = await this.pesananBoleh(principal, String(input.orderId));
-      if (!bolehTerimaBukti(order)) throw new ApiProblem('INVALID_STATE_TRANSITION', HttpStatus.CONFLICT);
+      if (!bolehTerimaBukti(order, order.userId !== principal.userId))
+        throw new ApiProblem(buktiDitolak(order), HttpStatus.CONFLICT);
     }
 
     const id = newId();
@@ -106,7 +108,8 @@ export class PaymentProofService {
     const targetPurchaseId = input.purchaseId ?? input.orderId;
     if (targetPurchaseId) {
       const purchase = await this.pesananBoleh(principal, String(targetPurchaseId));
-      if (!bolehTerimaBukti(purchase)) throw new ApiProblem('INVALID_STATE_TRANSITION', HttpStatus.CONFLICT);
+      if (!bolehTerimaBukti(purchase, purchase.userId !== principal.userId))
+        throw new ApiProblem(buktiDitolak(purchase), HttpStatus.CONFLICT);
       await pastikanPemilik(this.storage, id, principal.userId);
       const isStaff = purchase.userId !== principal.userId;
       const bankName = teksPendek(input.bankName);
@@ -196,7 +199,7 @@ export class PaymentProofService {
     const current = await this.db.pembelian.findUnique({ where: { id: purchaseId } });
     if (!current || current.userId !== principal.userId)
       throw new ApiProblem('RESOURCE_NOT_FOUND', HttpStatus.NOT_FOUND);
-    if (!bolehTerimaBukti(current)) throw new ApiProblem('INVALID_STATE_TRANSITION', HttpStatus.CONFLICT);
+    if (!bolehTerimaBukti(current)) throw new ApiProblem(buktiDitolak(current), HttpStatus.CONFLICT);
     await pastikanPemilik(this.storage, nextId, principal.userId);
     const bankName = teksPendek(input.bankName);
     const accountHolder = teksPendek(input.accountHolder);

@@ -632,6 +632,8 @@ export function purchaseFailure(error: unknown): string {
     PURCHASE_ALREADY_DECIDED: 'Purchase ini sudah memiliki keputusan atau sudah disetujui sebelumnya.',
     STALE_VERSION: 'Data purchase berubah. Muat ulang sebelum mengambil keputusan.',
     SEPARATION_OF_DUTIES_VIOLATION: 'Penjualan tidak boleh disetujui oleh orang yang mencatatnya.',
+    PAYMENT_PROOF_ORDER_CLOSED: 'Pesanan ini sudah diputus atau dibatalkan, jadi bukti tidak bisa diunggah lagi.',
+    PAYMENT_PROOF_DEADLINE_PASSED: 'Batas pembayaran pesanan ini sudah lewat. Minta admin cabang mengunggah buktinya.',
     DIRECT_PAYMENT_APPROVER_REQUIRED: 'Penjualan tunai/kartu hanya bisa disetujui Manager atau Super Owner.',
     RESOURCE_NOT_FOUND: 'Data tidak tersedia dalam cabang yang dipilih.',
     CONCURRENCY_CONFLICT: 'Terjadi konflik transaksi bersamaan. Silakan coba kembali.',
