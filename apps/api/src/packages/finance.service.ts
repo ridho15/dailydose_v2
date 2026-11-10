@@ -207,6 +207,19 @@ export class FinanceService {
       where: input.branchId ? { branchId: input.branchId } : {},
       orderBy: { effectiveDate: 'desc' },
     });
+    // Kelas yang jamnya sudah lewat tetapi belum Selesai tidak masuk honor maupun sesi terpakai.
+    // Angkanya ditampilkan supaya laporan Rp0 tidak terbaca sebagai normal.
+    const kelasBelumSelesai =
+      typeof this.db.slotKelas.count === 'function'
+        ? await this.db.slotKelas.count({
+            where: {
+              ...branchFilter,
+              startAt: { gte: range.fromDate, lt: range.untilExclusive },
+              endAt: { lt: new Date() },
+              status: { in: ['PUBLISHED', 'CONFIRMED'] },
+            },
+          })
+        : 0;
 
     const instructorBreakdown = summarizeInstructorFees(slots as any, fees);
     // Koreksi jam (dengan alasan dan bukti) ikut dihitung pada bulan kelasnya.
@@ -286,6 +299,7 @@ export class FinanceService {
       unverifiedClassCount,
       unconfiguredClassCount,
       instructorFeeMissing,
+      kelasBelumSelesai,
       totalTeachingHours,
       instructorCount: instructorBreakdown.length,
       instructors: instructorBreakdown,
@@ -409,6 +423,7 @@ export class FinanceService {
       modalSesiRp: modal.totalRp,
       sesiTerpakai: modal.sesi,
       sesiTanpaModal: modal.sesiTanpaModal,
+      kelasBelumSelesai: realtimeRes.kelasBelumSelesai,
       grossProfitRp,
       grossMarginPercent: margin(grossProfitRp),
       otherCostRp,
@@ -781,7 +796,11 @@ export class FinanceService {
 
     const fromDate = input.from ? new Date(input.from) : new Date(Date.now() - 30 * 86400000);
     const untilDate = input.until ? new Date(input.until) : new Date();
-    const range = input.from || input.until ? financeRange(input) : null;
+    // Layar mengirim "YYYY-MM-DDT00:00:00.000Z"; pemeriksa rentang hanya menerima tanggal (422 sebelumnya).
+    const range =
+      input.from || input.until
+        ? financeRange({ from: input.from?.slice(0, 10), until: input.until?.slice(0, 10) })
+        : null;
 
     const purchases = await this.db.pembelian.findMany({
       where: {

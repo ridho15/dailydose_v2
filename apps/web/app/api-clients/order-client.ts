@@ -502,6 +502,7 @@ export function orderErrorDetails(error: unknown) {
       'Kode pembayaran sedang penuh. Tunggu beberapa saat lalu buat pesanan kembali.',
     ORDER_EXPIRED: 'Batas pembayaran sudah berakhir. Buat pesanan baru.',
     PAYMENT_PROOF_MIME_MISMATCH: 'Format file tidak didukung. Harap pilih gambar JPEG, PNG, atau PDF.',
+    PACKAGE_NOT_ON_SALE: 'Paket ini sedang tidak dijual. Pilih paket lain.',
     PAYMENT_PROOF_ORDER_CLOSED: 'Pesanan ini sudah selesai diproses atau dibatalkan.',
     PAYMENT_PROOF_DEADLINE_PASSED:
       'Batas waktu unggah bukti sudah lewat. Hubungi studio lewat WhatsApp; admin bisa mengunggahkan bukti Anda.',

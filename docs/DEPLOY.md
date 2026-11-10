@@ -188,6 +188,22 @@ CREATE TABLE `booking_teman` (
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 ```
 
+`paket_masa_jual` (tanggal "Mulai berlaku" dan "Berakhir" paket di katalog, 10 November 2026).
+Tanpa tabel ini paket tetap tampil dan bisa dibeli seperti biasa; tanggalnya saja yang tidak tersimpan.
+
+```sql
+CREATE TABLE `paket_masa_jual` (
+    `packageId` CHAR(36) NOT NULL,
+    `mulai` DATE NULL,
+    `berakhir` DATE NULL,
+    `updatedById` CHAR(36) NULL,
+    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `updatedAt` DATETIME(3) NOT NULL,
+
+    PRIMARY KEY (`packageId`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+```
+
 `paket` (kolom `is_shareable` untuk paket bersama / Duet / Family, Oktober 2026) dan `paket_pelanggan_anggota`:
 
 ```sql

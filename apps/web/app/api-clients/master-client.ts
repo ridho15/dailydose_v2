@@ -455,6 +455,9 @@ export function masterFailure(error: unknown): string {
 const masterMessages: Record<string, string> = {
   HAS_UPCOMING_SLOTS:
     'Masih ada kelas terjadwal yang memakai area atau ruangan ini. Batalkan atau pindahkan kelasnya terlebih dahulu.',
+  RATE_DUPLICATE: 'Tarif yang sama untuk instruktur, cabang, tipe kelas, dan tanggal ini sudah ada.',
+  RATE_SAME_DATE_EXISTS:
+    'Sudah ada tarif lain untuk instruktur, cabang, tipe kelas, dan tanggal ini. Hapus yang lama atau pilih tanggal berbeda.',
   RATE_IN_EFFECT:
     'Tarif yang sedang berlaku tidak dapat dihapus. Koreksi dengan menambahkan tarif baru.',
   FORBIDDEN: 'Anda tidak memiliki izin untuk tindakan ini.',

@@ -270,6 +270,19 @@ export class EffectiveSettingsService {
           { field: 'instructorUserId', issue: 'REQUIRED' },
         ]);
       const instructorId = input.instructorUserId;
+      // Satu tarif per instruktur x cabang x tipe kelas x tanggal berlaku. Dulu tarif yang sama bisa
+      // tersimpan berkali-kali (klik ganda / simpan ulang), dan honor bergantung pada urutan acak.
+      if (typeof this.db.instructorFee.findFirst === 'function') {
+        const kembar = await this.db.instructorFee.findFirst({
+          where: { instructorId, branchId: input.branchId, classTypeId: input.classTypeId, effectiveDate },
+          select: { id: true, feePerJamRp: true },
+        });
+        if (kembar)
+          throw new ApiProblem(
+            kembar.feePerJamRp === feePerJamRp ? 'RATE_DUPLICATE' : 'RATE_SAME_DATE_EXISTS',
+            HttpStatus.CONFLICT,
+          );
+      }
       const row = await this.db.instructorFee.create({
         data: {
           instructorId,
@@ -424,8 +437,24 @@ export class EffectiveSettingsService {
       if (!row) throw new ApiProblem('NOT_FOUND', HttpStatus.NOT_FOUND);
       this.access.ensureBranchScope(principal, row.branchId, true);
       const sudahBerlaku = dateKey(row.effectiveDate) <= todayKey();
+      // Duplikat persis (instruktur, cabang, tipe kelas, tanggal, nominal sama) boleh dihapus kapan
+      // saja: kembarannya tetap ada, jadi honor tidak berubah sedikit pun.
+      const kembar =
+        sudahBerlaku && typeof tx.instructorFee.findFirst === 'function'
+          ? await tx.instructorFee.findFirst({
+              where: {
+                id: { not: row.id },
+                instructorId: row.instructorId,
+                branchId: row.branchId,
+                classTypeId: row.classTypeId,
+                effectiveDate: row.effectiveDate,
+                feePerJamRp: row.feePerJamRp,
+              },
+              select: { id: true },
+            })
+          : null;
       let dampak: DampakHapusTarif | undefined;
-      if (sudahBerlaku) {
+      if (sudahBerlaku && !kembar) {
         if (!salahInput) throw new ApiProblem('RATE_IN_EFFECT', HttpStatus.CONFLICT);
         if (!principal.capabilities.includes(CAP_KOREKSI_TARIF))
           throw new ApiProblem('FORBIDDEN', HttpStatus.FORBIDDEN);

@@ -3,6 +3,7 @@ import { HttpStatus, Injectable } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import { ApiProblem } from '../identity/security';
 import { branchPublicLocation } from '../master/branch-location';
+import { masaJualPaket, sedangDijual } from '../packages/masa-jual';
 
 @Injectable()
 export class PublicClassQueryService {
@@ -94,7 +95,8 @@ export class PublicClassQueryService {
       take: 6,
     });
 
-    const packages = packagesRaw.flatMap((pkg) => {
+    const masaJual = await masaJualPaket(this.db, packagesRaw.map((pkg) => pkg.id));
+    const packages = packagesRaw.filter((pkg) => sedangDijual(masaJual.get(pkg.id))).flatMap((pkg) => {
       const targetBranches = studios.slice(0, 1);
       return targetBranches.map((branch) => ({
         id: pkg.id,

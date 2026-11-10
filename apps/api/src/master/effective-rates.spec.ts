@@ -214,3 +214,32 @@ describe('Super Owner menghapus versi tarif yang sudah berlaku karena salah inpu
     expect(tx.instructorFee.delete).not.toHaveBeenCalled();
   });
 });
+
+describe('tarif honor dobel', () => {
+  it('menolak tarif yang persis sama untuk instruktur, cabang, tipe kelas, dan tanggal yang sama', async () => {
+    const { service, db } = setup();
+    (db.instructorFee as any).findFirst = jest.fn().mockResolvedValue({ id: id(60), feePerJamRp: 180_000 });
+    await expect(service.create(finance, feeInput(), 'c')).rejects.toMatchObject({ code: 'RATE_DUPLICATE' });
+    (db.instructorFee as any).findFirst = jest.fn().mockResolvedValue({ id: id(60), feePerJamRp: 150_000 });
+    await expect(service.create(finance, feeInput(), 'c')).rejects.toMatchObject({ code: 'RATE_SAME_DATE_EXISTS' });
+    expect(db.instructorFee.create).not.toHaveBeenCalled();
+  });
+
+  it('duplikat persis yang sudah berlaku boleh dihapus tanpa jalur salah input', async () => {
+    const { service, tx } = setup(dayFromToday(-30));
+    (tx.instructorFee as any).findFirst = jest.fn().mockResolvedValue({ id: id(61) });
+    await expect(service.remove(finance, 'INSTRUCTOR_FEE', rowId, 'c', 'Hapus duplikat')).resolves.toMatchObject({
+      id: rowId,
+      deleted: true,
+    });
+    expect(tx.instructorFee.delete).toHaveBeenCalledWith({ where: { id: rowId } });
+  });
+
+  it('tarif berlaku tanpa kembaran tetap butuh jalur salah input', async () => {
+    const { service, tx } = setup(dayFromToday(-30));
+    (tx.instructorFee as any).findFirst = jest.fn().mockResolvedValue(null);
+    await expect(service.remove(finance, 'INSTRUCTOR_FEE', rowId, 'c', 'Hapus saja')).rejects.toMatchObject({
+      code: 'RATE_IN_EFFECT',
+    });
+  });
+});

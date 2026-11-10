@@ -5,6 +5,7 @@ import { ApiProblem } from '../identity/security';
 import { assertPublicUuid } from './public-query.validation';
 import { PackagePricingService } from '../packages/kalkulasi-harga-paket.service';
 import { branchPublicLocation } from '../master/branch-location';
+import { masaJualPaket, sedangDijual } from '../packages/masa-jual';
 
 type Priced = ReturnType<PackagePricingService['calculate']>;
 
@@ -90,9 +91,11 @@ export class PublicPackageQueryService {
 
     const branch = branches.find(({ id }) => id === branchId) ?? branches[0] ?? null;
 
+    // Paket di luar masa jualnya (sebelum mulai atau lewat tanggal berakhir) tidak tampil di katalog.
+    const masaJual = await masaJualPaket(this.db, rawPackages.map((pkg) => pkg.id));
     const seen = new Set<string>();
     const packages: typeof rawPackages = [];
-    for (const pkg of rawPackages) {
+    for (const pkg of rawPackages.filter((item) => sedangDijual(masaJual.get(item.id)))) {
       const key = (pkg as any).businessKey || pkg.id;
       if (!seen.has(key)) {
         seen.add(key);

@@ -6,6 +6,7 @@ import { AuditService } from '../foundation/audit.service';
 import { optionalReason } from '../foundation/reason';
 import type { SessionPrincipal } from '../identity/identity.service';
 import { ApiProblem, ENTITY_ID_REGEX } from '../identity/security';
+import { masaJualPaket } from './masa-jual';
 import { PackageAccessService } from './package-access.service';
 import { calculatePackagePromotion, promotionEffectiveState } from './kalkulasi-harga-paket.service';
 
@@ -194,6 +195,7 @@ export class PackagePromotionService {
 
   async packageDetail(principal: SessionPrincipal, packageId: string) {
     const pkg = await this.packageOrThrow(principal, packageId);
+    const masa = (await masaJualPaket(this.db, [packageId])).get(packageId);
     const rows = await this.db.packagePromotion.findMany({
       where: { packageId },
       orderBy: [{ activeFrom: 'desc' }, { id: 'desc' }],
@@ -218,11 +220,13 @@ export class PackagePromotionService {
       validityDays: pkg.validityDays,
       status: pkg.status,
       isMultiBranch: Boolean((pkg as any).isMultiBranch),
+      // Paket bersama (Duet/Family): tanpa ini halaman detail selalu menulis "Individu".
+      isShareable: Boolean((pkg as any).isShareable),
       branchId: pkg.branchId ?? null,
       branch: (pkg as any).branch ?? null,
       effectiveState: pkg.status === 'ACTIVE' ? 'LIVE' : pkg.status,
-      effectiveFrom: pkg.createdAt.toISOString(),
-      effectiveUntil: null,
+      effectiveFrom: (masa?.mulai ?? pkg.createdAt).toISOString(),
+      effectiveUntil: masa?.berakhir?.toISOString() ?? null,
       branchScopes,
       classTypeScopes: pkg.classType ? [{ classType: pkg.classType }] : [],
       classType: pkg.classType ?? null,
@@ -252,6 +256,7 @@ export class PackagePromotionService {
 
   async list(principal: SessionPrincipal, packageId: string, _cursor?: string, _limit?: string) {
     const pkg = await this.packageOrThrow(principal, packageId);
+    const masa = (await masaJualPaket(this.db, [packageId])).get(packageId);
     const rows = await this.db.packagePromotion.findMany({
       where: { packageId },
       orderBy: [{ activeFrom: 'desc' }, { id: 'desc' }],

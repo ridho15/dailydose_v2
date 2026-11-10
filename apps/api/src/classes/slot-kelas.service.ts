@@ -1318,12 +1318,17 @@ export class ClassSlotService {
    * "Selesaikan kelas". Diberi jeda setelah jam selesai untuk scan yang terlambat (scan setelah
    * kelas selesai tetap tercatat lewat backfill tanpa potong ganda). Hanya 7 hari terakhir.
    */
-  async selesaikanOtomatis(now = new Date(), jedaMenit = 30) {
+  async selesaikanOtomatis(
+    now = new Date(),
+    jedaMenit = 30,
+    opsi: { sejak?: Date; branchId?: string } = {},
+  ) {
     const batasAkhir = new Date(now.getTime() - jedaMenit * 60_000);
     const kandidat = await this.db.slotKelas.findMany({
       where: {
         status: { in: [...STATUS_ALLOWED.complete] },
-        endAt: { lte: batasAkhir, gte: new Date(now.getTime() - 90 * 86_400_000) },
+        endAt: { lte: batasAkhir, gte: opsi.sejak ?? new Date(now.getTime() - 90 * 86_400_000) },
+        ...(opsi.branchId ? { branchId: opsi.branchId } : {}),
       },
       select: {
         id: true,
@@ -1368,6 +1373,34 @@ export class ClassSlotService {
       }
     }
     return { diperiksa: kelas.length, selesai, gagal, dilewati, kegagalan };
+  }
+
+  /**
+   * Jalankan penyelesaian otomatis sekarang, untuk satu cabang atau semua, mulai tanggal tertentu
+   * (Super Owner). Untuk cabang yang kelasnya tertinggal saat penjadwal mati atau belum terpasang.
+   * Aturannya sama persis dengan penjadwal: kelas tanpa satu pun presensi peserta dilewati, booking
+   * V1 dan booking batal tidak dipotong, booking yang sudah terpotong tidak dipotong lagi.
+   */
+  async selesaikanLampau(principal: SessionPrincipal, input: { sejak?: string; branchId?: string }) {
+    this.policy.requireCapability(principal.capabilities, 'master:manage');
+    if (!principal.capabilities.includes('branch:all'))
+      throw new ApiProblem('FORBIDDEN', HttpStatus.FORBIDDEN);
+    if (input.branchId && !UUID.test(input.branchId))
+      throw new ApiProblem('VALIDATION_ERROR', HttpStatus.UNPROCESSABLE_ENTITY);
+    const tanggal = typeof input.sejak === 'string' ? input.sejak.slice(0, 10) : '';
+    const sejak = new Date(`${tanggal}T00:00:00+07:00`);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(tanggal) || Number.isNaN(sejak.getTime()) || sejak.getTime() < Date.now() - 90 * 86_400_000)
+      throw new ApiProblem('VALIDATION_ERROR', HttpStatus.UNPROCESSABLE_ENTITY);
+    const hasil = await this.selesaikanOtomatis(new Date(), 30, { sejak, branchId: input.branchId });
+    await this.audit?.catat(null, {
+      actorId: principal.userId,
+      branchId: input.branchId ?? null,
+      action: 'class_slot.backfill_completed',
+      objectType: 'ClassSlot',
+      objectId: input.branchId ?? 'ALL',
+      afterMasked: { sejak: tanggal, ...hasil },
+    });
+    return hasil;
   }
 
   private validateKey(key: string) {

@@ -572,3 +572,16 @@ describe('FinanceService.overview dan anomalies: lingkup cabang', () => {
     });
   });
 });
+
+describe('FinanceService.overview: tanggal dari layar', () => {
+  it('menerima "YYYY-MM-DDT00:00:00.000Z" (dulu 422)', async () => {
+    const { service, db } = setup();
+    (db.cabang as unknown as Record<string, unknown>).findFirst = jest.fn().mockResolvedValue({ id: branchA, code: 'GG', name: 'GG' });
+    await expect(
+      service.overview(principal(['finance:read', 'branch:all'], 'SUPER_OWNER', id(1), []), {
+        from: '2026-11-01T00:00:00.000Z',
+        until: '2026-11-10T00:00:00.000Z',
+      }),
+    ).resolves.toBeDefined();
+  });
+});

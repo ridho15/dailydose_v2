@@ -173,3 +173,27 @@ describe('menyelesaikan kelas', () => {
     });
   });
 });
+
+describe('penyelesaian mundur oleh Super Owner', () => {
+  const superOwner = {
+    sessionId: 's', userId: '00000000-0000-4000-8000-000000000009', roles: [{ role: 'SUPER_OWNER', branchId: null }],
+    capabilities: ['master:manage', 'branch:all', 'class-slot:manage'], branchIds: [],
+  } as never;
+
+  it('hanya Super Owner, dan tanggal mulai wajib valid dan tidak lebih dari 90 hari', async () => {
+    const { svc } = build([], new Date(Date.now() - 3_600_000));
+    await expect(svc.selesaikanLampau(principal, { sejak: '2026-11-01' })).rejects.toBeDefined();
+    await expect(svc.selesaikanLampau(superOwner, { sejak: 'kemarin' })).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+    await expect(svc.selesaikanLampau(superOwner, { sejak: '2020-01-01' })).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+  });
+
+  it('meneruskan cabang dan tanggal mulai ke penyelesaian otomatis', async () => {
+    const { svc } = build([], new Date(Date.now() - 3_600_000));
+    const findMany = jest.fn().mockResolvedValue([]);
+    (svc as any).db = { slotKelas: { findMany } };
+    const sejak = new Date(Date.now() - 5 * 86_400_000).toISOString().slice(0, 10);
+    await svc.selesaikanLampau(superOwner, { sejak, branchId: '00000000-0000-4000-8000-000000000002' });
+    expect(findMany.mock.calls[0][0].where).toMatchObject({ branchId: '00000000-0000-4000-8000-000000000002' });
+    expect(findMany.mock.calls[0][0].where.endAt.gte).toEqual(new Date(`${sejak}T00:00:00+07:00`));
+  });
+});

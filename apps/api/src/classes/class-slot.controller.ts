@@ -1,4 +1,5 @@
 import {
+  HttpCode,
   Body,
   Controller,
   Get,
@@ -152,6 +153,16 @@ export class ClassSlotController {
       res,
       this.slots.cancel(req.principal, id, body, key, req.correlationId ?? 'unknown'),
     );
+  }
+
+  /** Super Owner: selesaikan kelas yang sudah lewat sejak tanggal tertentu (penyelesaian mundur). */
+  @Post('selesaikan-lampau')
+  @HttpCode(200)
+  selesaikanLampau(
+    @Req() req: AuthenticatedRequest,
+    @Body() body: { sejak?: string; branchId?: string },
+  ) {
+    return this.slots.selesaikanLampau(req.principal, body ?? {});
   }
 
   @Post(':id/complete')

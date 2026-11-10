@@ -11,6 +11,7 @@ import { PackageAccessService } from './package-access.service';
 import { PackagePricingService } from './kalkulasi-harga-paket.service';
 import { alamatBukti, bolehTerimaBukti, buktiDitolak, idUnggahan, pastikanPemilik, teksPendek } from './bukti-aman';
 import { ConfigGatedObjectStorageProvider } from './proof-providers';
+import { masaJualPaket, sedangDijual } from './masa-jual';
 import {
   VoucherService,
   calculateVoucherDiscount,
@@ -353,6 +354,9 @@ export class CustomerOrderService {
         if (!branch || !branch.active)
           throw new ApiProblem('RESOURCE_NOT_FOUND', HttpStatus.NOT_FOUND);
         pastikanPaketDijualDiCabang(pkg, input.branchId);
+        // Pembelian pelanggan hanya dalam masa jual paket (Mulai berlaku sampai Berakhir).
+        if (!sedangDijual((await masaJualPaket(tx, [pkg.id])).get(pkg.id)))
+          throw new ApiProblem('PACKAGE_NOT_ON_SALE', HttpStatus.CONFLICT);
 
         const { voucher, discountRp, subtotalRp, totalAmountRp: baseAmountRp, promotion } = await this.priceOrder(
           tx,

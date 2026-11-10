@@ -173,6 +173,8 @@ export interface InstructorCostRealtimeData {
   /** Honor kelas selesai yang presensi instrukturnya belum tercatat; tetap ada di total. */
   totalUnverifiedFeeRp: number;
   unverifiedClassCount: number;
+  /** Kelas yang jamnya sudah lewat tetapi belum Selesai: belum masuk honor maupun sesi terpakai. */
+  kelasBelumSelesai?: number;
   totalTeachingHours: number;
   instructorCount: number;
   instructors: InstructorCostBreakdown[];
@@ -214,6 +216,7 @@ export interface ProfitData {
   modalSesiRp?: number;
   sesiTerpakai?: number;
   sesiTanpaModal?: number;
+  kelasBelumSelesai?: number;
   grossProfitRp: number;
   grossMarginPercent: number;
   otherCostRp: number;
@@ -254,6 +257,13 @@ export interface FinanceClient {
   /** Alasan wajib (K4): biaya yang dihapus tidak dapat dipulihkan. */
   deleteOtherCost?(id: string, reason: string): Promise<{ id: string; deleted: boolean }>;
   updateOtherCost?(id: string, input: OtherCostUpdate): Promise<unknown>;
+  /** Super Owner: selesaikan kelas yang sudah lewat sejak tanggal tertentu. */
+  selesaikanKelasLampau?(input: { sejak: string; branchId?: string }): Promise<{
+    diperiksa: number;
+    selesai: number;
+    gagal: number;
+    dilewati: number;
+  }>;
 }
 
 async function financeFetch<T>(path: string, init?: RequestInit): Promise<T> {
@@ -291,6 +301,12 @@ function rangeParams(branchId: string | undefined, range: FinanceRange): string 
 }
 
 export const browserFinanceClient: FinanceClient = {
+  selesaikanKelasLampau(input) {
+    return financeFetch(`/class-slots/selesaikan-lampau`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    });
+  },
   async overview(input) {
     const params = new URLSearchParams({
       from: `${input.from}T00:00:00.000Z`,

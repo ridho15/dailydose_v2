@@ -8,10 +8,11 @@ import type { SessionPrincipal } from '../identity/identity.service';
 import { ApiProblem, newId } from '../identity/security';
 import { PackageAccessService } from './package-access.service';
 import { maksTemanPaket } from './bawa-teman';
+import { bacaMasaJual, masaJualPaket, simpanMasaJual, type MasaJual } from './masa-jual';
 
 const PAGE_SIZE = 20;
 
-function packageView(pkg: any) {
+function packageView(pkg: any, masa?: MasaJual) {
   const classTypeScopes = pkg.classType
     ? [{ classTypeId: pkg.classType.id, active: true, classType: pkg.classType }]
     : [];
@@ -38,8 +39,8 @@ function packageView(pkg: any) {
     isMultiBranch: Boolean(pkg.isMultiBranch),
     isShareable: Boolean(pkg.isShareable),
     effectiveState: pkg.status === 'ACTIVE' ? 'LIVE' : pkg.status,
-    effectiveFrom: pkg.createdAt,
-    effectiveUntil: null,
+    effectiveFrom: masa?.mulai ?? pkg.createdAt,
+    effectiveUntil: masa?.berakhir ?? null,
     branchScopes,
     classTypeScopes,
     classType: pkg.classType ?? null,
@@ -187,10 +188,11 @@ export class PackageCatalogService {
     const livePackageIds = new Set(live.map((item) => item.packageId));
 
     const teman = await maksTemanPaket(this.db, pageItems.map((item) => item.id));
+    const masaJual = await masaJualPaket(this.db, pageItems.map((item) => item.id));
 
     return {
       items: pageItems.map((item) => ({
-        ...packageView(item),
+        ...packageView(item, masaJual.get(item.id)),
         livePromotion: livePackageIds.has(item.id),
         bawaTeman: (teman.get(item.id) ?? 0) > 0,
       })),
@@ -269,6 +271,8 @@ export class PackageCatalogService {
 
         const bawaTeman = bacaBawaTeman(input);
         await simpanBawaTeman(tx, created.id, bawaTeman, principal.userId);
+        const masa = bacaMasaJual(input);
+        await simpanMasaJual(tx, created.id, masa, principal.userId);
 
         this.auditService.record({
           action: 'PACKAGE_CREATED',
@@ -280,7 +284,10 @@ export class PackageCatalogService {
 
         return {
           status: HttpStatus.CREATED,
-          body: { ...packageView(created), bawaTeman: bawaTeman === true } as unknown as Prisma.InputJsonValue,
+          body: {
+            ...packageView(created, { mulai: masa.mulai ?? null, berakhir: masa.berakhir ?? null }),
+            bawaTeman: bawaTeman === true,
+          } as unknown as Prisma.InputJsonValue,
         };
       },
     );
@@ -353,6 +360,8 @@ export class PackageCatalogService {
 
         const bawaTeman = bacaBawaTeman(body);
         await simpanBawaTeman(tx, id, bawaTeman, principal.userId);
+        await simpanMasaJual(tx, id, bacaMasaJual(body), principal.userId);
+        const masaSekarang = (await masaJualPaket(tx, [id])).get(id);
         const temanSekarang =
           bawaTeman ?? ((await maksTemanPaket(tx, [id])).get(id) ?? 0) > 0;
 
@@ -366,7 +375,7 @@ export class PackageCatalogService {
 
         return {
           status: HttpStatus.OK,
-          body: { ...packageView(updated), bawaTeman: temanSekarang } as unknown as Prisma.InputJsonValue,
+          body: { ...packageView(updated, masaSekarang), bawaTeman: temanSekarang } as unknown as Prisma.InputJsonValue,
         };
       },
     );

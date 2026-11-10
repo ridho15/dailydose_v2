@@ -1252,6 +1252,19 @@ model PaketBawaTeman {
   @@map("paket_bawa_teman")
 }
 
+/// Masa jual paket (tanggal mulai dan berakhir dijual di katalog), terpisah dari tabel `paket`.
+/// Tanpa baris berarti dijual sejak dibuat dan tanpa tanggal berakhir.
+model PaketMasaJual {
+  packageId   String    @id @db.Char(36)
+  mulai       DateTime? @db.Date
+  berakhir    DateTime? @db.Date
+  updatedById String?   @db.Char(36)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@map("paket_masa_jual")
+}
+
 /// Booking kursi teman: booking ini milik member pemilik paket, tetapi yang datang temannya.
 /// Tanpa relasi Prisma; tabel lama tidak berubah.
 model BookingTeman {

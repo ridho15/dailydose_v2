@@ -3,6 +3,7 @@ import { HttpStatus, Injectable } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import { ApiProblem } from '../identity/security';
 import { branchPublicLocation } from '../master/branch-location';
+import { masaJualPaket, sedangDijual } from '../packages/masa-jual';
 
 @Injectable()
 export class PublicStudioQueryService {
@@ -53,11 +54,13 @@ export class PublicStudioQueryService {
       orderBy: { name: 'asc' },
     });
 
-    const packages = await this.db.paket.findMany({
+    const semuaPaket = await this.db.paket.findMany({
       where: { status: 'ACTIVE' },
       include: { classType: true },
       take: 20,
     });
+    const masaJual = await masaJualPaket(this.db, semuaPaket.map((pkg) => pkg.id));
+    const packages = semuaPaket.filter((pkg) => sedangDijual(masaJual.get(pkg.id)));
 
     const branchMetadata: Record<string, { city: string; area: string; heroImageKey: string }> = {
       'DD-GG': {

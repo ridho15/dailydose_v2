@@ -50,6 +50,7 @@ const auditActionLabels: Record<string, string> = {
   'class_slot.override_updated_by_super_owner': 'Jadwal kelas diubah via override Super Admin',
   'class_slot.published': 'Kelas dipublikasikan',
   'class_slot.completed': 'Kelas diselesaikan',
+  'class_slot.backfill_completed': 'Kelas lampau diselesaikan (Super Owner)',
   'class_slot.instructor_assigned': 'Instruktur kelas ditetapkan',
   'master.branch_created': 'Cabang dibuat',
   'master.branch_updated': 'Cabang diubah',

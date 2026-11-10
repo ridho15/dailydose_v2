@@ -109,6 +109,8 @@ export function FinanceView({
   const [costToDelete, setCostToDelete] = useState<OtherCostItem | null>(null);
   const canManageCosts = Boolean(context?.hasCapability('finance:manage'));
   const [reportLoading, setReportLoading] = useState(false);
+  const [menyelesaikan, setMenyelesaikan] = useState(false);
+  const [hasilSelesai, setHasilSelesai] = useState('');
   const [reportError, setReportError] = useState<string | null>(null);
 
   const allowed = context?.hasCapability('finance:reconcile');
@@ -440,6 +442,56 @@ export function FinanceView({
               4. Biaya Operasional Lain
             </button>
           </div>
+
+          {(() => {
+            // Kelas yang jamnya lewat tetapi belum Selesai tidak masuk honor maupun sesi terpakai.
+            const belum = instructorRealtimeData?.kelasBelumSelesai ?? profitData?.kelasBelumSelesai ?? 0;
+            if (!belum) return null;
+            const bolehSelesaikan = Boolean(
+              context?.hasCapability('master:manage') && client.selesaikanKelasLampau,
+            );
+            return (
+              <Feedback kind="warning">
+                <span className="block">
+                  {belum} kelas di periode ini sudah lewat jamnya tetapi belum berstatus Selesai, sehingga
+                  honor instruktur dan sesi terpakainya belum masuk laporan ini.
+                </span>
+                {bolehSelesaikan && (
+                  <span className="mt-2 block">
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      disabled={menyelesaikan}
+                      onClick={async () => {
+                        setMenyelesaikan(true);
+                        try {
+                          const hasil = await client.selesaikanKelasLampau!({
+                            sejak: reportRange.from,
+                            branchId:
+                              selectedBranchId && selectedBranchId !== 'ALL' ? selectedBranchId : undefined,
+                          });
+                          setHasilSelesai(
+                            `${hasil.selesai} kelas diselesaikan` +
+                              (hasil.dilewati ? `, ${hasil.dilewati} dilewati karena belum ada presensi peserta (selesaikan manual setelah dicek)` : '') +
+                              (hasil.gagal ? `, ${hasil.gagal} gagal` : '') +
+                              '.',
+                          );
+                          await loadReports();
+                        } catch (error) {
+                          setHasilSelesai(error instanceof Error ? error.message : 'Gagal menyelesaikan kelas.');
+                        } finally {
+                          setMenyelesaikan(false);
+                        }
+                      }}
+                    >
+                      {menyelesaikan ? 'Menyelesaikan…' : 'Selesaikan kelas yang sudah lewat'}
+                    </Button>
+                  </span>
+                )}
+              </Feedback>
+            );
+          })()}
+          {hasilSelesai && <Feedback kind="info">{hasilSelesai}</Feedback>}
 
           {/* TAB 1: LABA BERSIH */}
           {reportTab === 'PROFIT' && profitData && (
