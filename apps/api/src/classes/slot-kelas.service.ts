@@ -1335,7 +1335,8 @@ export class ClassSlotService {
         bookings: { select: { status: true, bookingNumber: true, attendance: { select: { id: true } } } },
       },
       orderBy: { endAt: 'desc' },
-      take: 500,
+      // Cukup besar supaya kelas yang dilewati (belum ada presensi) tidak menutupi kelas lain.
+      take: 3000,
     });
     // Aturan pengaman: kelas yang punya peserta tetapi tidak ada satu pun yang tercatat hadir tidak
     // diselesaikan otomatis. Besar kemungkinan presensinya belum dicatat; menyelesaikannya akan

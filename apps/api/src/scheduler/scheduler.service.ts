@@ -98,6 +98,7 @@ export class SchedulerService implements OnApplicationBootstrap, OnModuleDestroy
             evaluated: result.evaluatedSlotsCount,
             confirmed: result.confirmedSlotsCount,
             cancelled: result.cancelledSlotsCount,
+            gagal: (result as { failedSlotsCount?: number }).failedSlotsCount ?? 0,
           };
         },
       },

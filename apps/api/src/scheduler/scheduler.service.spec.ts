@@ -76,6 +76,7 @@ describe('SchedulerService', () => {
       evaluated: 5,
       confirmed: 3,
       cancelled: 1,
+      gagal: 0,
     });
     expect((await service.runJob('reminders')).lastResult).toEqual({ adminDigestsSent: 1 });
   });
