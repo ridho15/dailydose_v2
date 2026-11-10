@@ -21,6 +21,7 @@ import {
   pakaiKuotaVoucher,
 } from './voucher.service';
 import { batalkanPesananKedaluwarsa } from './payment-expiration-worker';
+import { rapikanPesananKedaluwarsa } from './payment-expiration-worker';
 
 const PAGE_SIZE = 20;
 const UUID = ENTITY_ID_REGEX;
@@ -490,6 +491,7 @@ export class CustomerOrderService {
       includeHistorical?: boolean;
     } = {},
   ) {
+    await rapikanPesananKedaluwarsa(this.db);
     const limit = query.limit ? Math.min(Number(query.limit), 100) : PAGE_SIZE;
 
     const where: Prisma.PembelianWhereInput = {

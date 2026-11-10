@@ -606,6 +606,9 @@ export function classSlotFailure(error: unknown) {
     RESOURCE_NOT_FOUND: 'Data kelas atau ruangan tidak ditemukan pada cabang yang dipilih.',
     INVALID_STATE_TRANSITION: 'Status kelas saat ini tidak mengizinkan tindakan tersebut.',
     CLASS_NOT_ENDED: 'Kelas baru bisa diselesaikan setelah jam selesainya lewat.',
+    ADMIN_BACKFILL_WINDOW_CLOSED:
+      'Presensi manual hanya bisa dicatat sampai 2 jam setelah kelas selesai. Lewat dari itu gunakan Koreksi jam instruktur.',
+    CHECK_IN_WINDOW_CLOSED: 'Waktu scan sudah lewat (maksimal 10 menit setelah kelas mulai).',
     INSTRUCTOR_REQUIRED: 'Tetapkan instruktur terlebih dahulu sebelum mempublikasikan kelas.',
     VALIDATION_ERROR: 'Tanggal, waktu, atau pilihan kelas belum valid. Periksa kembali form isian.',
     CHECK_IN_TOO_EARLY: 'Presensi baru dapat dicatat mulai 30 menit sebelum kelas dimulai.',

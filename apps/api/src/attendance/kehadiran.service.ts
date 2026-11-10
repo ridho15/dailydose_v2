@@ -951,6 +951,11 @@ export class AttendanceService {
         alreadyRecorded: true,
       };
     }
+    // SOP: pencatatan manual presensi instruktur paling lambat 2 jam setelah kelas selesai, sama
+    // dengan presensi member. Dulu tanpa batas sehingga presensi bisa masuk berhari-hari kemudian
+    // dan langsung menjadi honor. Lewat dari itu jalurnya Koreksi jam (beralasan, berbukti, diaudit).
+    if (now.getTime() > slot.endAt.getTime() + 2 * 3_600_000)
+      throw new ApiProblem('ADMIN_BACKFILL_WINDOW_CLOSED', HttpStatus.GONE);
 
     // upsert (bukan create) agar klik ganda serentak tidak melanggar unique classSlotId.
     const created = await this.db.kehadiranInstruktur.upsert({

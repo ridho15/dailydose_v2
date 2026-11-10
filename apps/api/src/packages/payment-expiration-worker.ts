@@ -79,3 +79,22 @@ export class PaymentExpirationWorkerService {
     };
   }
 }
+
+let terakhirDirapikan = 0;
+
+/**
+ * Jaring pengaman bila penjadwal tidak berjalan (SCHEDULER_ENABLED mati atau proses API baru
+ * restart): saat daftar pesanan dibuka, pesanan mandiri yang lewat batas bayar tanpa bukti
+ * dibatalkan dulu dengan aturan yang sama. Paling sering sekali per menit per proses; kegagalan
+ * tidak menggagalkan daftar.
+ */
+export async function rapikanPesananKedaluwarsa(db: PrismaService, now = new Date()) {
+  if (now.getTime() - terakhirDirapikan < 60_000) return;
+  terakhirDirapikan = now.getTime();
+  try {
+    if (typeof (db as any)?.pembelian?.findMany !== 'function' || typeof (db as any)?.$transaction !== 'function') return;
+    await batalkanPesananKedaluwarsa(db, 24, now);
+  } catch (error) {
+    new Logger('PesananKedaluwarsa').warn(`Gagal merapikan pesanan kedaluwarsa: ${(error as Error)?.message ?? error}`);
+  }
+}

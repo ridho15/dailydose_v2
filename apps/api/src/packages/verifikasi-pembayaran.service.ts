@@ -13,6 +13,7 @@ import { ConfigGatedObjectStorageProvider } from './proof-providers';
 import { escapeXml, jalurBuktiLokal, jenisBukti } from './bukti-aman';
 import { berlakuSampai } from '../foundation/masa-berlaku';
 import { lepasKuotaVoucher } from './voucher.service';
+import { rapikanPesananKedaluwarsa } from './payment-expiration-worker';
 
 @Injectable()
 export class PaymentReviewService {
@@ -41,6 +42,7 @@ export class PaymentReviewService {
       includeHistorical?: boolean;
     } = {},
   ) {
+    await rapikanPesananKedaluwarsa(this.db);
     const reviewer =
       principal.capabilities.includes('payment:review') ||
       principal.capabilities.includes('purchase:review');

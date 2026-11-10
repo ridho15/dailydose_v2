@@ -174,13 +174,18 @@ describe('AttendanceService.verifyInstructorAttendance (manual)', () => {
     expect(db.kehadiranInstruktur.upsert).not.toHaveBeenCalled();
   });
 
-  it('also works retroactively on a COMPLETED class (payroll review)', async () => {
+  it('masih bisa dicatat manual sampai 2 jam setelah kelas selesai, lewat dari itu ditolak (SOP)', async () => {
     const { db, service } = build();
-    db.slotKelas.findUnique.mockResolvedValue(slotRow({ status: 'COMPLETED' }));
+    const slot = slotRow({ status: 'COMPLETED' });
+    db.slotKelas.findUnique.mockResolvedValue(slot);
     db.kehadiranInstruktur.upsert.mockResolvedValue({ checkedInAt: NOW, method: 'MANUAL_FRONTDESK' });
+    const selesai = new Date(slot.endAt).getTime();
     await expect(
-      service.verifyInstructorAttendance(admin, slotId, {}, new Date('2026-10-20T00:00:00.000Z')),
+      service.verifyInstructorAttendance(admin, slotId, {}, new Date(selesai + 90 * 60_000)),
     ).resolves.toMatchObject({ alreadyRecorded: false });
+    await expect(
+      service.verifyInstructorAttendance(admin, slotId, {}, new Date(selesai + 3 * 86_400_000)),
+    ).rejects.toMatchObject({ code: 'ADMIN_BACKFILL_WINDOW_CLOSED' });
   });
 
   it('denies principals without attendance:manage (instructors cannot verify themselves this way)', async () => {
