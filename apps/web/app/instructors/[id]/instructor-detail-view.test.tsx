@@ -221,3 +221,22 @@ describe('InstructorDetailView honor and blockers', () => {
   });
 });
 
+
+describe('reset kata sandi instruktur (Super Owner)', () => {
+  it('tombol Reset kata sandi mengganti sandi lewat API pengguna', async () => {
+    const { browserIdentityClient } = await import('@/api-clients/identity-client');
+    const reset = vi.spyOn(browserIdentityClient, 'resetPasswordDirect').mockResolvedValue(undefined);
+    vi.spyOn(instructorClient, 'detail').mockResolvedValue(mockDetail);
+    render(
+      <AppFeedbackProvider>
+        <InstructorDetailView id="inst-1" />
+      </AppFeedbackProvider>,
+    );
+    await userEvent.click(await screen.findByRole('button', { name: 'Reset kata sandi' }));
+    const simpan = screen.getByRole('button', { name: 'Simpan kata sandi' });
+    expect(simpan).toBeDisabled();
+    await userEvent.type(screen.getByLabelText('Kata sandi baru'), 'RahasiaBaru1');
+    await userEvent.click(simpan);
+    await waitFor(() => expect(reset).toHaveBeenCalledWith('inst-1', 'RahasiaBaru1'));
+  });
+});

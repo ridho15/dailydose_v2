@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { ArrowLeft, Building2, Calendar, CreditCard, Pencil, Power, PowerOff, ShieldAlert, UserCheck } from 'lucide-react';
+import { ArrowLeft, Building2, Calendar, CreditCard, KeyRound, Pencil, Power, PowerOff, ShieldAlert, UserCheck } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { Feedback, Skeleton, StatusBadge } from '../../ui';
 import { AdminPageHeader } from '../../components/admin/admin-page-header';
@@ -14,6 +14,7 @@ import { TextInput } from '../../components/forms';
 import { Badge } from '../../components/admin/admin-ui';
 import { useSessionContext } from '../../session-context';
 import { FeeInstruktur } from './fee-instruktur';
+import { browserIdentityClient } from '@/api-clients/identity-client';
 
 export function InstructorDetailView({ id }: { id: string }) {
   const sessionContext = useSessionContext();
@@ -27,6 +28,11 @@ export function InstructorDetailView({ id }: { id: string }) {
   const [data, setData] = useState<InstructorDetail | null>(null);
   const [error, setError] = useState(false);
   const [busy, setBusy] = useState(false);
+  // Reset kata sandi akun instruktur: hanya Super Owner (`user:admin`), sama dengan menu Pengguna.
+  const bolehResetSandi = Boolean(session?.capabilities?.includes('user:admin'));
+  const [resetOpen, setResetOpen] = useState(false);
+  const [sandiBaru, setSandiBaru] = useState('');
+  const [resetGagal, setResetGagal] = useState('');
 
   // Edit Profile Drawer State
   const [editOpen, setEditOpen] = useState(false);
@@ -255,6 +261,20 @@ export function InstructorDetailView({ id }: { id: string }) {
               >
                 Kelola Penugasan
               </ButtonLink>
+              {bolehResetSandi && data.status === 'ACTIVE' && (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  leadingIcon={<KeyRound className="size-4" />}
+                  onClick={() => {
+                    setSandiBaru('');
+                    setResetGagal('');
+                    setResetOpen(true);
+                  }}
+                >
+                  Reset kata sandi
+                </Button>
+              )}
             </div>
           )}
         </div>
@@ -615,6 +635,58 @@ export function InstructorDetailView({ id }: { id: string }) {
             </div>
           </div>
         </form>
+      </Drawer>
+
+      {/* Drawer: Reset kata sandi instruktur */}
+      <Drawer
+        open={resetOpen}
+        title="Reset kata sandi"
+        description={`Atur kata sandi baru untuk ${data?.displayName ?? 'instruktur'}. Semua sesi login instruktur ini akan keluar.`}
+        busy={busy}
+        onClose={() => setResetOpen(false)}
+        footer={
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="secondary" onClick={() => setResetOpen(false)} disabled={busy}>
+              Batal
+            </Button>
+            <Button
+              type="button"
+              disabled={busy || sandiBaru.trim().length < 8}
+              onClick={async () => {
+                if (!data) return;
+                setBusy(true);
+                setResetGagal('');
+                try {
+                  await browserIdentityClient.resetPasswordDirect(data.id, sandiBaru.trim());
+                  setResetOpen(false);
+                  feedback.showToast({
+                    tone: 'success',
+                    title: 'Kata sandi diganti',
+                    message: `Berikan kata sandi baru ke ${data.displayName}. Sesi login lamanya sudah diakhiri.`,
+                  });
+                } catch (error) {
+                  setResetGagal(error instanceof Error ? error.message : 'Kata sandi gagal diganti.');
+                } finally {
+                  setBusy(false);
+                }
+              }}
+            >
+              Simpan kata sandi
+            </Button>
+          </div>
+        }
+      >
+        <div className="grid gap-3">
+          <TextInput
+            label="Kata sandi baru"
+            type="password"
+            autoComplete="new-password"
+            value={sandiBaru}
+            onChange={(event) => setSandiBaru(event.target.value)}
+            description="Minimal 8 karakter."
+          />
+          {resetGagal && <Feedback kind="error">{resetGagal}</Feedback>}
+        </div>
       </Drawer>
     </section>
   );
