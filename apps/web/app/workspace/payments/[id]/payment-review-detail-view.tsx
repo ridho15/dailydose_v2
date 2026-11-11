@@ -25,6 +25,7 @@ import { formatRupiah } from '../../../lib/formatters';
 import { useDelayedAction } from '../../../lib/use-delayed-action';
 import { PaymentAmountCheck } from './payment-amount-check';
 import { ProofImageViewer } from './proof-image-viewer';
+import { KoreksiPembelian } from './koreksi-pembelian';
 
 const statusLabels: Record<string, string> = {
   AWAITING_PAYMENT: 'Menunggu pembayaran',
@@ -939,6 +940,9 @@ export function PaymentReviewDetailView({
                         : 'Mutation control ditutup untuk transaksi yang sudah diputus.'
                     }
                   />
+                )}
+                {sessionContext?.session?.roles?.some((r) => r === 'SUPER_OWNER') && (
+                  <KoreksiPembelian purchaseId={purchase.id} onSelesai={() => void load()} />
                 )}
               </Panel>
             </aside>

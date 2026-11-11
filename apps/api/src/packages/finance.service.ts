@@ -6,6 +6,7 @@ import { requireReason } from '../foundation/reason';
 import type { SessionPrincipal } from '../identity/identity.service';
 import { PolicyService } from '../identity/policy.service';
 import { ApiProblem } from '../identity/security';
+import { bacaOpsional } from '../foundation/tabel-opsional';
 import {
   calculateSlotFee,
   presensiMilikInstruktur,
@@ -931,7 +932,41 @@ export class FinanceService {
         };
       });
 
-    const allItems = [...terlambatItems, ...purchaseItems].slice(0, limit);
+    // Koreksi pembelian oleh Super Owner (void / pindah member) dalam rentang: tampil sebagai koreksi.
+    const koreksi =
+      typeof (this.db as any).pembelianKoreksi?.findMany === 'function'
+        ? await bacaOpsional<any[]>(
+            'pembelian_koreksi',
+            () =>
+              (this.db as any).pembelianKoreksi.findMany({
+                where: {
+                  createdAt: { gte: dari, lte: new Date(sampai.getTime() + 86_400_000) },
+                  ...lingkupCabang,
+                },
+                orderBy: { createdAt: 'desc' },
+                take: 200,
+              }),
+            [],
+          )
+        : [];
+    const kodeCabang = new Map(
+      koreksi.length
+        ? (await this.db.cabang.findMany({ select: { id: true, code: true } })).map((c) => [c.id, c.code])
+        : [],
+    );
+    const koreksiItems = koreksi.map((k) => ({
+      purchaseId: `koreksi-${k.id}`,
+      branchId: k.branchId,
+      branchCode: kodeCabang.get(k.branchId) || '—',
+      amountRp: k.jenis === 'VOID' ? -k.nominalRp : 0,
+      submittedAt: k.createdAt,
+      code: k.jenis === 'PINDAH' ? 'PEMBELIAN_DIPINDAH' : k.jenis === 'VOID' ? 'PEMBELIAN_DIBATALKAN' : 'PEMBELIAN_DIBATALKAN_SEBAGIAN',
+      severity: 'WARNING' as const,
+      message: `${k.kodeAlasan}: ${k.alasan}`,
+      href: `/workspace/payments/${k.purchaseId}`,
+    }));
+
+    const allItems = [...koreksiItems, ...terlambatItems, ...purchaseItems].slice(0, limit);
 
     return {
       items: allItems,

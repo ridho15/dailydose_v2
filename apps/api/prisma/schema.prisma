@@ -1294,3 +1294,27 @@ model PaketPelangganAnggota {
   @@index([customerPackageId])
   @@map("paket_pelanggan_anggota")
 }
+
+/// Koreksi pembelian oleh Super Owner (November 2026): pembatalan (void) dan pindah ke member lain.
+/// Pembelian yang di-void berstatus CANCELLED (status lama) sehingga keluar dari omzet; tabel ini
+/// menyimpan alasan, pelaku, nilai, dan pemilik asal/tujuan. Tanpa relasi ke tabel lama.
+model PembelianKoreksi {
+  id              String   @id @db.Char(36)
+  purchaseId      String   @db.Char(36)
+  jenis           String   @db.VarChar(16)
+  kodeAlasan      String   @db.VarChar(32)
+  alasan          String   @db.VarChar(500)
+  actorId         String   @db.Char(36)
+  dariUserId      String?  @db.Char(36)
+  keUserId        String?  @db.Char(36)
+  branchId        String   @db.Char(36)
+  nominalRp       Int
+  paidAt          DateTime?
+  sisaSesiSebelum Int      @default(0)
+  sesiTerpakai    Int      @default(0)
+  createdAt       DateTime @default(now())
+
+  @@index([purchaseId])
+  @@index([branchId, createdAt])
+  @@map("pembelian_koreksi")
+}

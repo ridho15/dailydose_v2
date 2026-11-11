@@ -204,6 +204,32 @@ CREATE TABLE `paket_masa_jual` (
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 ```
 
+`pembelian_koreksi` (batalkan/pindah pembelian oleh Super Owner, 11 November 2026). Tanpa tabel ini
+tombol koreksi gagal; laporan lain tetap jalan.
+
+```sql
+CREATE TABLE `pembelian_koreksi` (
+    `id` CHAR(36) NOT NULL,
+    `purchaseId` CHAR(36) NOT NULL,
+    `jenis` VARCHAR(16) NOT NULL,
+    `kodeAlasan` VARCHAR(32) NOT NULL,
+    `alasan` VARCHAR(500) NOT NULL,
+    `actorId` CHAR(36) NOT NULL,
+    `dariUserId` CHAR(36) NULL,
+    `keUserId` CHAR(36) NULL,
+    `branchId` CHAR(36) NOT NULL,
+    `nominalRp` INTEGER NOT NULL,
+    `paidAt` DATETIME(3) NULL,
+    `sisaSesiSebelum` INTEGER NOT NULL DEFAULT 0,
+    `sesiTerpakai` INTEGER NOT NULL DEFAULT 0,
+    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+
+    INDEX `pembelian_koreksi_purchaseId_idx`(`purchaseId`),
+    INDEX `pembelian_koreksi_branchId_createdAt_idx`(`branchId`, `createdAt`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+```
+
 `paket` (kolom `is_shareable` untuk paket bersama / Duet / Family, Oktober 2026) dan `paket_pelanggan_anggota`:
 
 ```sql

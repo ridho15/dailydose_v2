@@ -16,6 +16,8 @@ import {
 } from '@nestjs/common';
 import type { Response } from 'express';
 import { SelfService } from '../identity/route-access';
+import { Roles } from '../identity/roles.decorator';
+import { RolesGuard } from '../identity/roles.guard';
 import { AuthGuard, type AuthenticatedRequest } from '../identity/auth.guard';
 import { CustomerOrderService } from './pembelian-paket.service';
 import { PackageCatalogService } from './katalog-paket.service';
@@ -24,6 +26,7 @@ import { PaymentReviewService } from './verifikasi-pembayaran.service';
 import { PaymentProofService } from './bukti-pembayaran.service';
 import { VoucherService } from './voucher.service';
 import { PackagePromotionService } from './package-promotion.service';
+import { KoreksiPembelianService } from './koreksi-pembelian.service';
 import { ApiProblem } from '../identity/security';
 import { HttpStatus } from '@nestjs/common';
 /** Hasil `IdempotencyService.execute` berbentuk `{ status, body, replay }`; klien hanya butuh isinya. */
@@ -40,7 +43,32 @@ export class PackagesController {
     private readonly paymentProof: PaymentProofService,
     private readonly vouchers: VoucherService,
     private readonly promotions: PackagePromotionService,
+    private readonly koreksi: KoreksiPembelianService,
   ) {}
+  /** Super Owner: keadaan pembelian sebelum dibatalkan/dipindahkan (dan riwayat koreksinya). */
+  @UseGuards(RolesGuard)
+  @Roles('SUPER_OWNER')
+  @Get('purchases/:id/koreksi') pratinjauKoreksi(@Req() r: AuthenticatedRequest, @Param('id') id: string) {
+    return this.koreksi.pratinjau(r.principal, id);
+  }
+  @UseGuards(RolesGuard)
+  @Roles('SUPER_OWNER')
+  @Post('purchases/:id/void') @HttpCode(200) batalkanPembelian(
+    @Req() r: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Body() body: { kodeAlasan?: string; alasan?: string; batalkanBooking?: boolean; sebagian?: boolean },
+  ) {
+    return this.koreksi.batalkan(r.principal, id, body ?? {});
+  }
+  @UseGuards(RolesGuard)
+  @Roles('SUPER_OWNER')
+  @Post('purchases/:id/transfer') @HttpCode(200) pindahkanPembelian(
+    @Req() r: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Body() body: { keUserId?: string; alasan?: string; batalkanBooking?: boolean; konfirmasiTerpakai?: boolean },
+  ) {
+    return this.koreksi.pindahkan(r.principal, id, body ?? {});
+  }
   @Get('vouchers') listVouchers(
     @Req() r: AuthenticatedRequest,
     @Query('q') q?: string,

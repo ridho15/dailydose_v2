@@ -37,6 +37,7 @@ import { TransferHonorService } from './transfer-honor.service';
 import { ModalSesiService } from './modal-sesi.service';
 
 import { PaymentExpirationWorkerService } from './payment-expiration-worker';
+import { KoreksiPembelianService } from './koreksi-pembelian.service';
 
 @Module({
   imports: [DatabaseModule, FoundationModule, IdentityModule],
@@ -51,6 +52,7 @@ import { PaymentExpirationWorkerService } from './payment-expiration-worker';
     TargetController,
   ],
   providers: [
+    KoreksiPembelianService,
     SettlementOwnerService,
     TransferHonorService,
     ModalSesiService,
