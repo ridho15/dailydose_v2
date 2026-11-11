@@ -19,3 +19,17 @@ describe('masa jual paket', () => {
     expect(sedangDijual(undefined)).toBe(true);
   });
 });
+
+describe('simpan masa jual saat tabelnya belum dibuat di server', () => {
+  it('dilewati tanpa galat, supaya pembuatan/revisi paket tetap berhasil', async () => {
+    const { simpanMasaJual } = await import('./masa-jual');
+    const tx = {
+      $queryRawUnsafe: jest.fn().mockResolvedValue([]),
+      paketMasaJual: { upsert: jest.fn() },
+    };
+    await expect(
+      simpanMasaJual(tx, 'pkg-1', { mulai: new Date('2026-11-11T00:00:00Z'), berakhir: null }, 'u'),
+    ).resolves.toBeUndefined();
+    expect(tx.paketMasaJual.upsert).not.toHaveBeenCalled();
+  });
+});

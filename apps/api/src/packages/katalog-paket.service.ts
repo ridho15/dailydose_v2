@@ -8,6 +8,7 @@ import type { SessionPrincipal } from '../identity/identity.service';
 import { ApiProblem, newId } from '../identity/security';
 import { PackageAccessService } from './package-access.service';
 import { maksTemanPaket } from './bawa-teman';
+import { tabelOpsionalAda } from '../foundation/tabel-opsional';
 import { bacaMasaJual, masaJualPaket, simpanMasaJual, type MasaJual } from './masa-jual';
 
 const PAGE_SIZE = 20;
@@ -73,6 +74,7 @@ function bacaBawaTeman(body: any): boolean | undefined {
 /** Menyimpan centang "boleh bawa teman" (satu teman per kelas) di tabel terpisah. */
 async function simpanBawaTeman(tx: any, packageId: string, bawaTeman: boolean | undefined, actorId: string) {
   if (bawaTeman === undefined || typeof tx.paketBawaTeman?.upsert !== 'function') return;
+  if (!(await tabelOpsionalAda(tx, 'paket_bawa_teman'))) return;
   if (bawaTeman)
     await tx.paketBawaTeman.upsert({
       where: { packageId },

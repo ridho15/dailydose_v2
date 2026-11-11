@@ -1,5 +1,5 @@
 import { HttpStatus } from '@nestjs/common';
-import { bacaOpsional } from '../foundation/tabel-opsional';
+import { bacaOpsional, tabelOpsionalAda } from '../foundation/tabel-opsional';
 import { ApiProblem } from '../identity/security';
 
 /**
@@ -38,6 +38,8 @@ export async function simpanMasaJual(
 ) {
   if ((masa.mulai === undefined && masa.berakhir === undefined) || typeof tx.paketMasaJual?.upsert !== 'function')
     return;
+  // Fitur tambahan: tanpa tabelnya, paket tetap tersimpan (dulu seluruh pembuatan/revisi paket 500).
+  if (!(await tabelOpsionalAda(tx, 'paket_masa_jual'))) return;
   await tx.paketMasaJual.upsert({
     where: { packageId },
     create: { packageId, mulai: masa.mulai ?? null, berakhir: masa.berakhir ?? null, updatedById: actorId },

@@ -893,10 +893,12 @@ function PackageLifecycleEditor({
                       });
             setDirty(false);
             await onSaved(updated);
-          } catch {
-            setFailure(
-              'Data mungkin telah berubah atau periode bertabrakan. Muat ulang dan coba kembali.',
-            );
+          } catch (cause) {
+            // Pesan yang sebenarnya, juga sebagai notifikasi: dulu galat server (500) hanya muncul
+            // sebagai teks di atas form yang mudah terlewat, sehingga dialog terkesan diam saja.
+            const pesan = pesanGagalPaket(cause);
+            setFailure(pesan);
+            feedback.showToast({ tone: 'danger', title: 'Perubahan paket belum tersimpan', message: pesan });
           } finally {
             setBusy(false);
           }
@@ -1263,4 +1265,20 @@ function PromotionEditor({
       </form>
     </Drawer>
   );
+}
+
+/** Pesan galat simpan paket yang bisa dipahami pengguna, menurut kode dari API. */
+export function pesanGagalPaket(cause: unknown): string {
+  const code = (cause as { code?: string })?.code;
+  const status = (cause as { status?: number })?.status;
+  if (code === 'STALE_VERSION' || code === 'VERSION_CONFLICT' || status === 409)
+    return 'Data paket telah berubah atau periodenya bertabrakan. Muat ulang halaman lalu coba lagi.';
+  if (code === 'VALIDATION_ERROR' || status === 422 || status === 400)
+    return 'Isian belum valid: periksa harga, jumlah sesi, masa berlaku, dan tanggal (Berakhir tidak boleh sebelum Mulai).';
+  if (code === 'DATABASE_TABLE_MISSING')
+    return 'Server belum siap untuk perubahan ini (tabel baru belum dibuat). Hubungi developer.';
+  if (status === 403) return 'Akun Anda tidak berwenang mengubah paket.';
+  if (status && status >= 500)
+    return 'Server gagal menyimpan paket. Coba lagi beberapa saat; bila tetap gagal, kirim waktu kejadian ke developer.';
+  return 'Perubahan paket belum tersimpan. Muat ulang halaman lalu coba lagi.';
 }
