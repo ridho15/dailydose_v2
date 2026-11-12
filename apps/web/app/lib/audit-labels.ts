@@ -54,6 +54,7 @@ const auditActionLabels: Record<string, string> = {
   'purchase.voided': 'Pembelian dibatalkan (void)',
   'purchase.voided_partially': 'Pembelian dibatalkan sebagian',
   'purchase.transferred': 'Pembelian dipindah ke member lain',
+  'customer_package.refunded': 'Paket member direfund',
   'class_slot.instructor_assigned': 'Instruktur kelas ditetapkan',
   'master.branch_created': 'Cabang dibuat',
   'master.branch_updated': 'Cabang diubah',

@@ -25,8 +25,13 @@ export class ProblemDetailsFilter implements ExceptionFilter {
     // adalah konflik dari sisi pengguna, bukan kesalahan server.
     const isDuplicate = (error as any)?.code === 'P2002';
     const isGone = (error as any)?.code === 'P2025';
+    // Tabel/kolom baru belum dibuat di server (SQL di docs/DEPLOY.md belum dijalankan): sebutkan
+    // dengan jelas, jangan 500 umum yang menyuruh pengguna mencoba lagi.
+    const isSchemaMissing = ['P2021', 'P2022'].includes((error as any)?.code);
 
-    const status = isConcurrencyConflict || isDuplicate
+    const status = isSchemaMissing
+      ? HttpStatus.SERVICE_UNAVAILABLE
+      : isConcurrencyConflict || isDuplicate
       ? HttpStatus.CONFLICT
       : isGone
         ? HttpStatus.NOT_FOUND
@@ -34,7 +39,9 @@ export class ProblemDetailsFilter implements ExceptionFilter {
         ? error.getStatus()
         : HttpStatus.INTERNAL_SERVER_ERROR;
 
-    const code = isConcurrencyConflict
+    const code = isSchemaMissing
+      ? 'DATABASE_TABLE_MISSING'
+      : isConcurrencyConflict
       ? 'CONCURRENCY_CONFLICT'
       : isDuplicate
         ? 'DUPLICATE_REQUEST'

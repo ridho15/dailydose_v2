@@ -54,6 +54,8 @@ const routeCapabilities: Array<[string, string[]]> = [
   ['/orders', ['customer:self']],
   ['/account/packages', ['customer:self']],
   ['/workspace/payments', ['payment:review', 'purchase:review']],
+  // Refund paket: Admin, Manager, Super Owner (customer-package:manage) dan Owner (finance:read).
+  ['/workspace/refunds', ['customer-package:manage', 'finance:read']],
   ['/workspace/reminders', ['automation:read']],
   ['/workspace/bookings', ['booking:read', 'reschedule:read']],
   ['/workspace/branches', ['master:read', 'master:manage']],

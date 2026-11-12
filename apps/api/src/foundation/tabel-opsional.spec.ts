@@ -1,6 +1,6 @@
 import { Prisma } from '@prisma/client';
 import { bookingTeman, maksTemanPaket } from '../packages/bawa-teman';
-import { bacaOpsional, tabelBelumAda } from './tabel-opsional';
+import { bacaOpsional, tabelBelumAda, tabelOpsionalAda } from './tabel-opsional';
 
 const galatPrisma = (code: string) =>
   new Prisma.PrismaClientKnownRequestError('The table `booking_teman` does not exist', {
@@ -32,5 +32,19 @@ describe('bacaOpsional (tabel tambahan belum dibuat di server)', () => {
     };
     await expect(bookingTeman(db as never, ['b1'])).resolves.toEqual(new Map());
     await expect(maksTemanPaket(db as never, ['p1'])).resolves.toEqual(new Map());
+  });
+
+  it('tabelOpsionalAda memakai SELECT information_schema (bukan SHOW TABLES LIKE ?) dan mengembalikan hasil benar', async () => {
+    const queryMock = jest.fn(async (sql: string, param: string) => {
+      expect(sql).not.toMatch(/SHOW TABLES\s+LIKE\s+\?/i);
+      expect(sql).toMatch(/information_schema\.tables/i);
+      return param === 'tabel_uji_ada' ? [{ ada: 1 }] : [];
+    });
+    const db = { $queryRawUnsafe: queryMock };
+    await expect(tabelOpsionalAda(db, 'tabel_uji_hilang')).resolves.toBe(false);
+    await expect(tabelOpsionalAda(db, 'tabel_uji_ada')).resolves.toBe(true);
+    // Cache hit untuk tabel yang sudah diketahui ada
+    await expect(tabelOpsionalAda(db, 'tabel_uji_ada')).resolves.toBe(true);
+    expect(queryMock).toHaveBeenCalledTimes(2);
   });
 });

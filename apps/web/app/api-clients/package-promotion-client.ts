@@ -246,6 +246,10 @@ const promotionMessages: Record<string, string> = {
     'Business Key (kode paket) sudah digunakan oleh paket lain. Silakan gunakan Business Key yang berbeda.',
   CANNOT_DELETE_PACKAGE_WITH_DEPENDENCIES:
     'Paket tidak dapat dihapus karena sudah memiliki riwayat data. Gunakan fitur Nonaktifkan untuk mengarsipkan paket ini.',
+  DATABASE_TABLE_MISSING:
+    'Server belum siap untuk perubahan ini (tabel baru belum dibuat). Hubungi developer.',
+  CONCURRENCY_CONFLICT:
+    'Terjadi konflik konkurensi pada transaksi. Silakan coba kembali.',
 };
 
 /** Pesan Indonesia untuk kegagalan promo; membaca kode dari respons problem-details. */

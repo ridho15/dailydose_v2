@@ -37,6 +37,15 @@ describe('promotionFailure', () => {
         'x',
       ),
     ).resolves.toMatch(/sudah lewat/);
+    await expect(
+      promotionFailure(
+        failure(422, { error: { code: 'VALIDATION_ERROR', details: [{ issue: 'BEFORE_FROM' }] } }),
+        'x',
+      ),
+    ).resolves.toMatch(/lebih awal dari tanggal mulai/);
+    await expect(
+      promotionFailure(failure(503, { error: { code: 'DATABASE_TABLE_MISSING' } }), 'x'),
+    ).resolves.toMatch(/tabel baru belum dibuat/);
     await expect(promotionFailure(failure(500, {}), 'Fallback')).resolves.toBe('Fallback');
     await expect(promotionFailure(new Error('offline'), 'Fallback')).resolves.toBe('Fallback');
     await expect(promotionFailure(failure(403, {}), 'x')).resolves.toMatch(/izin/);

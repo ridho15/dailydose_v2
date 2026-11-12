@@ -38,10 +38,13 @@ import { ModalSesiService } from './modal-sesi.service';
 
 import { PaymentExpirationWorkerService } from './payment-expiration-worker';
 import { KoreksiPembelianService } from './koreksi-pembelian.service';
+import { RefundPaketService } from './refund-paket.service';
+import { RefundPaketController } from './refund-paket.controller';
 
 @Module({
   imports: [DatabaseModule, FoundationModule, IdentityModule],
   controllers: [
+    RefundPaketController,
     PackagesController,
     LedgerController,
     PenyesuaianBuktiController,
@@ -52,6 +55,7 @@ import { KoreksiPembelianService } from './koreksi-pembelian.service';
     TargetController,
   ],
   providers: [
+    RefundPaketService,
     KoreksiPembelianService,
     SettlementOwnerService,
     TransferHonorService,

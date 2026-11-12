@@ -7,7 +7,7 @@ import { optionalReason } from '../foundation/reason';
 import type { SessionPrincipal } from '../identity/identity.service';
 import { ApiProblem, newId } from '../identity/security';
 import { PackageAccessService } from './package-access.service';
-import { bacaOpsional } from '../foundation/tabel-opsional';
+import { bacaOpsional, tabelOpsionalAda } from '../foundation/tabel-opsional';
 import { maksTemanPaket } from './bawa-teman';
 import { bacaMasaJual, masaJualPaket, simpanMasaJual, type MasaJual } from './masa-jual';
 
@@ -21,8 +21,8 @@ function packageView(pkg: any, masa?: MasaJual) {
   const branchScopes = pkg.isMultiBranch
     ? []
     : pkg.branch
-    ? [{ branchId: pkg.branch.id, active: true, branch: pkg.branch }]
-    : [];
+      ? [{ branchId: pkg.branch.id, active: true, branch: pkg.branch }]
+      : [];
 
   return {
     id: pkg.id,
@@ -79,6 +79,7 @@ async function simpanBawaTeman(
   actorId: string,
 ): Promise<boolean | undefined> {
   if (bawaTeman === undefined || typeof tx.paketBawaTeman?.upsert !== 'function') return undefined;
+  if (!(await tabelOpsionalAda(tx, 'paket_bawa_teman'))) return undefined;
   return bacaOpsional(
     'paket_bawa_teman',
     async () => {
@@ -117,7 +118,7 @@ export class PackageCatalogService {
     private readonly access: PackageAccessService,
     private readonly idempotency: IdempotencyService,
     private readonly auditService: AuditService,
-  ) {}
+  ) { }
 
   async list(
     principal: SessionPrincipal,
@@ -144,24 +145,24 @@ export class PackageCatalogService {
       // Paket multi-cabang berlaku untuk semua cabang, jadi ikut tampil pada filter cabang mana pun.
       ...(query.branchId
         ? {
-            OR: [
-              { branchId: query.branchId },
-              { isMultiBranch: true },
-              { branchId: null },
-            ],
-          }
+          OR: [
+            { branchId: query.branchId },
+            { isMultiBranch: true },
+            { branchId: null },
+          ],
+        }
         : {}),
       ...(query.q?.trim()
         ? {
-            AND: [
-              {
-                OR: [
-                  { name: { contains: query.q.trim() } },
-                  { code: { contains: query.q.trim() } },
-                ],
-              },
-            ],
-          }
+          AND: [
+            {
+              OR: [
+                { name: { contains: query.q.trim() } },
+                { code: { contains: query.q.trim() } },
+              ],
+            },
+          ],
+        }
         : {}),
     };
     const where: Prisma.PaketWhereInput = {
@@ -348,8 +349,8 @@ export class PackageCatalogService {
           isMultiBranch === true
             ? null
             : body.branchId !== undefined
-            ? body.branchId
-            : undefined;
+              ? body.branchId
+              : undefined;
 
         const updated = await tx.paket.update({
           where: { id },

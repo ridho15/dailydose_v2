@@ -1,5 +1,5 @@
 import { HttpStatus } from '@nestjs/common';
-import { bacaOpsional } from '../foundation/tabel-opsional';
+import { bacaOpsional, tabelOpsionalAda } from '../foundation/tabel-opsional';
 import { ApiProblem } from '../identity/security';
 
 /**
@@ -38,6 +38,7 @@ export async function simpanMasaJual(
 ): Promise<{ mulai?: Date | null; berakhir?: Date | null }> {
   if ((masa.mulai === undefined && masa.berakhir === undefined) || typeof tx.paketMasaJual?.upsert !== 'function')
     return {};
+  if (!(await tabelOpsionalAda(tx, 'paket_masa_jual'))) return {};
   return bacaOpsional(
     'paket_masa_jual',
     async () => {
