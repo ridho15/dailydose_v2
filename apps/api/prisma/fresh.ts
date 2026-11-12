@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { execSync } from 'node:child_process';
-import { PrismaClient } from '@prisma/client';
+import { pathToFileURL } from 'node:url';
 
 // Ensure environment variables are loaded
 try {
@@ -45,7 +45,59 @@ if (process.env.NODE_ENV === 'production' && !isForced) {
   process.exit(1);
 }
 
+async function dropAllDatabaseObjects(): Promise<void> {
+  // Load PrismaClient only inside a short-lived child process so Windows releases query_engine DLL locks before `prisma generate`.
+  const { PrismaClient } = await import('@prisma/client');
+  const prisma = new PrismaClient();
+
+  try {
+    console.info('⏳ [Step 1/3] Inspecting database objects to drop...');
+
+    await prisma.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS = 0;');
+
+    const views: Array<{ TABLE_NAME?: string; table_name?: string }> = await prisma.$queryRawUnsafe(`
+      SELECT table_name AS TABLE_NAME 
+      FROM information_schema.tables 
+      WHERE table_schema = DATABASE() AND table_type = 'VIEW';
+    `);
+
+    if (views.length > 0) {
+      console.info(`🗑️  Dropping ${views.length} existing view(s)...`);
+      for (const viewRow of views) {
+        const viewName = viewRow.TABLE_NAME || viewRow.table_name;
+        if (viewName) {
+          await prisma.$executeRawUnsafe(`DROP VIEW IF EXISTS \`${viewName}\`;`);
+        }
+      }
+    }
+
+    const tables: Array<{ TABLE_NAME?: string; table_name?: string }> = await prisma.$queryRawUnsafe(`
+      SELECT table_name AS TABLE_NAME 
+      FROM information_schema.tables 
+      WHERE table_schema = DATABASE() AND table_type = 'BASE TABLE';
+    `);
+
+    console.info(`🗑️  Dropping ${tables.length} existing table(s) (including legacy/orphaned tables)...`);
+    for (const tableRow of tables) {
+      const tableName = tableRow.TABLE_NAME || tableRow.table_name;
+      if (tableName) {
+        await prisma.$executeRawUnsafe(`DROP TABLE IF EXISTS \`${tableName}\`;`);
+      }
+    }
+
+    await prisma.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS = 1;');
+    console.info(`✨ Successfully dropped all ${tables.length} table(s) and ${views.length} view(s). Database is completely clean.\n`);
+  } finally {
+    await prisma.$disconnect();
+  }
+}
+
 async function runMigrateFresh() {
+  if (args.includes('--internal-drop')) {
+    await dropAllDatabaseObjects();
+    return;
+  }
+
   const rawDbUrl = process.env.DATABASE_URL;
   if (!rawDbUrl) {
     throw new Error('DATABASE_URL environment variable is not defined.');
@@ -66,70 +118,31 @@ async function runMigrateFresh() {
     console.info('🚀 DailyDose V2: Database Migrate Fresh starting...\n');
   }
 
-  const prisma = new PrismaClient();
-
-  try {
-    console.info('⏳ [Step 1/3] Inspecting database objects to drop...');
-    
-    // Disable foreign key checks
-    await prisma.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS = 0;');
-
-    // Find all views
-    const views: Array<{ TABLE_NAME?: string; table_name?: string }> = await prisma.$queryRawUnsafe(`
-      SELECT table_name AS TABLE_NAME 
-      FROM information_schema.tables 
-      WHERE table_schema = DATABASE() AND table_type = 'VIEW';
-    `);
-
-    if (views.length > 0) {
-      console.info(`🗑️  Dropping ${views.length} existing view(s)...`);
-      for (const viewRow of views) {
-        const viewName = viewRow.TABLE_NAME || viewRow.table_name;
-        if (viewName) {
-          await prisma.$executeRawUnsafe(`DROP VIEW IF EXISTS \`${viewName}\`;`);
-        }
-      }
-    }
-
-    // Find all tables
-    const tables: Array<{ TABLE_NAME?: string; table_name?: string }> = await prisma.$queryRawUnsafe(`
-      SELECT table_name AS TABLE_NAME 
-      FROM information_schema.tables 
-      WHERE table_schema = DATABASE() AND table_type = 'BASE TABLE';
-    `);
-
-    console.info(`🗑️  Dropping ${tables.length} existing table(s) (including legacy/orphaned tables)...`);
-    for (const tableRow of tables) {
-      const tableName = tableRow.TABLE_NAME || tableRow.table_name;
-      if (tableName) {
-        await prisma.$executeRawUnsafe(`DROP TABLE IF EXISTS \`${tableName}\`;`);
-      }
-    }
-
-    // Re-enable foreign key checks
-    await prisma.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS = 1;');
-    console.info(`✨ Successfully dropped all ${tables.length} table(s) and ${views.length} view(s). Database is completely clean.\n`);
-
-  } finally {
-    await prisma.$disconnect();
-  }
-
-  // Step 2: Push clean schema using Prisma CLI
-  console.info('⏳ [Step 2/3] Pushing clean Prisma schema (schema.prisma)...');
   const apiDir = resolve(__dirname, '..');
   const prismaBin = resolve(apiDir, 'node_modules/prisma/build/index.js');
+  const tsxLoader = pathToFileURL(resolve(apiDir, 'node_modules/tsx/dist/loader.mjs')).href;
   const envFile = existsSync(resolve(process.cwd(), '.env'))
     ? resolve(process.cwd(), '.env')
     : resolve(process.cwd(), '../../.env');
+  const envFlag = existsSync(envFile) ? `--env-file="${envFile}" ` : '';
 
-  const pushCmd = `node --env-file="${envFile}" "${prismaBin}" db push --config prisma.config.ts --accept-data-loss --skip-generate`;
+  execSync(`"${process.execPath}" ${envFlag}--import "${tsxLoader}" "${__filename}" --internal-drop`, {
+    cwd: apiDir,
+    stdio: 'inherit',
+    env: process.env,
+  });
+
+  // Step 2: Push clean schema using Prisma CLI
+  console.info('⏳ [Step 2/3] Pushing clean Prisma schema (schema.prisma)...');
+
+  const pushCmd = `node ${envFlag}"${prismaBin}" db push --config prisma.config.ts --accept-data-loss --skip-generate`;
   execSync(pushCmd, {
     cwd: apiDir,
     stdio: 'inherit',
     env: process.env,
   });
 
-  const generateCmd = `node --env-file="${envFile}" "${prismaBin}" generate --config prisma.config.ts`;
+  const generateCmd = `node ${envFlag}"${prismaBin}" generate --config prisma.config.ts`;
   execSync(generateCmd, {
     cwd: apiDir,
     stdio: 'inherit',
@@ -142,8 +155,7 @@ async function runMigrateFresh() {
   if (shouldSeed) {
     console.info('⏳ [Step 3/3] Seeding database with fresh master & operational data...');
     const seedScript = resolve(__dirname, 'seed.ts');
-    const tsxLoader = resolve(apiDir, 'node_modules/tsx/dist/loader.mjs');
-    const seedCmd = `node --env-file="${envFile}" --import "${tsxLoader}" "${seedScript}"`;
+    const seedCmd = `node ${envFlag}--import "${tsxLoader}" "${seedScript}"`;
     
     execSync(seedCmd, {
       cwd: apiDir,

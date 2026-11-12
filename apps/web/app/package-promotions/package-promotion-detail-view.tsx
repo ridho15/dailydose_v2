@@ -145,9 +145,7 @@ export function PackagePromotionDetailView({ id }: { id: string }) {
       </Link>
       <header className="flex flex-wrap items-end justify-between gap-3 border-b border-dd-line pb-5">
         <div>
-          <p className="text-[13px] font-bold text-dd-forest">
-            Paket & promo harga
-          </p>
+          <p className="text-[13px] font-bold text-dd-forest">Paket & promo harga</p>
           <h1 id="package-promotion-title" className="mt-1 text-3xl font-semibold">
             {pkg.name}
           </h1>
@@ -157,7 +155,9 @@ export function PackagePromotionDetailView({ id }: { id: string }) {
               : (pkg.branchScopes ?? [])
                   .map((scope) => scope.branch?.name)
                   .filter(Boolean)
-                  .join(', ') || pkg.branch?.name || '—'}{' '}
+                  .join(', ') ||
+                pkg.branch?.name ||
+                '—'}{' '}
             · {pkg.sessionCount} sesi · {pkg.durationDays} hari
           </p>
         </div>
@@ -184,7 +184,9 @@ export function PackagePromotionDetailView({ id }: { id: string }) {
                   : (pkg.branchScopes ?? [])
                       .map((scope) => scope.branch?.name)
                       .filter(Boolean)
-                      .join(', ') || pkg.branch?.name || '—'
+                      .join(', ') ||
+                    pkg.branch?.name ||
+                    '—'
               }
             />
             <PackageInfo
@@ -199,9 +201,7 @@ export function PackagePromotionDetailView({ id }: { id: string }) {
             <PackageInfo
               label="Tipe Penggunaan"
               value={
-                pkg.isShareable
-                  ? 'Bisa Dipakai Bersama (Family / Duet)'
-                  : 'Individu (Single User)'
+                pkg.isShareable ? 'Bisa Dipakai Bersama (Family / Duet)' : 'Individu (Single User)'
               }
             />
           </dl>
@@ -421,11 +421,7 @@ export function PackagePromotionDetailView({ id }: { id: string }) {
                     </Button>
                   )}
                   {canManage && item.status !== 'ACTIVE' && item.status !== 'ARCHIVED' && (
-                    <Button
-                      size="sm"
-                      disabled={busy}
-                      onClick={() => void activate(item)}
-                    >
+                    <Button size="sm" disabled={busy} onClick={() => void activate(item)}>
                       Aktifkan
                     </Button>
                   )}
@@ -679,7 +675,9 @@ export function PackagePromotionDetailView({ id }: { id: string }) {
         }}
       />
       <LifecycleDialog
-        request={packageDelete ? { kind: 'package', id: pkg.id, name: pkg.name, action: 'delete' } : null}
+        request={
+          packageDelete ? { kind: 'package', id: pkg.id, name: pkg.name, action: 'delete' } : null
+        }
         onClose={() => setPackageDelete(false)}
         onDone={(message) => {
           setPackageDelete(false);
@@ -719,7 +717,9 @@ export function PackagePromotionDetailView({ id }: { id: string }) {
           setPromoLifecycle(null);
           feedback.showToast({ tone: 'success', title: 'Promo diperbarui', message });
           await load();
-          await browserPackagePromotionClient.promotions(id, promotionCursor).then(setPromotionPage);
+          await browserPackagePromotionClient
+            .promotions(id, promotionCursor)
+            .then(setPromotionPage);
         }}
       />
     </section>
@@ -759,7 +759,7 @@ function PackageLifecycleEditor({
   const [dirty, setDirty] = useState(false);
   const [failure, setFailure] = useState('');
   const [scopeIsMulti, setScopeIsMulti] = useState<boolean>(
-    pkg.isMultiBranch ?? (pkg.branchScopes?.length !== 1),
+    pkg.isMultiBranch ?? pkg.branchScopes?.length !== 1,
   );
   const [scopeBranchId, setScopeBranchId] = useState<string>(
     pkg.branchId ?? pkg.branchScopes?.[0]?.branchId ?? (branches[0]?.id || ''),
@@ -769,7 +769,7 @@ function PackageLifecycleEditor({
     if (!mode) return;
     setDirty(false);
     setFailure('');
-    setScopeIsMulti(pkg.isMultiBranch ?? (pkg.branchScopes?.length !== 1));
+    setScopeIsMulti(pkg.isMultiBranch ?? pkg.branchScopes?.length !== 1);
     setScopeBranchId(pkg.branchId ?? pkg.branchScopes?.[0]?.branchId ?? (branches[0]?.id || ''));
   }, [mode, pkg, branches]);
   const confirmDiscard = () =>
@@ -894,9 +894,7 @@ function PackageLifecycleEditor({
             setDirty(false);
             await onSaved(updated);
           } catch (cause) {
-            const pesan = await promotionFailure(cause, pesanGagalPaket(cause));
-            setFailure(pesan);
-            feedback.showToast({ tone: 'danger', title: 'Perubahan paket belum tersimpan', message: pesan });
+            setFailure(await promotionFailure(cause, pesanGagalPaket(cause)));
           } finally {
             setBusy(false);
           }
@@ -952,9 +950,12 @@ function PackageLifecycleEditor({
                 className="mt-0.5 accent-dd-forest cursor-pointer size-4 shrink-0 rounded"
               />
               <div>
-                <span className="font-semibold text-dd-forest">Bisa Dipakai Bersama (Family / Duet Package)</span>
+                <span className="font-semibold text-dd-forest">
+                  Bisa Dipakai Bersama (Family / Duet Package)
+                </span>
                 <p className="text-xs text-dd-muted">
-                  Izinkan pemilik paket untuk mendaftarkan anggota keluarga atau rekan untuk menggunakan kuota sesi paket.
+                  Izinkan pemilik paket untuk mendaftarkan anggota keluarga atau rekan untuk
+                  menggunakan kuota sesi paket.
                 </p>
               </div>
             </label>
@@ -1064,7 +1065,9 @@ function PackageLifecycleEditor({
                   className="mt-1"
                 />
                 <div>
-                  <span className="font-semibold text-dd-forest">Cabang Tertentu (Single-Branch)</span>
+                  <span className="font-semibold text-dd-forest">
+                    Cabang Tertentu (Single-Branch)
+                  </span>
                   <p className="text-xs text-dd-muted">
                     Paket terkunci hanya untuk latihan di studio/cabang terpilih.
                   </p>
@@ -1075,7 +1078,10 @@ function PackageLifecycleEditor({
                 <div className="mt-2 grid gap-2 border-t border-dd-line pt-2">
                   <p className="text-[13px] font-bold text-dd-muted">Pilih Cabang:</p>
                   {branches.map((branch) => (
-                    <label className="flex items-center gap-2 text-sm cursor-pointer" key={branch.id}>
+                    <label
+                      className="flex items-center gap-2 text-sm cursor-pointer"
+                      key={branch.id}
+                    >
                       <input
                         type="radio"
                         name="editSingleBranch"

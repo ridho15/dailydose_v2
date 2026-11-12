@@ -1,0 +1,56 @@
+{
+  "lifecycleMode": "BROWNFIELD_CONTINUE_EXISTING",
+  "projectName": "dailydose-v2",
+  "detectedPackages": [
+    "next@15.5.21",
+    "react@19.1.1",
+    "@tailwindcss/postcss@4.3.3",
+    "@nestjs/core@11.1.6",
+    "@prisma/client@6.15.0",
+    "playwright@1.61.1",
+    "vitest@3.2.4",
+    "jest@30.1.3",
+    "turbo@2.5.6"
+  ],
+  "detectedFramework": "Next.js 15 + NestJS 11 Monorepo",
+  "database": "MySQL 8.x (Prisma)",
+  "hasTailwind": true,
+  "hasLaravelBackend": false,
+  "hasGoBackend": false,
+  "hasPythonBackend": false,
+  "continuationFocus": "FULL_CONTINUATION_AND_REFACTOR",
+  "prdMode": "GENERATE_DELTA_PRD",
+  "refactoringStrategy": "PROGRESSIVE_BOY_SCOUT_RULE",
+  "databasePolicy": "SAFE_ZERO_DATALOSS_MIGRATION",
+  "dataListStandard": "CURSOR_LAZY_LOAD",
+  "localDevPorts": {
+    "web": 32220,
+    "api": 32221,
+    "reservedExternalDoNotTouch": [32120, 32121]
+  },
+  "enforcedStandards": {
+    "styling": "Tailwind CSS (UI/UX ProMax)",
+    "coreSubSkills": [
+      "Ponytail",
+      "Antislop",
+      "Graphify",
+      "No Happy Path",
+      "Verification Data"
+    ],
+    "mandatoryRules": {
+      "listView": "MUST_USE_PAGINATION_OR_LAZY_LOAD_WITH_DEBOUNCED_SEARCH_AND_FILTER",
+      "dynamicSelect": "MUST_USE_ASYNC_SEARCHABLE_COMBOBOX_FOR_RELATIONAL_DATA",
+      "alertSystem": "SINGLE_DEDUPLICATED_ALERT_WITH_EXPLICIT_CAUSE_AND_SOLUTION",
+      "confirmModal": "STANDARDIZED_CONFIRMATION_MODAL_WITH_LOADING_LOCK",
+      "completionGate": "NO_CLAIM_WITHOUT_DIRECT_EXECUTION_AND_EVIDENCE"
+    },
+    "verificationSuite": [
+      "Typecheck (API + Web)",
+      "Unit & Core-Flow Regression (Jest + Vitest)",
+      "Playwright Browser E2E & MySQL Persistence",
+      "QA 8-Point Matrix",
+      "UAT Sign-off"
+    ]
+  },
+  "updatedAt": "2026-11-12T10:52:00+07:00"
+}

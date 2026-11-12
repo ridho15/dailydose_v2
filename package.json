@@ -7,7 +7,7 @@
     "node": ">=24 <25"
   },
   "scripts": {
-    "ports:clean": "node -e \"['32120','32121'].forEach(p=>{try{const pids=require('child_process').execSync('lsof -ti:'+p).toString().trim();if(pids)pids.split(/\\s+/).forEach(pid=>{if(pid)process.kill(Number(pid),'SIGKILL')})}catch{}}); try{require('child_process').execSync('pkill -f ms-playwright-go 2>/dev/null')}catch{}\"",
+    "ports:clean": "node -e \"try{process.loadEnvFile('.env')}catch{};const {execSync,execFileSync}=require('node:child_process');const ports=[...new Set([process.env.WEB_PORT||'32120',process.env.PORT||'32121'])];ports.forEach(p=>{try{const pids=process.platform==='win32'?execFileSync('powershell',['-NoProfile','-Command','(Get-NetTCPConnection -LocalPort '+Number(p)+' -State Listen -ErrorAction SilentlyContinue).OwningProcess']).toString().trim():execSync('lsof -ti:'+Number(p)).toString().trim();if(pids)pids.split(/\\s+/).forEach(pid=>{if(Number(pid)>0)try{process.kill(Number(pid),'SIGKILL')}catch{}})}catch{}});try{if(process.platform!=='win32')execSync('pkill -f ms-playwright-go 2>/dev/null')}catch{}\"",
     "cleanup:zombies": "node -e \"try{require('child_process').execSync('pkill -f ms-playwright-go 2>/dev/null')}catch{}\"",
     "predev": "pnpm ports:clean",
     "bootstrap": "pnpm install && pnpm db:generate && pnpm build",

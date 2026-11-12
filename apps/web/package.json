@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "NEXT_DIST_DIR=.next-dev next dev -p ${WEB_PORT:-32120}",
+    "dev": "node -e \"const{spawnSync}=require('node:child_process');const p=process.env.WEB_PORT||'32120';process.exit(spawnSync(process.execPath,['node_modules/next/dist/bin/next','dev','-p',p],{stdio:'inherit',env:{...process.env,NEXT_DIST_DIR:'.next-dev'}}).status??1)\"",
     "build": "NEXT_DIST_DIR=.next next build && node -e \"const fs=require('node:fs'); fs.mkdirSync('.next/standalone/apps/web/.next', {recursive:true}); fs.cpSync('.next/static', '.next/standalone/apps/web/.next/static', {recursive:true, force:true}); fs.cpSync('public', '.next/standalone/apps/web/public', {recursive:true, force:true});\"",
     "lint": "tsc --noEmit",
     "typecheck": "tsc --noEmit",

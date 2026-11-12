@@ -1,0 +1,6 @@
+# SDLC ProMax Standards
+Read and strictly adhere to the Full-Cycle SDLC orchestrator blueprint:
+- Config: docs/sdlc/sdlc-config.json
+- Master Skill: .agent/skills/app-setup-blueprint-promax/SKILL.md
+- UI Standards: docs/sdlc/ui-standards-reference
+- Mandatory Completion Rule: Do NOT claim a task, fix, or command works or is finished without direct post-edit execution and concrete verification evidence (test output, DB persistence check, Playwright screenshots). Never suggest untested commands as verified.
