@@ -7,6 +7,7 @@ import { optionalReason } from '../foundation/reason';
 import type { SessionPrincipal } from '../identity/identity.service';
 import { ApiProblem, newId } from '../identity/security';
 import { PackageAccessService } from './package-access.service';
+import { bacaOpsional } from '../foundation/tabel-opsional';
 import { maksTemanPaket } from './bawa-teman';
 import { bacaMasaJual, masaJualPaket, simpanMasaJual, type MasaJual } from './masa-jual';
 
@@ -71,15 +72,27 @@ function bacaBawaTeman(body: any): boolean | undefined {
 }
 
 /** Menyimpan centang "boleh bawa teman" (satu teman per kelas) di tabel terpisah. */
-async function simpanBawaTeman(tx: any, packageId: string, bawaTeman: boolean | undefined, actorId: string) {
-  if (bawaTeman === undefined || typeof tx.paketBawaTeman?.upsert !== 'function') return;
-  if (bawaTeman)
-    await tx.paketBawaTeman.upsert({
-      where: { packageId },
-      create: { packageId, maksTeman: 1, updatedById: actorId },
-      update: { updatedById: actorId },
-    });
-  else await tx.paketBawaTeman.deleteMany({ where: { packageId } });
+async function simpanBawaTeman(
+  tx: any,
+  packageId: string,
+  bawaTeman: boolean | undefined,
+  actorId: string,
+): Promise<boolean | undefined> {
+  if (bawaTeman === undefined || typeof tx.paketBawaTeman?.upsert !== 'function') return undefined;
+  return bacaOpsional(
+    'paket_bawa_teman',
+    async () => {
+      if (bawaTeman)
+        await tx.paketBawaTeman.upsert({
+          where: { packageId },
+          create: { packageId, maksTeman: 1, updatedById: actorId },
+          update: { updatedById: actorId },
+        });
+      else await tx.paketBawaTeman.deleteMany({ where: { packageId } });
+      return bawaTeman;
+    },
+    undefined,
+  );
 }
 
 const HARGA_PAKET_MAKS_RP = 2_000_000_000;
@@ -270,9 +283,9 @@ export class PackageCatalogService {
         });
 
         const bawaTeman = bacaBawaTeman(input);
-        await simpanBawaTeman(tx, created.id, bawaTeman, principal.userId);
+        const bawaTemanTersimpan = await simpanBawaTeman(tx, created.id, bawaTeman, principal.userId);
         const masa = bacaMasaJual(input);
-        await simpanMasaJual(tx, created.id, masa, principal.userId);
+        const masaTersimpan = await simpanMasaJual(tx, created.id, masa, principal.userId);
 
         this.auditService.record({
           action: 'PACKAGE_CREATED',
@@ -285,8 +298,11 @@ export class PackageCatalogService {
         return {
           status: HttpStatus.CREATED,
           body: {
-            ...packageView(created, { mulai: masa.mulai ?? null, berakhir: masa.berakhir ?? null }),
-            bawaTeman: bawaTeman === true,
+            ...packageView(created, {
+              mulai: masaTersimpan.mulai ?? null,
+              berakhir: masaTersimpan.berakhir ?? null,
+            }),
+            bawaTeman: bawaTemanTersimpan === true,
           } as unknown as Prisma.InputJsonValue,
         };
       },
@@ -359,11 +375,11 @@ export class PackageCatalogService {
         });
 
         const bawaTeman = bacaBawaTeman(body);
-        await simpanBawaTeman(tx, id, bawaTeman, principal.userId);
+        const bawaTemanTersimpan = await simpanBawaTeman(tx, id, bawaTeman, principal.userId);
         await simpanMasaJual(tx, id, bacaMasaJual(body), principal.userId);
         const masaSekarang = (await masaJualPaket(tx, [id])).get(id);
         const temanSekarang =
-          bawaTeman ?? ((await maksTemanPaket(tx, [id])).get(id) ?? 0) > 0;
+          bawaTemanTersimpan ?? ((await maksTemanPaket(tx, [id])).get(id) ?? 0) > 0;
 
         this.auditService.record({
           action: 'PACKAGE_UPDATED',

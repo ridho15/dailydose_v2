@@ -893,9 +893,12 @@ function PackageLifecycleEditor({
                       });
             setDirty(false);
             await onSaved(updated);
-          } catch {
+          } catch (cause) {
             setFailure(
-              'Data mungkin telah berubah atau periode bertabrakan. Muat ulang dan coba kembali.',
+              await promotionFailure(
+                cause,
+                'Data mungkin telah berubah atau periode bertabrakan. Muat ulang dan coba kembali.',
+              ),
             );
           } finally {
             setBusy(false);

@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppFeedbackProvider } from '../components/app-feedback';
 import { PackagesManagementView } from './packages-management-view';
-import { browserPackagePromotionClient } from '@/api-clients/package-promotion-client';
+import { browserPackagePromotionClient, promotionFailure } from '@/api-clients/package-promotion-client';
 import { browserMasterClient } from '@/api-clients/master-client';
 
 const mockDeletability = vi.fn();
@@ -255,5 +255,57 @@ describe('PackagesManagementView duplicate feature', () => {
     await user.click(generateBtn);
     const input = screen.getByPlaceholderText('Contoh: PKG-10X-GROUP') as HTMLInputElement;
     expect(input.value).toMatch(/^PKG-[A-Z0-9]+-[A-Z0-9]{4}$/);
+  });
+
+  it('surfaces real API error via promotionFailure and renders LIVE effectiveState as Aktif', async () => {
+    (browserPackagePromotionClient.packages as unknown as { mockResolvedValue(v: unknown): void }).mockResolvedValue({
+      items: [
+        {
+          id: 'pkg-live',
+          name: '11.11 TRIO PASS',
+          businessKey: 'PKG-NOV26-8Q0F',
+          sessionCount: 12,
+          durationDays: 30,
+          priceRp: 1139981,
+          status: 'ACTIVE',
+          effectiveState: 'LIVE',
+          effectiveFrom: '2026-11-10',
+          effectiveUntil: null,
+          isMultiBranch: true,
+          branchScopes: [],
+          classTypeScopes: [],
+        },
+      ],
+      summary: { ACTIVE: 1 },
+      page: { hasMore: false, nextCursor: null },
+    });
+    (browserPackagePromotionClient.updatePackage as unknown as { mockRejectedValueOnce(v: unknown): void }).mockRejectedValueOnce(
+      new Error('api error'),
+    );
+    (promotionFailure as unknown as { mockResolvedValueOnce(v: unknown): void }).mockResolvedValueOnce(
+      'Tanggal berakhir tidak boleh lebih awal dari tanggal mulai.',
+    );
+
+    const user = userEvent.setup();
+    render(
+      <AppFeedbackProvider>
+        <PackagesManagementView />
+      </AppFeedbackProvider>,
+    );
+
+    expect((await screen.findAllByText('11.11 TRIO PASS'))[0]).toBeInTheDocument();
+    expect(screen.getAllByText('Aktif').length).toBeGreaterThanOrEqual(2);
+
+    await user.click(screen.getAllByRole('button', { name: /Pilihan tindakan untuk 11.11 TRIO PASS/i })[0]!);
+    await user.click((await screen.findAllByRole('menuitem', { name: /Edit/i }))[0]!);
+    expect(await screen.findByRole('heading', { name: 'Ubah Paket: 11.11 TRIO PASS' })).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText('Alasan perubahan (Audit Log)'), 'Uji error asli dari API');
+    await user.click(screen.getByRole('button', { name: 'Simpan perubahan' }));
+    const confirmBtns = await screen.findAllByRole('button', { name: 'Simpan perubahan' });
+    await user.click(confirmBtns[confirmBtns.length - 1]!);
+
+    expect(await screen.findByText('Tanggal berakhir tidak boleh lebih awal dari tanggal mulai.')).toBeInTheDocument();
+    expect(promotionFailure).toHaveBeenCalled();
   });
 });

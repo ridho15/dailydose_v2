@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import { PackageCatalogService } from './katalog-paket.service';
 
 const row = (n: number, status = 'ACTIVE', branchId: string | null = null) => ({
@@ -60,5 +61,45 @@ describe('daftar paket admin menampilkan seluruh katalog', () => {
     expect(db.paket.findMany.mock.calls[0][0].where).toMatchObject({
       OR: expect.arrayContaining([{ branchId: 'branch-1' }, { branchId: null }]),
     });
+  });
+
+  it('update paket tetap berhasil ketika tabel opsional paket_masa_jual dan paket_bawa_teman belum ada (P2021)', async () => {
+    const p2021 = (table: string) =>
+      new Prisma.PrismaClientKnownRequestError(`The table \`${table}\` does not exist`, {
+        code: 'P2021',
+        clientVersion: 'test',
+      });
+    const baseRow = row(1);
+    const tx = {
+      paket: {
+        findUnique: jest.fn().mockResolvedValue(baseRow),
+        update: jest.fn().mockResolvedValue({ ...baseRow, name: 'Paket 1 Baru', branch: null }),
+      },
+      paketBawaTeman: {
+        upsert: jest.fn().mockRejectedValue(p2021('paket_bawa_teman')),
+        deleteMany: jest.fn().mockRejectedValue(p2021('paket_bawa_teman')),
+        findMany: jest.fn().mockRejectedValue(p2021('paket_bawa_teman')),
+      },
+      paketMasaJual: {
+        upsert: jest.fn().mockRejectedValue(p2021('paket_masa_jual')),
+        findMany: jest.fn().mockRejectedValue(p2021('paket_masa_jual')),
+      },
+    };
+    const service = new PackageCatalogService(
+      {} as never,
+      { catalog: jest.fn() } as never,
+      { execute: (_opts: unknown, fn: (t: unknown) => Promise<unknown>) => fn(tx) } as never,
+      { record: jest.fn() } as never,
+    );
+
+    const res = await service.update(
+      principal,
+      baseRow.id,
+      { name: 'Paket 1 Baru', effectiveFrom: '2026-11-10', effectiveUntil: '2026-12-31', bawaTeman: true },
+      'idem-1',
+      'corr-1',
+    );
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ name: 'Paket 1 Baru', bawaTeman: false, effectiveUntil: null });
   });
 });

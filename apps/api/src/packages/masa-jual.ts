@@ -35,14 +35,21 @@ export async function simpanMasaJual(
   packageId: string,
   masa: { mulai?: Date | null; berakhir?: Date | null },
   actorId: string,
-) {
+): Promise<{ mulai?: Date | null; berakhir?: Date | null }> {
   if ((masa.mulai === undefined && masa.berakhir === undefined) || typeof tx.paketMasaJual?.upsert !== 'function')
-    return;
-  await tx.paketMasaJual.upsert({
-    where: { packageId },
-    create: { packageId, mulai: masa.mulai ?? null, berakhir: masa.berakhir ?? null, updatedById: actorId },
-    update: { ...masa, updatedById: actorId },
-  });
+    return {};
+  return bacaOpsional(
+    'paket_masa_jual',
+    async () => {
+      await tx.paketMasaJual.upsert({
+        where: { packageId },
+        create: { packageId, mulai: masa.mulai ?? null, berakhir: masa.berakhir ?? null, updatedById: actorId },
+        update: { ...masa, updatedById: actorId },
+      });
+      return masa;
+    },
+    {},
+  );
 }
 
 export async function masaJualPaket(db: any, packageIds: readonly string[]): Promise<Map<string, MasaJual>> {

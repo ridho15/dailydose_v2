@@ -28,6 +28,10 @@ const stateLabels = {
   INACTIVE: 'Tidak aktif',
 } as const;
 
+const isLiveOrActiveState = (state?: string) => state === 'ACTIVE' || state === 'LIVE';
+const packageStateLabel = (state?: string) =>
+  state === 'LIVE' ? stateLabels.ACTIVE : (stateLabels[state as keyof typeof stateLabels] ?? stateLabels.INACTIVE);
+
 export type PackageFormValues = {
   name?: string;
   businessKey?: string;
@@ -371,8 +375,8 @@ export function PackagesManagementView() {
               header: 'Status',
               cell: (item) => (
                 <div className="flex flex-wrap gap-1">
-                  <Badge tone={item.effectiveState === 'ACTIVE' ? 'success' : 'neutral'}>
-                    {stateLabels[item.effectiveState ?? 'INACTIVE']}
+                  <Badge tone={isLiveOrActiveState(item.effectiveState) ? 'success' : 'neutral'}>
+                    {packageStateLabel(item.effectiveState)}
                   </Badge>
                   {item.livePromotion && <Badge tone="warning">Promo live</Badge>}
                   {item.bawaTeman && <Badge tone="neutral">Bawa teman</Badge>}
@@ -450,8 +454,8 @@ export function PackagesManagementView() {
                       </div>
                     )}
                   </div>
-                  <Badge tone={item.effectiveState === 'ACTIVE' ? 'success' : 'neutral'}>
-                    {stateLabels[item.effectiveState ?? 'INACTIVE']}
+                  <Badge tone={isLiveOrActiveState(item.effectiveState) ? 'success' : 'neutral'}>
+                    {packageStateLabel(item.effectiveState)}
                   </Badge>
                 </div>
                 <div>
@@ -1075,8 +1079,9 @@ function EditPackageModal({
                 expectedVersion: pkg.version,
                 name,
                 isShareable,
+                effectiveUntil,
                 ...(canEditCommercialInPlace
-                  ? { sessionCount, durationDays, priceRp, effectiveUntil }
+                  ? { sessionCount, durationDays, priceRp }
                   : {}),
                 bawaTeman,
                 reason,
@@ -1090,8 +1095,13 @@ function EditPackageModal({
             setDirty(false);
             onClose();
             await onSaved();
-          } catch {
-            setError('Gagal memperbarui paket. Data mungkin telah berubah atau input tidak valid.');
+          } catch (cause) {
+            setError(
+              await promotionFailure(
+                cause,
+                'Gagal memperbarui paket. Data mungkin telah berubah atau input tidak valid.',
+              ),
+            );
           } finally {
             setBusy(false);
           }
@@ -1102,10 +1112,15 @@ function EditPackageModal({
         <div className="rounded-dd-md border border-dd-line bg-dd-surface-muted/50 p-3 text-xs text-dd-muted">
           Business Key:{' '}
           <code className="font-mono font-semibold text-dd-ink">{pkg.businessKey}</code> · Status:{' '}
-          <strong className="font-semibold text-dd-forest">{stateLabels[pkg.effectiveState ?? 'INACTIVE']}</strong>.
+          <strong className="font-semibold text-dd-forest">{packageStateLabel(pkg.effectiveState)}</strong>.
           {!canEditCommercialInPlace && (
             <p className="mt-1">
-              Catatan: Paket ini sudah aktif. Jika mengubah harga, kuota sesi, atau masa berlaku, sistem akan mencatatnya sebagai <strong>revisi baru</strong> yang aman bagi member aktif.
+              Catatan:{' '}
+              {isLiveOrActiveState(pkg.effectiveState)
+                ? 'Paket ini sudah aktif'
+                : 'Paket ini sudah melewati tanggal mulai atau memiliki transaksi'}
+              . Jika mengubah harga, kuota sesi, atau masa berlaku, sistem akan mencatatnya sebagai{' '}
+              <strong>revisi baru</strong> yang aman bagi member aktif.
             </p>
           )}
         </div>

@@ -273,6 +273,7 @@ export async function promotionFailure(error: unknown, fallback: string): Promis
   if (code === 'VALIDATION_ERROR') {
     if (issue === 'TOO_LARGE') return 'Nilai diskon terlalu besar (persen maks. 90; nominal harus di bawah harga paket).';
     if (issue === 'BEFORE_START') return 'Tanggal berakhir harus setelah tanggal mulai.';
+    if (issue === 'BEFORE_FROM') return 'Tanggal berakhir tidak boleh lebih awal dari tanggal mulai.';
     if (issue === 'IN_THE_PAST') return 'Tanggal berakhir promo sudah lewat.';
     return 'Data yang dimasukkan belum valid. Pastikan Business Key, nama paket, jumlah sesi (min. 1), dan harga telah terisi dengan benar.';
   }
