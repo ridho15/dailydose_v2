@@ -1318,3 +1318,30 @@ model PembelianKoreksi {
   @@index([branchId, createdAt])
   @@map("pembelian_koreksi")
 }
+
+/// Refund paket member (November 2026): sisa sesi dikembalikan dalam rupiah, prorata harga final
+/// yang dibayar. Paketnya dinolkan; pembelian asal tidak diubah. Tanpa relasi ke tabel lama.
+model RefundPaket {
+  id                String   @id @db.Char(36)
+  customerPackageId String   @db.Char(36)
+  purchaseId        String?  @db.Char(36)
+  userId            String   @db.Char(36)
+  branchId          String   @db.Char(36)
+  namaPaket         String   @db.VarChar(191)
+  hargaDibayarRp    Int
+  totalSesi         Int
+  sisaSesi          Int
+  nominalRefundRp   Int
+  bankName          String   @db.VarChar(64)
+  nomorRekening     String   @db.VarChar(40)
+  namaRekening      String   @db.VarChar(128)
+  buktiExt          String?  @db.VarChar(8)
+  alasan            String   @db.VarChar(500)
+  bookingDibatalkan Int      @default(0)
+  actorId           String   @db.Char(36)
+  createdAt         DateTime @default(now())
+
+  @@index([customerPackageId])
+  @@index([branchId, createdAt])
+  @@map("refund_paket")
+}

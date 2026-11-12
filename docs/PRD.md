@@ -153,6 +153,10 @@ Aturan kerahasiaan per peran ada di [Rules.md](./Rules.md#2-kerahasiaan-data-keu
     dengan kode alasan dan alasan minimal 20 karakter. Void membuat status pembelian CANCELLED (keluar
     dari omzet) dan paketnya tidak bisa dipakai; bila sesi sudah terpakai hanya void sebagian (sisa sesi
     dinolkan, omzet tetap). Semua tercatat di `pembelian_koreksi` dan audit log (11 November 2026).
+17. Refund paket: sisa sesi dikembalikan prorata, harga final dibayar (setelah promo/voucher, tanpa kode
+    unik) ÷ total sesi × sisa sesi. Diproses Admin, Manager, Owner, atau Super Owner di cabang pembelian,
+    wajib bank, nomor dan nama rekening, alasan, dan bukti transfer; paket dinolkan; surat konfirmasi bisa
+    dicetak (12 November 2026).
 15. Presensi instruktur lewat scan QR diterima mulai 45 menit sebelum kelas sampai 10 menit setelah
     kelas **mulai** (kelas 10.00 masih bisa scan 10.10). Scan setelah jam mulai tercatat sebagai anomali
     "Instruktur Check-in Terlambat" di Laporan Keuangan > Rekonsiliasi (5 November 2026).

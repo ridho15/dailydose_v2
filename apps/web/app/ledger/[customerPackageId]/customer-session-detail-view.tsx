@@ -54,6 +54,10 @@ export function CustomerSessionDetailView({ id }: { id: string }) {
   const [error, setError] = useState('');
   const sessionContext = useSessionContext();
   const canManagePackage = Boolean(sessionContext?.hasCapability('customer-package:manage'));
+  // Refund paket: Admin, Manager, Owner, Super Owner (cabang diperiksa di API).
+  const bolehRefund = Boolean(
+    sessionContext?.session?.roles?.some((r) => ['ADMIN', 'MANAGER', 'OWNER', 'SUPER_OWNER'].includes(r)),
+  );
   const isSuperOwner = Boolean(sessionContext?.session?.roles?.includes('SUPER_OWNER'));
   const [syncDialogOpen, setSyncDialogOpen] = useState(false);
   const [syncPreview, setSyncPreview] = useState<PackageSyncPreview | null>(null);
@@ -289,6 +293,15 @@ export function CustomerSessionDetailView({ id }: { id: string }) {
         {balance.customer?.id && (
           <ButtonLink className="mt-4" variant="secondary" href={`/users/${balance.customer.id}`}>
             Buka detail pelanggan
+          </ButtonLink>
+        )}
+        {bolehRefund && balance.ledgerBalance > 0 && balance.status !== 'EXPIRED' && (
+          <ButtonLink
+            className="mt-4 ml-2"
+            variant="secondary"
+            href={`/workspace/refunds/baru?paket=${encodeURIComponent(balance.id)}`}
+          >
+            Refund paket
           </ButtonLink>
         )}
       </Panel>

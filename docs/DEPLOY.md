@@ -230,6 +230,36 @@ CREATE TABLE `pembelian_koreksi` (
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 ```
 
+`refund_paket` (refund sisa sesi paket member, 12 November 2026). **Buat sebelum deploy**; tanpa tabel ini
+tombol refund gagal, fitur lain tetap jalan.
+
+```sql
+CREATE TABLE `refund_paket` (
+    `id` CHAR(36) NOT NULL,
+    `customerPackageId` CHAR(36) NOT NULL,
+    `purchaseId` CHAR(36) NULL,
+    `userId` CHAR(36) NOT NULL,
+    `branchId` CHAR(36) NOT NULL,
+    `namaPaket` VARCHAR(191) NOT NULL,
+    `hargaDibayarRp` INTEGER NOT NULL,
+    `totalSesi` INTEGER NOT NULL,
+    `sisaSesi` INTEGER NOT NULL,
+    `nominalRefundRp` INTEGER NOT NULL,
+    `bankName` VARCHAR(64) NOT NULL,
+    `nomorRekening` VARCHAR(40) NOT NULL,
+    `namaRekening` VARCHAR(128) NOT NULL,
+    `buktiExt` VARCHAR(8) NULL,
+    `alasan` VARCHAR(500) NOT NULL,
+    `bookingDibatalkan` INTEGER NOT NULL DEFAULT 0,
+    `actorId` CHAR(36) NOT NULL,
+    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+
+    INDEX `refund_paket_customerPackageId_idx`(`customerPackageId`),
+    INDEX `refund_paket_branchId_createdAt_idx`(`branchId`, `createdAt`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+```
+
 `paket` (kolom `is_shareable` untuk paket bersama / Duet / Family, Oktober 2026) dan `paket_pelanggan_anggota`:
 
 ```sql
