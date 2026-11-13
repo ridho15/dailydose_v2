@@ -6,6 +6,7 @@ import { PrismaService } from '../database/prisma.service';
 import { AuditService } from '../foundation/audit.service';
 import type { SessionPrincipal } from '../identity/identity.service';
 import { ApiProblem, newId } from '../identity/security';
+import { NotificationWriterService } from '../notifications/notification-writer.service';
 import { PackageAccessService } from './package-access.service';
 import { ConfigGatedObjectStorageProvider, type ObjectStorageProvider } from './proof-providers';
 import {
@@ -30,6 +31,7 @@ export class PaymentProofService {
     private readonly config: RuntimeConfigService,
     private readonly auditService: AuditService,
     @Optional() private readonly storage?: ConfigGatedObjectStorageProvider,
+    @Optional() private readonly notificationWriter?: NotificationWriterService,
   ) {}
 
   async issue(principal: SessionPrincipal, input: any, correlationId: string) {
@@ -132,6 +134,36 @@ export class PaymentProofService {
           uploadedAt: new Date(),
         },
       });
+
+      if (this.notificationWriter) {
+        // Notifikasi ke staf cabang (ADMIN, MANAGER, FINANCE)
+        void this.notificationWriter
+          .writeForUsersInBranch(this.db, {
+            branchId: purchase.branchId,
+            roles: ['ADMIN', 'MANAGER', 'FINANCE'],
+            eventKey: `payment.proof.uploaded:${purchase.id}:${id}`,
+            category: 'PAYMENT',
+            tone: 'INFO',
+            title: 'Bukti Pembayaran Baru',
+            message: `Bukti transfer baru diunggah untuk pesanan #${purchase.id.slice(0, 8)}. Silakan verifikasi.`,
+            href: '/payments',
+          })
+          .catch(() => {});
+
+        // Konfirmasi in-app ke pengguna
+        void this.notificationWriter
+          .writeForUser(this.db, {
+            userId: purchase.userId,
+            branchId: purchase.branchId,
+            eventKey: `payment.proof.submitted:${purchase.id}:${id}`,
+            category: 'PAYMENT',
+            tone: 'SUCCESS',
+            title: 'Bukti Pembayaran Diterima',
+            message: 'Bukti transfer Anda telah diterima dan sedang menunggu verifikasi oleh kasir.',
+            href: `/orders/${purchase.id}`,
+          })
+          .catch(() => {});
+      }
     }
 
     this.auditService.record({
@@ -220,6 +252,21 @@ export class PaymentProofService {
         uploadedAt: new Date(),
       },
     });
+
+    if (this.notificationWriter) {
+      void this.notificationWriter
+        .writeForUsersInBranch(this.db, {
+          branchId: current.branchId,
+          roles: ['ADMIN', 'MANAGER', 'FINANCE'],
+          eventKey: `payment.proof.reuploaded:${current.id}:${nextId}`,
+          category: 'PAYMENT',
+          tone: 'INFO',
+          title: 'Unggah Ulang Bukti Bayar',
+          message: `Bukti transfer revisi telah diunggah untuk pesanan #${current.id.slice(0, 8)}. Silakan verifikasi ulang.`,
+          href: '/payments',
+        })
+        .catch(() => {});
+    }
 
     this.auditService.record({
       action: 'PAYMENT_PROOF_REPLACED',

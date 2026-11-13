@@ -197,6 +197,11 @@ else
   echo -e "   Silakan buat file .env.production terlebih dahulu sebelum menjalankan update."
   exit 1
 fi
+# Edit manual di server pada file yang dilacak git ikut di-stash oleh langkah 2, jadi konfigurasi wajib harus ada di repo.
+if ! bash tools/check-env.sh "${APP_ENV_FILE:-.env.production}"; then
+  echo -e "   ${RED}✗ Deploy dibatalkan sebelum container diganti. Tambahkan variabel di atas ke .env.production pada repo lalu commit.${NC}"
+  exit 1
+fi
 
 # ------------------------------------------------------------------------------
 # STEP 4: DOCKER COMPOSE BUILD

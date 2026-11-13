@@ -1,6 +1,7 @@
 import { HITUNG_TERISI, STATUS_MENEMPATI_KURSI, terisi } from '../classes/terisi';
 import { HttpStatus, Injectable, Optional } from '@nestjs/common';
 import { AuditService } from '../foundation/audit.service';
+import { NotificationWriterService } from '../notifications/notification-writer.service';
 import { Prisma, BookingStatus, SessionMutationType, PaymentMethod } from '@prisma/client';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { RuntimeConfigService } from '../configuration/runtime-config.service';
@@ -74,6 +75,7 @@ export class BookingsService {
     private readonly policy: PolicyService,
     private readonly config: RuntimeConfigService,
     @Optional() private readonly audit?: AuditService,
+    @Optional() private readonly notificationWriter?: NotificationWriterService,
   ) {}
 
   private syntheticPolicy() {
@@ -407,6 +409,39 @@ export class BookingsService {
             },
           },
         });
+
+        if (this.notificationWriter) {
+          const className = booking.classSlot.classType.name;
+          const branchName = booking.classSlot.branch.name;
+
+          // Member notification
+          await this.notificationWriter
+            .writeForUser(tx, {
+              userId: booking.userId,
+              branchId: booking.classSlot.branchId,
+              eventKey: `booking.cancelled:${booking.id}`,
+              category: 'BOOKING',
+              tone: 'INFO',
+              title: 'Booking Dibatalkan',
+              message: `Booking kelas "${className}" di ${branchName} berhasil dibatalkan. Kuota sesi Anda tetap aman.`,
+              href: '/my-bookings',
+            })
+            .catch(() => {});
+
+          // Branch staff notification
+          await this.notificationWriter
+            .writeForUsersInBranch(tx, {
+              branchId: booking.classSlot.branchId,
+              roles: ['ADMIN', 'MANAGER'],
+              eventKey: `branch.booking.cancelled:${booking.id}`,
+              category: 'BOOKING',
+              tone: 'INFO',
+              title: 'Booking Dibatalkan',
+              message: `${booking.user.displayName || 'Member'} membatalkan booking kelas "${className}". Kursi kembali tersedia.`,
+              href: '/classes/timetable',
+            })
+            .catch(() => {});
+        }
 
         return {
           status: HttpStatus.OK,
@@ -1083,6 +1118,44 @@ export class BookingsService {
               backdated: slotPast,
             },
           });
+
+        if (this.notificationWriter) {
+          const className = booking.classSlot.classType.name;
+          const branchName = booking.classSlot.branch.name;
+          const timeStr = new Intl.DateTimeFormat('id-ID', {
+            dateStyle: 'medium',
+            timeStyle: 'short',
+            timeZone: booking.classSlot.branch.timezone || 'Asia/Jakarta',
+          }).format(booking.classSlot.startAt);
+
+          // 1. Member in-app notification
+          await this.notificationWriter
+            .writeForUser(tx, {
+              userId: customerUserId,
+              branchId: slot.branchId,
+              eventKey: `booking.created:${booking.id}`,
+              category: 'BOOKING',
+              tone: 'SUCCESS',
+              title: 'Booking Berhasil',
+              message: `Kelas "${className}" di ${branchName} pada ${timeStr} berhasil dipesan.`,
+              href: '/my-bookings',
+            })
+            .catch(() => {});
+
+          // 2. Branch staff in-app notification
+          await this.notificationWriter
+            .writeForUsersInBranch(tx, {
+              branchId: slot.branchId,
+              roles: ['ADMIN', 'MANAGER'],
+              eventKey: `branch.booking.created:${booking.id}`,
+              category: 'BOOKING',
+              tone: 'INFO',
+              title: 'Pemesanan Kelas Baru',
+              message: `${booking.user.displayName || 'Member'} memesan kelas "${className}" (${timeStr}).`,
+              href: '/classes/timetable',
+            })
+            .catch(() => {});
+        }
 
         return {
           status: HttpStatus.CREATED,

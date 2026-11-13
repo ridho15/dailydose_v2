@@ -3,6 +3,7 @@ import { bacaOpsional } from '../foundation/tabel-opsional';
 import { requireReason } from '../foundation/reason';
 import { HttpStatus, Injectable, Logger, Optional } from '@nestjs/common';
 import { WhatsAppGatewayService } from '../notifications/whatsapp-gateway.service';
+import { NotificationWriterService } from '../notifications/notification-writer.service';
 import { ClassSlotStatus, Prisma, SessionMutationType } from '@prisma/client';
 import { createHash } from 'node:crypto';
 import { PrismaService } from '../database/prisma.service';
@@ -118,6 +119,7 @@ export class ClassSlotService {
     private readonly config: RuntimeConfigService,
     @Optional() private readonly audit?: AuditService,
     @Optional() private readonly whatsapp?: WhatsAppGatewayService,
+    @Optional() private readonly notificationWriter?: NotificationWriterService,
   ) {}
 
   /** Jejak audit permanen untuk perubahan kelas; ikut transaksi sehingga batal bersama perubahannya. */

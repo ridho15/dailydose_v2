@@ -1,10 +1,14 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
+import { PrismaService } from '../database/prisma.service';
 import type { SessionPrincipal } from '../identity/identity.service';
 import { ApiProblem } from '../identity/security';
-import { inMemoryNotifications, type NotificationItem } from './notification-writer.service';
+import type { NotificationItem } from './notification-writer.service';
 
 @Injectable()
 export class NotificationsService {
+  constructor(private readonly db: PrismaService) {}
+
   private safeHref(value: string | null) {
     if (!value || !value.startsWith('/') || value.startsWith('//')) return null;
     try {
@@ -35,11 +39,32 @@ export class NotificationsService {
     return null;
   }
 
-  private view(item: NotificationItem) {
+  private view(item: NotificationItem | {
+    id: string;
+    userId: string;
+    eventKey: string;
+    category: string;
+    tone: string;
+    title: string;
+    message: string;
+    href: string | null;
+    branchId: string | null;
+    metadataMasked?: unknown;
+    readAt: Date | null;
+    expiresAt: Date | null;
+    createdAt: Date;
+  }) {
     return {
-      ...item,
-      href: this.safeHref(item.href),
+      id: item.id,
+      userId: item.userId,
+      eventKey: item.eventKey,
+      category: item.category,
       tone: (typeof item.tone === 'string' && item.tone ? item.tone : 'INFO').toLowerCase(),
+      title: item.title,
+      message: item.message,
+      href: this.safeHref(item.href),
+      branchId: item.branchId,
+      metadataMasked: item.metadataMasked ?? null,
       readAt: this.toNullableIsoString(item.readAt),
       expiresAt: this.toNullableIsoString(item.expiresAt),
       createdAt: this.toIsoString(item.createdAt),
@@ -55,22 +80,36 @@ export class NotificationsService {
       throw new ApiProblem('VALIDATION_ERROR', HttpStatus.UNPROCESSABLE_ENTITY);
 
     const now = new Date();
-    const userNotifications = inMemoryNotifications.filter((n) => {
-      if (n.userId !== principal.userId) return false;
-      if (input.unreadOnly && n.readAt !== null) return false;
-      if (n.expiresAt && n.expiresAt <= now) return false;
-      return true;
-    });
+    const where: Prisma.NotificationWhereInput = {
+      userId: principal.userId,
+      ...(input.unreadOnly ? { readAt: null } : {}),
+      OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+    };
 
-    let startIndex = 0;
     if (input.cursor) {
-      const cursorIndex = userNotifications.findIndex((n) => n.id === input.cursor);
-      if (cursorIndex === -1) throw new ApiProblem('NOT_FOUND', HttpStatus.NOT_FOUND);
-      startIndex = cursorIndex + 1;
+      const cursorRecord = await this.db.notification.findFirst({
+        where: { id: input.cursor, userId: principal.userId },
+        select: { id: true },
+      });
+      if (!cursorRecord) {
+        throw new ApiProblem('NOT_FOUND', HttpStatus.NOT_FOUND);
+      }
     }
 
-    const items = userNotifications.slice(startIndex, startIndex + limit);
-    const hasMore = startIndex + limit < userNotifications.length;
+    const records = await this.db.notification.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      take: limit + 1,
+      ...(input.cursor
+        ? {
+            cursor: { id: input.cursor },
+            skip: 1,
+          }
+        : {}),
+    });
+
+    const hasMore = records.length > limit;
+    const items = hasMore ? records.slice(0, limit) : records;
 
     return {
       items: items.map((item) => this.view(item)),
@@ -80,33 +119,42 @@ export class NotificationsService {
 
   async unreadCount(principal: SessionPrincipal) {
     const now = new Date();
-    const count = inMemoryNotifications.filter(
-      (n) =>
-        n.userId === principal.userId && n.readAt === null && (!n.expiresAt || n.expiresAt > now),
-    ).length;
+    const count = await this.db.notification.count({
+      where: {
+        userId: principal.userId,
+        readAt: null,
+        OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+      },
+    });
 
     return { count };
   }
 
   async markRead(principal: SessionPrincipal, id: string) {
-    const item = inMemoryNotifications.find((n) => n.id === id && n.userId === principal.userId);
-    if (!item) throw new ApiProblem('NOT_FOUND', HttpStatus.NOT_FOUND);
+    const existing = await this.db.notification.findFirst({
+      where: { id, userId: principal.userId },
+    });
+    if (!existing) throw new ApiProblem('NOT_FOUND', HttpStatus.NOT_FOUND);
 
-    item.readAt = new Date();
-    return this.view(item);
+    const now = new Date();
+    const updated = await this.db.notification.update({
+      where: { id },
+      data: { readAt: now },
+    });
+
+    return this.view(updated);
   }
 
   async markAllRead(principal: SessionPrincipal) {
     const readAt = new Date();
-    let updatedCount = 0;
+    const result = await this.db.notification.updateMany({
+      where: {
+        userId: principal.userId,
+        readAt: null,
+      },
+      data: { readAt },
+    });
 
-    for (const item of inMemoryNotifications) {
-      if (item.userId === principal.userId && item.readAt === null) {
-        item.readAt = readAt;
-        updatedCount++;
-      }
-    }
-
-    return { updatedCount, readAt: readAt.toISOString() };
+    return { updatedCount: result.count, readAt: readAt.toISOString() };
   }
 }

@@ -25,8 +25,6 @@ export interface NotificationItem {
   createdAt: Date;
 }
 
-export const inMemoryNotifications: NotificationItem[] = [];
-
 export interface WriteNotificationInput {
   userId: string;
   eventKey: string;
@@ -36,6 +34,7 @@ export interface WriteNotificationInput {
   message: string;
   href?: string;
   branchId?: string;
+  metadataMasked?: unknown;
   expiresInDays?: number;
 }
 
@@ -56,74 +55,88 @@ export class NotificationWriterService {
   constructor(private readonly db: PrismaService) {}
 
   /**
-   * Menulis notifikasi in-app untuk satu user.
+   * Menulis notifikasi in-app untuk satu user secara persisten di MySQL.
+   * Bersifat idempoten via @@unique([userId, eventKey]).
    */
-  async writeForUser(_tx: Tx, input: WriteNotificationInput): Promise<void> {
-    const exists = inMemoryNotifications.some(
-      (n) => n.userId === input.userId && n.eventKey === input.eventKey,
-    );
-    if (exists) return;
-
+  async writeForUser(tx: Tx, input: WriteNotificationInput): Promise<void> {
+    const client = tx ?? this.db;
     const expiresAt = input.expiresInDays
       ? new Date(Date.now() + input.expiresInDays * 86_400_000)
       : null;
 
-    inMemoryNotifications.unshift({
-      id: randomUUID(),
-      userId: input.userId,
-      eventKey: input.eventKey,
-      category: input.category,
-      tone: input.tone,
-      title: input.title,
-      message: input.message,
-      href: input.href ?? null,
-      branchId: input.branchId ?? null,
-      readAt: null,
-      expiresAt,
-      createdAt: new Date(),
-    });
-
-    if (inMemoryNotifications.length > 500) {
-      inMemoryNotifications.pop();
+    try {
+      await client.notification.create({
+        data: {
+          id: randomUUID(),
+          userId: input.userId,
+          eventKey: input.eventKey,
+          category: input.category,
+          tone: input.tone,
+          title: input.title,
+          message: input.message,
+          href: input.href ?? null,
+          branchId: input.branchId ?? null,
+          metadataMasked:
+            input.metadataMasked !== undefined
+              ? (input.metadataMasked as Prisma.InputJsonValue)
+              : Prisma.JsonNull,
+          readAt: null,
+          expiresAt,
+        },
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        // Event sudah pernah dicatat untuk pengguna ini, lewati tanpa galat
+        return;
+      }
+      throw error;
     }
   }
 
   /**
-   * Menulis notifikasi in-app ke staf cabang.
+   * Menulis notifikasi in-app ke staf cabang tertentu secara persisten di MySQL.
+   * Memfilter peran secara ketat sesuai input.roles agar akun pelanggan tidak terpapar.
    */
-  async writeForUsersInBranch(_tx: Tx, input: WriteForBranchInput): Promise<void> {
+  async writeForUsersInBranch(tx: Tx, input: WriteForBranchInput): Promise<void> {
+    const client = tx ?? this.db;
     const expiresAt = input.expiresInDays
       ? new Date(Date.now() + input.expiresInDays * 86_400_000)
       : null;
 
-    const users = await this.db.user.findMany({
+    const users = await client.user.findMany({
       where: {
         preferredBranchId: input.branchId,
         status: 'ACTIVE',
+        ...(input.roles && input.roles.length > 0
+          ? { role: { in: input.roles as any } }
+          : {}),
       },
       select: { id: true },
     });
 
     for (const user of users) {
       const eventKey = `${input.eventKey}:${user.id}`;
-      const exists = inMemoryNotifications.some(
-        (n) => n.userId === user.id && n.eventKey === eventKey,
-      );
-      if (!exists) {
-        inMemoryNotifications.unshift({
-          id: randomUUID(),
-          userId: user.id,
-          eventKey,
-          category: input.category,
-          tone: input.tone,
-          title: input.title,
-          message: input.message,
-          href: input.href ?? null,
-          branchId: input.branchId,
-          readAt: null,
-          expiresAt,
-          createdAt: new Date(),
+      try {
+        await client.notification.create({
+          data: {
+            id: randomUUID(),
+            userId: user.id,
+            eventKey,
+            category: input.category,
+            tone: input.tone,
+            title: input.title,
+            message: input.message,
+            href: input.href ?? null,
+            branchId: input.branchId,
+            readAt: null,
+            expiresAt,
+          },
         });
+      } catch (error) {
+        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+          continue;
+        }
+        throw error;
       }
     }
   }

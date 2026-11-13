@@ -44,6 +44,8 @@ jobs:
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
+      - name: Pastikan .env.production memuat konfigurasi booking
+        run: bash tools/check-env.sh .env.production
       - name: Create local environment file for Node CLI
         run: cp .env.example .env
       - run: pnpm openapi:validate

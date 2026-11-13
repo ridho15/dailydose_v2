@@ -136,7 +136,7 @@ export class DashboardService {
       // allow access for customer/member or review principals
     }
     const now = new Date();
-    const [upcomingBookings, packages, actionableOrders, profile] = await Promise.all([
+    const [upcomingBookings, packages, actionableOrders, profile, unreadNotifications] = await Promise.all([
       this.db.pemesananKelas.findMany({
         where: {
           userId: principal.userId,
@@ -181,6 +181,15 @@ export class DashboardService {
       (this.db as any).profilPengguna?.findUnique
         ? (this.db as any).profilPengguna.findUnique({ where: { userId: principal.userId } })
         : null,
+      (this.db as any).notification?.count
+        ? (this.db as any).notification.count({
+            where: {
+              userId: principal.userId,
+              readAt: null,
+              OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+            },
+          })
+        : Promise.resolve(0),
     ]);
 
     const isApproved = Boolean(profile?.notes?.includes('KYC_APPROVED'));
@@ -218,7 +227,7 @@ export class DashboardService {
         status: verificationStatus,
         documents: [],
       },
-      unreadNotifications: 0,
+      unreadNotifications: unreadNotifications ?? 0,
     };
 
     if (ttl > 0) {

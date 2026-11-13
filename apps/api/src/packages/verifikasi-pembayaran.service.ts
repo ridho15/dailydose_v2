@@ -774,16 +774,49 @@ export class PaymentReviewService {
         include: { package: true },
       });
       if (!purchase) return;
+      const nextStatus: 'APPROVED' | 'ACTION_REQUIRED' | 'REJECTED' =
+        decision === 'REJECTED' && input.reasonCode !== 'DUPLICATE_PURCHASE'
+          ? 'ACTION_REQUIRED'
+          : decision;
+
+      if (this.notificationWriter) {
+        const tone =
+          nextStatus === 'APPROVED' ? 'SUCCESS' : nextStatus === 'ACTION_REQUIRED' ? 'WARNING' : 'DANGER';
+        const title =
+          nextStatus === 'APPROVED'
+            ? 'Pembayaran Disetujui'
+            : nextStatus === 'ACTION_REQUIRED'
+              ? 'Bukti Pembayaran Perlu Tindakan'
+              : 'Pembayaran Ditolak';
+        const message =
+          nextStatus === 'APPROVED'
+            ? `Pembayaran paket "${purchase.package.name}" telah disetujui. Paket Anda kini aktif.`
+            : nextStatus === 'ACTION_REQUIRED'
+              ? `Bukti transfer paket "${purchase.package.name}" perlu diunggah ulang (${input.reasonCode ?? 'periksa kembali'}${input.note ? `: ${input.note}` : ''}).`
+              : `Pembayaran paket "${purchase.package.name}" ditolak (${input.reasonCode ?? 'tidak valid'}).`;
+
+        await this.notificationWriter
+          .writeForUser(this.db, {
+            userId: purchase.userId,
+            branchId: purchase.branchId,
+            eventKey: `payment.decide:${id}:${decision.toLowerCase()}`,
+            category: 'PAYMENT',
+            tone,
+            title,
+            message,
+            href: nextStatus === 'APPROVED' ? '/packages' : `/orders/${id}`,
+          })
+          .catch(() => {});
+      }
+
+      if (!this.emails) return;
       const user = await this.db.user.findUnique({
         where: { id: purchase.userId },
         select: { email: true },
       });
       const publicBaseUrl = process.env.PUBLIC_WEB_BASE_URL?.trim();
       if (!user?.email || !publicBaseUrl) return;
-      const nextStatus: 'APPROVED' | 'ACTION_REQUIRED' | 'REJECTED' =
-        decision === 'REJECTED' && input.reasonCode !== 'DUPLICATE_PURCHASE'
-          ? 'ACTION_REQUIRED'
-          : decision;
+
       const templateMap = {
         APPROVED: 'ORDER_APPROVED_V1',
         ACTION_REQUIRED: 'ORDER_ACTION_REQUIRED_V1',

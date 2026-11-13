@@ -283,6 +283,34 @@ CREATE TABLE `paket_pelanggan_anggota` (
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 ```
 
+`notification` (notifikasi in-app persisten untuk pengguna, November 2026):
+
+```sql
+CREATE TABLE IF NOT EXISTS `notification` (
+    `id` CHAR(36) NOT NULL,
+    `userId` CHAR(36) NOT NULL,
+    `branchId` CHAR(36) NULL,
+    `eventKey` VARCHAR(128) NOT NULL,
+    `category` VARCHAR(32) NOT NULL,
+    `tone` VARCHAR(16) NOT NULL DEFAULT 'INFO',
+    `title` VARCHAR(191) NOT NULL,
+    `message` TEXT NOT NULL,
+    `href` VARCHAR(255) NULL,
+    `metadataMasked` JSON NULL,
+    `readAt` DATETIME(3) NULL,
+    `expiresAt` DATETIME(3) NULL,
+    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `updatedAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+
+    UNIQUE INDEX `notification_userId_eventKey_key`(`userId`, `eventKey`),
+    INDEX `notification_userId_readAt_createdAt_idx`(`userId`, `readAt`, `createdAt`),
+    INDEX `notification_branchId_createdAt_idx`(`branchId`, `createdAt`),
+    PRIMARY KEY (`id`),
+    CONSTRAINT `notification_userId_fkey` FOREIGN KEY (`userId`) REFERENCES `user`(`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT `notification_branchId_fkey` FOREIGN KEY (`branchId`) REFERENCES `cabang`(`id`) ON DELETE SET NULL ON UPDATE CASCADE
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+```
+
 ## Kembali ke versi sebelumnya
 
 ```bash

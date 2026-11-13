@@ -1,9 +1,10 @@
-import { HttpStatus, Injectable } from '@nestjs/common';
+import { HttpStatus, Injectable, Optional } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service';
 import type { SessionPrincipal } from '../identity/identity.service';
 import { PolicyService } from '../identity/policy.service';
 import { ApiProblem } from '../identity/security';
+import { NotificationWriterService } from '../notifications/notification-writer.service';
 import {
   CAP_PUTUS_PEMBATALAN,
   KODE_PEMBATALAN_TERLAMBAT,
@@ -41,6 +42,7 @@ export class PembatalanTerlambatService {
   constructor(
     private readonly db: PrismaService,
     private readonly policy: PolicyService,
+    @Optional() private readonly notificationWriter?: NotificationWriterService,
   ) {}
 
   private bolehDiCabang(principal: SessionPrincipal, capability: string, branchId: string) {
@@ -119,6 +121,28 @@ export class PembatalanTerlambatService {
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );
+
+    if (this.notificationWriter) {
+      const b = await this.db.pemesananKelas.findUnique({
+        where: { id: bookingId },
+        select: { branchId: true, bookingNumber: true, user: { select: { displayName: true } } },
+      });
+      if (b) {
+        void this.notificationWriter
+          .writeForUsersInBranch(this.db, {
+            branchId: b.branchId,
+            roles: ['MANAGER', 'SUPER_OWNER'],
+            eventKey: `late_cancel.requested:${dibuat.id}`,
+            category: 'APPROVAL',
+            tone: 'WARNING',
+            title: 'Pengajuan Batal Terlambat',
+            message: `${b.user?.displayName || 'Member'} mengajukan pembatalan terlambat (booking #${b.bookingNumber}). Menunggu disposisi.`,
+            href: '/classes/reschedules',
+          })
+          .catch(() => {});
+      }
+    }
+
     return this.tampilan(dibuat);
   }
 
@@ -178,7 +202,7 @@ export class PembatalanTerlambatService {
       async (tx) => {
         const row = await tx.sessionAdjustRequest.findUnique({
           where: { id },
-          include: { booking: { include: { classSlot: { select: { branchId: true } } } } },
+          include: { booking: { include: { classSlot: { select: { branchId: true } }, user: { select: { id: true, displayName: true } } } } },
         });
         if (!row || row.reasonCode !== KODE_PEMBATALAN_TERLAMBAT || !row.booking)
           throw new ApiProblem('RESOURCE_NOT_FOUND', HttpStatus.NOT_FOUND);
@@ -214,6 +238,25 @@ export class PembatalanTerlambatService {
           keputusan === 'approve'
             ? await jalankanPembatalanTerlambat(tx, row, principal.userId, now)
             : { resultingBalance: null, sessionsReturned: 0 };
+
+        if (this.notificationWriter && row.booking?.userId) {
+          const approved = keputusan === 'approve';
+          await this.notificationWriter
+            .writeForUser(tx, {
+              userId: row.booking.userId,
+              branchId: cabang,
+              eventKey: `late_cancel.decided:${id}:${keputusan}`,
+              category: 'BOOKING',
+              tone: approved ? 'SUCCESS' : 'DANGER',
+              title: approved ? 'Pembatalan Terlambat Disetujui' : 'Pembatalan Terlambat Ditolak',
+              message: approved
+                ? 'Permohonan pembatalan terlambat Anda telah disetujui. Sesi kelas Anda telah dikembalikan.'
+                : `Permohonan pembatalan terlambat Anda ditolak${note ? ` (${note})` : '.'}`,
+              href: '/my-bookings',
+            })
+            .catch(() => {});
+        }
+
         return {
           id,
           status: keputusan === 'approve' ? 'APPROVED' : 'REJECTED',

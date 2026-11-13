@@ -206,6 +206,7 @@ model Cabang {
   instructorAvailabilities InstructorAvailability[]
   packages              Paket[]
   bookings              PemesananKelas[]
+  notifications         Notification[]
 
   @@map("cabang")
 }
@@ -318,6 +319,7 @@ model User {
   approvedAdjustments   SessionAdjustRequest[] @relation("AdjustApprover")
   instructorAvailabilities InstructorAvailability[]
   sharedPackages        PaketPelangganAnggota[]
+  notifications         Notification[]
 
   @@index([role, status])
   @@map("user")
@@ -1051,6 +1053,32 @@ model PublicContent {
   @@unique([contentKey, scopeKey, locale, version])
   @@index([kind, status, scopeKey])
   @@map("public_content")
+}
+
+/// Notifikasi in-app untuk pengguna (member, instruktur, staf, owner).
+model Notification {
+  id             String    @id @default(uuid()) @db.Char(36)
+  userId         String    @db.Char(36)
+  branchId       String?   @db.Char(36)
+  eventKey       String    @db.VarChar(128)
+  category       String    @db.VarChar(32)
+  tone           String    @default("INFO") @db.VarChar(16)
+  title          String    @db.VarChar(191)
+  message        String    @db.Text
+  href           String?   @db.VarChar(255)
+  metadataMasked Json?
+  readAt         DateTime?
+  expiresAt      DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  branch Cabang? @relation(fields: [branchId], references: [id], onDelete: SetNull)
+
+  @@unique([userId, eventKey])
+  @@index([userId, readAt, createdAt])
+  @@index([branchId, createdAt])
+  @@map("notification")
 }
 
 /// Template pesan notifikasi yang dikelola staf. Versi terbit dipakai saat pesan dikirim; bila tidak ada
