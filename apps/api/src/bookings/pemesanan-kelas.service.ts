@@ -424,7 +424,7 @@ export class BookingsService {
               tone: 'INFO',
               title: 'Booking Dibatalkan',
               message: `Booking kelas "${className}" di ${branchName} berhasil dibatalkan. Kuota sesi Anda tetap aman.`,
-              href: '/my-bookings',
+              href: '/bookings',
             })
             .catch(() => {});
 
@@ -438,7 +438,7 @@ export class BookingsService {
               tone: 'INFO',
               title: 'Booking Dibatalkan',
               message: `${booking.user.displayName || 'Member'} membatalkan booking kelas "${className}". Kursi kembali tersedia.`,
-              href: '/classes/timetable',
+              href: '/workspace/bookings',
             })
             .catch(() => {});
         }
@@ -1138,7 +1138,7 @@ export class BookingsService {
               tone: 'SUCCESS',
               title: 'Booking Berhasil',
               message: `Kelas "${className}" di ${branchName} pada ${timeStr} berhasil dipesan.`,
-              href: '/my-bookings',
+              href: '/bookings',
             })
             .catch(() => {});
 
@@ -1152,7 +1152,7 @@ export class BookingsService {
               tone: 'INFO',
               title: 'Pemesanan Kelas Baru',
               message: `${booking.user.displayName || 'Member'} memesan kelas "${className}" (${timeStr}).`,
-              href: '/classes/timetable',
+              href: '/workspace/bookings',
             })
             .catch(() => {});
         }

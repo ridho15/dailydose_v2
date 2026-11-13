@@ -127,7 +127,7 @@ export class PembatalanTerlambatService {
         where: { id: bookingId },
         select: { branchId: true, bookingNumber: true, user: { select: { displayName: true } } },
       });
-      if (b) {
+      if (b && b.branchId) {
         void this.notificationWriter
           .writeForUsersInBranch(this.db, {
             branchId: b.branchId,
@@ -137,7 +137,7 @@ export class PembatalanTerlambatService {
             tone: 'WARNING',
             title: 'Pengajuan Batal Terlambat',
             message: `${b.user?.displayName || 'Member'} mengajukan pembatalan terlambat (booking #${b.bookingNumber}). Menunggu disposisi.`,
-            href: '/classes/reschedules',
+            href: '/workspace/bookings',
           })
           .catch(() => {});
       }
@@ -252,7 +252,7 @@ export class PembatalanTerlambatService {
               message: approved
                 ? 'Permohonan pembatalan terlambat Anda telah disetujui. Sesi kelas Anda telah dikembalikan.'
                 : `Permohonan pembatalan terlambat Anda ditolak${note ? ` (${note})` : '.'}`,
-              href: '/my-bookings',
+              href: '/bookings',
             })
             .catch(() => {});
         }

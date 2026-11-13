@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  ArrowRight,
   Bell,
   CheckCheck,
   ChevronDown,
@@ -20,6 +21,7 @@ import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   browserNotificationClient,
+  getNotificationActionLabel,
   type UserNotification,
 } from '@/api-clients/notification-client';
 import { Button } from '../components/actions';
@@ -366,6 +368,16 @@ export function NotificationsView() {
                     <span className="mt-1 block text-xs leading-relaxed text-dd-muted">
                       {item.message}
                     </span>
+
+                    {/* Action CTA Button */}
+                    {item.href && (
+                      <div className="mt-3 flex items-center gap-2">
+                        <span className="inline-flex items-center gap-1.5 rounded-dd-sm border border-dd-forest/20 bg-dd-forest/5 px-2.5 py-1 text-xs font-semibold text-dd-forest transition-colors group-hover:bg-dd-forest group-hover:text-white">
+                          {getNotificationActionLabel(item)}
+                          <ArrowRight className="size-3.5" aria-hidden="true" />
+                        </span>
+                      </div>
+                    )}
                   </div>
                 </div>
               );
@@ -375,7 +387,7 @@ export function NotificationsView() {
                   {item.href ? (
                     <Link
                       href={item.href}
-                      className="block no-underline"
+                      className="group block no-underline"
                       onClick={() => void markRead(item)}
                     >
                       {content}

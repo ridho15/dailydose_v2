@@ -71,3 +71,36 @@ export const browserNotificationClient: NotificationClient = {
     });
   },
 };
+
+export function getNotificationActionLabel(item: {
+  category?: string;
+  href?: string | null;
+}): string {
+  if (!item.href) return '';
+  const href = item.href.toLowerCase();
+  const cat = (item.category ?? '').toUpperCase();
+
+  if (href.includes('/purchases') || href.includes('/payments')) {
+    return 'Verifikasi Pembayaran';
+  }
+  if (cat === 'PAYMENT' || href.includes('/orders')) {
+    return 'Lihat Pesanan';
+  }
+  if (cat === 'APPROVAL') {
+    return 'Tinjau Pengajuan';
+  }
+  if (cat === 'BOOKING' || href.includes('/bookings')) {
+    return 'Lihat Booking';
+  }
+  if (cat === 'SCHEDULE' || href.includes('/schedule') || href.includes('/classes') || href.includes('/instructor')) {
+    return 'Lihat Jadwal';
+  }
+  if (cat === 'PACKAGE' || href.includes('/packages')) {
+    return 'Lihat Paket';
+  }
+  if (href.includes('/account')) {
+    return 'Buka Akun';
+  }
+  return 'Buka Halaman';
+}
+

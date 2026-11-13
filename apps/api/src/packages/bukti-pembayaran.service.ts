@@ -146,7 +146,7 @@ export class PaymentProofService {
             tone: 'INFO',
             title: 'Bukti Pembayaran Baru',
             message: `Bukti transfer baru diunggah untuk pesanan #${purchase.id.slice(0, 8)}. Silakan verifikasi.`,
-            href: '/payments',
+            href: '/workspace/payments',
           })
           .catch(() => {});
 
@@ -263,7 +263,7 @@ export class PaymentProofService {
           tone: 'INFO',
           title: 'Unggah Ulang Bukti Bayar',
           message: `Bukti transfer revisi telah diunggah untuk pesanan #${current.id.slice(0, 8)}. Silakan verifikasi ulang.`,
-          href: '/payments',
+          href: '/workspace/payments',
         })
         .catch(() => {});
     }

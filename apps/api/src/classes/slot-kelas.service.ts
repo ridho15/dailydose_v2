@@ -580,6 +580,29 @@ export class ClassSlotService {
           },
         );
 
+        if (this.notificationWriter && slot.instructorId) {
+          const className = slot.classType?.name ?? 'Pilates';
+          const branchName = slot.branch?.name ?? 'Studio';
+          const timeStr = new Intl.DateTimeFormat('id-ID', {
+            dateStyle: 'medium',
+            timeStyle: 'short',
+            timeZone: slot.branch?.timezone || 'Asia/Jakarta',
+          }).format(slot.startAt);
+
+          void this.notificationWriter
+            .writeForUser(tx, {
+              userId: slot.instructorId,
+              branchId: slot.branchId,
+              eventKey: `instructor.assigned:${slot.id}:${slot.instructorId}`,
+              category: 'SCHEDULE',
+              tone: 'INFO',
+              title: 'Penugasan Mengajar Baru',
+              message: `Anda dijadwalkan mengajar kelas "${className}" di ${branchName} pada ${timeStr}.`,
+              href: '/workspace/classes',
+            })
+            .catch(() => {});
+        }
+
         return this.view(slot);
       },
     );
@@ -637,6 +660,36 @@ export class ClassSlotService {
           { instructorId: slot.instructorId, status: slot.status },
           { instructorId: input.instructorUserId },
         );
+
+        if (this.notificationWriter && input.instructorUserId && input.instructorUserId !== slot.instructorId) {
+          const slotDetails = await tx.slotKelas.findUnique({
+            where: { id },
+            include: { branch: true, classType: true },
+          });
+          if (slotDetails) {
+            const className = slotDetails.classType?.name ?? 'Pilates';
+            const branchName = slotDetails.branch?.name ?? 'Studio';
+            const timeStr = new Intl.DateTimeFormat('id-ID', {
+              dateStyle: 'medium',
+              timeStyle: 'short',
+              timeZone: slotDetails.branch?.timezone || 'Asia/Jakarta',
+            }).format(slotDetails.startAt);
+
+            void this.notificationWriter
+              .writeForUser(tx, {
+                userId: input.instructorUserId,
+                branchId: slotDetails.branchId,
+                eventKey: `instructor.assigned:${id}:${input.instructorUserId}`,
+                category: 'SCHEDULE',
+                tone: 'INFO',
+                title: 'Penugasan Mengajar Baru',
+                message: `Anda dijadwalkan mengajar kelas "${className}" di ${branchName} pada ${timeStr}.`,
+                href: '/workspace/classes',
+              })
+              .catch(() => {});
+          }
+        }
+
         return this.viewOf(tx, id);
       },
     );
@@ -854,6 +907,36 @@ export class ClassSlotService {
           },
           input.reason,
         );
+
+        if (this.notificationWriter && targetInstructorId && targetInstructorId !== slot.instructorId) {
+          const updatedSlot = await tx.slotKelas.findUnique({
+            where: { id },
+            include: { branch: true, classType: true },
+          });
+          if (updatedSlot) {
+            const className = updatedSlot.classType?.name ?? 'Pilates';
+            const branchName = updatedSlot.branch?.name ?? 'Studio';
+            const timeStr = new Intl.DateTimeFormat('id-ID', {
+              dateStyle: 'medium',
+              timeStyle: 'short',
+              timeZone: updatedSlot.branch?.timezone || 'Asia/Jakarta',
+            }).format(updatedSlot.startAt);
+
+            void this.notificationWriter
+              .writeForUser(tx, {
+                userId: targetInstructorId,
+                branchId: updatedSlot.branchId,
+                eventKey: `instructor.assigned:${id}:${targetInstructorId}`,
+                category: 'SCHEDULE',
+                tone: 'INFO',
+                title: 'Penugasan Mengajar Baru',
+                message: `Anda dijadwalkan mengajar kelas "${className}" di ${branchName} pada ${timeStr}.`,
+                href: '/workspace/classes',
+              })
+              .catch(() => {});
+          }
+        }
+
         return this.viewOf(tx, id);
       },
     );

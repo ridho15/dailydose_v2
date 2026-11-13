@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   browserNotificationClient,
+  getNotificationActionLabel,
   type NotificationClient,
   type UserNotification,
 } from '@/api-clients/notification-client';
@@ -254,12 +255,20 @@ export function NotificationCenter({
                 <span className="min-w-0">
                   <strong className="block text-sm">{item.title}</strong>
                   <span className="mt-1 block text-xs leading-5 text-dd-muted">{item.message}</span>
-                  <time className="mt-1 block text-[13px] text-dd-muted" dateTime={item.createdAt}>
-                    {new Intl.DateTimeFormat('id-ID', {
-                      dateStyle: 'medium',
-                      timeStyle: 'short',
-                    }).format(new Date(item.createdAt))}
-                  </time>
+                  <div className="mt-2 flex items-center justify-between gap-2">
+                    <time className="block text-[12px] text-dd-muted" dateTime={item.createdAt}>
+                      {new Intl.DateTimeFormat('id-ID', {
+                        dateStyle: 'medium',
+                        timeStyle: 'short',
+                      }).format(new Date(item.createdAt))}
+                    </time>
+                    {item.href && (
+                      <span className="inline-flex items-center gap-1 text-[12px] font-semibold text-dd-forest">
+                        {getNotificationActionLabel(item)}
+                        <ArrowRight className="size-3" aria-hidden="true" />
+                      </span>
+                    )}
+                  </div>
                 </span>
               </Link>
             ))}
