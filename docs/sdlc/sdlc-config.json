@@ -26,7 +26,10 @@
   "localDevPorts": {
     "web": 32220,
     "api": 32221,
-    "reservedExternalDoNotTouch": [32120, 32121]
+    "reservedExternalDoNotTouch": [
+      32120,
+      32121
+    ]
   },
   "enforcedStandards": {
     "styling": "Tailwind CSS (UI/UX ProMax)",
@@ -35,22 +38,31 @@
       "Antislop",
       "Graphify",
       "No Happy Path",
-      "Verification Data"
+      "Verification Data",
+      "Security by Default",
+      "Evidence Before Claims"
     ],
     "mandatoryRules": {
       "listView": "MUST_USE_PAGINATION_OR_LAZY_LOAD_WITH_DEBOUNCED_SEARCH_AND_FILTER",
-      "dynamicSelect": "MUST_USE_ASYNC_SEARCHABLE_COMBOBOX_FOR_RELATIONAL_DATA",
+      "dynamicSelect": "MUST_USE_ASYNC_SEARCHABLE_COMBOBOX",
       "alertSystem": "SINGLE_DEDUPLICATED_ALERT_WITH_EXPLICIT_CAUSE_AND_SOLUTION",
       "confirmModal": "STANDARDIZED_CONFIRMATION_MODAL_WITH_LOADING_LOCK",
-      "completionGate": "NO_CLAIM_WITHOUT_DIRECT_EXECUTION_AND_EVIDENCE"
+      "evidence": "RUN_VERIFICATION_NOW_SHOW_OUTPUT_MARK_UNRUN_AS_BELUM_DIVERIFIKASI_QA_UAT_ROW_NEEDS_BUKTI",
+      "stagedDelivery": "SIZE_CHECK_CLOSED_INVENTORY_FROM_EVIDENCE_SMALL_STAGES_WITH_EXIT_CRITERIA_TRACKER_NO_ITEM_WITHOUT_STAGE_VERIFY_EACH_STAGE_NEW_FINDINGS_TO_BACKLOG",
+      "complexityControl": "CHECK_DRIFT_VS_PRD_BOTH_WAYS_EVIDENCE_BASED_FINDINGS_RESPECT_INTENTIONAL_REGISTER_RECOMMEND_THEN_FINISH_APPROVED_SIMPLIFICATION_COMPLETELY",
+      "skillRoutingAndTokenEfficiency": "RIGHT_SKILL_IF_INSTALLED_NEVER_CLAIM_MISSING_PROJECT_MAP_FIRST_NO_FULL_RESCAN_READ_ONLY_NEEDED_MINIMAL_DIFF_NO_AI_SLOP",
+      "planGoalVerification": "MEASURABLE_GOAL_PLAN_CHECKED_AGAINST_REALITY_TRACEABILITY_RECORDED_APPROVAL_REVERIFY_ON_CHANGE_MATCH_RESULT_TO_GOAL",
+      "focusedChange": "SCOPE_FIRST_READ_BEFORE_EDIT_PROVE_NAMES_EXIST_MAP_DEPENDENTS_REPRODUCE_AND_ROOT_CAUSE_BUGS_MARK_UNPROVEN_ASSUMPTIONS",
+      "dataVerification": "TRACE_DATA_FLOW_END_TO_END_MATCH_DISPLAYED_DATA_TO_INDEPENDENT_SOURCE_QA_13_TO_16_BEFORE_CLAIMING_TEST_PASSED",
+      "evidenceVerification": "CURRENT_COMMIT_SCREENSHOTS_CHECKED_NEGATIVE_CONTROL_COMPLETE_COUNTS_REPRODUCIBLE_INDEPENDENT_REVIEW_FOR_HIGH_RISK",
+      "security": "SERVER_SIDE_AUTHZ_ESCAPED_OUTPUT_PARAMETERIZED_QUERIES_HTTPONLY_SESSION_NO_SECRETS_IN_CODE_SEC_CHECKLIST_PER_MODULE"
     },
     "verificationSuite": [
-      "Typecheck (API + Web)",
-      "Unit & Core-Flow Regression (Jest + Vitest)",
-      "Playwright Browser E2E & MySQL Persistence",
-      "QA 8-Point Matrix",
+      "Playwright Browser E2E & Regression",
+      "QA Matrix",
       "UAT Sign-off"
     ]
   },
-  "updatedAt": "2026-11-12T10:52:00+07:00"
+  "updatedAt": "2026-11-14T03:21:02.490Z",
+  "kitVersion": "1.2.0"
 }

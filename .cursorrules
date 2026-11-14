@@ -1,6 +1,16 @@
+<!-- sdlc-promax:start -->
 # SDLC ProMax Standards
 Read and strictly adhere to the Full-Cycle SDLC orchestrator blueprint:
 - Config: docs/sdlc/sdlc-config.json
 - Master Skill: .agent/skills/app-setup-blueprint-promax/SKILL.md
 - UI Standards: docs/sdlc/ui-standards-reference
-- Mandatory Completion Rule: Do NOT claim a task, fix, or command works or is finished without direct post-edit execution and concrete verification evidence (test output, DB persistence check, Playwright screenshots). Never suggest untested commands as verified.
+- Evidence before claims: never say done/fixed/passing without running the verification command now and showing its output; mark anything unrun as "belum diverifikasi"
+- Verify the evidence itself before reporting (SKILL.md Evidence Verification Gate): same commit, screenshots checked, new tests proven able to fail, full counts
+- Data verification before claiming a test passed: trace one record input -> saved -> displayed -> exported, compare displayed values with an independent source, and fill QA-13..QA-16 (SKILL.md Data Verification Gates)
+- Focused change, no guessing: for every feature/bug/adjustment, set scope, read the code first, prove every name exists, map dependents, reproduce and find the root cause before fixing, and mark unproven assumptions (SKILL.md Focused Change Protocol, docs/sdlc/templates/CHANGE-SCOPE-TEMPLATE.md)
+- Plan & goal verification: before building, require a measurable goal with provable completion criteria, check the plan against the real project state, trace every requirement to a task, test and QA row, and record the approval (name, date, version); re-verify when the plan changes and match the result to the goal before claiming done (SKILL.md Plan & Goal Verification Gate, docs/sdlc/templates/PLAN-AND-GOAL-TEMPLATE.md)
+- Skill routing & token efficiency: pick the right skill per task only if installed (never claim an uninstalled one), read docs/sdlc/PROJECT-MAP.md (or graphify-out/) before opening files, update it incrementally, never re-scan the whole project without a stated reason, read only needed line ranges, and keep diffs minimal and free of AI slop (SKILL.md Skill Routing & Token Efficiency Protocol)
+- Complexity & scope drift: at each milestone compare the project with the PRD goal and non-goals in both directions, back overengineering findings with evidence from the code, leave anything recorded in docs/sdlc/COMPLEXITY-DECISIONS.md alone, recommend simplification and wait for a decision (agree/reject/record as intentional), and finish approved simplifications completely with before/after metrics (SKILL.md Complexity & Scope Drift Protocol)
+- Staged delivery, nothing missed: if a job is too broad (several modules, ~8+ files, several goals, or all/everything) build a closed inventory from evidence, split it into small stages with provable exit criteria, keep a tracker where every item has a stage and status, verify each stage before the next, add new findings to the backlog instead of doing them silently, and close only when every item is done or deferred/cancelled on record (SKILL.md Work Decomposition & Staged Execution Protocol, docs/sdlc/templates/ROADMAP-TEMPLATE.md)
+- Security: apply the SEC-01..SEC-10 checklist (docs/sdlc/templates/PRD-AND-DELTA-TEMPLATE.md section 6.1) to every module
+<!-- sdlc-promax:end -->

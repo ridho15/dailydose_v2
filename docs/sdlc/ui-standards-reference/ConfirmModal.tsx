@@ -93,7 +93,7 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
 
   const variantClasses = {
     danger: 'bg-rose-600 hover:bg-rose-700 focus:ring-rose-500 text-white',
-    warning: 'bg-amber-600 hover:bg-amber-700 focus:ring-amber-500 text-white',
+    warning: 'bg-amber-700 hover:bg-amber-800 focus:ring-amber-600 text-white',
     primary: 'bg-indigo-600 hover:bg-indigo-700 focus:ring-indigo-500 text-white'
   }[variant];
 
@@ -122,11 +122,11 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
               variant === 'danger'
                 ? 'bg-rose-100 text-rose-600 dark:bg-rose-950/50 dark:text-rose-400'
                 : variant === 'warning'
-                ? 'bg-amber-100 text-amber-600 dark:bg-amber-950/50 dark:text-amber-400'
+                ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-400'
                 : 'bg-indigo-100 text-indigo-600 dark:bg-indigo-950/50 dark:text-indigo-400'
             }`}
           >
-            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg aria-hidden="true" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -152,7 +152,7 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
             type="button"
             disabled={isLoading}
             onClick={onCancel}
-            className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-slate-400 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-750"
+            className="min-h-[44px] cursor-pointer rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-slate-400 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
           >
             {cancelLabel}
           </button>
@@ -160,11 +160,11 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
             type="button"
             disabled={isLoading}
             onClick={onConfirm}
-            className={`inline-flex items-center justify-center rounded-xl px-4 py-2 text-sm font-medium shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 ${variantClasses}`}
+            className={`inline-flex min-h-[44px] cursor-pointer items-center justify-center rounded-xl px-4 py-2 text-sm font-medium shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 ${variantClasses}`}
           >
             {isLoading ? (
               <span className="inline-flex items-center gap-2">
-                <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                <svg aria-hidden="true" className="h-4 w-4 animate-spin motion-reduce:animate-none" viewBox="0 0 24 24" fill="none">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
                 </svg>

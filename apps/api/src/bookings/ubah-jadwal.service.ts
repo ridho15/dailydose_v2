@@ -11,6 +11,7 @@ import { PolicyService } from '../identity/policy.service';
 import { ApiProblem, ENTITY_ID_REGEX } from '../identity/security';
 import { HITUNG_TERISI, terisi } from '../classes/terisi';
 import { paketBerlakuDi } from './cabang-paket';
+import { NotificationWriterService } from '../notifications/notification-writer.service';
 
 export type RescheduleRequestReasonCode =
   | 'CUSTOMER_SCHEDULE_CONFLICT'
@@ -62,6 +63,7 @@ export class ReschedulesService {
     private readonly policy: PolicyService,
     private readonly config: RuntimeConfigService,
     @Optional() private readonly audit?: AuditService,
+    @Optional() private readonly notificationWriter?: NotificationWriterService,
   ) {}
 
   private syntheticPolicy() {
@@ -412,6 +414,33 @@ export class ReschedulesService {
           afterMasked: { bookingId: booking.id, sourceSlotId: reschedule.sourceSlotId, targetSlotId: reschedule.targetSlotId },
         });
 
+        if (this.notificationWriter) {
+          const branchId = targetSlot.branchId || reschedule.sourceSlot?.branchId;
+          const memberName = reschedule.booking.user?.displayName || 'Member';
+          const sourceName = reschedule.sourceSlot?.classType?.name ?? 'Kelas Asal';
+          const targetName = reschedule.targetSlot?.classType?.name ?? 'Kelas Baru';
+          const timeStr = new Intl.DateTimeFormat('id-ID', {
+            dateStyle: 'medium',
+            timeStyle: 'short',
+            timeZone: reschedule.targetSlot?.branch?.timezone || 'Asia/Jakarta',
+          }).format(targetSlot.startAt);
+
+          if (branchId) {
+            void this.notificationWriter
+              .writeForUsersInBranch(tx, {
+                branchId,
+                roles: ['ADMIN', 'MANAGER'],
+                eventKey: `reschedule.requested:${reschedule.id}`,
+                category: 'APPROVAL',
+                tone: 'WARNING',
+                title: 'Permohonan Reschedule Baru',
+                message: `${memberName} mengajukan reschedule kelas "${sourceName}" ke "${targetName}" (${timeStr}). Menunggu persetujuan.`,
+                href: '/workspace/bookings?tab=reschedules',
+              })
+              .catch(() => {});
+          }
+        }
+
         return {
           status: HttpStatus.CREATED,
           body: {
@@ -466,9 +495,18 @@ export class ReschedulesService {
         const reschedule = await tx.ubahJadwal.findUnique({
           where: { id },
           include: {
-            booking: { include: { customerPackage: { include: { package: true, purchase: true } } } },
-            targetSlot: true,
-            sourceSlot: true,
+            booking: {
+              include: {
+                user: { select: { id: true, displayName: true } },
+                customerPackage: { include: { package: true, purchase: true } },
+              },
+            },
+            targetSlot: {
+              include: { classType: true, branch: true },
+            },
+            sourceSlot: {
+              include: { classType: true, branch: true },
+            },
           },
         });
         if (!reschedule) throw new ApiProblem('RESOURCE_NOT_FOUND', HttpStatus.NOT_FOUND);
@@ -604,6 +642,54 @@ export class ReschedulesService {
           beforeMasked: { status: reschedule.status, sourceSlotId: reschedule.sourceSlotId },
           afterMasked: { status: newStatus, targetSlotId: reschedule.targetSlotId },
         });
+
+        if (this.notificationWriter) {
+          if (decision === 'approve') {
+            const targetName = reschedule.targetSlot?.classType?.name ?? 'Kelas';
+            const timeStr = reschedule.targetSlot?.startAt
+              ? new Intl.DateTimeFormat('id-ID', {
+                  dateStyle: 'medium',
+                  timeStyle: 'short',
+                  timeZone: reschedule.targetSlot?.branch?.timezone || 'Asia/Jakarta',
+                }).format(reschedule.targetSlot.startAt)
+              : '';
+
+            void this.notificationWriter
+              .writeForUser(tx, {
+                userId: reschedule.booking.userId,
+                branchId: reschedule.targetSlot?.branchId ?? reschedule.sourceSlot?.branchId,
+                eventKey: `reschedule.approved:${reschedule.id}`,
+                category: 'SCHEDULE',
+                tone: 'SUCCESS',
+                title: 'Reschedule Disetujui',
+                message: `Permohonan pindah ke kelas "${targetName}"${timeStr ? ` pada ${timeStr}` : ''} telah disetujui. Sampai jumpa di kelas!`,
+                href: '/bookings',
+              })
+              .catch(() => {});
+          } else {
+            const reasonText =
+              input.reasonCode === 'TARGET_UNAVAILABLE'
+                ? 'target kelas tidak tersedia atau penuh'
+                : input.reasonCode === 'OUTSIDE_POLICY'
+                  ? 'di luar kebijakan reschedule'
+                  : input.reasonCode === 'OUT_OF_SCOPE'
+                    ? 'di luar cakupan cabang'
+                    : null;
+
+            void this.notificationWriter
+              .writeForUser(tx, {
+                userId: reschedule.booking.userId,
+                branchId: reschedule.sourceSlot?.branchId ?? reschedule.targetSlot?.branchId,
+                eventKey: `reschedule.rejected:${reschedule.id}`,
+                category: 'SCHEDULE',
+                tone: 'WARNING',
+                title: 'Reschedule Belum Disetujui',
+                message: `Permohonan reschedule Anda belum dapat disetujui${reasonText ? ` karena ${reasonText}` : ''}. Booking tetap berada pada kelas semula.`,
+                href: '/bookings',
+              })
+              .catch(() => {});
+          }
+        }
 
         return {
           status: HttpStatus.OK,

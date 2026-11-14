@@ -1,0 +1,22 @@
+{
+  "files": {
+    ".agent/skills/sdlc-promax-prompt-writer/SKILL.md": "c261e0e48cda617d783568f41ad3df3ff67c5e8e6eba96b7b69bed79bc3d6e34",
+    ".claude/skills/sdlc-promax-prompt-writer/SKILL.md": "c261e0e48cda617d783568f41ad3df3ff67c5e8e6eba96b7b69bed79bc3d6e34",
+    "docs/sdlc/templates/CHANGE-SCOPE-TEMPLATE.md": "5ed9aa11ca8487f9e28643b7790a60de6f28ec15f73e11ed5ad38d274a7e9c5f",
+    "docs/sdlc/templates/COMPLEXITY-DECISIONS-TEMPLATE.md": "d65498e7df80120d9e127cc3839060bb5fc54f9a046196f52c123e06376a33f4",
+    "docs/sdlc/templates/PLAN-AND-GOAL-TEMPLATE.md": "e9a76aa6dd6de7e415d6d3e3159d1ce197334585750072ecd44ed19260180563",
+    "docs/sdlc/templates/PRD-AND-DELTA-TEMPLATE.md": "e2385ec3deb0a12cedf83cfcacaac30a44ad0ee1550029c761ce357314ccea2b",
+    "docs/sdlc/templates/PROJECT-MAP-TEMPLATE.md": "04fb333d993397095f59cdb5146f8fe52645194dbf14bece2e67964753d53c5e",
+    "docs/sdlc/templates/QA-UAT-MATRIX.md": "7d8df11d7d148fb93020ea78cc96ac4a826776c1e71c5d832a077132adcdc7bb",
+    "docs/sdlc/templates/ROADMAP-TEMPLATE.md": "18b64faf577e083568518dc506200897a6d204b540c5b1151f021b69f302d38a",
+    "docs/sdlc/templates/SIMPLIFICATION-REPORT-TEMPLATE.md": "f06dc594c817942124de43593d7e84cf6cfcbf8095059fe4be233bd51bb5c159",
+    "docs/sdlc/ui-standards-reference/alert-manager.ts": "353db3d98984320d5a152c8054f17fdde9931f5e4877578807ed59a6cce47221",
+    "docs/sdlc/ui-standards-reference/AlertContainer.tsx": "fe83371ae1d92ef53142d52b32005c1a1c5a19a7355af18f4ac8ba523890e903",
+    "docs/sdlc/ui-standards-reference/AsyncSearchSelect.tsx": "538ae6c9793c89b0430ab0c44d05e9f179ffc790acc93a3a71f31c01bba27af0",
+    "docs/sdlc/ui-standards-reference/ConfirmModal.tsx": "4fa1821177a4dfd9d68528d6bd40864a832629fc99c0f0e6750bd73367981ba1",
+    "docs/sdlc/ui-standards-reference/DataTablePagination.tsx": "2603cfe79ef3384a0371cc1fd9d5a2d44863bd1e297758a1f1961ac70e5184e9",
+    "docs/sdlc/playwright-reference/ui-standards-e2e.spec.ts": "b8ef71f0c021efeefec2a92b4e46b1b4f3c40e36f41677ef3e60a29477e1f22a"
+  },
+  "kitVersion": "1.2.0",
+  "updatedAt": "2026-11-14T03:21:02.494Z"
+}

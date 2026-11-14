@@ -66,7 +66,7 @@ export const DataTablePagination: React.FC<DataTablePaginationProps> = ({
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="relative flex-1 max-w-sm">
           <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
-            <svg className="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg aria-hidden="true" className="h-4 w-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -82,7 +82,7 @@ export const DataTablePagination: React.FC<DataTablePaginationProps> = ({
             value={localSearch}
             onChange={(e) => setLocalSearch(e.target.value)}
             placeholder={searchPlaceholder}
-            className="w-full rounded-xl border border-slate-300 bg-white py-2 pl-9 pr-8 text-sm text-slate-800 placeholder-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+            className="min-h-[44px] w-full rounded-xl border border-slate-300 bg-white py-2 pl-9 pr-11 text-sm text-slate-800 placeholder-slate-500 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
           />
           {localSearch && (
             <button
@@ -92,9 +92,9 @@ export const DataTablePagination: React.FC<DataTablePaginationProps> = ({
                 setLocalSearch('');
                 onSearchChange('');
               }}
-              className="absolute inset-y-0 right-0 flex items-center pr-2.5 text-slate-400 hover:text-slate-600"
+              className="absolute inset-y-0 right-0 flex w-11 cursor-pointer items-center justify-center text-slate-500 hover:text-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-600"
             >
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
@@ -134,7 +134,7 @@ export const DataTablePagination: React.FC<DataTablePaginationProps> = ({
           <select
             value={pagination.limit}
             onChange={(e) => onLimitChange(Number(e.target.value))}
-            className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+            className="min-h-[44px] cursor-pointer rounded-lg border border-slate-300 bg-white px-2 py-1 text-sm font-medium text-slate-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
           >
             {limitOptions.map((opt) => (
               <option key={opt} value={opt}>
@@ -154,7 +154,7 @@ export const DataTablePagination: React.FC<DataTablePaginationProps> = ({
             disabled={pagination.page <= 1 || isLoading}
             onClick={() => onPageChange(pagination.page - 1)}
             aria-label="Halaman Sebelumnya"
-            className="inline-flex h-9 items-center justify-center rounded-lg border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
+            className="inline-flex h-11 cursor-pointer items-center justify-center rounded-lg border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-600 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
           >
             Sebelumnya
           </button>
@@ -168,7 +168,7 @@ export const DataTablePagination: React.FC<DataTablePaginationProps> = ({
             disabled={pagination.page >= pagination.totalPages || isLoading}
             onClick={() => onPageChange(pagination.page + 1)}
             aria-label="Halaman Selanjutnya"
-            className="inline-flex h-9 items-center justify-center rounded-lg border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
+            className="inline-flex h-11 cursor-pointer items-center justify-center rounded-lg border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-600 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
           >
             Selanjutnya
           </button>

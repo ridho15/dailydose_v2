@@ -47,6 +47,9 @@ export const AsyncSearchSelect: React.FC<AsyncSearchSelectProps> = ({
   const fetchOptionsRef = useRef(fetchOptions);
   fetchOptionsRef.current = fetchOptions;
   const listboxId = useId();
+  const triggerId = `${listboxId}-trigger`;
+  const errorId = `${listboxId}-error`;
+  const optionId = (index: number) => `${listboxId}-option-${index}`;
 
   // Parent reset the value (form reset) or changed it to another option: drop the stale label
   useEffect(() => {
@@ -146,7 +149,7 @@ export const AsyncSearchSelect: React.FC<AsyncSearchSelectProps> = ({
   return (
     <div className="relative w-full" ref={containerRef}>
       {label && (
-        <label className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">
+        <label htmlFor={triggerId} className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">
           {label} {required && <span className="text-rose-500">*</span>}
         </label>
       )}
@@ -155,6 +158,7 @@ export const AsyncSearchSelect: React.FC<AsyncSearchSelectProps> = ({
       <div className="relative">
       <button
         type="button"
+        id={triggerId}
         role="combobox"
         data-testid="async-searchable-select"
         disabled={disabled}
@@ -164,7 +168,9 @@ export const AsyncSearchSelect: React.FC<AsyncSearchSelectProps> = ({
         aria-expanded={isOpen}
         aria-controls={listboxId}
         aria-invalid={!!error}
-        className={`flex w-full items-center justify-between rounded-xl border bg-white px-3.5 py-2.5 text-left text-sm transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500/20 disabled:cursor-not-allowed disabled:bg-slate-100 dark:bg-slate-800 ${
+        aria-describedby={error ? errorId : undefined}
+        aria-activedescendant={isOpen && options[highlightedIndex] ? optionId(highlightedIndex) : undefined}
+        className={`flex w-full items-center justify-between min-h-[44px] cursor-pointer rounded-xl border bg-white px-3.5 py-2.5 text-left text-sm transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-600 disabled:cursor-not-allowed disabled:bg-slate-100 dark:bg-slate-800 ${
           error
             ? 'border-rose-500 focus:border-rose-500'
             : isOpen
@@ -172,13 +178,14 @@ export const AsyncSearchSelect: React.FC<AsyncSearchSelectProps> = ({
             : 'border-slate-300 hover:border-slate-400 dark:border-slate-700'
         }`}
       >
-        <span className={`truncate ${selectedItem || value ? 'text-slate-900 dark:text-slate-100 font-medium' : 'text-slate-400'}`}>
+        <span className={`truncate ${selectedItem || value ? 'text-slate-900 dark:text-slate-100 font-medium' : 'text-slate-500 dark:text-slate-400'}`}>
           {selectedItem?.label || selectedLabel || value || placeholder}
         </span>
 
-        <div className={`flex items-center gap-1.5 ${(selectedItem || value) && !disabled ? 'pl-7' : ''}`}>
+        <div className={`flex items-center gap-1.5 ${(selectedItem || value) && !disabled ? 'pl-10' : ''}`}>
           <svg
-            className={`h-4 w-4 text-slate-400 transition-transform ${isOpen ? 'rotate-180 text-indigo-500' : ''}`}
+            aria-hidden="true"
+            className={`h-4 w-4 text-slate-500 transition-transform ${isOpen ? 'rotate-180 text-indigo-500' : ''}`}
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
@@ -192,16 +199,16 @@ export const AsyncSearchSelect: React.FC<AsyncSearchSelectProps> = ({
           type="button"
           onClick={handleClear}
           aria-label="Hapus pilihan"
-          className="absolute inset-y-0 right-9 my-auto h-6 rounded p-0.5 text-slate-400 hover:text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/40 dark:hover:text-slate-200"
+          className="absolute inset-y-0 right-8 my-auto flex h-11 w-11 cursor-pointer items-center justify-center rounded text-slate-500 hover:text-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-600 dark:hover:text-slate-200"
         >
-          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
           </svg>
         </button>
       )}
       </div>
 
-      {error && <p className="mt-1 text-xs text-rose-600 dark:text-rose-400">{error}</p>}
+      {error && <p id={errorId} className="mt-1 text-xs text-rose-600 dark:text-rose-400">{error}</p>}
 
       {/* Dropdown Panel */}
       {isOpen && (
@@ -209,7 +216,8 @@ export const AsyncSearchSelect: React.FC<AsyncSearchSelectProps> = ({
           {/* Inner Search Input */}
           <div className="relative mb-2">
             <svg
-              className="pointer-events-none absolute inset-y-0 left-0 my-auto ml-3 h-4 w-4 text-slate-400"
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-y-0 left-0 my-auto ml-3 h-4 w-4 text-slate-500"
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
@@ -230,7 +238,9 @@ export const AsyncSearchSelect: React.FC<AsyncSearchSelectProps> = ({
               onKeyDown={handleKeyDown}
               placeholder={searchPlaceholder}
               aria-label={searchPlaceholder}
-              className="w-full rounded-lg border border-slate-200 bg-slate-50 py-1.5 pl-9 pr-3 text-sm text-slate-800 placeholder-slate-400 focus:border-indigo-500 focus:bg-white focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+              aria-controls={listboxId}
+              aria-activedescendant={options[highlightedIndex] ? optionId(highlightedIndex) : undefined}
+              className="min-h-[44px] w-full rounded-lg border border-slate-200 bg-slate-50 py-1.5 pl-9 pr-3 text-sm text-slate-800 placeholder-slate-500 focus:border-indigo-500 focus:bg-white focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
             />
           </div>
 
@@ -238,7 +248,7 @@ export const AsyncSearchSelect: React.FC<AsyncSearchSelectProps> = ({
           <div id={listboxId} role="listbox" data-testid="async-select-options" className="max-h-60 overflow-y-auto">
             {isLoading ? (
               <div className="flex items-center justify-center py-6 text-sm text-slate-500 gap-2">
-                <svg className="h-4 w-4 animate-spin text-indigo-500" viewBox="0 0 24 24" fill="none">
+                <svg aria-hidden="true" className="h-4 w-4 animate-spin motion-reduce:animate-none text-indigo-500" viewBox="0 0 24 24" fill="none">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
                 </svg>
@@ -251,7 +261,7 @@ export const AsyncSearchSelect: React.FC<AsyncSearchSelectProps> = ({
                 <button
                   type="button"
                   onClick={() => setRetryCount((n) => n + 1)}
-                  className="mt-2 rounded-lg border border-slate-300 px-3 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-indigo-500/40 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+                  className="mt-2 min-h-[44px] cursor-pointer rounded-lg border border-slate-300 px-4 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-600 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
                 >
                   Coba lagi
                 </button>
@@ -268,11 +278,12 @@ export const AsyncSearchSelect: React.FC<AsyncSearchSelectProps> = ({
                 return (
                   <div
                     key={opt.value}
+                    id={optionId(index)}
                     role="option"
                     aria-selected={isSelected}
                     onClick={() => handleSelect(opt)}
                     onMouseEnter={() => setHighlightedIndex(index)}
-                    className={`cursor-pointer rounded-lg px-3 py-2 text-sm transition-colors ${
+                    className={`min-h-[44px] cursor-pointer rounded-lg px-3 py-2.5 text-sm transition-colors ${
                       isSelected
                         ? 'bg-indigo-50 font-semibold text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300'
                         : isHighlighted
@@ -283,7 +294,7 @@ export const AsyncSearchSelect: React.FC<AsyncSearchSelectProps> = ({
                     <div className="flex items-center justify-between">
                       <span>{opt.label}</span>
                       {isSelected && (
-                        <svg className="h-4 w-4 text-indigo-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <svg aria-hidden="true" className="h-4 w-4 text-indigo-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                         </svg>
                       )}
