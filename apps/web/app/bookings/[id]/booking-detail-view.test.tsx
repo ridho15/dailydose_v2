@@ -160,9 +160,17 @@ describe('BookingDetailView reschedule customer', () => {
       expect(client.cancellationOptions).toHaveBeenCalledWith(bookingId);
     });
 
+    it('states the self-service limit from the API cutoff, not a fixed H-24', async () => {
+      // Kelas mulai 2026-08-10T03:00Z, cutoff 12 jam sebelumnya.
+      const client = withCancelCheck({ ...cutoff, canCancel: true, unavailableReason: null, supportAction: null, cutoffAt: '2026-08-09T15:00:00Z' });
+      render(<BookingDetailView id={bookingId} client={client} />);
+      expect(await screen.findByText(/dapat dilakukan paling lambat 12 jam sebelum kelas dimulai\./)).toBeVisible();
+      expect(screen.queryByText(/H-24/)).not.toBeInTheDocument();
+    });
+
     it('hides the button after the cutoff and says why, with the time', async () => {
       render(<BookingDetailView id={bookingId} client={withCancelCheck(cutoff)} />);
-      expect(await screen.findByRole('note')).toHaveTextContent(/Batas pembatalan mandiri \(H-24\) ditutup pada/);
+      expect(await screen.findByRole('note')).toHaveTextContent(/Batas pembatalan mandiri ditutup pada/);
       expect(screen.getByRole('note')).toHaveTextContent(/Hubungi studio/);
       expect(screen.queryByRole('button', { name: 'Batalkan booking' })).not.toBeInTheDocument();
     });
@@ -213,7 +221,7 @@ describe('BookingDetailView reschedule customer', () => {
 
       expect(
         await screen.findByText(
-          'Batas waktu pembatalan mandiri (H-24) telah terlewati. Hubungi admin studio jika terdapat kondisi darurat medis.',
+          'Batas waktu pembatalan mandiri (24 jam sebelum kelas dimulai) telah terlewati. Hubungi admin studio jika terdapat kondisi darurat medis.',
         ),
       ).toBeVisible();
     });

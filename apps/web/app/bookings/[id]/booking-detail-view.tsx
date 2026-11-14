@@ -91,6 +91,13 @@ export function BookingDetailView({
   const [cancelError, setCancelError] = useState('');
   const [cancelMessage, setCancelMessage] = useState('');
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  // Batas mandiri dihitung dari cutoff yang dikirim API (mengikuti pengaturan cutoff), bukan angka tetap.
+  const cutoffRef = cancelOptions?.cutoffAt ?? options?.cutoffAt ?? null;
+  const jamBatas =
+    cutoffRef && booking?.classSlot?.startAt
+      ? Math.round((booking.classSlot.startAt.getTime() - new Date(cutoffRef).getTime()) / 3600e3)
+      : null;
+  const batasLabel = jamBatas && jamBatas > 0 ? `${jamBatas} jam sebelum kelas dimulai` : 'batas waktu yang ditentukan studio';
   const intentKey = useRef(newIntentKey());
 
   const handleCancelBooking = async () => {
@@ -122,7 +129,7 @@ export function BookingDetailView({
       } else if (code === 'CLASS_IN_PROGRESS') {
         setCancelError('Kelas sedang atau sudah selesai berlangsung. Booking tidak dapat dibatalkan.');
       } else if (code === 'CANCELLATION_CUTOFF_PASSED') {
-        setCancelError('Batas waktu pembatalan mandiri (H-24) telah terlewati. Hubungi admin studio jika terdapat kondisi darurat medis.');
+        setCancelError(`Batas waktu pembatalan mandiri (${batasLabel}) telah terlewati. Hubungi admin studio jika terdapat kondisi darurat medis.`);
       } else if (code === 'BOOKING_ALREADY_CANCELLED') {
         setCancelError('Booking ini sudah dibatalkan sebelumnya.');
       } else if (code === 'RESOURCE_NOT_FOUND') {
@@ -448,7 +455,7 @@ export function BookingDetailView({
             }
             message={
               rescheduleUnavailable.code === 'RESCHEDULE_CUTOFF_PASSED'
-                ? 'Batas perubahan jadwal mandiri (H-24 sebelum kelas) telah berakhir. Kursi kelas Anda saat ini tetap aman. Silakan hubungi admin studio untuk asistensi darurat.'
+                ? `Batas perubahan jadwal mandiri (${batasLabel}) telah berakhir. Kursi kelas Anda saat ini tetap aman. Silakan hubungi admin studio untuk asistensi darurat.`
                 : 'Booking Anda tetap aktif. Coba kembali atau hubungi studio jika Anda memerlukan bantuan untuk mengganti jadwal.'
             }
           />
@@ -499,7 +506,7 @@ export function BookingDetailView({
           <AlertBanner
             tone="warning"
             title="Batas reschedule telah lewat"
-            message={`Batas perubahan jadwal mandiri (H-24) ditutup pada ${dateTime(options.cutoffAt, booking.classSlot?.timezone ?? 'Asia/Jakarta')}. Kursi Anda pada jadwal ini tetap aman. Hubungi studio untuk bantuan atau adjustment manual.`}
+            message={`Batas perubahan jadwal mandiri ditutup pada ${dateTime(options.cutoffAt, booking.classSlot?.timezone ?? 'Asia/Jakarta')}. Kursi Anda pada jadwal ini tetap aman. Hubungi studio untuk bantuan atau adjustment manual.`}
           />
           <ButtonLink href="/contact" variant="secondary">
             Hubungi studio
@@ -524,7 +531,7 @@ export function BookingDetailView({
         <section className="rounded-none border border-ed-line bg-white p-5 shadow-none sm:p-6">
           <h2 className="font-serif text-lg font-normal tracking-tight text-ed-ink">Perubahan atau Pembatalan Booking</h2>
           <p className="mt-2 text-sm leading-relaxed text-ed-muted">
-            Perubahan jadwal (reschedule) dan pembatalan mandiri dapat dilakukan sebelum batas waktu H-24 sebelum kelas dimulai.
+            Perubahan jadwal (reschedule) dan pembatalan mandiri dapat dilakukan paling lambat {batasLabel}.
           </p>
           <div className="mt-4 flex flex-wrap gap-3">
             {options?.canRequest && !showForm && (
@@ -553,7 +560,7 @@ export function BookingDetailView({
           {cancelOptions?.canCancel === false && options?.supportAction !== 'CONTACT_STUDIO' && (
             <p className="mt-4 text-sm leading-relaxed text-ed-muted" role="note">
               {cancelOptions.unavailableReason === 'CANCELLATION_CUTOFF_PASSED'
-                ? `Batas pembatalan mandiri (H-24) ditutup pada ${dateTime(new Date(cancelOptions.cutoffAt), booking.classSlot?.timezone ?? 'Asia/Jakarta')}. Hubungi studio bila Anda tidak dapat hadir.`
+                ? `Batas pembatalan mandiri ditutup pada ${dateTime(new Date(cancelOptions.cutoffAt), booking.classSlot?.timezone ?? 'Asia/Jakarta')}. Hubungi studio bila Anda tidak dapat hadir.`
                 : 'Booking ini tidak dapat dibatalkan sendiri lagi. Hubungi studio bila Anda memerlukan bantuan.'}
             </p>
           )}
