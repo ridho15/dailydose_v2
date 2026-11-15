@@ -43,6 +43,29 @@ interface MemoryUpload {
 
 const multipartLimits = { fileSize: 8_000_000, files: 2 };
 
+/** Cookie sesi web (HttpOnly) dari `issueSession`; token tidak ikut di body respons. */
+export function pasangCookieSesi(
+  response: Response,
+  session: Awaited<ReturnType<IdentityService['issueSession']>>,
+) {
+  if (session.webCookieToken)
+    response.cookie('dd_session', session.webCookieToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV !== 'development',
+      sameSite: 'lax',
+      path: '/',
+    });
+  if (session.webRefreshToken)
+    response.cookie('dd_refresh', session.webRefreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV !== 'development',
+      sameSite: 'lax',
+      path: '/api/v1/auth',
+    });
+  const { webCookieToken: _private, webRefreshToken: _privateRefresh, ...body } = session;
+  return body;
+}
+
 @Controller()
 export class IdentityController {
   constructor(
@@ -59,22 +82,7 @@ export class IdentityController {
     response: Response,
     session: Awaited<ReturnType<IdentityService['issueSession']>>,
   ) {
-    if (session.webCookieToken)
-      response.cookie('dd_session', session.webCookieToken, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV !== 'development',
-        sameSite: 'lax',
-        path: '/',
-      });
-    if (session.webRefreshToken)
-      response.cookie('dd_refresh', session.webRefreshToken, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV !== 'development',
-        sameSite: 'lax',
-        path: '/api/v1/auth',
-      });
-    const { webCookieToken: _private, webRefreshToken: _privateRefresh, ...body } = session;
-    return body;
+    return pasangCookieSesi(response, session);
   }
 
   @Public()

@@ -18,6 +18,7 @@ import { useReturnTo } from '../lib/return-to';
 import { BrandMark } from '../components/public/brand-mark';
 import { GoogleIdentityButton } from '../components/auth/google-identity-button';
 import { googleClientId } from '../lib/google-client-id';
+import { hrGroupErrorMessage, hrGroupStartHref } from '../lib/hr-group';
 
 const messages: Record<UiFailure, string> = {
   AUTHENTICATION_REQUIRED: 'Email, username/nomor WhatsApp, atau password tidak valid.',
@@ -34,15 +35,26 @@ const messages: Record<UiFailure, string> = {
 
 type AuthState = 'idle' | 'loading' | 'success' | 'invalid' | UiFailure;
 
-export function SignInView({ client = browserIdentityClient }: { client?: IdentityClient }) {
+export function SignInView({
+  client = browserIdentityClient,
+  hrGroupEnabled = false,
+}: {
+  client?: IdentityClient;
+  hrGroupEnabled?: boolean;
+}) {
   const [state, setState] = useState<AuthState>('idle');
   const [reference, setReference] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   // Sebelum hidrasi, submit native akan menaruh email dan password di URL; tahan sampai handler aktif.
   const hydrated = useHydrated();
   const sessionContext = useSessionContext();
-  const { withReturnTo } = useReturnTo();
+  const { returnTo, withReturnTo } = useReturnTo();
   const googleEnabled = Boolean(googleClientId());
+  // Galat dari callback Akun HR Group (`/sign-in?hrg_error=...`), dibaca setelah hidrasi.
+  const [hrGroupError, setHrGroupError] = useState<string | null>(null);
+  useEffect(() => {
+    setHrGroupError(hrGroupErrorMessage(new URLSearchParams(window.location.search).get('hrg_error')));
+  }, []);
 
   const complete = useCallback(async () => {
     if (sessionContext) {
@@ -158,6 +170,7 @@ export function SignInView({ client = browserIdentityClient }: { client?: Identi
               event.preventDefault();
               const form = new FormData(event.currentTarget);
               setReference(null);
+              setHrGroupError(null);
               setState('loading');
               void client
                 .signInWithPassword(String(form.get('email')), String(form.get('password')))
@@ -220,6 +233,11 @@ export function SignInView({ client = browserIdentityClient }: { client?: Identi
             </button>
           </form>
 
+          {hrGroupError && state === 'idle' && (
+            <div className="mt-4">
+              <Feedback kind="error">{hrGroupError}</Feedback>
+            </div>
+          )}
           {state === 'invalid' && (
             <div className="mt-4">
               <Feedback kind="error">
@@ -266,13 +284,22 @@ export function SignInView({ client = browserIdentityClient }: { client?: Identi
             </div>
           )}
 
+          {(googleEnabled || hrGroupEnabled) && (
+            <div className="my-6 flex items-center gap-4 text-[13px] font-bold text-ed-muted before:h-px before:flex-1 before:bg-ed-line after:h-px after:flex-1 after:bg-ed-line">
+              atau
+            </div>
+          )}
           {googleEnabled && (
-            <>
-              <div className="my-6 flex items-center gap-4 text-[13px] font-bold text-ed-muted before:h-px before:flex-1 before:bg-ed-line after:h-px after:flex-1 after:bg-ed-line">
-                atau
-              </div>
-              <GoogleIdentityButton client={client} onComplete={complete} onFailure={fail} />
-            </>
+            <GoogleIdentityButton client={client} onComplete={complete} onFailure={fail} />
+          )}
+          {hrGroupEnabled && (
+            <a
+              className="mt-3 flex min-h-[44px] w-full items-center justify-center gap-2 rounded-none border border-ed-border-ui bg-white px-5 text-sm font-bold text-ed-ink no-underline transition-colors hover:bg-ed-tint focus-visible:outline focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-[#09371f] motion-reduce:transition-none"
+              href={hrGroupStartHref(returnTo)}
+            >
+              <ShieldCheck aria-hidden="true" className="size-4 shrink-0 text-ed-forest" />
+              Masuk dengan Akun HR Group
+            </a>
           )}
 
           <div className="mt-6 border-t border-ed-line pt-4 text-xs leading-relaxed text-ed-muted">

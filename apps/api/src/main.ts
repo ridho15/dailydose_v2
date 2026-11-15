@@ -21,6 +21,8 @@ import { ProblemDetailsFilter } from './platform/problem-details.filter';
 import type { NextFunction, Request, Response } from 'express';
 import { json, raw, urlencoded } from 'express';
 
+const HRG_VERIFY_PATH = '/api/v1/integrations/hr-group/verify-credentials';
+
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule, {
     bufferLogs: true,
@@ -30,12 +32,16 @@ async function bootstrap(): Promise<void> {
     '/api/v1/uploads/payment-proofs/:id/content',
     raw({ type: 'application/octet-stream', limit: '12mb' }),
   );
+  // Credential bridge Akun HR Group: tanda tangan HMAC dihitung atas badan mentah, jadi jangan diurai di sini.
+  app.use(HRG_VERIFY_PATH, raw({ type: () => true, limit: '16kb' }));
   app.use(json({ limit: '10mb' }));
   app.use(urlencoded({ extended: true, limit: '10mb' }));
   app.use((request: Request, response: Response, next: NextFunction) => {
     if (
       !['GET', 'HEAD', 'OPTIONS'].includes(request.method) &&
-      process.env.NODE_ENV === 'production'
+      process.env.NODE_ENV === 'production' &&
+      // Panggilan server-ke-server dari Akun HR Group (tanpa Origin); diamankan HMAC di controllernya.
+      request.path !== HRG_VERIFY_PATH
     ) {
       const configured = process.env.PUBLIC_WEB_BASE_URL?.trim();
       const expectedOrigin = configured ? new URL(configured).origin : null;

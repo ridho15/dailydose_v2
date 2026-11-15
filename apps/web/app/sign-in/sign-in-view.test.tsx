@@ -113,4 +113,28 @@ describe('SignInView (Poin 15)', () => {
     expect(screen.getByRole('link', { name: /Daftar akun baru/i })).toHaveAttribute('href', '/register');
     window.history.replaceState({}, '', '/');
   });
+  it('hides the HR Group button unless the server enables it', () => {
+    render(<SignInView client={createMockClient()} />);
+    expect(screen.queryByRole('link', { name: 'Masuk dengan Akun HR Group' })).toBeNull();
+  });
+
+  it('shows the HR Group button pointing at the API start route with the safe destination', async () => {
+    window.history.replaceState({}, '', '/sign-in?returnTo=%2Faccount');
+    const view = render(<SignInView client={createMockClient()} hrGroupEnabled />);
+    await waitFor(() =>
+      expect(screen.getByRole('link', { name: 'Masuk dengan Akun HR Group' })).toHaveAttribute(
+        'href',
+        '/api/v1/auth/hr-group/start?returnTo=%2Faccount',
+      ),
+    );
+    expect((await axe(view.container)).violations).toHaveLength(0);
+    window.history.replaceState({}, '', '/');
+  });
+
+  it('explains an HR Group callback error code in Indonesian', async () => {
+    window.history.replaceState({}, '', '/sign-in?hrg_error=ambiguous');
+    render(<SignInView client={createMockClient()} hrGroupEnabled />);
+    await waitFor(() => expect(screen.getByText(/Hubungi admin, akun ganda/)).toBeVisible());
+    window.history.replaceState({}, '', '/');
+  });
 });

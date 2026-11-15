@@ -1373,3 +1373,15 @@ model RefundPaket {
   @@index([branchId, createdAt])
   @@map("refund_paket")
 }
+
+/// Tautan Akun HR Group (SSO, `sub` OIDC) ke user lokal (November 2026). Tanpa relasi ke tabel lama;
+/// kode tetap jalan bila tabelnya belum dibuat (lihat foundation/tabel-opsional.ts).
+model AkunGrupTautan {
+  id        String   @id @db.Char(36)
+  hrgSub    String   @unique @db.VarChar(64)
+  userId    String   @db.Char(36)
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@map("akun_grup_tautan")
+}

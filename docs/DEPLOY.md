@@ -311,6 +311,59 @@ CREATE TABLE IF NOT EXISTS `notification` (
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 ```
 
+`akun_grup_tautan` (tautan Akun HR Group ke user lokal, November 2026). Login HR Group tetap jalan tanpa tabel
+ini, tetapi tautan tidak tersimpan sehingga pencocokan diulang tiap login:
+
+```sql
+CREATE TABLE `akun_grup_tautan` (
+    `id` CHAR(36) NOT NULL,
+    `hrgSub` VARCHAR(64) NOT NULL,
+    `userId` CHAR(36) NOT NULL,
+    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+
+    UNIQUE INDEX `akun_grup_tautan_hrgSub_key`(`hrgSub`),
+    INDEX `akun_grup_tautan_userId_idx`(`userId`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+```
+
+## Akun HR Group (SSO)
+
+Tombol "Masuk dengan Akun HR Group" di halaman masuk dan credential bridge untuk migrasi member lama. Kontraknya
+sama dengan penyedia OIDC di repo `hr-group` (klien `dailydose`). Fitur **mati** sampai semua variabel di bawah terisi
+di `.env.production` dan `HRG_ENABLED=true`; saat mati, ketiga endpoint di bawah menjawab 404 dan tombolnya tidak tampil.
+Login password dan Google tetap berjalan seperti biasa.
+
+| Variabel | Isi |
+| --- | --- |
+| `HRG_ENABLED` | `true` untuk menyalakan; selain itu mati |
+| `HRG_ISSUER` | URL issuer Akun HR Group, mis. `https://akun.hrgroup.id` (tanpa `/` di akhir) |
+| `HRG_CLIENT_ID` | `dailydose` |
+| `HRG_CLIENT_SECRET` | secret klien `dailydose` dari Akun HR Group |
+| `HRG_REDIRECT_URI` | `https://<domain web>/api/v1/auth/hr-group/callback`, harus sama persis dengan yang didaftarkan di Akun HR Group |
+| `HRG_BRIDGE_SECRET` | secret HMAC khusus Daily Dose, sama dengan yang disimpan Akun HR Group untuk Daily Dose |
+
+Endpoint (semua lewat domain web, diteruskan ke API):
+
+- `GET /api/v1/auth/hr-group/start?returnTo=/account`: redirect ke `${HRG_ISSUER}/auth` (code + PKCE S256, state, nonce).
+  State, nonce, dan verifier disimpan di cookie HttpOnly terenkripsi `dd_hrg_flow` (10 menit). `returnTo` hanya
+  jalur relatif di situs ini; selain itu diganti `/account`.
+- `GET /api/v1/auth/hr-group/callback`: tukar code, verifikasi `id_token` (RS256 lewat JWKS, `iss`, `aud`, `nonce`, `exp`),
+  cocokkan user (tautan lokal, `hrg_links.dailydose`, nomor HP terverifikasi, email terverifikasi, lalu customer baru),
+  buat sesi Daily Dose biasa, lalu memberi tahu `POST ${HRG_ISSUER}/api/links`. Kegagalan back-channel hanya dicatat
+  di log. Staf tidak pernah dibuat otomatis. Gagal: redirect ke `/sign-in?hrg_error=<kode>` dengan kode `cancelled`,
+  `state`, `token`, `ambiguous` (akun ganda, dicatat di audit `auth.hrg_ambiguous`), `inactive`, atau `server`.
+- `POST /api/v1/integrations/hr-group/verify-credentials`: dipanggil server Akun HR Group dengan header
+  `X-HRG-Timestamp` dan `X-HRG-Signature`. Selisih waktu lebih dari 300 detik atau tanda tangan salah dijawab 401.
+  Maksimal 10 percobaan per identifier per 15 menit (429). Hanya customer aktif yang dijawab; staf, user tidak ada,
+  dan password salah sama-sama `401 {"error":"invalid_credentials"}`. `phoneVerified`/`emailVerified` selalu `false`
+  karena Daily Dose tidak menyimpan status verifikasi nomor/email. Jalur ini dikecualikan dari cek `Origin` produksi
+  (panggilan server-ke-server) dan dijaga tanda tangan HMAC.
+
+Sebelum menyalakan: buat tabel `akun_grup_tautan` (SQL di atas), isi keenam variabel, deploy ulang (tidak perlu build
+ulang khusus; tombol membaca env server saat halaman diminta), lalu coba masuk dengan satu akun uji. Aktivitasnya
+tercatat di audit dengan kode `auth.hrg_login`, `auth.hrg_linked`, dan `auth.hrg_customer_created`.
+
 ## Kembali ke versi sebelumnya
 
 ```bash

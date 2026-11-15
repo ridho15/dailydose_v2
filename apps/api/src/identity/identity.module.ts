@@ -29,6 +29,8 @@ import { InstructorManagementController } from './instructor-management.controll
 import { InstructorManagementService } from './manajemen-instruktur.service';
 import { RolesGuard } from './roles.guard';
 import { RoleAliasMigrationService } from './role-alias-migration.service';
+import { HrGroupController } from './hr-group.controller';
+import { HrGroupService } from './hr-group.service';
 
 @Module({
   imports: [DatabaseModule],
@@ -37,10 +39,12 @@ import { RoleAliasMigrationService } from './role-alias-migration.service';
     AccessManagementController,
     CustomerManagementController,
     InstructorManagementController,
+    HrGroupController,
   ],
   providers: [
     RoleAliasMigrationService,
     IdentityService,
+    HrGroupService,
     CustomerProfileService,
     IdentityReviewQueryService,
     IdentityDocumentAccessService,
