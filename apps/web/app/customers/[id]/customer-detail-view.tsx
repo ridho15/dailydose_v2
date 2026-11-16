@@ -1383,7 +1383,7 @@ export function CustomerDetailView({ id }: { id: string }) {
           }}
         >
           <div className="space-y-4 py-2">
-            {impersonateError && <Feedback kind="error">{impersonateError}</Feedback>}
+            {impersonateError && <Feedback kind="error" onDismiss={() => setImpersonateError('')}>{impersonateError}</Feedback>}
             <p className="text-sm text-dd-muted">
               Sesi Super Owner di peramban ini akan dialihkan langsung ke tampilan portal pelanggan (Paket Saya).
             </p>

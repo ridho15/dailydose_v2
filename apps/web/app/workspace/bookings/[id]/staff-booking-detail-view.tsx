@@ -192,11 +192,12 @@ export function StaffBookingDetailView({
         }
       />
 
-      {error && <AlertBanner tone="danger" title="Tindakan belum berhasil" message={error} />}
+      {error && <AlertBanner tone="danger" title="Tindakan belum berhasil" message={error} onDismiss={() => setError('')} />}
       {!context?.activeBranchId && context?.hasCapability('attendance:manage') && (
         <AlertBanner
           tone="info"
           title="Mode baca global"
+          dismissible={false}
           message="Pilih cabang dari topbar untuk menerbitkan QR atau mencatat kehadiran."
         />
       )}

@@ -508,6 +508,7 @@ export function PaymentReviewDetailView({
           tone="danger"
           title="Tindakan belum dapat diproses"
           message={error}
+          onDismiss={() => setError('')}
           action={{ label: 'Muat data terbaru', onSelect: () => void load() }}
         />
       )}
@@ -515,6 +516,7 @@ export function PaymentReviewDetailView({
         <AlertBanner
           tone="info"
           title="Mode hanya baca"
+          dismissible={false}
           message="Anda dapat melihat transaksi dan bukti. Keputusan dilakukan oleh Finance atau Super Owner."
         />
       )}      <div className="flex flex-col gap-6 lg:flex-row lg:items-start">

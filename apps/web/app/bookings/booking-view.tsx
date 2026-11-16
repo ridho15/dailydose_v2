@@ -1122,13 +1122,13 @@ export function BookingView({
               {selectedSlot.bookedCount + 1}/{selectedSlot.capacity}. Tidak ada pemotongan saldo sesi permanen pada tahap booking (sesi hanya direservasi sementara).
             </Panel>
           )}
-          {failure && <Feedback kind="error">{failure}</Feedback>}
+          {failure && <Feedback kind="error" onDismiss={() => setFailure('')}>{failure}</Feedback>}
         </form>
       </Drawer>
 
       {busy && <Skeleton label="Memproses booking" />}
-      {!createOpen && failure && <Feedback kind="error">{failure}</Feedback>}
-      {message && !busy && <Feedback kind="status">{message}</Feedback>}
+      {!createOpen && failure && <Feedback kind="error" onDismiss={() => setFailure('')}>{failure}</Feedback>}
+      {message && !busy && <Feedback kind="status" onDismiss={() => setMessage('')}>{message}</Feedback>}
       {canReview && activeTab === 'reschedules' && (
         <section aria-labelledby="reschedule-queue-title">
           <div className="mb-4">

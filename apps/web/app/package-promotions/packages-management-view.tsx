@@ -312,7 +312,7 @@ export function PackagesManagementView() {
           ))}
         </SelectInput>
       </Panel>
-      {error && <AlertBanner tone="danger" title="Paket tidak tersedia" message={error} />}
+      {error && <AlertBanner tone="danger" title="Paket tidak tersedia" message={error} onDismiss={() => setError('')} />}
       <Panel className="p-0">
         <DataTable
           items={page.items}
@@ -1107,7 +1107,7 @@ function EditPackageModal({
           }
         }}
       >
-        {error && <AlertBanner tone="danger" title="Perubahan belum tersimpan" message={error} />}
+        {error && <AlertBanner tone="danger" title="Perubahan belum tersimpan" message={error} onDismiss={() => setError('')} />}
 
         <div className="rounded-dd-md border border-dd-line bg-dd-surface-muted/50 p-3 text-xs text-dd-muted">
           Business Key:{' '}

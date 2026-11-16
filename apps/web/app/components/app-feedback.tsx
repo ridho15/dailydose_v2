@@ -251,6 +251,13 @@ export function messageForApiError(error: unknown): {
   return { title, message, correlationReference: response?.correlationId };
 }
 
+export type AlertBannerProps = Omit<AppAlert, 'id'> & {
+  onDismiss?: () => void;
+  autoDismiss?: boolean;
+  durationMs?: number;
+  dismissible?: boolean;
+};
+
 export function AlertBanner({
   tone,
   title,
@@ -258,12 +265,27 @@ export function AlertBanner({
   correlationReference,
   action,
   onDismiss,
-}: Omit<AppAlert, 'id'> & { onDismiss?: () => void }) {
+  autoDismiss,
+  durationMs = 5000,
+  dismissible = true,
+}: AlertBannerProps) {
   const [visible, setVisible] = useState(true);
 
   useEffect(() => {
     setVisible(true);
   }, [title, message]);
+
+  useEffect(() => {
+    const shouldAutoDismiss = autoDismiss ?? tone === 'success';
+    if (!shouldAutoDismiss || !visible) return;
+
+    const timer = setTimeout(() => {
+      setVisible(false);
+      onDismiss?.();
+    }, durationMs);
+
+    return () => clearTimeout(timer);
+  }, [autoDismiss, durationMs, onDismiss, tone, title, message, visible]);
 
   if (!visible) return null;
 
@@ -295,14 +317,14 @@ export function AlertBanner({
           )}
         </div>
       </div>
-      {onDismiss && (
+      {dismissible && (
         <button
           type="button"
           onClick={() => {
             setVisible(false);
-            onDismiss();
+            onDismiss?.();
           }}
-          className="ml-2 -mr-1 -mt-1 p-1 rounded-dd-sm text-current opacity-60 hover:opacity-100 hover:bg-black/5 transition cursor-pointer"
+          className="ml-2 -mr-1 -mt-1 p-1 rounded-dd-sm text-current opacity-60 hover:opacity-100 hover:bg-black/5 transition cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-current"
           aria-label="Tutup pemberitahuan"
         >
           <X className="size-4" />

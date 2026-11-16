@@ -2,7 +2,8 @@ import { render, screen, waitForElementToBeRemoved } from '@testing-library/reac
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
-import { AppFeedbackProvider, Drawer, Modal, useAppFeedback } from './app-feedback';
+import { AppFeedbackProvider, AlertBanner, Drawer, Modal, useAppFeedback } from './app-feedback';
+import { Feedback } from '../ui';
 
 function Harness() {
   const feedback = useAppFeedback();
@@ -122,5 +123,120 @@ describe('AppFeedbackProvider', () => {
     await user.click(screen.getByRole('button', { name: 'Tutup dialog' }));
     expect(dialog.parentElement).toHaveAttribute('data-overlay-phase', 'exiting');
     await waitForElementToBeRemoved(() => screen.queryByRole('dialog', { name: 'Modal animasi' }));
+  });
+});
+
+describe('AlertBanner', () => {
+  it('renders dismiss button by default even when onDismiss is omitted and hides when clicked', async () => {
+    const user = userEvent.setup();
+    render(<AlertBanner tone="danger" title="Gagal memproses" message="Periksa koneksi" />);
+
+    expect(screen.getByRole('alert')).toBeInTheDocument();
+    const closeBtn = screen.getByRole('button', { name: 'Tutup pemberitahuan' });
+    expect(closeBtn).toBeInTheDocument();
+
+    await user.click(closeBtn);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('calls onDismiss when close button is clicked', async () => {
+    const user = userEvent.setup();
+    const onDismiss = vi.fn();
+    render(
+      <AlertBanner
+        tone="warning"
+        title="Perhatian"
+        message="Segera lengkapi data"
+        onDismiss={onDismiss}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Tutup pemberitahuan' }));
+    expect(onDismiss).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  });
+
+  it('hides dismiss button when dismissible is false', () => {
+    render(
+      <AlertBanner
+        tone="info"
+        title="Mode hanya baca"
+        message="Data terkunci"
+        dismissible={false}
+      />,
+    );
+
+    expect(screen.getByRole('status')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Tutup pemberitahuan' })).not.toBeInTheDocument();
+  });
+
+  it('auto-dismisses success banners after duration', async () => {
+    vi.useFakeTimers();
+    const onDismiss = vi.fn();
+    render(
+      <AlertBanner
+        tone="success"
+        title="Berhasil disimpan"
+        durationMs={2000}
+        onDismiss={onDismiss}
+      />,
+    );
+
+    expect(screen.getByRole('status')).toBeInTheDocument();
+    vi.advanceTimersByTime(2000);
+    expect(onDismiss).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
+  });
+
+  it('does not auto-dismiss danger banners by default', () => {
+    vi.useFakeTimers();
+    const onDismiss = vi.fn();
+    render(
+      <AlertBanner
+        tone="danger"
+        title="Kesalahan fatal"
+        durationMs={2000}
+        onDismiss={onDismiss}
+      />,
+    );
+
+    expect(screen.getByRole('alert')).toBeInTheDocument();
+    vi.advanceTimersByTime(2500);
+    expect(onDismiss).not.toHaveBeenCalled();
+    expect(screen.getByRole('alert')).toBeInTheDocument();
+    vi.useRealTimers();
+  });
+});
+
+describe('Feedback', () => {
+  it('allows dismissing and does not resurrect closed primitive message on re-render', async () => {
+    const user = userEvent.setup();
+    const onDismiss = vi.fn();
+    const { rerender } = render(
+      <Feedback kind="error" onDismiss={onDismiss}>
+        Terjadi galat pada server
+      </Feedback>,
+    );
+
+    expect(screen.getByRole('alert')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Tutup pemberitahuan' }));
+    expect(onDismiss).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+
+    // Rerender with the same message
+    rerender(
+      <Feedback kind="error" onDismiss={onDismiss}>
+        Terjadi galat pada server
+      </Feedback>,
+    );
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+
+    // Rerender with a new message
+    rerender(
+      <Feedback kind="error" onDismiss={onDismiss}>
+        Galat baru yang berbeda
+      </Feedback>,
+    );
+    expect(screen.getByRole('alert')).toBeInTheDocument();
   });
 });

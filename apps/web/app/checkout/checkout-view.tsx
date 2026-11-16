@@ -205,7 +205,15 @@ export function CheckoutView() {
         </p>
         {error && (
           <div className="mt-5">
-            <AlertBanner tone="danger" title="Checkout belum dapat dimuat" message={error} />
+            <AlertBanner
+              tone="danger"
+              title="Checkout belum dapat dimuat"
+              message={error}
+              onDismiss={() => {
+                setError('');
+                setErrorCode('');
+              }}
+            />
           </div>
         )}
         <ButtonLink className="mt-5 min-h-[44px]" href="/packages">
@@ -252,6 +260,10 @@ export function CheckoutView() {
               ? 'Identitas kamu belum diverifikasi. Isi data verifikasi dulu, sekitar 2 menit.'
               : error
           }
+          onDismiss={() => {
+            setError('');
+            setErrorCode('');
+          }}
           action={
             errorCode === 'CUSTOMER_VERIFICATION_REQUIRED' ||
             errorCode === 'IDENTITY_VERIFICATION_REQUIRED'
@@ -435,6 +447,7 @@ export function CheckoutView() {
               tone="danger"
               title="Voucher tidak dapat digunakan"
               message={voucherError}
+              onDismiss={() => setVoucherError('')}
             />
           </div>
         )}

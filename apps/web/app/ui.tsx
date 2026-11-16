@@ -1,6 +1,6 @@
 'use client';
 
-import { type ReactNode, useEffect, useState } from 'react';
+import { type ReactNode, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { ChevronLeft, Inbox, X } from 'lucide-react';
 
@@ -102,22 +102,32 @@ export function Feedback({
   durationMs?: number;
 }) {
   const [visible, setVisible] = useState(true);
+  const dismissedContentRef = useRef<unknown>(null);
 
   useEffect(() => {
+    if (dismissedContentRef.current !== null) {
+      if (typeof children === 'string' || typeof children === 'number') {
+        if (children === dismissedContentRef.current) {
+          return;
+        }
+      }
+    }
     setVisible(true);
   }, [children]);
 
   useEffect(() => {
     const shouldAutoDismiss = autoDismiss ?? kind === 'status';
-    if (!shouldAutoDismiss) return;
+    if (!shouldAutoDismiss || !visible) return;
 
     const timer = setTimeout(() => {
+      dismissedContentRef.current =
+        typeof children === 'string' || typeof children === 'number' ? children : true;
       setVisible(false);
       onDismiss?.();
     }, durationMs);
 
     return () => clearTimeout(timer);
-  }, [autoDismiss, children, durationMs, kind, onDismiss]);
+  }, [autoDismiss, children, durationMs, kind, onDismiss, visible]);
 
   if (!visible) return null;
 
@@ -142,6 +152,8 @@ export function Feedback({
       <button
         type="button"
         onClick={() => {
+          dismissedContentRef.current =
+            typeof children === 'string' || typeof children === 'number' ? children : true;
           setVisible(false);
           onDismiss?.();
         }}

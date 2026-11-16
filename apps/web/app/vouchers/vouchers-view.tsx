@@ -190,7 +190,7 @@ export function VouchersView() {
           ))}
         </SelectInput>
       </Panel>
-      {error && <AlertBanner tone="danger" title="Gagal memuat voucher" message={error} />}
+      {error && <AlertBanner tone="danger" title="Gagal memuat voucher" message={error} onDismiss={() => setError('')} />}
       {busy && items.length === 0 ? (
         <Skeleton label="Memuat daftar voucher" />
       ) : items.length === 0 ? (
@@ -457,7 +457,7 @@ export function VouchersView() {
             }
           }}
         >
-          {error && <AlertBanner tone="danger" title="Voucher belum tersimpan" message={error} />}
+          {error && <AlertBanner tone="danger" title="Voucher belum tersimpan" message={error} onDismiss={() => setError('')} />}
           <div className="grid gap-4 sm:grid-cols-2">
             <TextInput
               label="Kode voucher"
@@ -775,7 +775,7 @@ function EditVoucherModal({
           }
         }}
       >
-        {error && <AlertBanner tone="danger" title="Perubahan belum tersimpan" message={error} />}
+        {error && <AlertBanner tone="danger" title="Perubahan belum tersimpan" message={error} onDismiss={() => setError('')} />}
 
         <div className="rounded-dd-md border border-dd-line bg-dd-surface-muted/50 p-3 text-xs text-dd-muted">
           Kode Voucher: <strong className="font-mono font-semibold text-dd-ink">{voucher.code}</strong> · Penggunaan:{' '}

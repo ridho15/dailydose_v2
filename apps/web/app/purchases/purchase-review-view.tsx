@@ -694,6 +694,7 @@ export function PurchaseReviewView({
           tone="danger"
           title="Antrean belum dapat diproses"
           message={error}
+          onDismiss={() => setError('')}
           action={{ label: 'Coba lagi', onSelect: () => void load() }}
         />
       )}

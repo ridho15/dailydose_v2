@@ -518,6 +518,7 @@ export function BookingDetailView({
           tone="success"
           title="Booking berhasil dibatalkan"
           message={cancelMessage}
+          onDismiss={() => setCancelMessage('')}
         />
       )}
       {rescheduleMessage && (
@@ -525,6 +526,7 @@ export function BookingDetailView({
           tone="success"
           title="Permintaan berhasil dikirim"
           message={rescheduleMessage}
+          onDismiss={() => setRescheduleMessage('')}
         />
       )}
       {booking.status === 'BOOKED' && !booking.attendance && (

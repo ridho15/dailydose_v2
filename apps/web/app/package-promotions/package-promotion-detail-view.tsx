@@ -901,7 +901,12 @@ function PackageLifecycleEditor({
         }}
       >
         {failure && (
-          <AlertBanner tone="danger" title="Perubahan belum tersimpan" message={failure} />
+          <AlertBanner
+            tone="danger"
+            title="Perubahan belum tersimpan"
+            message={failure}
+            onDismiss={() => setFailure('')}
+          />
         )}
         {mode !== 'lifecycle' && mode !== 'scopes' && (
           <TextInput name="name" label="Nama paket" defaultValue={pkg.name} required />
@@ -1176,7 +1181,7 @@ function PromotionEditor({
       <p className="mb-4 text-sm text-dd-muted">
         Harga normal {formatRupiah(pkg.priceRp)}. Promo harus menyisakan minimal Rp1.
       </p>
-      {failure && <AlertBanner tone="danger" title="Promo belum tersimpan" message={failure} />}
+      {failure && <AlertBanner tone="danger" title="Promo belum tersimpan" message={failure} onDismiss={() => setFailure('')} />}
       <form
         id="package-promotion-form"
         className="grid gap-4"
