@@ -22,6 +22,15 @@ import {
 } from './voucher.service';
 import { batalkanPesananKedaluwarsa } from './payment-expiration-worker';
 import { rapikanPesananKedaluwarsa } from './payment-expiration-worker';
+import {
+  HARI_PERPANJANGAN,
+  MAKS_PERPANJANGAN,
+  adalahPaketPerpanjangan,
+  catatPerpanjangan,
+  infoPerpanjangan,
+  periksaTargetPerpanjangan,
+  pilihanTargetPerpanjangan,
+} from './perpanjangan-masa-aktif';
 
 const PAGE_SIZE = 20;
 const UUID = ENTITY_ID_REGEX;
@@ -50,7 +59,7 @@ export class CustomerOrderService {
     @Optional() private readonly storage?: ConfigGatedObjectStorageProvider,
   ) {}
 
-  private orderView(order: any, _revealAccount = false) {
+  private orderView(order: any, _revealAccount = false, extension: unknown = null) {
     const pkg = order.package;
     const branch = order.branch;
     const voucher = order.voucher;
@@ -247,7 +256,14 @@ export class CustomerOrderService {
           }
         : null,
       paymentAccount,
+      // Pembelian paket perpanjangan masa aktif: paket member yang diperpanjang (null untuk paket biasa).
+      extension,
     };
+  }
+
+  private async orderViews(orders: any[]) {
+    const perpanjangan = await infoPerpanjangan(this.db, orders.map((o) => o.id));
+    return orders.map((o) => this.orderView(o, false, perpanjangan.get(o.id) ?? null));
   }
 
   async checkoutOptions(
@@ -286,6 +302,14 @@ export class CustomerOrderService {
       pkg.priceRp,
       await this.pricing.activePromotion(this.db, pkg.id),
     );
+    // Paket perpanjangan: pembeli memilih satu paket aktifnya sendiri yang akan diperpanjang.
+    const extension = (await adalahPaketPerpanjangan(this.db, pkg.id))
+      ? {
+          days: HARI_PERPANJANGAN,
+          maxPerPackage: MAKS_PERPANJANGAN,
+          targets: await pilihanTargetPerpanjangan(this.db, principal.userId),
+        }
+      : null;
 
     return {
       package: {
@@ -309,6 +333,7 @@ export class CustomerOrderService {
         branchName: targetBranch?.name ?? null,
         classTypes,
       },
+      extension,
       paymentAccount: firstAccount
         ? {
             id: firstAccount.id,
@@ -330,6 +355,7 @@ export class CustomerOrderService {
       paymentProofId?: string;
       expectedPromotionId?: string | null;
       expectedPromotionVersion?: number;
+      targetCustomerPackageId?: string;
     },
     key: string,
     correlationId: string,
@@ -358,6 +384,10 @@ export class CustomerOrderService {
         // Pembelian pelanggan hanya dalam masa jual paket (Mulai berlaku sampai Berakhir).
         if (!sedangDijual((await masaJualPaket(tx, [pkg.id])).get(pkg.id)))
           throw new ApiProblem('PACKAGE_NOT_ON_SALE', HttpStatus.CONFLICT);
+        const perpanjangan = await adalahPaketPerpanjangan(tx, pkg.id);
+        const target = perpanjangan
+          ? await periksaTargetPerpanjangan(tx, input.targetCustomerPackageId, principal.userId, new Date())
+          : null;
 
         const { voucher, discountRp, subtotalRp, totalAmountRp: baseAmountRp, promotion } = await this.priceOrder(
           tx,
@@ -447,6 +477,13 @@ export class CustomerOrderService {
         if (voucher) {
           await pakaiKuotaVoucher(tx, voucher);
         }
+        if (target)
+          await catatPerpanjangan(tx, {
+            purchaseId: order.id,
+            targetCustomerPackageId: target.id,
+            userId: principal.userId,
+            actorId: principal.userId,
+          });
 
         if (input.paymentProofId) {
           await tx.buktiPembayaran.upsert({
@@ -473,7 +510,7 @@ export class CustomerOrderService {
 
         return {
           status: HttpStatus.CREATED,
-          body: this.orderView(order) as unknown as Prisma.InputJsonValue,
+          body: (await this.orderViewsTx(tx, order)) as unknown as Prisma.InputJsonValue,
         };
       },
     );
@@ -585,7 +622,7 @@ export class CustomerOrderService {
     const pageItems = hasNext ? items.slice(0, limit) : items;
 
     return {
-      items: pageItems.map((o) => this.orderView(o)),
+      items: await this.orderViews(pageItems),
       summary,
       nextCursor: hasNext ? pageItems[pageItems.length - 1]?.id ?? null : null,
       page: {
@@ -614,7 +651,8 @@ export class CustomerOrderService {
     if (order.userId !== principal.userId)
       throw new ApiProblem('RESOURCE_NOT_FOUND', HttpStatus.NOT_FOUND);
 
-    return this.orderView(order, true);
+    const perpanjangan = await infoPerpanjangan(this.db, [order.id]);
+    return this.orderView(order, true, perpanjangan.get(order.id) ?? null);
   }
 
   async attachOrderProof(
@@ -680,7 +718,41 @@ export class CustomerOrderService {
       },
     });
 
-    return this.orderView(updated);
+    return (await this.orderViews([updated]))[0];
+  }
+
+  private async orderViewsTx(tx: Prisma.TransactionClient, order: any) {
+    const perpanjangan = await infoPerpanjangan(tx, [order.id]);
+    return this.orderView(order, false, perpanjangan.get(order.id) ?? null);
+  }
+
+  /**
+   * Staf (penjualan di meja): paket aktif milik member yang bisa diperpanjang. Wewenang sama dengan
+   * mencatat penjualan di cabang itu.
+   */
+  async extensionTargets(principal: SessionPrincipal, query: { customerUserId?: string; branchId?: string }) {
+    const branchId = query.branchId ?? '';
+    if (!UUID.test(branchId))
+      throw new ApiProblem('VALIDATION_ERROR', HttpStatus.UNPROCESSABLE_ENTITY, false, [
+        { field: 'branchId', issue: 'INVALID' },
+      ]);
+    this.access.record(principal, branchId);
+    const customerUserId = query.customerUserId ?? '';
+    if (!UUID.test(customerUserId))
+      throw new ApiProblem('VALIDATION_ERROR', HttpStatus.UNPROCESSABLE_ENTITY, false, [
+        { field: 'customerUserId', issue: 'INVALID' },
+      ]);
+    const customer = await this.db.user.findUnique({
+      where: { id: customerUserId },
+      select: { id: true, role: true },
+    });
+    if (!customer || customer.role !== 'CUSTOMER')
+      throw new ApiProblem('RESOURCE_NOT_FOUND', HttpStatus.NOT_FOUND);
+    return {
+      days: HARI_PERPANJANGAN,
+      maxPerPackage: MAKS_PERPANJANGAN,
+      items: await pilihanTargetPerpanjangan(this.db, customer.id),
+    };
   }
 
   /**
@@ -745,6 +817,7 @@ export class CustomerOrderService {
       paymentMethod?: string;
       voucherCode?: string;
       note?: string;
+      targetCustomerPackageId?: string;
     },
     key: string,
     correlationId: string,
@@ -800,6 +873,9 @@ export class CustomerOrderService {
         if (!pkg || pkg.status !== 'ACTIVE')
           throw new ApiProblem('RESOURCE_NOT_FOUND', HttpStatus.NOT_FOUND);
         pastikanPaketDijualDiCabang(pkg, branchId);
+        const target = (await adalahPaketPerpanjangan(tx, pkg.id))
+          ? await periksaTargetPerpanjangan(tx, input.targetCustomerPackageId, customer.id, new Date())
+          : null;
 
         const { voucher, discountRp, subtotalRp, totalAmountRp, promotion } = await this.priceOrder(
           tx,
@@ -846,6 +922,13 @@ export class CustomerOrderService {
         if (voucher) {
           await pakaiKuotaVoucher(tx, voucher);
         }
+        if (target)
+          await catatPerpanjangan(tx, {
+            purchaseId: order.id,
+            targetCustomerPackageId: target.id,
+            userId: customer.id,
+            actorId: principal.userId,
+          });
 
         this.auditService.record({
           action: 'PURCHASE_RECORDED_BY_STAFF',
@@ -854,13 +937,18 @@ export class CustomerOrderService {
           branchId,
           actorUserId: principal.userId,
           correlationId,
-          details: { paymentMethod, totalAmountRp, customerUserId },
+          details: {
+            paymentMethod,
+            totalAmountRp,
+            customerUserId,
+            ...(target ? { targetCustomerPackageId: target.id } : {}),
+          },
         });
 
         return {
           status: HttpStatus.CREATED,
           body: {
-            ...this.orderView(order),
+            ...(await this.orderViewsTx(tx, order)),
             paymentMethod,
             recordedById: principal.userId,
             recordNote: note,

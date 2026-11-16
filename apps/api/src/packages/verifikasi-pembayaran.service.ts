@@ -14,6 +14,7 @@ import { escapeXml, jalurBuktiLokal, jenisBukti } from './bukti-aman';
 import { berlakuSampai } from '../foundation/masa-berlaku';
 import { lepasKuotaVoucher } from './voucher.service';
 import { rapikanPesananKedaluwarsa } from './payment-expiration-worker';
+import { adalahPaketPerpanjangan, perpanjanganPembelian, terapkanPerpanjangan } from './perpanjangan-masa-aktif';
 
 @Injectable()
 export class PaymentReviewService {
@@ -636,6 +637,14 @@ export class PaymentReviewService {
             throw new ApiProblem('PAYMENT_PROOF_REQUIRED', HttpStatus.CONFLICT);
           const nextStatus = decision === 'APPROVED' ? PurchaseStatus.PAID : PurchaseStatus.REJECTED;
 
+          // Paket perpanjangan masa aktif: tidak membuat Paket Pelanggan 0 sesi; yang berubah hanya
+          // masa berlaku paket target (sekali). Paket target yang hangus selama menunggu verifikasi
+          // membuat persetujuan gagal; staf menolak pembayaran lalu mengembalikan dananya.
+          const perpanjangan =
+            decision === 'APPROVED' && (await adalahPaketPerpanjangan(tx, purchase.packageId))
+              ? await terapkanPerpanjangan(tx, purchase.id, decidedAt)
+              : null;
+
           const updated = await tx.pembelian.update({
             where: { id },
             data: {
@@ -648,7 +657,7 @@ export class PaymentReviewService {
           });
 
           let customerPackage = null;
-          if (decision === 'APPROVED') {
+          if (decision === 'APPROVED' && !perpanjangan) {
             const existingPkg = tx.paketPelanggan?.findUnique ? await tx.paketPelanggan.findUnique({
               where: { purchaseId: purchase.id },
             }) : null;
@@ -745,6 +754,14 @@ export class PaymentReviewService {
                       }
                     : null,
                   ledgerEntry: null,
+                  extension: perpanjangan
+                    ? {
+                        targetCustomerPackageId: perpanjangan.targetCustomerPackageId,
+                        days: perpanjangan.hari,
+                        validUntilBefore: perpanjangan.validUntilBefore,
+                        validUntilAfter: perpanjangan.validUntilAfter,
+                      }
+                    : null,
                   idempotentReplay: false,
                 }
               : purchaseWithAudit) as unknown as Prisma.InputJsonValue,
@@ -774,6 +791,7 @@ export class PaymentReviewService {
         include: { package: true },
       });
       if (!purchase) return;
+      const perpanjangan = decision === 'APPROVED' ? await perpanjanganPembelian(this.db, id) : null;
       const nextStatus: 'APPROVED' | 'ACTION_REQUIRED' | 'REJECTED' =
         decision === 'REJECTED' && input.reasonCode !== 'DUPLICATE_PURCHASE'
           ? 'ACTION_REQUIRED'
@@ -790,7 +808,9 @@ export class PaymentReviewService {
               : 'Pembayaran Ditolak';
         const message =
           nextStatus === 'APPROVED'
-            ? `Pembayaran paket "${purchase.package.name}" telah disetujui. Paket Anda kini aktif.`
+            ? perpanjangan?.appliedAt
+              ? `Pembayaran "${purchase.package.name}" telah disetujui. Masa aktif paket Anda bertambah ${perpanjangan.hari} hari.`
+              : `Pembayaran paket "${purchase.package.name}" telah disetujui. Paket Anda kini aktif.`
             : nextStatus === 'ACTION_REQUIRED'
               ? `Bukti transfer paket "${purchase.package.name}" perlu diunggah ulang (${input.reasonCode ?? 'periksa kembali'}${input.note ? `: ${input.note}` : ''}).`
               : `Pembayaran paket "${purchase.package.name}" ditolak (${input.reasonCode ?? 'tidak valid'}).`;
@@ -834,7 +854,9 @@ export class PaymentReviewService {
               : `${publicBaseUrl}/orders/${id}`,
           detail:
             nextStatus === 'APPROVED'
-              ? 'Paket Anda kini aktif dan siap digunakan.'
+              ? perpanjangan?.appliedAt
+                ? `Masa aktif paket Anda bertambah ${perpanjangan.hari} hari.`
+                : 'Paket Anda kini aktif dan siap digunakan.'
               : `Alasan: ${input.reasonCode ?? 'lihat aplikasi'}${input.note ? ` — ${input.note}` : ''}`,
         },
         correlationId,

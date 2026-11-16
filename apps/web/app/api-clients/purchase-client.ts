@@ -1,6 +1,7 @@
 import { apiFetch } from '../lib/api-client';
 import { appLoading, foregroundFetch } from '../components/app-loading';
 import { notifySessionFailure } from './session-client';
+import { EXTENSION_ERROR_LABELS, type ExtensionTarget } from './order-client';
 
 export interface PackageBranchScope {
   id?: string;
@@ -33,6 +34,8 @@ export interface Package {
   classTypeScopes?: Array<PackageClassTypeScope>;
   revisions?: Array<any>;
   version?: number;
+  /** Paket 0 sesi yang menambah masa aktif satu paket member yang masih aktif. */
+  perpanjanganMasaAktif?: boolean;
 }
 
 export interface PaymentProof {
@@ -638,6 +641,13 @@ export function purchaseFailure(error: unknown): string {
     RESOURCE_NOT_FOUND: 'Data tidak tersedia dalam cabang yang dipilih.',
     CONCURRENCY_CONFLICT: 'Terjadi konflik transaksi bersamaan. Silakan coba kembali.',
     DUPLICATE_REQUEST: 'Permintaan persetujuan sedang diproses atau sudah dikirim.',
+    ...EXTENSION_ERROR_LABELS,
+    PACKAGE_EXTENSION_TARGET_EXPIRED:
+      'Paket yang mau diperpanjang sudah tidak aktif (masa berlaku atau sesinya habis) selama pembayaran menunggu verifikasi, jadi perpanjangan tidak bisa disetujui. Tolak pembayaran ini lalu kembalikan dana ke member.',
+    PACKAGE_EXTENSION_LIMIT_REACHED:
+      'Paket ini sudah diperpanjang 3 kali, batas maksimal, jadi pembayaran ini tidak bisa disetujui. Tolak pembayaran lalu kembalikan dana ke member.',
+    PACKAGE_EXTENSION_TARGET_REQUIRED:
+      'Pesanan ini belum memilih paket yang diperpanjang. Tolak pembayaran lalu minta member membuat pesanan baru.',
   };
   if (code && messages[code]) return messages[code];
   if (status === 503) return messages.CONFIGURATION_REQUIRED!;
@@ -665,11 +675,20 @@ export interface AssistedSaleInput {
   paymentMethod: AssistedPaymentMethod;
   voucherCode?: string;
   note?: string;
+  /** Wajib untuk paket perpanjangan masa aktif: paket member yang diperpanjang. */
+  targetCustomerPackageId?: string;
+}
+
+export interface ExtensionTargetList {
+  days: number;
+  maxPerPackage: number;
+  items: ExtensionTarget[];
 }
 
 export interface AssistedSaleClient {
   record(input: AssistedSaleInput, idempotencyKey: string): Promise<Purchase>;
   searchPackages(query: string): Promise<Package[]>;
+  extensionTargets?(customerUserId: string, branchId: string): Promise<ExtensionTargetList>;
 }
 
 export const browserAssistedSaleClient: AssistedSaleClient = {
@@ -690,6 +709,12 @@ export const browserAssistedSaleClient: AssistedSaleClient = {
     });
     return (result.items ?? []).map(mapPackage);
   },
+  async extensionTargets(customerUserId, branchId) {
+    const params = new URLSearchParams({ customerUserId, branchId });
+    return apiFetch<ExtensionTargetList>(`/purchases/extension-targets?${params.toString()}`, {
+      label: 'Memuat paket member…',
+    });
+  },
 };
 
 const assistedSaleMessages: Record<string, string> = {
@@ -701,6 +726,8 @@ const assistedSaleMessages: Record<string, string> = {
   IDEMPOTENCY_KEY_REUSED: 'Data berubah setelah dikirim. Tutup lalu buka kembali formulir.',
   VALIDATION_ERROR: 'Data penjualan belum valid. Periksa isian lalu coba lagi.',
   FORBIDDEN: 'Anda tidak memiliki izin mencatat penjualan di cabang ini.',
+  ...EXTENSION_ERROR_LABELS,
+  PACKAGE_EXTENSION_TARGET_REQUIRED: 'Pilih paket member yang ingin diperpanjang terlebih dahulu.',
 };
 
 export function assistedSaleFailure(error: unknown): string {

@@ -45,6 +45,7 @@ export type PackageFormValues = {
   selectedBranches?: string[];
   selectedClassTypes?: string[];
   bawaTeman?: boolean;
+  perpanjanganMasaAktif?: boolean;
   reason?: string;
 };
 
@@ -199,6 +200,7 @@ export function PackagesManagementView() {
       effectiveUntil,
       isMultiBranch: Boolean(source.isMultiBranch),
       bawaTeman: Boolean(source.bawaTeman),
+      perpanjanganMasaAktif: Boolean(source.perpanjanganMasaAktif),
       isShareable: Boolean(source.isShareable),
       selectedBranches: branchIds,
       selectedClassTypes: classTypeIds,
@@ -332,9 +334,12 @@ export function PackagesManagementView() {
                   <div className="flex items-center gap-1.5">
                     <strong>{item.name}</strong>
                     {item.isShareable && <Badge tone="success">Duet / Family</Badge>}
+                    {item.perpanjanganMasaAktif && <Badge tone="warning">Perpanjangan masa aktif</Badge>}
                   </div>
                   <p className="text-xs text-dd-muted">
-                    {item.sessionCount} sesi · {item.durationDays} hari
+                    {item.perpanjanganMasaAktif
+                      ? 'Tanpa sesi · tambah masa aktif 30 hari'
+                      : `${item.sessionCount} sesi · ${item.durationDays} hari`}
                   </p>
                 </div>
               ),
@@ -669,6 +674,7 @@ function PackageCreateForm({
   const [isShareable, setIsShareable] = useState(
     initialValues?.isShareable !== undefined ? initialValues.isShareable : false,
   );
+  const [perpanjangan, setPerpanjangan] = useState(Boolean(initialValues?.perpanjanganMasaAktif));
   const [selectedBranches, setSelectedBranches] = useState<string[]>(
     initialValues?.selectedBranches ?? [],
   );
@@ -732,6 +738,7 @@ function PackageCreateForm({
           effectiveFrom: String(data.get('effectiveFrom')),
           effectiveUntil: data.get('effectiveUntil') || null,
           bawaTeman: data.get('bawaTeman') === 'on',
+          perpanjanganMasaAktif: perpanjangan,
           reason: String(data.get('reason')),
         });
       }}
@@ -820,7 +827,7 @@ function PackageCreateForm({
                   name="classTypeIds"
                   value={item.id}
                   checked={selectedClassTypes.includes(item.id)}
-                  required={selectedClassTypes.length === 0}
+                  required={!perpanjangan && selectedClassTypes.length === 0}
                   onChange={(event) => {
                     const checked = event.currentTarget.checked;
                     setSelectedClassTypes((current) =>
@@ -854,6 +861,13 @@ function PackageCreateForm({
             </p>
           </div>
         </label>
+        <PerpanjanganCheckbox
+          checked={perpanjangan}
+          onChange={(checked) => {
+            setPerpanjangan(checked);
+            onDirty();
+          }}
+        />
       </fieldset>
       <div className="grid gap-4 sm:grid-cols-2">
         <div>
@@ -892,15 +906,28 @@ function PackageCreateForm({
         />
       </div>
       <div className="grid gap-4 sm:grid-cols-3">
-        <TextInput
-          name="sessionCount"
-          label="Jumlah sesi"
-          type="number"
-          min={1}
-          placeholder="Contoh: 10"
-          defaultValue={initialValues?.sessionCount ?? ''}
-          required
-        />
+        {perpanjangan ? (
+          <TextInput
+            key="sessionCount-perpanjangan"
+            name="sessionCount"
+            label="Jumlah sesi"
+            type="number"
+            value={0}
+            readOnly
+            description="Paket perpanjangan selalu 0 sesi."
+          />
+        ) : (
+          <TextInput
+            key="sessionCount-biasa"
+            name="sessionCount"
+            label="Jumlah sesi"
+            type="number"
+            min={1}
+            placeholder="Contoh: 10"
+            defaultValue={initialValues?.sessionCount || ''}
+            required
+          />
+        )}
         <TextInput
           name="durationDays"
           label="Masa berlaku (hari)"
@@ -978,9 +1005,13 @@ function EditPackageModal({
   const [dirty, setDirty] = useState(false);
   const [error, setError] = useState('');
   const [isShareable, setIsShareable] = useState(Boolean(pkg?.isShareable));
+  const [perpanjangan, setPerpanjangan] = useState(Boolean(pkg?.perpanjanganMasaAktif));
 
   useEffect(() => {
-    if (pkg) setIsShareable(Boolean(pkg.isShareable));
+    if (pkg) {
+      setIsShareable(Boolean(pkg.isShareable));
+      setPerpanjangan(Boolean(pkg.perpanjanganMasaAktif));
+    }
   }, [pkg]);
 
   if (!pkg) return null;
@@ -1072,6 +1103,7 @@ function EditPackageModal({
                 effectiveUntil,
                 bawaTeman,
                 isShareable,
+                perpanjanganMasaAktif: perpanjangan,
                 reason,
               });
             } else {
@@ -1084,6 +1116,7 @@ function EditPackageModal({
                   ? { sessionCount, durationDays, priceRp }
                   : {}),
                 bawaTeman,
+                perpanjanganMasaAktif: perpanjangan,
                 reason,
               });
             }
@@ -1145,6 +1178,13 @@ function EditPackageModal({
               </p>
             </div>
           </label>
+          <PerpanjanganCheckbox
+            checked={perpanjangan}
+            onChange={(checked) => {
+              setDirty(true);
+              setPerpanjangan(checked);
+            }}
+          />
         </fieldset>
 
         <div className="grid gap-4 sm:grid-cols-2">
@@ -1165,14 +1205,27 @@ function EditPackageModal({
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2">
-          <TextInput
-            name="sessionCount"
-            label="Jumlah sesi"
-            type="number"
-            min={1}
-            defaultValue={pkg.sessionCount}
-            required
-          />
+          {perpanjangan ? (
+            <TextInput
+              key="sessionCount-perpanjangan"
+              name="sessionCount"
+              label="Jumlah sesi"
+              type="number"
+              value={0}
+              readOnly
+              description="Paket perpanjangan selalu 0 sesi."
+            />
+          ) : (
+            <TextInput
+              key="sessionCount-biasa"
+              name="sessionCount"
+              label="Jumlah sesi"
+              type="number"
+              min={1}
+              defaultValue={pkg.sessionCount || ''}
+              required
+            />
+          )}
           <TextInput
             name="durationDays"
             label="Masa berlaku (hari)"
@@ -1223,5 +1276,28 @@ function EditPackageModal({
         />
       </form>
     </Drawer>
+  );
+}
+
+/** Centang jenis paket "Perpanjangan masa aktif" (dipakai form buat dan ubah paket). */
+function PerpanjanganCheckbox({ checked, onChange }: { checked: boolean; onChange(checked: boolean): void }) {
+  return (
+    <label className="flex min-h-[44px] items-start gap-2 text-sm cursor-pointer">
+      <input
+        type="checkbox"
+        name="perpanjanganMasaAktif"
+        checked={checked}
+        onChange={(event) => onChange(event.target.checked)}
+        className="mt-1 accent-dd-forest cursor-pointer size-4 shrink-0 rounded"
+      />
+      <div>
+        <span className="font-semibold text-dd-forest">Perpanjangan masa aktif</span>
+        <p className="text-xs text-dd-muted">
+          Paket tanpa sesi (jumlah sesi otomatis 0). Setelah lunas, masa aktif satu paket member yang
+          masih aktif bertambah 30 hari, paling banyak 3 kali per paket. Pembeli memilih paket yang
+          diperpanjang saat membeli.
+        </p>
+      </div>
+    </label>
   );
 }

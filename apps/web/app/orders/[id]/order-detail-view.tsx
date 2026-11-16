@@ -100,6 +100,32 @@ export function OrderDetailView({ id }: { id: string }) {
         }}
       />
 
+      {order.extension && (
+        <section
+          aria-labelledby="order-extension-title"
+          className="rounded-none border border-ed-line bg-ed-tint/60 p-5 sm:p-6"
+        >
+          <p className="text-[13px] font-bold text-ed-green">Perpanjangan masa aktif</p>
+          <h2 id="order-extension-title" className="font-serif mt-1 text-xl font-normal tracking-tight text-ed-ink">
+            {order.extension.targetPackageName ?? 'Paket kamu'}
+          </h2>
+          <p className="mt-2 text-sm text-ed-muted">
+            {order.extension.rolledBackAt
+              ? `Perpanjangan ${order.extension.days} hari dibatalkan karena pembelian ini dibatalkan studio.`
+              : order.extension.appliedAt && order.extension.validUntilAfter
+                ? `Masa aktif bertambah ${order.extension.days} hari, sekarang berlaku sampai ${tanggalWib(order.extension.validUntilAfter)}.`
+                : `Masa aktif akan bertambah ${order.extension.days} hari setelah pembayaran disetujui${
+                    order.extension.targetValidUntil
+                      ? `, dihitung dari tanggal berakhir saat ini (${tanggalWib(order.extension.targetValidUntil)})`
+                      : ''
+                  }. Paket harus masih aktif saat pembayaran diperiksa.`}
+          </p>
+          <ButtonLink href="/account/packages" size="sm" className="mt-4">
+            Lihat Paket Saya
+          </ButtonLink>
+        </section>
+      )}
+
       {order.activation && (
         <section className="rounded-none border border-ed-line bg-ed-tint/60 p-5 sm:p-6">
           <div className="flex items-start gap-3">
@@ -192,4 +218,8 @@ export function OrderDetailView({ id }: { id: string }) {
       </section>
     </main>
   );
+}
+
+function tanggalWib(value: string) {
+  return new Intl.DateTimeFormat('id-ID', { dateStyle: 'long', timeZone: 'Asia/Jakarta' }).format(new Date(value));
 }

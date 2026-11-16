@@ -65,12 +65,20 @@ export function PackageDetailView({
             imageKey={item.branch?.publicProfile?.heroImageKey ?? ''}
             facts={
               <DetailFactLedger
-                items={[
-                  { label: 'Harga', value: formatRupiah(item.effectivePriceRp) },
-                  { label: 'Per sesi', value: formatRupiah(item.pricePerSessionRp) },
-                  { label: 'Jumlah', value: `${item.sessionCount} sesi` },
-                  { label: 'Berlaku', value: `${item.durationDays} hari` },
-                ]}
+                items={
+                  item.perpanjanganMasaAktif
+                    ? [
+                        { label: 'Harga', value: formatRupiah(item.effectivePriceRp) },
+                        { label: 'Jenis', value: 'Perpanjangan masa aktif' },
+                        { label: 'Tambahan', value: `${item.extensionDays ?? 30} hari` },
+                      ]
+                    : [
+                        { label: 'Harga', value: formatRupiah(item.effectivePriceRp) },
+                        { label: 'Per sesi', value: formatRupiah(item.pricePerSessionRp ?? 0) },
+                        { label: 'Jumlah', value: `${item.sessionCount} sesi` },
+                        { label: 'Berlaku', value: `${item.durationDays} hari` },
+                      ]
+                }
               />
             }
             actions={

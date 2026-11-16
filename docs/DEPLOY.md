@@ -327,6 +327,43 @@ CREATE TABLE `akun_grup_tautan` (
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 ```
 
+`paket_perpanjangan` dan `perpanjangan_paket` (paket "Perpanjangan masa aktif": Rp150.000, 0 sesi, menambah
+masa berlaku satu paket member yang masih aktif 30 hari, paling banyak 3 kali per paket, 16 November 2026).
+`paket_perpanjangan` menandai Paket mana yang berjenis perpanjangan; `perpanjangan_paket` mencatat paket target
+tiap pembelian, kapan diterapkan (saat lunas, sekali), dan kapan ditarik (saat pembelian dibatalkan Super Owner).
+Tanpa kedua tabel ini semua paket tetap berjalan seperti biasa; centang "Perpanjangan masa aktif" di Data Master
+ditolak dengan pesan yang jelas. Paket perpanjangannya dibuat admin sendiri di Data Master > Paket (tidak di-seed).
+
+```sql
+CREATE TABLE `paket_perpanjangan` (
+    `packageId` CHAR(36) NOT NULL,
+    `updatedById` CHAR(36) NULL,
+    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `updatedAt` DATETIME(3) NOT NULL,
+
+    PRIMARY KEY (`packageId`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+CREATE TABLE `perpanjangan_paket` (
+    `id` CHAR(36) NOT NULL,
+    `purchaseId` CHAR(36) NOT NULL,
+    `targetCustomerPackageId` CHAR(36) NOT NULL,
+    `userId` CHAR(36) NOT NULL,
+    `hari` INTEGER NOT NULL,
+    `validUntilBefore` DATETIME(3) NULL,
+    `validUntilAfter` DATETIME(3) NULL,
+    `appliedAt` DATETIME(3) NULL,
+    `rolledBackAt` DATETIME(3) NULL,
+    `createdById` CHAR(36) NOT NULL,
+    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+
+    UNIQUE INDEX `perpanjangan_paket_purchaseId_key`(`purchaseId`),
+    INDEX `perpanjangan_paket_targetCustomerPackageId_idx`(`targetCustomerPackageId`),
+    INDEX `perpanjangan_paket_userId_idx`(`userId`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+```
+
 ## Akun HR Group (SSO)
 
 Tombol "Masuk dengan Akun HR Group" di halaman masuk dan credential bridge untuk migrasi member lama. Kontraknya

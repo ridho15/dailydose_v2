@@ -1385,3 +1385,36 @@ model AkunGrupTautan {
   @@index([userId])
   @@map("akun_grup_tautan")
 }
+
+/// Paket "Perpanjangan masa aktif" (November 2026): paket 0 sesi yang, setelah lunas, menambah masa
+/// berlaku satu Paket Pelanggan milik member yang sama. Baris di sini menandai Paket mana yang berjenis
+/// perpanjangan. Tanpa relasi ke tabel lama; kode tetap jalan bila tabelnya belum dibuat.
+model PaketPerpanjangan {
+  packageId   String   @id @db.Char(36)
+  updatedById String?  @db.Char(36)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("paket_perpanjangan")
+}
+
+/// Satu pembelian paket perpanjangan dan Paket Pelanggan yang diperpanjang. Dibuat saat pesanan dibuat
+/// (appliedAt kosong), diterapkan sekali saat pembelian lunas, dan ditarik kembali (rolledBackAt) bila
+/// pembeliannya dibatalkan Super Owner. Tanpa relasi ke tabel lama.
+model PerpanjanganPaket {
+  id                      String    @id @db.Char(36)
+  purchaseId              String    @unique @db.Char(36)
+  targetCustomerPackageId String    @db.Char(36)
+  userId                  String    @db.Char(36)
+  hari                    Int
+  validUntilBefore        DateTime?
+  validUntilAfter         DateTime?
+  appliedAt               DateTime?
+  rolledBackAt            DateTime?
+  createdById             String    @db.Char(36)
+  createdAt               DateTime  @default(now())
+
+  @@index([targetCustomerPackageId])
+  @@index([userId])
+  @@map("perpanjangan_paket")
+}

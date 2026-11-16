@@ -10,6 +10,12 @@ import { PackageAccessService } from './package-access.service';
 import { bacaOpsional, tabelOpsionalAda } from '../foundation/tabel-opsional';
 import { maksTemanPaket } from './bawa-teman';
 import { bacaMasaJual, masaJualPaket, simpanMasaJual, type MasaJual } from './masa-jual';
+import {
+  bacaTandaPerpanjangan,
+  cekSesiPaketPerpanjangan,
+  paketPerpanjanganIds,
+  simpanTandaPerpanjangan,
+} from './perpanjangan-masa-aktif';
 
 const PAGE_SIZE = 20;
 
@@ -98,14 +104,15 @@ async function simpanBawaTeman(
 
 const HARGA_PAKET_MAKS_RP = 2_000_000_000;
 
-/** Angka paket harus bilangan bulat wajar; NaN, nol, negatif, atau pecahan ditolak. Yang undefined dilewati. */
-function cekAngkaPaket(n: { priceRp?: number; sessionCount?: number; validityDays?: number }) {
+/**
+ * Angka paket harus bilangan bulat wajar; NaN, nol, negatif, atau pecahan ditolak. Yang undefined dilewati.
+ * Jumlah sesi diperiksa terpisah (`cekSesiPaketPerpanjangan`): paket perpanjangan masa aktif wajib 0 sesi.
+ */
+function cekAngkaPaket(n: { priceRp?: number; validityDays?: number }) {
   const salah: { field: string; issue: string }[] = [];
   const bulat = (v: number | undefined) => v !== undefined && Number.isInteger(v);
   if (n.priceRp !== undefined && !(bulat(n.priceRp) && n.priceRp >= 0 && n.priceRp <= HARGA_PAKET_MAKS_RP))
     salah.push({ field: 'priceRp', issue: 'INVALID' });
-  if (n.sessionCount !== undefined && !(bulat(n.sessionCount) && n.sessionCount >= 1))
-    salah.push({ field: 'sessionCount', issue: 'INVALID' });
   if (n.validityDays !== undefined && !(bulat(n.validityDays) && n.validityDays >= 1))
     salah.push({ field: 'validityDays', issue: 'INVALID' });
   if (salah.length) throw new ApiProblem('VALIDATION_ERROR', HttpStatus.BAD_REQUEST, false, salah);
@@ -203,12 +210,14 @@ export class PackageCatalogService {
 
     const teman = await maksTemanPaket(this.db, pageItems.map((item) => item.id));
     const masaJual = await masaJualPaket(this.db, pageItems.map((item) => item.id));
+    const perpanjangan = await paketPerpanjanganIds(this.db, pageItems.map((item) => item.id));
 
     return {
       items: pageItems.map((item) => ({
         ...packageView(item, masaJual.get(item.id)),
         livePromotion: livePackageIds.has(item.id),
         bawaTeman: (teman.get(item.id) ?? 0) > 0,
+        perpanjanganMasaAktif: perpanjangan.has(item.id),
       })),
       summary: {
         ACTIVE: activeCount,
@@ -238,7 +247,9 @@ export class PackageCatalogService {
     const validityDays = Number(input.validityDays ?? input.durationDays ?? 30);
 
     if (!code || !name) throw new ApiProblem('VALIDATION_ERROR', HttpStatus.BAD_REQUEST);
-    cekAngkaPaket({ priceRp, sessionCount, validityDays });
+    cekAngkaPaket({ priceRp, validityDays });
+    const perpanjanganDiminta = bacaTandaPerpanjangan(input) === true;
+    cekSesiPaketPerpanjangan(perpanjanganDiminta, sessionCount);
 
     const isMultiBranch = Boolean(
       input.isMultiBranch === true ||
@@ -287,6 +298,13 @@ export class PackageCatalogService {
         const bawaTemanTersimpan = await simpanBawaTeman(tx, created.id, bawaTeman, principal.userId);
         const masa = bacaMasaJual(input);
         const masaTersimpan = await simpanMasaJual(tx, created.id, masa, principal.userId);
+        // Tanpa tabel penanda, paket 0 sesi ditolak di sini (seluruh transaksi dibatalkan).
+        const perpanjanganTersimpan = await simpanTandaPerpanjangan(
+          tx,
+          created.id,
+          perpanjanganDiminta ? true : undefined,
+          principal.userId,
+        );
 
         this.auditService.record({
           action: 'PACKAGE_CREATED',
@@ -304,6 +322,7 @@ export class PackageCatalogService {
               berakhir: masaTersimpan.berakhir ?? null,
             }),
             bawaTeman: bawaTemanTersimpan === true,
+            perpanjanganMasaAktif: perpanjanganTersimpan === true,
           } as unknown as Prisma.InputJsonValue,
         };
       },
@@ -332,7 +351,6 @@ export class PackageCatalogService {
 
         cekAngkaPaket({
           priceRp: body.priceRp !== undefined ? Number(body.priceRp) : undefined,
-          sessionCount: body.sessionCount !== undefined ? Number(body.sessionCount) : undefined,
           validityDays:
             body.validityDays !== undefined
               ? Number(body.validityDays)
@@ -340,6 +358,15 @@ export class PackageCatalogService {
                 ? Number(body.durationDays)
                 : undefined,
         });
+
+        // Jenis dan jumlah sesi diperiksa dengan nilai akhirnya (yang dikirim, atau yang tersimpan).
+        const tandaDiminta = bacaTandaPerpanjangan(body);
+        const perpanjanganAkhir = tandaDiminta ?? (await paketPerpanjanganIds(tx, [id])).has(id);
+        if (body.sessionCount !== undefined || tandaDiminta !== undefined)
+          cekSesiPaketPerpanjangan(
+            perpanjanganAkhir,
+            body.sessionCount !== undefined ? Number(body.sessionCount) : pkg.sessionCount,
+          );
 
         const isMultiBranch =
           body.isMultiBranch !== undefined
@@ -378,6 +405,7 @@ export class PackageCatalogService {
         const bawaTeman = bacaBawaTeman(body);
         const bawaTemanTersimpan = await simpanBawaTeman(tx, id, bawaTeman, principal.userId);
         await simpanMasaJual(tx, id, bacaMasaJual(body), principal.userId);
+        await simpanTandaPerpanjangan(tx, id, tandaDiminta, principal.userId);
         const masaSekarang = (await masaJualPaket(tx, [id])).get(id);
         const temanSekarang =
           bawaTemanTersimpan ?? ((await maksTemanPaket(tx, [id])).get(id) ?? 0) > 0;
@@ -392,7 +420,11 @@ export class PackageCatalogService {
 
         return {
           status: HttpStatus.OK,
-          body: { ...packageView(updated, masaSekarang), bawaTeman: temanSekarang } as unknown as Prisma.InputJsonValue,
+          body: {
+            ...packageView(updated, masaSekarang),
+            bawaTeman: temanSekarang,
+            perpanjanganMasaAktif: perpanjanganAkhir,
+          } as unknown as Prisma.InputJsonValue,
         };
       },
     );

@@ -48,7 +48,7 @@ export function PackagePrice({
           Hemat {formatRupiah(promotion?.discountRp ?? 0)}
         </span>
       )}
-      {sessionCount && !compact && (
+      {sessionCount !== undefined && sessionCount > 0 && !compact && (
         <span className="text-sm text-ed-muted">
           {formatRupiah(Math.round(effectivePriceRp / sessionCount))} per sesi
         </span>

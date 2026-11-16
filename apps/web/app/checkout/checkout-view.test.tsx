@@ -243,3 +243,103 @@ describe('CheckoutView Voucher Non-Happy Path', () => {
     );
   });
 });
+
+describe('CheckoutView paket perpanjangan masa aktif', () => {
+  const target = (overrides: Record<string, unknown> = {}) => ({
+    customerPackageId: 'cp-1',
+    packageName: 'Paket 8 Sesi',
+    remainingSessions: 3,
+    totalSessions: 8,
+    validUntil: '2026-11-30T16:59:59.000Z',
+    validUntilAfterExtension: '2026-12-30T16:59:59.000Z',
+    extensionsUsed: 1,
+    extensionsPending: 0,
+    extensionsLeft: 2,
+    ...overrides,
+  });
+  const options = (targets: ReturnType<typeof target>[]) => ({
+    package: {
+      id: 'pkg-ext',
+      name: 'Perpanjangan 30 Hari',
+      priceRp: 150000,
+      effectivePriceRp: 150000,
+      version: 1,
+      promotion: null,
+      sessionCount: 0,
+      durationDays: 30,
+      branchId: 'branch-1',
+      branchName: 'Daily Dose Menteng',
+      classTypes: [],
+    },
+    paymentAccount: {
+      id: 'pa-1',
+      bankName: 'BCA',
+      accountNumber: '1234567890',
+      accountHolderName: 'PT Daily Dose Pilates',
+      paymentWindowHours: 24,
+    },
+    extension: { days: 30, maxPerPackage: 3, targets },
+  });
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+    mockSearchParams.clear();
+    mockSearchParams.set('package', 'pkg-ext');
+    mockSearchParams.set('branch', 'branch-1');
+    mockSession.session.identityVerificationStatus = 'APPROVED';
+  });
+
+  it('wajib memilih paket yang diperpanjang, lalu mengirim id paket itu saat membuat pesanan', async () => {
+    const user = userEvent.setup();
+    vi.mocked(browserOrderClient.checkout).mockResolvedValue(
+      options([target(), target({ customerPackageId: 'cp-2', packageName: 'Paket 4 Sesi' })]),
+    );
+    vi.mocked(browserOrderClient.create).mockRejectedValue(
+      new OrderClientError('PACKAGE_EXTENSION_TARGET_EXPIRED'),
+    );
+
+    render(
+      <AppFeedbackProvider>
+        <CheckoutView />
+      </AppFeedbackProvider>,
+    );
+
+    expect(await screen.findByText('Paket yang diperpanjang')).toBeVisible();
+    expect(screen.getByText('Perpanjangan masa aktif')).toBeVisible();
+    const submit = screen.getByRole('button', { name: /Buat pesanan dan lanjutkan pembayaran/ });
+    expect(submit).toBeDisabled();
+
+    await user.click(screen.getByRole('radio', { name: /Paket 4 Sesi/ }));
+    expect(submit).toBeEnabled();
+    await user.click(submit);
+    await user.click(await screen.findByRole('button', { name: 'Buat pesanan' }));
+
+    expect(vi.mocked(browserOrderClient.create).mock.calls[0]?.[6]).toBe('cp-2');
+    expect(
+      (await screen.findAllByText(/sudah tidak aktif .* jadi tidak bisa diperpanjang/)).length,
+    ).toBeGreaterThan(0);
+  });
+
+  it('paket yang sudah 3 kali diperpanjang tidak bisa dipilih; tanpa paket aktif tampil arahan beli paket baru', async () => {
+    vi.mocked(browserOrderClient.checkout).mockResolvedValueOnce(
+      options([target({ extensionsUsed: 3, extensionsLeft: 0 })]),
+    );
+    const { unmount } = render(
+      <AppFeedbackProvider>
+        <CheckoutView />
+      </AppFeedbackProvider>,
+    );
+    expect(await screen.findByRole('radio', { name: /Paket 8 Sesi/ })).toBeDisabled();
+    expect(screen.getByText('Sudah diperpanjang 3 kali, batas maksimal.')).toBeVisible();
+    unmount();
+
+    vi.mocked(browserOrderClient.checkout).mockResolvedValueOnce(options([]));
+    render(
+      <AppFeedbackProvider>
+        <CheckoutView />
+      </AppFeedbackProvider>,
+    );
+    expect(await screen.findByText('Belum ada paket aktif')).toBeVisible();
+    expect(screen.getByRole('button', { name: /Buat pesanan dan lanjutkan pembayaran/ })).toBeDisabled();
+  });
+});

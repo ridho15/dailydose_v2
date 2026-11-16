@@ -16,6 +16,7 @@ import {
   orderErrorDetails,
   type CheckoutOptions,
   type CustomerOrder,
+  type ExtensionTarget,
 } from '@/api-clients/order-client';
 import { Skeleton } from '../ui';
 import { formatRupiah } from '../lib/formatters';
@@ -50,6 +51,7 @@ export function CheckoutView() {
     discountValue?: number;
   } | null>(null);
   const [voucherBusy, setVoucherBusy] = useState(false);
+  const [targetId, setTargetId] = useState('');
 
   const effectiveBranchId = branchId?.trim() || options?.package.branchId || '';
 
@@ -63,6 +65,9 @@ export function CheckoutView() {
       : packageId
         ? browserOrderClient.checkout(packageId, branchId).then((value) => {
             setOptions(value);
+            // Paket perpanjangan: bila hanya satu paket yang bisa diperpanjang, langsung terpilih.
+            const eligible = (value.extension?.targets ?? []).filter((item) => item.extensionsLeft > 0);
+            setTargetId(eligible.length === 1 ? eligible[0]!.customerPackageId : '');
 
             const requestedIsValid = value.package.classTypes.some(
               (item) => item.id === requestedClassTypeId,
@@ -215,6 +220,10 @@ export function CheckoutView() {
     );
   }
 
+  const extension = options.extension ?? null;
+  const readyToSubmit = extension ? Boolean(targetId) : Boolean(selectedClassTypeId);
+  const selectedTarget = extension?.targets.find((item) => item.customerPackageId === targetId);
+
   return (
     <main className="space-y-6 pt-2" aria-labelledby="checkout-title">
       <header>
@@ -321,14 +330,29 @@ export function CheckoutView() {
             </div>
           )}
           <dl className="mt-6 grid gap-3 sm:grid-cols-3">
-            <div className="rounded-none border border-ed-line/70 bg-ed-tint/40 p-4">
-              <dt className="text-[13px] font-medium text-ed-muted">Jumlah sesi</dt>
-              <dd className="mt-1 font-serif text-lg text-ed-ink">{options.package.sessionCount} sesi</dd>
-            </div>
-            <div className="rounded-none border border-ed-line/70 bg-ed-tint/40 p-4">
-              <dt className="text-[13px] font-medium text-ed-muted">Masa berlaku</dt>
-              <dd className="mt-1 font-serif text-lg text-ed-ink">{options.package.durationDays} hari</dd>
-            </div>
+            {extension ? (
+              <>
+                <div className="rounded-none border border-ed-line/70 bg-ed-tint/40 p-4">
+                  <dt className="text-[13px] font-medium text-ed-muted">Jenis paket</dt>
+                  <dd className="mt-1 font-serif text-lg text-ed-ink">Perpanjangan masa aktif</dd>
+                </div>
+                <div className="rounded-none border border-ed-line/70 bg-ed-tint/40 p-4">
+                  <dt className="text-[13px] font-medium text-ed-muted">Tambahan masa aktif</dt>
+                  <dd className="mt-1 font-serif text-lg text-ed-ink">{extension.days} hari</dd>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="rounded-none border border-ed-line/70 bg-ed-tint/40 p-4">
+                  <dt className="text-[13px] font-medium text-ed-muted">Jumlah sesi</dt>
+                  <dd className="mt-1 font-serif text-lg text-ed-ink">{options.package.sessionCount} sesi</dd>
+                </div>
+                <div className="rounded-none border border-ed-line/70 bg-ed-tint/40 p-4">
+                  <dt className="text-[13px] font-medium text-ed-muted">Masa berlaku</dt>
+                  <dd className="mt-1 font-serif text-lg text-ed-ink">{options.package.durationDays} hari</dd>
+                </div>
+              </>
+            )}
             <div className="rounded-none border border-ed-line/70 bg-ed-tint/40 p-4">
               <dt className="text-[13px] font-medium text-ed-muted">Harga paket</dt>
               <dd className="mt-2">
@@ -366,6 +390,16 @@ export function CheckoutView() {
         </aside>
       </div>
 
+      {extension && (
+        <ExtensionTargetPicker
+          days={extension.days}
+          maxPerPackage={extension.maxPerPackage}
+          targets={extension.targets}
+          value={targetId}
+          onChange={setTargetId}
+        />
+      )}
+
       <section className="rounded-none border border-ed-line bg-white p-5 shadow-none sm:p-6">
         <h2 className="font-serif text-lg font-normal tracking-tight text-ed-ink">Punya voucher?</h2>
         <p className="mt-1 text-sm text-ed-muted">
@@ -387,7 +421,10 @@ export function CheckoutView() {
             type="button"
             variant="secondary"
             disabled={
-              voucherBusy || !effectiveBranchId || !selectedClassTypeId || voucherCode.trim().length < 3
+              voucherBusy ||
+              !effectiveBranchId ||
+              (!extension && !selectedClassTypeId) ||
+              voucherCode.trim().length < 3
             }
             loading={voucherBusy}
             onClick={async () => {
@@ -483,7 +520,7 @@ export function CheckoutView() {
           type="button"
           size="lg"
           fullWidth
-          disabled={!selectedClassTypeId}
+          disabled={!readyToSubmit}
           loading={submitting}
           loadingLabel="Membuat pesanan…"
           trailingIcon={<ArrowRight className="size-4" aria-hidden="true" />}
@@ -491,7 +528,9 @@ export function CheckoutView() {
           onClick={async () => {
             const confirmed = await feedback.confirm({
               title: 'Buat pesanan ini?',
-              message: `${options.package.name} di ${options.package.branchName} akan dibuat. Setelah itu Anda memperoleh rekening dan nominal pembayaran.`,
+              message: selectedTarget
+                ? `${options.package.name} untuk ${selectedTarget.packageName} di ${options.package.branchName} akan dibuat. Masa aktifnya bertambah ${extension?.days ?? 30} hari setelah pembayaran disetujui.`
+                : `${options.package.name} di ${options.package.branchName} akan dibuat. Setelah itu Anda memperoleh rekening dan nominal pembayaran.`,
               confirmLabel: 'Buat pesanan',
             });
             if (!confirmed) return;
@@ -505,6 +544,7 @@ export function CheckoutView() {
                 selectedClassTypeId,
                 voucherPreview?.code,
                 options.package,
+                extension ? targetId : undefined,
               );
               setOrder(created);
               router.replace(`/checkout?order=${encodeURIComponent(created.id)}`);
@@ -531,5 +571,87 @@ export function CheckoutView() {
         </Button>
       </StickyActionBar>
     </main>
+  );
+}
+
+function tanggalWib(value: string) {
+  return new Intl.DateTimeFormat('id-ID', { dateStyle: 'medium', timeZone: 'Asia/Jakarta' }).format(
+    new Date(value),
+  );
+}
+
+/** Pilihan paket aktif milik member yang akan diperpanjang (paket perpanjangan masa aktif). */
+function ExtensionTargetPicker({
+  days,
+  maxPerPackage,
+  targets,
+  value,
+  onChange,
+}: {
+  days: number;
+  maxPerPackage: number;
+  targets: ExtensionTarget[];
+  value: string;
+  onChange(value: string): void;
+}) {
+  return (
+    <section className="rounded-none border border-ed-line bg-white p-5 shadow-none sm:p-6">
+      <fieldset>
+        <legend className="font-serif text-lg font-normal tracking-tight text-ed-ink">
+          Paket yang diperpanjang
+        </legend>
+        <p className="mt-1 text-sm text-ed-muted">
+          Masa aktif bertambah {days} hari dari tanggal berakhir saat ini, setelah pembayaran disetujui.
+          Satu paket bisa diperpanjang paling banyak {maxPerPackage} kali.
+        </p>
+        {targets.length === 0 ? (
+          <div className="mt-4">
+            <AlertBanner
+              tone="warning"
+              title="Belum ada paket aktif"
+              message="Perpanjangan hanya untuk paket yang masih aktif dan masih punya sesi. Paket yang sudah hangus tidak bisa diperpanjang; beli paket baru untuk melanjutkan latihan."
+            />
+          </div>
+        ) : (
+          <div className="mt-4 grid gap-2">
+            {targets.map((item) => {
+              const full = item.extensionsLeft <= 0;
+              return (
+                <label
+                  key={item.customerPackageId}
+                  className={`flex min-h-[44px] items-start gap-3 rounded-none border p-4 text-sm ${
+                    value === item.customerPackageId ? 'border-ed-forest bg-ed-tint/40' : 'border-ed-line'
+                  } ${full ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
+                >
+                  <input
+                    type="radio"
+                    name="extensionTarget"
+                    value={item.customerPackageId}
+                    checked={value === item.customerPackageId}
+                    disabled={full}
+                    onChange={() => onChange(item.customerPackageId)}
+                    className="mt-0.5 size-4 shrink-0 accent-ed-forest"
+                  />
+                  <span className="grid gap-0.5">
+                    <span className="font-semibold text-ed-ink">{item.packageName}</span>
+                    <span className="text-ed-muted">
+                      Sisa {item.remainingSessions} sesi · berlaku sampai {tanggalWib(item.validUntil)}
+                      {full ? '' : `, menjadi ${tanggalWib(item.validUntilAfterExtension)}`}
+                    </span>
+                    <span className="text-xs text-ed-muted">
+                      {full
+                        ? item.extensionsPending > 0
+                          ? `Sudah ${item.extensionsUsed} kali diperpanjang dan ada pesanan perpanjangan yang menunggu pembayaran.`
+                          : `Sudah diperpanjang ${maxPerPackage} kali, batas maksimal.`
+                        : `Sudah diperpanjang ${item.extensionsUsed} dari ${maxPerPackage} kali.`}
+                    </span>
+                  </span>
+                </label>
+              );
+            })}
+          </div>
+        )}
+      </fieldset>
+    </section>
   );
 }
