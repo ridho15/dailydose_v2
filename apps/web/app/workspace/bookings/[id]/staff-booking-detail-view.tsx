@@ -103,8 +103,8 @@ export function StaffBookingDetailView({
   // API hanya menerbitkan QR untuk kelas PUBLISHED/CONFIRMED yang belum selesai.
   const qrPossible = Boolean(
     booking?.classSlot &&
-      ['PUBLISHED', 'CONFIRMED'].includes(booking.classSlot.status) &&
-      new Date(booking.classSlot.endAt).getTime() > Date.now(),
+    ['PUBLISHED', 'CONFIRMED'].includes(booking.classSlot.status) &&
+    new Date(booking.classSlot.endAt).getTime() > Date.now(),
   );
   const issueQr = async () => {
     if (!booking || !client.issueCheckIn || !canManageAttendance) return;
@@ -192,11 +192,12 @@ export function StaffBookingDetailView({
         }
       />
 
-      {error && <AlertBanner tone="danger" title="Tindakan belum berhasil" message={error} />}
+      {error && <AlertBanner tone="danger" title="Tindakan belum berhasil" message={error} onDismiss={() => setError('')} />}
       {!context?.activeBranchId && context?.hasCapability('attendance:manage') && (
         <AlertBanner
           tone="info"
           title="Mode baca global"
+          dismissible={false}
           message="Pilih cabang dari topbar untuk menerbitkan QR atau mencatat kehadiran."
         />
       )}

@@ -295,6 +295,7 @@ export function CustomerPaymentFlow({
       {failure && (
         <AlertBanner
           tone="danger"
+          onDismiss={() => setFailure(undefined)}
           title={
             failure.stage === 'ISSUING'
               ? 'Upload belum dapat disiapkan'
@@ -922,6 +923,7 @@ export function CustomerPaymentFlow({
                     tone="danger"
                     title="Bukti belum dapat ditampilkan"
                     message={proofPreviewError}
+                    onDismiss={() => setProofPreviewError('')}
                   />
                 </div>
               )}

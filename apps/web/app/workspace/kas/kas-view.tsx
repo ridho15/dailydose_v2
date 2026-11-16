@@ -113,9 +113,8 @@ function FormPengeluaran({
       const pembayar = owners.find((o) => o.id === dibayarOleh)?.nama;
       setPesan({
         kind: 'status',
-        text: `${labelKategori(kategori)} ${rp(amountRp)} tercatat untuk ${branchName}${
-          pembayar ? `, dibayar ${pembayar} (diganti saat settlement)` : ''
-        }.`,
+        text: `${labelKategori(kategori)} ${rp(amountRp)} tercatat untuk ${branchName}${pembayar ? `, dibayar ${pembayar} (diganti saat settlement)` : ''
+          }.`,
       });
       setKeterangan('');
       setNominal('');
@@ -225,7 +224,7 @@ function FormPengeluaran({
           </button>
         </div>
       </div>
-      {pesan && <Feedback kind={pesan.kind}>{pesan.text}</Feedback>}
+      {pesan && <Feedback kind={pesan.kind} onDismiss={() => setPesan(null)}>{pesan.text}</Feedback>}
     </form>
   );
 }
@@ -294,11 +293,11 @@ export function KasView({
     if (!koreksi || !client.hapusPengeluaran) return;
     const yakin = feedback
       ? await feedback.confirm({
-          tone: 'danger',
-          title: 'Batalkan Pengeluaran Ini?',
-          message: 'Pengeluaran ini akan dihapus dari jurnal kas cabang.',
-          confirmLabel: 'Ya, batalkan pengeluaran',
-        })
+        tone: 'danger',
+        title: 'Batalkan Pengeluaran Ini?',
+        message: 'Pengeluaran ini akan dihapus dari jurnal kas cabang.',
+        confirmLabel: 'Ya, batalkan pengeluaran',
+      })
       : true;
     if (!yakin) return;
     setKoreksiSibuk(true);
@@ -403,18 +402,17 @@ export function KasView({
             type="button"
             aria-pressed={periode === p}
             onClick={() => setPeriode(p)}
-            className={`min-h-11 rounded-dd-lg px-4 text-[15px] transition ${
-              periode === p
-                ? 'bg-dd-forest font-semibold text-white'
-                : 'border border-dd-border-interactive bg-white text-dd-ink hover:border-dd-forest'
-            }`}
+            className={`min-h-11 rounded-dd-lg px-4 text-[15px] transition ${periode === p
+              ? 'bg-dd-forest font-semibold text-white'
+              : 'border border-dd-border-interactive bg-white text-dd-ink hover:border-dd-forest'
+              }`}
           >
             {namaBulan(p)}
           </button>
         ))}
       </div>
 
-      {gagal && <Feedback kind="error">{gagal}</Feedback>}
+      {gagal && <Feedback kind="error" onDismiss={() => setGagal('')}>{gagal}</Feedback>}
       {!jurnal && !gagal && <Skeleton label="Memuat jurnal kas" />}
 
       {jurnal && (
@@ -661,7 +659,7 @@ export function KasView({
                 ))}
               </select>
             </label>
-            {koreksiGalat && <Feedback kind="error">{koreksiGalat}</Feedback>}
+            {koreksiGalat && <Feedback kind="error" onDismiss={() => setKoreksiGalat('')}>{koreksiGalat}</Feedback>}
           </form>
         )}
       </Modal>

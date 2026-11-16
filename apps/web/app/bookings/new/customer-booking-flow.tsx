@@ -339,7 +339,12 @@ export function CustomerBookingFlow({ client = browserBookingClient }: { client?
       </header>
 
       {message && (
-        <AlertBanner tone="danger" title="Booking belum dapat diproses" message={message} />
+        <AlertBanner
+          tone="danger"
+          title="Booking belum dapat diproses"
+          message={message}
+          onDismiss={() => setMessage('')}
+        />
       )}
 
       {/* Step Tracker (Identical to Checkout) - shown when booking not done and eligible */}

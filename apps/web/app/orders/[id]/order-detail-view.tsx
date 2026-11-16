@@ -63,7 +63,12 @@ export function OrderDetailView({ id }: { id: string }) {
         </p>
         {error && (
           <div className="mt-5">
-            <AlertBanner tone="danger" title="Pesanan belum dapat dimuat" message={error} />
+            <AlertBanner
+              tone="danger"
+              title="Pesanan belum dapat dimuat"
+              message={error}
+              onDismiss={() => setError('')}
+            />
           </div>
         )}
         <div className="mt-5 flex flex-wrap gap-3">

@@ -493,7 +493,7 @@ export function FrontDeskTodayView({
       />
 
       {error && (
-        <Feedback kind="error">
+        <Feedback kind="error" onDismiss={() => setError('')}>
           {error}{' '}
           <button
             type="button"
@@ -588,7 +588,7 @@ export function FrontDeskTodayView({
                       {window.reason}
                     </p>
                   )}
-                  {attendeesError && <Feedback kind="error">{attendeesError}</Feedback>}
+                  {attendeesError && <Feedback kind="error" onDismiss={() => setAttendeesError('')}>{attendeesError}</Feedback>}
                   {attendeesLoading ? (
                     <Skeleton label="Memuat daftar peserta" />
                   ) : attendees.length === 0 ? (
@@ -862,7 +862,7 @@ export function FrontDeskTodayView({
             maxLength={500}
             onChange={(event) => setReason(event.target.value)}
           />
-          {markError && <Feedback kind="error">{markError}</Feedback>}
+          {markError && <Feedback kind="error" onDismiss={() => setMarkError('')}>{markError}</Feedback>}
         </div>
       </Modal>
 

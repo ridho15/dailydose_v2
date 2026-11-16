@@ -579,8 +579,8 @@ export function ClassSlotView({
       )}
 
       {busy && <Skeleton label="Memuat timetable kelas" />}
-      {failure && <Feedback kind="error">{failure}</Feedback>}
-      {message && !busy && <Feedback kind="status">{message}</Feedback>}
+      {failure && <Feedback kind="error" onDismiss={() => setFailure('')}>{failure}</Feedback>}
+      {message && !busy && <Feedback kind="status" onDismiss={() => setMessage('')}>{message}</Feedback>}
       {!busy && slots.length === 0 ? (
         <EmptyState
           title="Belum ada kelas pada minggu ini"
@@ -893,7 +893,7 @@ export function ClassSlotView({
         footer={
           panel?.kind === 'create' ? (
             <div className="grid gap-3">
-              {failure && <Feedback kind="error">Kelas belum tersimpan. {failure}</Feedback>}
+              {failure && <Feedback kind="error" onDismiss={() => setFailure('')}>Kelas belum tersimpan. {failure}</Feedback>}
               <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
                 <Button
                   type="button"
