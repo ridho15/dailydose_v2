@@ -139,4 +139,65 @@ describe('AssistedSaleDrawer', () => {
     expect(screen.queryByRole('option', { name: /Paket Cabang Ini/ })).toBeNull();
     expect(screen.getByRole('option', { name: /Paket Cabang Lain/ })).toBeVisible();
   });
+
+  it('paket perpanjangan: memuat paket aktif member, wajib memilih satu, lalu mengirim id paket itu', async () => {
+    const user = userEvent.setup();
+    const target = (customerPackageId: string, packageName: string, extensionsLeft: number) => ({
+      customerPackageId,
+      packageName,
+      remainingSessions: 2,
+      totalSessions: 8,
+      validUntil: '2026-11-30T16:59:59.000Z',
+      validUntilAfterExtension: '2026-12-30T16:59:59.000Z',
+      extensionsUsed: 3 - extensionsLeft,
+      extensionsPending: 0,
+      extensionsLeft,
+    });
+    const extensionTargets = vi.fn().mockResolvedValue({
+      days: 30,
+      maxPerPackage: 3,
+      items: [target('cp-1', 'Paket 8 Sesi Lama', 0), target('cp-2', 'Paket 4 Sesi', 2)],
+    });
+    const client = fake({
+      searchPackages: vi
+        .fn()
+        .mockResolvedValue([
+          pkg({ id: 'pkg-ext', name: 'Perpanjangan 30 Hari', sessionCount: 0, priceRp: 150_000, perpanjanganMasaAktif: true }),
+        ]),
+      extensionTargets,
+    });
+    open(client);
+    const dialog = screen.getByRole('dialog', { name: 'Catat penjualan paket' });
+    await pickPackage(user, dialog, /Perpanjangan 30 Hari/);
+    expect(extensionTargets).toHaveBeenCalledWith('customer-1', 'branch-1');
+    expect(await within(dialog).findByRole('radio', { name: /Paket 8 Sesi Lama/ })).toBeDisabled();
+    // Satu-satunya paket yang masih bisa diperpanjang langsung terpilih.
+    expect(within(dialog).getByRole('radio', { name: /Paket 4 Sesi/ })).toBeChecked();
+    await user.click(within(dialog).getByRole('button', { name: 'Catat penjualan' }));
+    const confirm = await screen.findByRole('dialog', { name: 'Catat penjualan paket?' });
+    expect(confirm).toHaveTextContent(/Masa aktif Paket 4 Sesi bertambah 30 hari/);
+    await user.click(within(confirm).getByRole('button', { name: 'Catat penjualan' }));
+    await waitFor(() => expect(client.record).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(client.record).mock.calls[0]![0]).toMatchObject({
+      packageId: 'pkg-ext',
+      targetCustomerPackageId: 'cp-2',
+    });
+  });
+
+  it('paket perpanjangan tanpa paket aktif member: tombol catat tetap nonaktif dan ada arahan', async () => {
+    const user = userEvent.setup();
+    const client = fake({
+      searchPackages: vi
+        .fn()
+        .mockResolvedValue([
+          pkg({ id: 'pkg-ext', name: 'Perpanjangan 30 Hari', sessionCount: 0, perpanjanganMasaAktif: true }),
+        ]),
+      extensionTargets: vi.fn().mockResolvedValue({ days: 30, maxPerPackage: 3, items: [] }),
+    });
+    open(client);
+    const dialog = screen.getByRole('dialog', { name: 'Catat penjualan paket' });
+    await pickPackage(user, dialog, /Perpanjangan 30 Hari/);
+    expect(await within(dialog).findByText(/tidak punya paket aktif yang bisa diperpanjang/)).toBeVisible();
+    expect(within(dialog).getByRole('button', { name: 'Catat penjualan' })).toBeDisabled();
+  });
 });

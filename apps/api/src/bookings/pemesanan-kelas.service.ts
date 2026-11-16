@@ -15,6 +15,8 @@ import { cabangPublik } from '../foundation/tampilan-publik';
 import { paketBerlakuDi } from './cabang-paket';
 import { alasanPaketDitolak } from './kelayakan-paket';
 import { bookingTeman, maksTemanPaket } from '../packages/bawa-teman';
+import { adalahPaketPerpanjangan } from '../packages/perpanjangan-masa-aktif';
+import { catatModalPaket } from '../packages/modal-sesi.service';
 import { tertahanPerPaket } from '../packages/sesi-terpesan';
 import { berlakuSampai } from '../foundation/masa-berlaku';
 
@@ -1284,6 +1286,10 @@ export class BookingsService {
         if (pkg.classTypeId && pkg.classTypeId !== slot.classTypeId) {
           throw new ApiProblem('PACKAGE_CLASS_TYPE_MISMATCH', HttpStatus.UNPROCESSABLE_ENTITY);
         }
+        // Paket perpanjangan masa aktif (0 sesi) tidak bisa membayar kursi kelas; dijual lewat Jual paket.
+        if (await adalahPaketPerpanjangan(tx, pkg.id)) {
+          throw new ApiProblem('PACKAGE_EXTENSION_NOT_FOR_WALK_IN', HttpStatus.UNPROCESSABLE_ENTITY);
+        }
 
         // 1. Catat Pembelian Kasir (langsung lunas)
         const invoiceNumber = `INV-${Date.now().toString(36).toUpperCase()}-${randomBytes(3).toString('hex').toUpperCase()}`;
@@ -1311,6 +1317,8 @@ export class BookingsService {
             recordNote: note,
           },
         });
+        // Modal paket dibekukan saat lunas (aturan laba November 2026).
+        await catatModalPaket(tx as never, order.id);
 
         // 2. Buat Paket Pelanggan Aktif (Instant Reserve Sesi Pertama)
         const durationDays = pkg.validityDays || 30;

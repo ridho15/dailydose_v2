@@ -70,6 +70,9 @@ export interface PublicPackageSummary {
   effectivePriceRp?: number;
   pricePerSessionRp?: number;
   promotion?: any;
+  /** Paket 0 sesi yang menambah masa aktif satu paket member yang masih aktif. */
+  perpanjanganMasaAktif?: boolean;
+  extensionDays?: number | null;
 }
 
 export interface PublicScheduleSummary {

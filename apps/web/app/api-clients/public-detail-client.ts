@@ -33,8 +33,11 @@ export interface GeneratedPublicPackageDetail {
   description?: string | null;
   priceRp: number;
   effectivePriceRp?: number;
-  pricePerSessionRp: number;
+  /** null untuk paket perpanjangan masa aktif (0 sesi). */
+  pricePerSessionRp: number | null;
   sessionCount: number;
+  perpanjanganMasaAktif?: boolean;
+  extensionDays?: number | null;
   validityDays?: number;
   durationDays?: number;
   branch: PublicBranch;

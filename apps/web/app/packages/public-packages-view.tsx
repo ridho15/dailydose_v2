@@ -55,7 +55,9 @@ export const PACKAGE_SORT_OPTIONS: { id: PackageSortOption; label: string }[] = 
   { id: 'popular', label: 'Paling sering dibeli' },
 ];
 
-export function recommendedPackageId(items: PublicPackage[]) {
+export function recommendedPackageId(allItems: PublicPackage[]) {
+  // Paket perpanjangan masa aktif (0 sesi) tidak ikut dibandingkan per sesi.
+  const items = allItems.filter((item) => item.sessionCount > 0);
   if (items.length < 2) return null;
   return [...items].sort(
     (left, right) =>
@@ -940,18 +942,35 @@ function PackageCard({
 
         {/* Fakta Esensial: Sesi & Masa Aktif */}
         <dl className="mt-4 grid grid-cols-2 gap-3 border-t border-dd-line/60 pt-3 text-xs text-dd-muted">
-          <div>
-            <dt className="font-medium text-dd-muted">Jumlah sesi</dt>
-            <dd className="mt-0.5 text-sm sm:text-base font-bold text-dd-ink">
-              {item.sessionCount} sesi
-            </dd>
-          </div>
-          <div>
-            <dt className="font-medium text-dd-muted">Masa berlaku</dt>
-            <dd className="mt-0.5 text-sm sm:text-base font-bold text-dd-ink">
-              {item.durationDays} hari
-            </dd>
-          </div>
+          {item.perpanjanganMasaAktif ? (
+            <>
+              <div>
+                <dt className="font-medium text-dd-muted">Jenis paket</dt>
+                <dd className="mt-0.5 text-sm sm:text-base font-bold text-dd-ink">Perpanjangan masa aktif</dd>
+              </div>
+              <div>
+                <dt className="font-medium text-dd-muted">Tambahan masa aktif</dt>
+                <dd className="mt-0.5 text-sm sm:text-base font-bold text-dd-ink">
+                  {item.extensionDays ?? 30} hari
+                </dd>
+              </div>
+            </>
+          ) : (
+            <>
+              <div>
+                <dt className="font-medium text-dd-muted">Jumlah sesi</dt>
+                <dd className="mt-0.5 text-sm sm:text-base font-bold text-dd-ink">
+                  {item.sessionCount} sesi
+                </dd>
+              </div>
+              <div>
+                <dt className="font-medium text-dd-muted">Masa berlaku</dt>
+                <dd className="mt-0.5 text-sm sm:text-base font-bold text-dd-ink">
+                  {item.durationDays} hari
+                </dd>
+              </div>
+            </>
+          )}
         </dl>
 
         <p className="mt-3 flex items-center gap-1.5 text-xs text-dd-muted">

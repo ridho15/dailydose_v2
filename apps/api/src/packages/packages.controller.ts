@@ -444,6 +444,14 @@ export class PackagesController {
   ) {
     return this.paymentProof.status(r.principal, id);
   }
+  /** Penjualan di meja: paket aktif member yang bisa diperpanjang (paket perpanjangan masa aktif). */
+  @Get('purchases/extension-targets') extensionTargets(
+    @Req() r: AuthenticatedRequest,
+    @Query('customerUserId') customerUserId?: string,
+    @Query('branchId') branchId?: string,
+  ) {
+    return this.customerOrders.extensionTargets(r.principal, { customerUserId, branchId });
+  }
   @Get('purchases') listPurchases(
     @Req() r: AuthenticatedRequest,
     @Query('branchId') branchId?: string,

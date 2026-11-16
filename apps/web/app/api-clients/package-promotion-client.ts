@@ -35,6 +35,8 @@ export type InternalPackageRecord = {
   isMultiBranch?: boolean;
   /** Pemilik paket boleh menambah 1 kursi teman per kelas. */
   bawaTeman?: boolean;
+  /** Paket 0 sesi yang menambah masa aktif satu paket member yang masih aktif. */
+  perpanjanganMasaAktif?: boolean;
   isShareable?: boolean;
   livePromotion?: boolean;
   _count?: { purchases: number; customerPackages: number };
@@ -248,6 +250,8 @@ const promotionMessages: Record<string, string> = {
     'Paket tidak dapat dihapus karena sudah memiliki riwayat data. Gunakan fitur Nonaktifkan untuk mengarsipkan paket ini.',
   DATABASE_TABLE_MISSING:
     'Server belum siap untuk perubahan ini (tabel baru belum dibuat). Hubungi developer.',
+  PACKAGE_EXTENSION_UNAVAILABLE:
+    'Paket perpanjangan masa aktif belum bisa disimpan karena tabelnya belum dibuat di server. Minta developer menjalankan SQL paket_perpanjangan dan perpanjangan_paket di docs/DEPLOY.md.',
   CONCURRENCY_CONFLICT:
     'Terjadi konflik konkurensi pada transaksi. Silakan coba kembali.',
 };
@@ -279,6 +283,8 @@ export async function promotionFailure(error: unknown, fallback: string): Promis
     if (issue === 'BEFORE_START') return 'Tanggal berakhir harus setelah tanggal mulai.';
     if (issue === 'BEFORE_FROM') return 'Tanggal berakhir tidak boleh lebih awal dari tanggal mulai.';
     if (issue === 'IN_THE_PAST') return 'Tanggal berakhir promo sudah lewat.';
+    if (issue === 'EXTENSION_MUST_BE_ZERO')
+      return 'Paket perpanjangan masa aktif harus 0 sesi. Ubah jumlah sesi menjadi 0 atau hapus centang Perpanjangan masa aktif.';
     return 'Data yang dimasukkan belum valid. Pastikan Business Key, nama paket, jumlah sesi (min. 1), dan harga telah terisi dengan benar.';
   }
   if (issue) return issue;

@@ -7,6 +7,7 @@ import {
   browserAssistedSaleClient,
   type AssistedPaymentMethod,
   type AssistedSaleClient,
+  type ExtensionTargetList,
   type Purchase,
 } from '@/api-clients/purchase-client';
 import { customerClient } from '../customers/customer-client';
@@ -24,7 +25,11 @@ import { formatRupiah } from '../lib/formatters';
 import { browserOrderClient, sha256Upload } from '@/api-clients/order-client';
 import { compressImageIfNeeded } from '@/lib/image-compression';
 
-type PackageOption = SearchSelectOption & { priceRp: number };
+type PackageOption = SearchSelectOption & { priceRp: number; perpanjangan: boolean };
+type TargetState =
+  | { status: 'idle' | 'loading' }
+  | { status: 'ready'; list: ExtensionTargetList }
+  | { status: 'error'; message: string };
 const NO_BRANCHES: Array<{ id: string; name: string }> = [];
 
 /**
@@ -63,6 +68,8 @@ export function AssistedSaleDrawer({
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState('');
   const [chosenBranchId, setChosenBranchId] = useState('');
+  const [targets, setTargets] = useState<TargetState>({ status: 'idle' });
+  const [targetId, setTargetId] = useState('');
   const idempotencyKey = useRef<string | undefined>(undefined);
   const branchKey = branches.map((item) => item.id).join('|');
   const dirty = Boolean(
@@ -104,21 +111,55 @@ export function AssistedSaleDrawer({
         .map<PackageOption>((pkg) => ({
           id: pkg.id,
           label: pkg.name,
-          description: `${formatRupiah(pkg.priceRp)} · ${pkg.sessionCount} sesi · ${pkg.durationDays} hari`,
+          description: pkg.perpanjanganMasaAktif
+            ? `${formatRupiah(pkg.priceRp)} · perpanjangan masa aktif 30 hari`
+            : `${formatRupiah(pkg.priceRp)} · ${pkg.sessionCount} sesi · ${pkg.durationDays} hari`,
           priceRp: pkg.priceRp,
+          perpanjangan: Boolean(pkg.perpanjanganMasaAktif),
         }));
     },
     [client, saleBranchId],
   );
 
-  const ready = Boolean(customerOption && packageOption && saleBranch);
+  // Paket perpanjangan masa aktif: muat paket aktif member untuk dipilih yang diperpanjang.
+  const isExtension = Boolean(packageOption?.perpanjangan);
+  const customerId = customerOption?.id ?? '';
+  useEffect(() => {
+    setTargetId('');
+    if (!open || !isExtension || !customerId || !saleBranchId) {
+      setTargets({ status: 'idle' });
+      return;
+    }
+    const load = client.extensionTargets ?? browserAssistedSaleClient.extensionTargets!;
+    let active = true;
+    setTargets({ status: 'loading' });
+    load(customerId, saleBranchId)
+      .then((list) => {
+        if (!active) return;
+        setTargets({ status: 'ready', list });
+        const eligible = list.items.filter((item) => item.extensionsLeft > 0);
+        if (eligible.length === 1) setTargetId(eligible[0]!.customerPackageId);
+      })
+      .catch((error) => {
+        if (active) setTargets({ status: 'error', message: assistedSaleFailure(error) });
+      });
+    return () => {
+      active = false;
+    };
+  }, [open, isExtension, customerId, saleBranchId, client]);
+
+  const selectedTarget =
+    targets.status === 'ready' ? targets.list.items.find((item) => item.customerPackageId === targetId) : undefined;
+  const ready = Boolean(customerOption && packageOption && saleBranch && (!isExtension || selectedTarget));
 
   const submit = async () => {
     if (!customerOption || !packageOption || !saleBranch) return;
     const accepted = await feedback.confirm({
       tone: 'warning',
       title: 'Catat penjualan paket?',
-      message: `${packageOption.label} untuk ${customerOption.label} (${formatRupiah(packageOption.priceRp)}, ${assistedPaymentMethodLabels[method]}). Paket aktif setelah penyetuju lain menyetujuinya di antrean Pembayaran.`,
+      message: selectedTarget
+        ? `${packageOption.label} untuk ${customerOption.label} (${formatRupiah(packageOption.priceRp)}, ${assistedPaymentMethodLabels[method]}). Masa aktif ${selectedTarget.packageName} bertambah 30 hari setelah penyetuju lain menyetujuinya di antrean Pembayaran.`
+        : `${packageOption.label} untuk ${customerOption.label} (${formatRupiah(packageOption.priceRp)}, ${assistedPaymentMethodLabels[method]}). Paket aktif setelah penyetuju lain menyetujuinya di antrean Pembayaran.`,
       confirmLabel: 'Catat penjualan',
     });
     if (!accepted) return;
@@ -134,6 +175,7 @@ export function AssistedSaleDrawer({
           paymentMethod: method,
           voucherCode: voucherCode.trim() || undefined,
           note: note.trim() || undefined,
+          ...(selectedTarget ? { targetCustomerPackageId: selectedTarget.customerPackageId } : {}),
         },
         idempotencyKey.current,
       );
@@ -246,6 +288,65 @@ export function AssistedSaleDrawer({
           loadOptions={searchPackages}
           onChange={(_id, option) => setPackageOption(option as PackageOption | undefined)}
         />
+        {isExtension && (
+          <fieldset className="grid gap-2 rounded-dd-md border border-dd-line p-3">
+            <legend className="px-1 text-sm font-semibold text-dd-ink">Paket member yang diperpanjang</legend>
+            <p className="text-xs text-dd-muted">
+              Masa aktif bertambah 30 hari dari tanggal berakhir saat ini setelah pembayaran disetujui.
+              Hanya paket yang masih aktif, paling banyak 3 kali per paket.
+            </p>
+            {!customerOption ? (
+              <p className="text-sm text-dd-muted">Pilih pelanggan terlebih dahulu.</p>
+            ) : targets.status === 'loading' ? (
+              <p className="text-sm text-dd-muted" role="status">
+                Memuat paket aktif member…
+              </p>
+            ) : targets.status === 'error' ? (
+              <Feedback kind="error">{targets.message}</Feedback>
+            ) : targets.status === 'ready' && targets.list.items.length === 0 ? (
+              <Feedback kind="warning">
+                Member ini tidak punya paket aktif yang bisa diperpanjang. Paket yang sudah hangus tidak
+                bisa diperpanjang; jual paket baru untuk melanjutkan latihan.
+              </Feedback>
+            ) : targets.status === 'ready' ? (
+              targets.list.items.map((item) => {
+                const full = item.extensionsLeft <= 0;
+                return (
+                  <label
+                    key={item.customerPackageId}
+                    className={`flex min-h-[44px] items-start gap-2 rounded-dd-sm border p-2.5 text-sm ${
+                      targetId === item.customerPackageId ? 'border-dd-forest bg-dd-forest/5' : 'border-dd-line'
+                    } ${full ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
+                  >
+                    <input
+                      type="radio"
+                      name="extensionTarget"
+                      value={item.customerPackageId}
+                      checked={targetId === item.customerPackageId}
+                      disabled={full}
+                      onChange={() => setTargetId(item.customerPackageId)}
+                      className="mt-0.5 size-4 shrink-0 accent-dd-forest"
+                    />
+                    <span className="grid gap-0.5">
+                      <span className="font-semibold text-dd-ink">{item.packageName}</span>
+                      <span className="text-xs text-dd-muted">
+                        Sisa {item.remainingSessions} sesi · berlaku sampai {tanggalWib(item.validUntil)}
+                        {full ? '' : `, menjadi ${tanggalWib(item.validUntilAfterExtension)}`}
+                      </span>
+                      <span className="text-xs text-dd-muted">
+                        {full
+                          ? item.extensionsPending > 0
+                            ? 'Batas 3 kali sudah terisi (termasuk pesanan yang menunggu pembayaran).'
+                            : 'Sudah diperpanjang 3 kali, batas maksimal.'
+                          : `Sudah diperpanjang ${item.extensionsUsed} dari ${targets.list.maxPerPackage} kali.`}
+                      </span>
+                    </span>
+                  </label>
+                );
+              })
+            ) : null}
+          </fieldset>
+        )}
         <SelectInput
           label="Metode pembayaran"
           value={method}
@@ -302,5 +403,11 @@ export function AssistedSaleDrawer({
         {failure && <Feedback kind="error">{failure}</Feedback>}
       </form>
     </Drawer>
+  );
+}
+
+function tanggalWib(value: string) {
+  return new Intl.DateTimeFormat('id-ID', { dateStyle: 'medium', timeZone: 'Asia/Jakarta' }).format(
+    new Date(value),
   );
 }

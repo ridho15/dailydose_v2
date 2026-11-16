@@ -166,6 +166,11 @@ Aturan kerahasiaan per peran ada di [Rules.md](./Rules.md#2-kerahasiaan-data-keu
     unik) ÷ total sesi × sisa sesi. Diproses Admin, Manager, Owner, atau Super Owner di cabang pembelian,
     wajib bank, nomor dan nama rekening, alasan, dan bukti transfer; paket dinolkan; surat konfirmasi bisa
     dicetak (12 November 2026).
+18. Paket perpanjangan masa aktif (16 November 2026): paket 0 sesi (ditandai "Perpanjangan masa
+    aktif" di Data Master > Paket, harga diisi di sana, mis. Rp150.000) menambah 30 hari pada masa
+    berlaku 1 paket member yang dipilih. Maksimal 3 kali per paket; pembelian ke-4 ditolak. Hanya untuk
+    paket yang masih aktif (belum hangus). Bisa dibeli member sendiri atau dicatat admin. Modal Rp0, jadi
+    seluruh nilainya masuk laba. Void mengembalikan 30 hari itu.
 15. Presensi instruktur lewat scan QR diterima mulai 45 menit sebelum kelas sampai 10 menit setelah
     kelas **mulai** (kelas 10.00 masih bisa scan 10.10). Scan setelah jam mulai tercatat sebagai anomali
     "Instruktur Check-in Terlambat" di Laporan Keuangan > Rekonsiliasi (5 November 2026).

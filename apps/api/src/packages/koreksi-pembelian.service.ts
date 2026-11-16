@@ -6,6 +6,7 @@ import { AuditService } from '../foundation/audit.service';
 import type { SessionPrincipal } from '../identity/identity.service';
 import { ApiProblem, ENTITY_ID_REGEX } from '../identity/security';
 import { MEMEGANG_SESI } from './sesi-terpesan';
+import { perpanjanganPembelian, tarikPerpanjangan } from './perpanjangan-masa-aktif';
 
 /**
  * Koreksi pembelian yang sudah lunas, khusus Super Owner (November 2026):
@@ -156,6 +157,8 @@ export class KoreksiPembelianService {
           });
       }
       const penuh = !(sesiTerpakai > 0);
+      // Pembelian paket perpanjangan masa aktif: tambahan hari pada paket target ditarik kembali.
+      const perpanjanganDitarik = await tarikPerpanjangan(tx, purchase.id, now);
       if (penuh)
         await tx.pembelian.update({
           where: { id: purchase.id },
@@ -192,6 +195,16 @@ export class KoreksiPembelianService {
           status: penuh ? 'CANCELLED' : purchase.status,
           sisaSesi: 0,
           bookingDibatalkan: bookingAktif.length,
+          ...(perpanjanganDitarik
+            ? {
+                perpanjanganDitarik: {
+                  customerPackageId: perpanjanganDitarik.customerPackageId,
+                  hari: perpanjanganDitarik.hari,
+                  validUntilSebelum: perpanjanganDitarik.validUntilBefore.toISOString(),
+                  validUntilSesudah: perpanjanganDitarik.validUntilAfter.toISOString(),
+                },
+              }
+            : {}),
         },
       });
       return {
@@ -200,6 +213,7 @@ export class KoreksiPembelianService {
         omzetBerkurangRp: penuh ? purchase.totalAmountRp : 0,
         sesiDinolkan: sisa,
         bookingDibatalkan: bookingAktif.length,
+        perpanjanganDitarikHari: perpanjanganDitarik?.hari ?? 0,
       };
     });
   }
@@ -223,6 +237,9 @@ export class KoreksiPembelianService {
       const { purchase, pkg, sesiTerpakai, bookingAktif } = await this.keadaan(tx, purchaseId);
       if (purchase.status !== 'PAID') throw new ApiProblem('PURCHASE_NOT_PAID', HttpStatus.CONFLICT);
       if (purchase.userId === keUserId) throw new ApiProblem('SAME_MEMBER', HttpStatus.CONFLICT);
+      // Perpanjangan melekat pada paket member asal; memindahkan pembeliannya tidak bermakna.
+      if (await perpanjanganPembelian(tx, purchase.id))
+        throw new ApiProblem('PURCHASE_IS_EXTENSION', HttpStatus.CONFLICT);
       const tujuan = await tx.user.findUnique({
         where: { id: keUserId },
         select: { id: true, role: true, status: true, displayName: true },

@@ -114,7 +114,11 @@ export function WalkInDrawer({
       .then((pkgs) => {
         if (!cancelled) {
           const eligible = pkgs.filter(
-            (p) => (!p.branchId || p.branchId === branch.id) && p.status === 'ACTIVE',
+            // Paket perpanjangan masa aktif tidak berisi sesi, jadi tidak bisa membayar kursi walk-in.
+            (p) =>
+              (!p.branchId || p.branchId === branch.id) &&
+              p.status === 'ACTIVE' &&
+              !p.perpanjanganMasaAktif,
           );
           setPackages(eligible);
           if (eligible.length > 0 && !selectedPackageId) {

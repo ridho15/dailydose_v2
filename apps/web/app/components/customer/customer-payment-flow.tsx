@@ -336,7 +336,9 @@ export function CustomerPaymentFlow({
                   {order.packageName}
                 </h2>
                 <p className="mt-1 text-sm text-ed-muted">
-                  {order.branchName} · {order.sessionCount} sesi · {order.durationDays} hari
+                  {order.extension
+                    ? `${order.branchName} · perpanjang ${order.extension.targetPackageName ?? 'paket'} ${order.extension.days} hari`
+                    : `${order.branchName} · ${order.sessionCount} sesi · ${order.durationDays} hari`}
                 </p>
               </div>
               <span className="rounded-none border border-ed-line bg-ed-tint px-2.5 py-0.5 text-[13px] font-bold text-ed-forest">

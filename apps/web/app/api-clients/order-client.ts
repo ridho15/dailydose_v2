@@ -40,6 +40,37 @@ export interface CheckoutOptions {
     accountHolderName: string;
     paymentWindowHours: number;
   };
+  /** Terisi bila paket ini paket perpanjangan masa aktif. */
+  extension?: null | {
+    days: number;
+    maxPerPackage: number;
+    targets: ExtensionTarget[];
+  };
+}
+
+/** Paket aktif member yang bisa dipilih untuk diperpanjang. */
+export interface ExtensionTarget {
+  customerPackageId: string;
+  packageName: string;
+  remainingSessions: number;
+  totalSessions: number;
+  validUntil: string;
+  validUntilAfterExtension: string;
+  extensionsUsed: number;
+  extensionsPending: number;
+  extensionsLeft: number;
+}
+
+/** Pembelian paket perpanjangan: paket yang diperpanjang dan hasilnya setelah lunas. */
+export interface OrderExtension {
+  targetCustomerPackageId: string;
+  targetPackageName: string | null;
+  targetValidUntil: string | null;
+  days: number;
+  appliedAt: string | null;
+  validUntilBefore: string | null;
+  validUntilAfter: string | null;
+  rolledBackAt: string | null;
 }
 
 export interface CustomerOrder {
@@ -85,6 +116,7 @@ export interface CustomerOrder {
   timelineComplete: boolean;
   version: number;
   activation: CustomerOrderActivation | null;
+  extension?: OrderExtension | null;
   timeline?: CustomerOrderTimelinePage;
   paymentAccount: null | {
     bankName: string;
@@ -279,6 +311,7 @@ export const browserOrderClient = {
     classTypeId?: string | null,
     voucherCode?: string,
     pricing?: CheckoutOptions['package'],
+    targetCustomerPackageId?: string,
   ) {
     const value = await request<any>('/orders', {
       method: 'POST',
@@ -289,6 +322,7 @@ export const browserOrderClient = {
         ...(branchId ? { branchId } : {}),
         ...(classTypeId ? { classTypeId } : {}),
         ...(voucherCode ? { voucherCode } : {}),
+        ...(targetCustomerPackageId ? { targetCustomerPackageId } : {}),
         ...(pricing
           ? {
               expectedPackageVersion: pricing.version,
@@ -540,6 +574,7 @@ export function orderErrorDetails(error: unknown) {
     VOUCHER_EXHAUSTED: 'Kuota penggunaan voucher telah habis.',
     VOUCHER_QUOTA_EXHAUSTED: 'Kuota penggunaan voucher telah habis.',
     VOUCHER_NOT_APPLICABLE: 'Voucher tidak dapat digunakan untuk pesanan ini.',
+    ...EXTENSION_ERROR_LABELS,
   };
 
   let message = labels[code];
@@ -564,3 +599,22 @@ export function orderErrorDetails(error: unknown) {
     stage: error instanceof OrderClientError ? error.stage : undefined,
   };
 }
+
+/** Pesan galat paket perpanjangan masa aktif (dipakai checkout member dan layar staf). */
+export const EXTENSION_ERROR_LABELS: Record<string, string> = {
+  PACKAGE_EXTENSION_TARGET_REQUIRED: 'Pilih paket yang ingin diperpanjang terlebih dahulu.',
+  PACKAGE_EXTENSION_TARGET_NOT_FOUND:
+    'Paket yang dipilih tidak ditemukan atau bukan milik member ini. Muat ulang halaman lalu pilih paket lagi.',
+  PACKAGE_EXTENSION_TARGET_EXPIRED:
+    'Paket yang dipilih sudah tidak aktif (masa berlaku habis atau sesi habis), jadi tidak bisa diperpanjang. Beli paket baru untuk melanjutkan latihan.',
+  PACKAGE_EXTENSION_LIMIT_REACHED:
+    'Paket ini sudah diperpanjang 3 kali, batas maksimal. Beli paket baru untuk melanjutkan latihan.',
+  PACKAGE_EXTENSION_PENDING_LIMIT:
+    'Paket ini masih punya pesanan perpanjangan yang menunggu pembayaran, dan totalnya sudah mencapai batas 3 kali. Selesaikan atau tunggu pesanan itu dulu.',
+  PACKAGE_EXTENSION_UNAVAILABLE:
+    'Perpanjangan masa aktif sedang belum bisa diproses. Hubungi studio lewat WhatsApp.',
+  PACKAGE_EXTENSION_NOT_FOR_WALK_IN:
+    'Paket perpanjangan masa aktif tidak berisi sesi, jadi tidak bisa dipakai untuk walk-in. Jual lewat menu Jual paket.',
+  PURCHASE_IS_EXTENSION:
+    'Pembelian perpanjangan masa aktif tidak bisa dipindahkan ke member lain. Batalkan pembelian ini bila salah input.',
+};

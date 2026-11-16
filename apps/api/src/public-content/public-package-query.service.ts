@@ -6,6 +6,12 @@ import { assertPublicUuid } from './public-query.validation';
 import { PackagePricingService } from '../packages/kalkulasi-harga-paket.service';
 import { branchPublicLocation } from '../master/branch-location';
 import { masaJualPaket, sedangDijual } from '../packages/masa-jual';
+import {
+  HARI_PERPANJANGAN,
+  MAKS_PERPANJANGAN,
+  adalahPaketPerpanjangan,
+  paketPerpanjanganIds,
+} from '../packages/perpanjangan-masa-aktif';
 
 type Priced = ReturnType<PackagePricingService['calculate']>;
 
@@ -107,6 +113,7 @@ export class PublicPackageQueryService {
       this.db,
       packages.map((pkg) => pkg.id),
     );
+    const perpanjangan = await paketPerpanjanganIds(this.db, packages.map((pkg) => pkg.id));
     const items = packages.map((pkg: any) => {
       const classTypes =
         pkg.classTypeScopes?.map((s: any) => s.classType) ||
@@ -122,6 +129,8 @@ export class PublicPackageQueryService {
         classTypes,
         ...publicPricing(pkg.priceRp, this.pricing.calculate(pkg.priceRp, promotions.get(pkg.id))),
         branch,
+        perpanjanganMasaAktif: perpanjangan.has(pkg.id),
+        extensionDays: perpanjangan.has(pkg.id) ? HARI_PERPANJANGAN : null,
       };
     });
 
@@ -221,6 +230,7 @@ export class PublicPackageQueryService {
 
     const classType = item.classType ?? { id: 'all', code: 'ALL', name: 'Semua Kelas' };
     const classTypes = [classType];
+    const perpanjangan = await adalahPaketPerpanjangan(this.db, item.id);
     const priced = this.pricing.calculate(
       item.priceRp,
       await this.pricing.activePromotion(this.db, item.id, now),
@@ -235,11 +245,17 @@ export class PublicPackageQueryService {
       priceRp: item.priceRp,
       effectiveFrom: item.createdAt,
       effectiveUntil: null,
+      perpanjanganMasaAktif: perpanjangan,
+      extensionDays: perpanjangan ? HARI_PERPANJANGAN : null,
       publicProfile: {
-        summary: `${item.sessionCount} Sesi Pilates - Berlaku ${item.validityDays} Hari`,
+        summary: perpanjangan
+          ? `Tambah masa aktif ${HARI_PERPANJANGAN} hari untuk satu paket yang masih aktif`
+          : `${item.sessionCount} Sesi Pilates - Berlaku ${item.validityDays} Hari`,
         description:
           item.description?.trim() ||
-          `Paket latihan pilates ${item.name} dengan total ${item.sessionCount} sesi kelas.`,
+          (perpanjangan
+            ? `Perpanjang masa aktif satu paket kamu yang masih aktif selama ${HARI_PERPANJANGAN} hari, paling banyak ${MAKS_PERPANJANGAN} kali per paket.`
+            : `Paket latihan pilates ${item.name} dengan total ${item.sessionCount} sesi kelas.`),
         highlights: ['Akses instruktur bersertifikat', 'Fasilitas studio lengkap', 'Jadwal fleksibel'],
         usageGuidance: 'Pemesanan kelas dapat dilakukan melalui aplikasi kapan saja.',
         terms: [
@@ -252,7 +268,7 @@ export class PublicPackageQueryService {
       classType,
       classTypes,
       ...publicPricing(item.priceRp, priced),
-      pricePerSessionRp: Math.round(priced.effectivePriceRp / item.sessionCount),
+      pricePerSessionRp: item.sessionCount > 0 ? Math.round(priced.effectivePriceRp / item.sessionCount) : null,
       schedules: schedules.map(({ bookedCount, _count, ...schedule }) => ({
         ...schedule,
         timezone: branch.timezone,
