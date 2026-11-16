@@ -103,13 +103,19 @@ Aturan kerahasiaan per peran ada di [Rules.md](./Rules.md#2-kerahasiaan-data-keu
   fee bawaan Rp150.000 per jam.
 - **Modal per sesi** diatur per cabang × tipe kelas (atau "semua tipe kelas") di Data Master > Modal per
   Sesi, dengan tanggal mulai berlaku.
-- **Laba bulanan = omzet − modal sesi − pengeluaran.** Modal sesi mengikuti **pemakaian**: setiap
-  sesi member yang terpakai (hadir atau tidak hadir) di kelas yang selesai bulan itu × modal per sesi
-  tipe kelas di cabang kelas. Sesi yang hangus karena paket kedaluwarsa tidak punya modal.
-  Contoh pemilik: paket Group 20 sesi Rp4.000.000 di Untar, modal Rp50.000 per sesi; bila 20 sesi
-  terpakai sebelum paket habis, modalnya Rp1.000.000 (tersebar di bulan pemakaiannya) dan laba
-  Rp3.000.000 sebelum pengeluaran.
-- Payroll instruktur (yang dibayar) ditampilkan terpisah dan **tidak mengurangi laba**.
+- **Laba bulanan per cabang = omzet − modal paket terjual − pengeluaran cabang** (pembelian lunas mulai
+  1 November 2026). Saat paket lunas, modal = sesi paket × modal per sesi cabang pembelian dan tipe
+  kelas paket, tarif yang berlaku pada tanggal lunas; nilainya dibekukan di `modal_paket_terjual`
+  sehingga perubahan tarif sesudahnya tidak mengubah bulan yang sudah lewat. Contoh pemilik: paket 20
+  sesi Rp4.000.000, modal Rp80.000/sesi → modal Rp1.600.000, laba Rp2.400.000. Sesi terpakai dan sesi
+  hangus tidak mengubah laba. Pembelian yang di-void membalik seluruh modalnya, dan refund membalik
+  modal sisa sesinya, di bulan pembatalan/refund.
+- Oktober 2026 dan sebelumnya tetap memakai aturan lama (sesi terpakai di kelas selesai × modal per
+  sesi pada tanggal kelas) dan tidak dihitung ulang.
+- **Kas payroll simpanan** per cabang (mulai November 2026): masuk = modal paket terjual, keluar =
+  payroll instruktur + pembalikan modal. Payroll dibayar dari kas ini dan **tidak mengurangi laba**.
+  Saldo awal, masuk, keluar, dan saldo akhir per cabang per bulan tampil di Beranda Owner dan halaman
+  Keuangan.
 - **Jurnal kas**: admin mencatat pengeluaran cabang; pengeluaran bisa ditandai "Dibayar oleh" Super Owner
   (uang pribadi, diganti saat settlement).
 - **Settlement Super Owner**: porsi laba per cabang per Super Owner (persen, total 100%) + reimburse
@@ -119,8 +125,9 @@ Aturan kerahasiaan per peran ada di [Rules.md](./Rules.md#2-kerahasiaan-data-keu
   yang sama. Berkas diolah Converter dan Checksum BCA sebelum diunggah.
 
 ### 3.9 Laporan
-- Beranda Owner: omzet, modal sesi (sesi terpakai), payroll (dibayar), pengeluaran, laba; total dan
-  per cabang; tiga bulan terakhir.
+- Beranda Owner: omzet, modal paket terjual (bulan sebelum November 2026: modal sesi terpakai),
+  payroll (dibayar dari kas payroll simpanan), pengeluaran, laba, kas payroll simpanan; total dan per
+  cabang; tiga bulan terakhir.
 - Laporan keuangan menurut rentang tanggal; tidak ada tutup buku.
 
 ## 4. Kebutuhan non-fungsional
@@ -134,8 +141,10 @@ Aturan kerahasiaan per peran ada di [Rules.md](./Rules.md#2-kerahasiaan-data-keu
 1. **Database existing tidak boleh diubah.** Fitur baru memakai tabel baru tanpa relasi Prisma.
 2. Fee instruktur hanya dari Data Master; admin tidak boleh tahu soal keuangan.
 3. Honor dibayar hanya untuk kelas yang sudah di-scan QR instruktur.
-4. Laba = omzet − modal sesi − pengeluaran. Modal sesi mengikuti pemakaian sesi sebelum paket
-   kedaluwarsa, bukan honor instruktur.
+4. Laba = omzet − modal − pengeluaran, bukan honor instruktur. Mulai pembelian yang lunas 1 November
+   2026, modal diakui saat paket lunas (sesi paket × modal per sesi, dibekukan), dan payroll dibayar
+   dari kas payroll simpanan per cabang (16 November 2026, menggantikan aturan pemakaian sesi dari
+   1 November yang membuat November terlihat minus). Oktober 2026 dan sebelumnya tidak dihitung ulang.
 5. Admin hanya boleh melihat omzet cabangnya sendiri; instruktur hanya fee dirinya sendiri.
 6. Pembatalan kurang dari H-12 perlu persetujuan Manager atau Owner.
 7. Paket tertentu boleh membawa teman; member juga bisa booking kursi teman sendiri.
@@ -171,5 +180,8 @@ lewat scan QR oleh staf.
 | :--- | :--- | :--- |
 | 1 | Fee dihitung per jam (dibulatkan, minimal 1 jam). Kelas 1 jam = 1 sesi. | `instructor-fee-calculator.ts` |
 | 2 | Kapasitas dari Data Master menang atas jumlah bed ruangan. | `slot-kelas.service.ts` |
-| 3 | Sesi "tidak hadir" (NO_SHOW) ikut dihitung modal karena sesinya tetap terpotong. | `modal-sesi.service.ts` |
-| 4 | Modal sesi memakai tarif cabang dan tipe kelas **kelas yang dihadiri**, bukan cabang tempat paket dibeli. | `modal-sesi.service.ts` |
+| 3 | Hanya untuk bulan sebelum November 2026: sesi "tidak hadir" (NO_SHOW) ikut dihitung modal karena sesinya tetap terpotong. | `modal-sesi.service.ts` |
+| 4 | Hanya untuk bulan sebelum November 2026: modal sesi memakai tarif cabang dan tipe kelas **kelas yang dihadiri**. Mulai November: cabang pembelian dan tipe kelas paket. | `modal-sesi.service.ts` |
+| 5 | "Payroll yang dibayar" untuk kas payroll simpanan = payroll instruktur bulan itu seperti di Beranda Owner (honor kelas selesai + koreksi jam), karena aplikasi belum mencatat tanggal transfer honor. | `ringkasan-keuangan.service.ts` |
+| 6 | Batas bulan modal sama dengan batas bulan omzet (tanggal UTC, jam 07.00 WIB), supaya omzet dan modal satu pembayaran selalu di bulan yang sama. | `modal-sesi.service.ts` |
+| 7 | Void sebagian (sesi sudah terpakai, sisa dinolkan tanpa uang kembali) diperlakukan seperti sesi hangus: tidak ada pembalikan modal. | `modal-sesi.service.ts` |

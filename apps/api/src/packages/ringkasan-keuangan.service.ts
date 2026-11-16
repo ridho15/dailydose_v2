@@ -7,16 +7,18 @@ import { ApiProblem } from '../identity/security';
 import { financeRange, otherCostDay, otherCostInRange } from './finance-range';
 import { summarizeInstructorFees } from './instructor-fee-calculator';
 import { koreksiHonorDalamRentang } from './koreksi-jam.service';
-import { hitungModalSesi } from './modal-sesi.service';
+import { hitungModalSesi, MULAI_MODAL_PAKET, type MetodeModal } from './modal-sesi.service';
 
 /**
  * Angka keuangan satu bulan untuk Owner, dan jurnal kas sederhana untuk cabang.
  *
- * Omzet adalah pembelian PAID menurut `paidAt`; modal sesi adalah sesi member yang terpakai di
- * kelas selesai dikali modal per sesi tipe kelasnya di cabang itu (`hitungModalSesi`); pengeluaran adalah biaya lain menurut
- * tanggal pengeluarannya; laba = omzet − modal sesi − pengeluaran. Payroll (honor kelas yang
- * di-scan QR ditambah koreksi jam) adalah yang dibayar ke instruktur dan ditampilkan terpisah;
- * payroll tidak mengurangi laba karena biaya mengajar sudah diwakili modal sesi.
+ * Omzet adalah pembelian PAID menurut `paidAt`; modal mulai November 2026 adalah modal paket
+ * terjual (sesi paket yang lunas x modal per sesi, dibekukan saat lunas; lihat `hitungModalSesi`),
+ * Oktober 2026 dan sebelumnya tetap sesi terpakai x modal per sesi; pengeluaran adalah biaya lain
+ * menurut tanggal pengeluarannya; laba = omzet − modal − pengeluaran. Payroll (honor kelas yang
+ * di-scan QR ditambah koreksi jam) dibayar dari kas payroll simpanan dan tidak mengurangi laba.
+ * Kas payroll simpanan per cabang: masuk = modal paket terjual, keluar = payroll + pembalikan modal
+ * (VOID/refund), mulai November 2026.
  * Satu-satunya perbedaan: di sini semua cabang dihitung sekaligus, bukan satu per satu, dan tarif
  * honor tiap cabang tetap dicari dari tarif cabang itu saja seperti laporan per cabang.
  */
@@ -30,9 +32,15 @@ export interface AngkaCabang {
   /** Bagian payroll dari koreksi jam; bisa negatif. */
   koreksiPayrollRp: number;
   pengeluaranRp: number;
-  /** Sesi terpakai x modal per sesi; dasar laba. */
+  /** Modal bersih yang mengurangi laba: modal paket terjual − pembalikan (atau sesi terpakai untuk bulan lama). */
   modalSesiRp: number;
-  /** Sesi member yang terpakai (hadir/tidak hadir) di kelas selesai bulan ini. */
+  /** Sesi paket yang terjual (lunas) bulan ini; aturan mulai November 2026. */
+  sesiTerjual: number;
+  /** Modal paket terjual sebelum pembalikan. */
+  modalTerjualRp: number;
+  /** Pembalikan modal karena VOID atau refund bulan ini. */
+  modalBalikRp: number;
+  /** Sesi terpakai di kelas selesai; hanya dasar modal untuk bulan sebelum November 2026. */
   sesiTerpakai: number;
   /** Sesi tanpa tarif modal yang cocok (dihitung Rp0 sampai diatur). */
   sesiTanpaModal: number;
@@ -44,10 +52,33 @@ export interface AngkaCabang {
   pengeluaranPerKategori: { category: string; amountRp: number }[];
 }
 
+export interface KasPayrollCabang {
+  branchId: string;
+  branchName: string;
+  saldoAwalRp: number;
+  /** Modal paket terjual bulan ini. */
+  masukRp: number;
+  /** Payroll instruktur bulan ini. */
+  keluarPayrollRp: number;
+  /** Pembalikan modal karena VOID atau refund bulan ini. */
+  keluarBalikRp: number;
+  saldoAkhirRp: number;
+}
+
+export interface KasPayrollSimpanan {
+  /** False untuk bulan sebelum November 2026: kas simpanan belum ada. */
+  berlaku: boolean;
+  cabang: KasPayrollCabang[];
+  total: Omit<KasPayrollCabang, 'branchId' | 'branchName'>;
+}
+
 export interface RingkasanBulanan {
   period: string;
   from: string;
   until: string;
+  /** PEMAKAIAN untuk bulan sebelum November 2026, PAKET_TERJUAL sesudahnya. */
+  metodeModal: MetodeModal;
+  kasPayroll: KasPayrollSimpanan;
   total: Omit<AngkaCabang, 'branchId' | 'branchName' | 'targetRp'> & { targetRp: number | null };
   cabang: AngkaCabang[];
   /** Kelas selesai yang tarif honornya belum dipasang dan memakai tarif bawaan. */
@@ -83,6 +114,12 @@ export interface JurnalKas {
 }
 
 const MAKS_BARIS_JURNAL = 500;
+
+function bulanBerikut(bulan: string): string {
+  const d = new Date(`${bulan}-01T00:00:00.000Z`);
+  d.setUTCMonth(d.getUTCMonth() + 1);
+  return d.toISOString().slice(0, 7);
+}
 
 function tambahKategori(peta: Map<string, number>, kategori: string, nilai: number) {
   peta.set(kategori, (peta.get(kategori) ?? 0) + nilai);
@@ -123,7 +160,7 @@ export class RingkasanKeuanganService {
     const ids = cabangList.map((c) => c.id);
     const lingkup = { branchId: { in: ids } };
 
-    const [pembelian, biaya, kelas, tarif, koreksi] = await Promise.all([
+    const [pembelian, biaya, gaji, modal] = await Promise.all([
       this.db.pembelian.findMany({
         where: {
           ...lingkup,
@@ -136,6 +173,98 @@ export class RingkasanKeuanganService {
         where: { ...lingkup, ...otherCostInRange(range) },
         select: { branchId: true, category: true, amountRp: true },
       }),
+      this.payrollPerCabang(ids, range),
+      hitungModalSesi(this.db, {
+        branchIds: ids,
+        fromDate: range.fromDate,
+        untilExclusive: range.untilExclusive,
+      }),
+    ]);
+    const kasPayroll = await this.kasPayroll(cabangList, period, { gaji, modal });
+
+    const tarifBelumDipasang = gaji.tarifBelumDipasang;
+    const cabang: AngkaCabang[] = cabangList.map((c) => {
+      const beli = (pembelian as { branchId: string; totalAmountRp: number }[]).filter(
+        (p) => p.branchId === c.id,
+      );
+      const omsetRp = beli.reduce((s, p) => s + p.totalAmountRp, 0);
+
+      const kategori = new Map<string, number>();
+      let pengeluaranRp = 0;
+      for (const b of biaya as { branchId: string; category: string; amountRp: number }[]) {
+        if (b.branchId !== c.id) continue;
+        pengeluaranRp += b.amountRp;
+        tambahKategori(kategori, b.category, b.amountRp);
+      }
+
+      const koreksiPayrollRp = gaji.koreksiPerCabang.get(c.id) ?? 0;
+      const payrollRp = gaji.perCabang.get(c.id) ?? 0;
+      const modalRp = modal.perCabang.get(c.id) ?? 0;
+
+      return {
+        branchId: c.id,
+        branchName: c.name,
+        omsetRp,
+        payrollRp,
+        koreksiPayrollRp,
+        pengeluaranRp,
+        modalSesiRp: modalRp,
+        sesiTerjual: modal.sesiTerjualPerCabang.get(c.id) ?? 0,
+        modalTerjualRp: modal.modalTerjualPerCabang.get(c.id) ?? 0,
+        modalBalikRp: modal.modalBalikPerCabang.get(c.id) ?? 0,
+        sesiTerpakai: modal.sesiTerpakaiPerCabang.get(c.id) ?? 0,
+        sesiTanpaModal: modal.sesiTanpaModalPerCabang.get(c.id) ?? 0,
+        profitRp: omsetRp - modalRp - pengeluaranRp,
+        targetRp: c.monthlyTargetRp,
+        transaksi: beli.length,
+        kelasSelesai: gaji.kelasPerCabang.get(c.id) ?? 0,
+        pengeluaranPerKategori: [...kategori]
+          .map(([category, amountRp]) => ({ category, amountRp }))
+          .sort((a, b) => b.amountRp - a.amountRp),
+      };
+    });
+
+    const jumlah = (f: (c: AngkaCabang) => number) => cabang.reduce((s, c) => s + f(c), 0);
+    const kategoriTotal = new Map<string, number>();
+    for (const c of cabang)
+      for (const k of c.pengeluaranPerKategori)
+        tambahKategori(kategoriTotal, k.category, k.amountRp);
+    const adaTarget = cabang.some((c) => c.targetRp !== null);
+
+    return {
+      period,
+      from: range.from,
+      until: range.until,
+      metodeModal: modal.metode,
+      kasPayroll,
+      total: {
+        omsetRp: jumlah((c) => c.omsetRp),
+        payrollRp: jumlah((c) => c.payrollRp),
+        koreksiPayrollRp: jumlah((c) => c.koreksiPayrollRp),
+        pengeluaranRp: jumlah((c) => c.pengeluaranRp),
+        modalSesiRp: jumlah((c) => c.modalSesiRp),
+        sesiTerjual: jumlah((c) => c.sesiTerjual),
+        modalTerjualRp: jumlah((c) => c.modalTerjualRp),
+        modalBalikRp: jumlah((c) => c.modalBalikRp),
+        sesiTerpakai: jumlah((c) => c.sesiTerpakai),
+        sesiTanpaModal: jumlah((c) => c.sesiTanpaModal),
+        profitRp: jumlah((c) => c.profitRp),
+        targetRp: adaTarget ? jumlah((c) => c.targetRp ?? 0) : null,
+        transaksi: jumlah((c) => c.transaksi),
+        kelasSelesai: jumlah((c) => c.kelasSelesai),
+        pengeluaranPerKategori: [...kategoriTotal]
+          .map(([category, amountRp]) => ({ category, amountRp }))
+          .sort((a, b) => b.amountRp - a.amountRp),
+      },
+      cabang,
+      tarifBelumDipasang,
+    };
+  }
+
+  /** Payroll instruktur per cabang dalam rentang: honor kelas selesai (tarif cabang itu) + koreksi jam. */
+  private async payrollPerCabang(ids: string[], range: { fromDate: Date; untilExclusive: Date }) {
+    const lingkup = { branchId: { in: ids } };
+    const [kelas, tarif, koreksi] = await Promise.all([
       this.db.slotKelas.findMany({
         where: {
           ...lingkup,
@@ -158,86 +287,81 @@ export class RingkasanKeuanganService {
         untilExclusive: range.untilExclusive,
       }),
     ]);
-
-    const modal = await hitungModalSesi(this.db, {
-      branchIds: ids,
-      fromDate: range.fromDate,
-      untilExclusive: range.untilExclusive,
-    });
-
+    const perCabang = new Map<string, number>();
+    const kelasPerCabang = new Map<string, number>();
     let tarifBelumDipasang = 0;
-    const cabang: AngkaCabang[] = cabangList.map((c) => {
-      const beli = (pembelian as { branchId: string; totalAmountRp: number }[]).filter(
-        (p) => p.branchId === c.id,
-      );
-      const omsetRp = beli.reduce((s, p) => s + p.totalAmountRp, 0);
-
-      const kategori = new Map<string, number>();
-      let pengeluaranRp = 0;
-      for (const b of biaya as { branchId: string; category: string; amountRp: number }[]) {
-        if (b.branchId !== c.id) continue;
-        pengeluaranRp += b.amountRp;
-        tambahKategori(kategori, b.category, b.amountRp);
-      }
-
-      const kelasCabang = (kelas as { branchId: string }[]).filter((k) => k.branchId === c.id);
+    for (const id of ids) {
+      const kelasCabang = (kelas as { branchId: string }[]).filter((k) => k.branchId === id);
       const ringkasHonor = summarizeInstructorFees(
         kelasCabang as never,
-        (tarif as { branchId: string }[]).filter((t) => t.branchId === c.id) as never,
+        (tarif as { branchId: string }[]).filter((t) => t.branchId === id) as never,
       );
       tarifBelumDipasang += ringkasHonor.reduce((s, r) => s + r.unconfiguredFeeClassCount, 0);
-      const koreksiPayrollRp = koreksi.perCabang.get(c.id) ?? 0;
-      const payrollRp = ringkasHonor.reduce((s, r) => s + r.totalFeeRp, 0) + koreksiPayrollRp;
+      perCabang.set(id, ringkasHonor.reduce((s, r) => s + r.totalFeeRp, 0) + (koreksi.perCabang.get(id) ?? 0));
+      kelasPerCabang.set(id, kelasCabang.length);
+    }
+    return { perCabang, kelasPerCabang, koreksiPerCabang: koreksi.perCabang, tarifBelumDipasang };
+  }
 
+  /**
+   * Kas payroll simpanan per cabang untuk bulan `period`: saldo awal adalah akumulasi bulan-bulan
+   * sejak November 2026; masuk = modal paket terjual, keluar = payroll instruktur + pembalikan modal.
+   * Bulan sebelum November 2026 tidak punya kas simpanan.
+   */
+  private async kasPayroll(
+    cabangList: { id: string; name: string }[],
+    period: string,
+    bulanIni: {
+      gaji: { perCabang: Map<string, number> };
+      modal: { modalTerjualPerCabang: Map<string, number>; modalBalikPerCabang: Map<string, number> };
+    },
+  ): Promise<KasPayrollSimpanan> {
+    const nol = { saldoAwalRp: 0, masukRp: 0, keluarPayrollRp: 0, keluarBalikRp: 0, saldoAkhirRp: 0 };
+    const mulai = MULAI_MODAL_PAKET.toISOString().slice(0, 7);
+    if (period < mulai) return { berlaku: false, cabang: [], total: nol };
+    const ids = cabangList.map((c) => c.id);
+    const saldoAwal = new Map<string, number>();
+    for (let bulan = mulai; bulan < period; bulan = bulanBerikut(bulan)) {
+      const r = financeRange({ period: bulan });
+      const [gaji, modal] = await Promise.all([
+        this.payrollPerCabang(ids, r),
+        hitungModalSesi(this.db, { branchIds: ids, fromDate: r.fromDate, untilExclusive: r.untilExclusive }),
+      ]);
+      for (const id of ids)
+        saldoAwal.set(
+          id,
+          (saldoAwal.get(id) ?? 0) +
+            (modal.modalTerjualPerCabang.get(id) ?? 0) -
+            (gaji.perCabang.get(id) ?? 0) -
+            (modal.modalBalikPerCabang.get(id) ?? 0),
+        );
+    }
+    const cabang = cabangList.map((c) => {
+      const saldoAwalRp = saldoAwal.get(c.id) ?? 0;
+      const masukRp = bulanIni.modal.modalTerjualPerCabang.get(c.id) ?? 0;
+      const keluarPayrollRp = bulanIni.gaji.perCabang.get(c.id) ?? 0;
+      const keluarBalikRp = bulanIni.modal.modalBalikPerCabang.get(c.id) ?? 0;
       return {
         branchId: c.id,
         branchName: c.name,
-        omsetRp,
-        payrollRp,
-        koreksiPayrollRp,
-        pengeluaranRp,
-        modalSesiRp: modal.perCabang.get(c.id) ?? 0,
-        sesiTerpakai: modal.sesiPerCabang.get(c.id) ?? 0,
-        sesiTanpaModal: modal.sesiTanpaModalPerCabang.get(c.id) ?? 0,
-        profitRp: omsetRp - (modal.perCabang.get(c.id) ?? 0) - pengeluaranRp,
-        targetRp: c.monthlyTargetRp,
-        transaksi: beli.length,
-        kelasSelesai: kelasCabang.length,
-        pengeluaranPerKategori: [...kategori]
-          .map(([category, amountRp]) => ({ category, amountRp }))
-          .sort((a, b) => b.amountRp - a.amountRp),
+        saldoAwalRp,
+        masukRp,
+        keluarPayrollRp,
+        keluarBalikRp,
+        saldoAkhirRp: saldoAwalRp + masukRp - keluarPayrollRp - keluarBalikRp,
       };
     });
-
-    const jumlah = (f: (c: AngkaCabang) => number) => cabang.reduce((s, c) => s + f(c), 0);
-    const kategoriTotal = new Map<string, number>();
-    for (const c of cabang)
-      for (const k of c.pengeluaranPerKategori)
-        tambahKategori(kategoriTotal, k.category, k.amountRp);
-    const adaTarget = cabang.some((c) => c.targetRp !== null);
-
+    const jumlah = (f: (c: KasPayrollCabang) => number) => cabang.reduce((s, c) => s + f(c), 0);
     return {
-      period,
-      from: range.from,
-      until: range.until,
-      total: {
-        omsetRp: jumlah((c) => c.omsetRp),
-        payrollRp: jumlah((c) => c.payrollRp),
-        koreksiPayrollRp: jumlah((c) => c.koreksiPayrollRp),
-        pengeluaranRp: jumlah((c) => c.pengeluaranRp),
-        modalSesiRp: jumlah((c) => c.modalSesiRp),
-        sesiTerpakai: jumlah((c) => c.sesiTerpakai),
-        sesiTanpaModal: jumlah((c) => c.sesiTanpaModal),
-        profitRp: jumlah((c) => c.profitRp),
-        targetRp: adaTarget ? jumlah((c) => c.targetRp ?? 0) : null,
-        transaksi: jumlah((c) => c.transaksi),
-        kelasSelesai: jumlah((c) => c.kelasSelesai),
-        pengeluaranPerKategori: [...kategoriTotal]
-          .map(([category, amountRp]) => ({ category, amountRp }))
-          .sort((a, b) => b.amountRp - a.amountRp),
-      },
+      berlaku: true,
       cabang,
-      tarifBelumDipasang,
+      total: {
+        saldoAwalRp: jumlah((c) => c.saldoAwalRp),
+        masukRp: jumlah((c) => c.masukRp),
+        keluarPayrollRp: jumlah((c) => c.keluarPayrollRp),
+        keluarBalikRp: jumlah((c) => c.keluarBalikRp),
+        saldoAkhirRp: jumlah((c) => c.saldoAkhirRp),
+      },
     };
   }
 

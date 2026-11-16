@@ -1252,6 +1252,26 @@ model ModalSesi {
   @@map("modal_sesi")
 }
 
+/// Snapshot modal satu pembelian paket yang lunas (aturan laba mulai November 2026): sesi paket x
+/// modal per sesi yang berlaku pada tanggal lunas, dibekukan supaya perubahan Modal per Sesi di
+/// kemudian hari tidak mengubah laba bulan yang sudah lewat. Satu baris per pembelian.
+/// Tanpa relasi Prisma; tabel lama tidak berubah.
+model ModalPaketTerjual {
+  purchaseId     String   @id @db.Char(36)
+  branchId       String   @db.Char(36)
+  classTypeId    String?  @db.Char(36)
+  sesi           Int
+  modalPerSesiRp Int
+  modalTotalRp   Int
+  /// Versi tarif modal_sesi yang dipakai; kosong bila belum ada tarif (modal Rp0).
+  modalSesiId    String?  @db.Char(36)
+  paidAt         DateTime
+  createdAt      DateTime @default(now())
+
+  @@index([branchId, paidAt])
+  @@map("modal_paket_terjual")
+}
+
 /// Kapasitas kelas per cabang dan tipe kelas dari Data Master (Kuota & Kapasitas). Bila ada,
 /// dipakai untuk kelas baru dan kelas mendatang menggantikan kapasitas bawaan tipe kelas.
 /// Tanpa relasi Prisma; tabel lama tidak berubah.

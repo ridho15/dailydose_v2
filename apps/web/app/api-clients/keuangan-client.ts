@@ -7,8 +7,14 @@ export interface AngkaCabang {
   payrollRp: number;
   koreksiPayrollRp: number;
   pengeluaranRp: number;
-  /** Sesi terpakai x modal per sesi; dasar laba. */
+  /** Modal yang mengurangi laba: modal paket terjual − pembalikan (bulan lama: sesi terpakai x modal per sesi). */
   modalSesiRp: number;
+  /** Sesi paket yang terjual bulan ini (aturan mulai November 2026). */
+  sesiTerjual?: number;
+  modalTerjualRp?: number;
+  /** Pembalikan modal karena pembelian dibatalkan atau di-refund bulan ini. */
+  modalBalikRp?: number;
+  /** Sesi terpakai; dasar modal hanya untuk bulan sebelum November 2026. */
   sesiTerpakai: number;
   /** Sesi tanpa modal per sesi yang cocok (dihitung Rp0). */
   sesiTanpaModal: number;
@@ -19,10 +25,31 @@ export interface AngkaCabang {
   pengeluaranPerKategori: { category: string; amountRp: number }[];
 }
 
+export type MetodeModal = 'PEMAKAIAN' | 'PAKET_TERJUAL' | 'CAMPURAN';
+
+export interface KasPayrollCabang {
+  branchId: string;
+  branchName: string;
+  saldoAwalRp: number;
+  masukRp: number;
+  keluarPayrollRp: number;
+  keluarBalikRp: number;
+  saldoAkhirRp: number;
+}
+
+export interface KasPayrollSimpanan {
+  /** False untuk bulan sebelum November 2026. */
+  berlaku: boolean;
+  cabang: KasPayrollCabang[];
+  total: Omit<KasPayrollCabang, 'branchId' | 'branchName'>;
+}
+
 export interface RingkasanBulanan {
   period: string;
   from: string;
   until: string;
+  metodeModal?: MetodeModal;
+  kasPayroll?: KasPayrollSimpanan;
   total: Omit<AngkaCabang, 'branchId' | 'branchName'>;
   cabang: AngkaCabang[];
   tarifBelumDipasang: number;

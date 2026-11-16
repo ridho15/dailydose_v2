@@ -118,10 +118,12 @@ describe('FinanceService.exportReport', () => {
     expect(rows[2]).toContain(`'=HYPERLINK("http://x","a")`.replace(/"/g, '""'));
     expect(rows[3]).toContain('"Paket, dengan koma"');
     expect(rows[4]).toBe('2026-08-12,DD-GG,BIAYA_LAIN,'+id(300)+',SEWA: Sewa studio,400000');
-    expect(rows.slice(-3)).toEqual([
+    expect(rows.slice(-5)).toEqual([
       ',,TOTAL_PENJUALAN,,Penjualan paket lunas,1750000',
       ',,TOTAL_BIAYA_LAIN,,Biaya lain menurut tanggal pengeluaran,400000',
       ',,SELISIH,,Penjualan dikurangi biaya lain,1350000',
+      ',,TOTAL_MODAL,,Modal sesi (0 sesi terpakai x modal per sesi),0',
+      ',,LABA,,Penjualan dikurangi modal dan biaya lain,1350000',
     ]);
     expect(result.content).not.toMatch(/@|displayName|email|phone/i);
     expect(result.controlHash).toBe(createHash('sha256').update(result.content).digest('hex'));

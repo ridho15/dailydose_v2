@@ -29,11 +29,11 @@ const tanggal = (iso: string) =>
   }).format(new Date(`${iso}T00:00:00Z`));
 
 /**
- * Modal per sesi untuk menghitung laba: setiap sesi member yang terpakai di kelas selesai dikali
- * modal per sesi tipe kelasnya di cabang itu, pada bulan kelasnya. Contoh: paket Group 20 sesi
- * Rp4.000.000 di Untar, modal Group Untar Rp50.000; bila 20 sesi terpakai sebelum paket habis,
- * modalnya Rp1.000.000 dan laba Rp3.000.000 (sebelum pengeluaran). Berbeda dari fee instruktur,
- * yang dibayar per kelas yang di-scan QR.
+ * Modal per sesi untuk menghitung laba (mulai paket yang lunas 1 November 2026): modal diakui di
+ * bulan paket lunas, sesi paket x modal per sesi cabang pembelian dan tipe kelas paket, tarif yang
+ * berlaku pada tanggal lunas, lalu dibekukan. Contoh pemilik: paket 20 sesi Rp4.000.000, modal
+ * Rp80.000/sesi → modal Rp1.600.000, laba Rp2.400.000 (sebelum pengeluaran). Berbeda dari fee
+ * instruktur, yang dibayar dari kas payroll simpanan per kelas yang di-scan QR.
  */
 export function ModalSesiSection({
   branches,
@@ -118,12 +118,14 @@ export function ModalSesiSection({
             Modal per sesi
           </h2>
           <p className="m-0 mt-1 max-w-[70ch] text-[15px] text-dd-muted">
-            Dipakai untuk laba bulanan: setiap sesi member yang terpakai (hadir atau tidak hadir)
-            dikali modal per sesi tipe kelasnya di cabang itu, pada bulan kelasnya. Contoh: paket
-            Group 20 sesi Rp4.000.000, modal Rp50.000 per sesi; bila 20 sesi terpakai sebelum
-            paket habis, modalnya Rp1.000.000 dan laba Rp3.000.000. Sesi yang hangus tidak punya
-            modal. Fee instruktur (yang dibayar per kelas ter-scan QR) diatur terpisah di detail
-            instruktur.
+            Dipakai untuk laba bulanan: saat paket lunas, jumlah sesi paket dikali modal per sesi
+            tipe kelas paket di cabang pembelian, memakai tarif yang berlaku pada tanggal lunas.
+            Modal ini mengurangi laba di bulan paket lunas dan masuk ke kas payroll simpanan.
+            Contoh: paket 20 sesi Rp4.000.000, modal Rp80.000 per sesi, maka modalnya Rp1.600.000
+            dan laba Rp2.400.000. Mengubah tarif di sini hanya berlaku untuk paket yang lunas
+            sesudahnya; paket yang sudah lunas tetap memakai modal saat lunas. Sesi terpakai dan
+            sesi hangus tidak mengubah laba. Fee instruktur diatur terpisah di detail instruktur
+            dan dibayar dari kas payroll simpanan.
           </p>
         </div>
         {canEdit && (

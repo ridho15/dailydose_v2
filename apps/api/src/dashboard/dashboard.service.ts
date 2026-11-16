@@ -47,8 +47,14 @@ export interface ProfitBreakdownDetails {
   discountRp: number;
   netRevenueRp: number;
   instructorCostRp: number;
-  /** Sesi paket yang dibeli x modal per sesi; dasar laba. */
+  /** Modal bersih yang mengurangi laba (mulai November 2026: modal paket terjual − pembalikan). */
   modalSesiRp: number;
+  /** PAKET_TERJUAL, PEMAKAIAN (bulan sebelum November 2026), atau CAMPURAN. */
+  metodeModal: string;
+  /** Sesi paket yang terjual dalam rentang (aturan baru). */
+  sesiTerjual: number;
+  /** Sesi terpakai (aturan lama, bagian rentang sebelum November 2026). */
+  sesiTerpakai: number;
   grossProfitRp: number;
   grossMarginPercent: number;
   otherCostRp: number;
@@ -318,7 +324,7 @@ export class DashboardService {
     // Tarif honor belum diisi sama sekali padahal ada kelas selesai: biaya instruktur tampil Rp 0 dan laba = omzet.
     const instructorFeeMissing = completedSlots.length > 0 && fees.length === 0;
 
-    // Laba memakai modal sesi (sesi terpakai x modal per sesi), bukan honor instruktur.
+    // Laba memakai modal (mulai November 2026 modal paket terjual), bukan honor instruktur.
     const modal = await hitungModalSesi(this.db, {
       branchIds: params.branchIds,
       fromDate: new Date(`${params.from}T00:00:00.000Z`),
@@ -496,6 +502,9 @@ export class DashboardService {
       netRevenueRp: totalRevenue,
       instructorCostRp: totalInstructorFee,
       modalSesiRp: modal.totalRp,
+      metodeModal: modal.metode,
+      sesiTerjual: modal.sesiTerjual,
+      sesiTerpakai: modal.sesiTerpakai,
       grossProfitRp: grossProfit,
       grossMarginPercent,
       otherCostRp: totalOtherCost,

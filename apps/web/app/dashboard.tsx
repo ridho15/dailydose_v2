@@ -721,7 +721,11 @@ export function Dashboard({
                   <span className="font-bold text-dd-forest">{formatRupiah(overview.financial.profitBreakdown.netRevenueRp)}</span>
                 </div>
                 <div className="flex items-center justify-between py-1.5 text-dd-brass-dark">
-                  <span>(-) Modal sesi (sesi terpakai x modal per sesi)</span>
+                  <span>
+                    {overview.financial.profitBreakdown.metodeModal === 'PEMAKAIAN'
+                      ? '(-) Modal sesi (sesi terpakai x modal per sesi)'
+                      : `(-) Modal paket terjual (${overview.financial.profitBreakdown.sesiTerjual ?? 0} sesi terjual x modal per sesi)`}
+                  </span>
                   <span className="font-medium">- {formatRupiah(overview.financial.profitBreakdown.modalSesiRp ?? 0)}</span>
                 </div>
                 <div className="flex items-center justify-between rounded-dd-md bg-dd-forest/5 px-3 py-2 border border-dd-forest/20">
@@ -836,7 +840,10 @@ export function Dashboard({
                 { id: 'revenue', header: 'Omzet', cell: (branch) => formatRupiah(branch.revenueRp) },
                 {
                   id: 'instructor',
-                  header: 'Modal sesi',
+                  header:
+                    overview.financial.profitBreakdown?.metodeModal === 'PEMAKAIAN'
+                      ? 'Modal sesi'
+                      : 'Modal paket terjual',
                   cell: (branch) => formatRupiah(branch.modalSesiRp ?? 0),
                 },
                 {

@@ -43,8 +43,10 @@ Serah terima pekerjaan per **1 November 2026**, branch `perbaikan_arsitektur`. B
 ### Keuangan
 - Fee instruktur hanya dari Data Master; bagian "Fee per sesi" di detail instruktur; kolom fee dihapus
   dari timetable.
-- Modal per sesi (Data Master > Modal per Sesi); laba = omzet − modal sesi − pengeluaran, modal
-  mengikuti pemakaian sesi (dikonfirmasi pemilik 1 November).
+- Modal per sesi (Data Master > Modal per Sesi); laba = omzet − modal paket terjual − pengeluaran.
+  Mulai pembelian lunas 1 November 2026 modal diakui saat lunas dan dibekukan (`modal_paket_terjual`),
+  payroll dibayar dari kas payroll simpanan per cabang (keputusan pemilik 16 November). Oktober ke
+  belakang tetap modal dari pemakaian sesi.
 - Beranda Owner, jurnal kas, pengeluaran "Dibayar oleh", settlement Super Owner, koreksi jam instruktur.
 - Transfer honor: Excel KlikBCA Multi Payroll + rekening instruktur.
 - Kapasitas Data Master > Kuota & Kapasitas kini benar-benar tersimpan dan diterapkan.
@@ -144,7 +146,8 @@ bertentangan, PRD/Rules/HANDOFF ini lebih baru; konfirmasi ke pemilik bila ragu.
 
 ## 6. Pertanyaan terbuka untuk pemilik
 Jawaban pemilik 1 November 2026: laba dikurangi pengeluaran (ya), kursi teman memotong 1 sesi (ya),
-modal sesi mengikuti pemakaian sesi sebelum paket kedaluwarsa (sudah diterapkan di kode), batas
+modal sesi mengikuti pemakaian sesi sebelum paket kedaluwarsa (diganti 16 November: modal diakui saat
+paket lunas untuk pembelian mulai 1 November), batas
 pembatalan H-24, aplikasi Flutter tidak ada, presensi member lewat scan QR oleh staf.
 
 Masih terbuka:

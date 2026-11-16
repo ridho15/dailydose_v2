@@ -173,7 +173,7 @@ export interface InstructorCostRealtimeData {
   /** Honor kelas selesai yang presensi instrukturnya belum tercatat; tetap ada di total. */
   totalUnverifiedFeeRp: number;
   unverifiedClassCount: number;
-  /** Kelas yang jamnya sudah lewat tetapi belum Selesai: belum masuk honor maupun sesi terpakai. */
+  /** Kelas yang jamnya sudah lewat tetapi belum Selesai: belum masuk honor. */
   kelasBelumSelesai?: number;
   totalTeachingHours: number;
   instructorCount: number;
@@ -212,8 +212,13 @@ export interface ProfitData {
   branchId: string;
   omsetRp: number;
   costRealtimeRp: number;
-  /** Sesi terpakai x modal per sesi; dasar laba. */
+  /** Modal yang mengurangi laba (mulai November 2026: modal paket terjual − pembalikan). */
   modalSesiRp?: number;
+  metodeModal?: 'PEMAKAIAN' | 'PAKET_TERJUAL' | 'CAMPURAN';
+  sesiTerjual?: number;
+  modalTerjualRp?: number;
+  modalBalikRp?: number;
+  /** Sesi terpakai; dasar modal hanya untuk bagian rentang sebelum November 2026. */
   sesiTerpakai?: number;
   sesiTanpaModal?: number;
   kelasBelumSelesai?: number;

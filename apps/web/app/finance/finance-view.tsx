@@ -46,6 +46,12 @@ import {
   type ProfitData,
 } from './finance-client';
 import { OtherCostEditDialog } from './other-cost-edit-dialog';
+import {
+  browserKeuanganClient,
+  type KasPayrollSimpanan,
+  type KeuanganClient,
+} from '../api-clients/keuangan-client';
+import { KasPayrollSimpananTabel } from '../workspace/kas-payroll-simpanan';
 import { OtherCostForm } from './other-cost-form';
 import { formatDay, presetRange, RANGE_PRESETS, rangeProblem } from './report-range';
 import { formatRupiah, formatTanggalSingkat } from '../lib/formatters';
@@ -61,11 +67,46 @@ type ReportSubTab =
   | 'INSTRUCTOR_REALTIME'
   | 'OTHER_COST';
 
+/** Label modal laporan laba: paket terjual mulai November 2026, sesi terpakai sebelumnya. */
+export function labelModalLaporan(p: ProfitData): string {
+  return p.metodeModal === 'PEMAKAIAN' ? 'Modal Sesi Terpakai' : 'Modal Paket Terjual';
+}
+
+export function dasarModalLaporan(p: ProfitData): string {
+  const balik = p.modalBalikRp ? ` · dikurangi pembatalan/refund ${formatRupiah(p.modalBalikRp)}` : '';
+  if (p.metodeModal === 'PEMAKAIAN') return `${p.sesiTerpakai ?? 0} sesi terpakai x modal per sesi`;
+  if (p.metodeModal === 'CAMPURAN')
+    return `${p.sesiTerpakai ?? 0} sesi terpakai sebelum 1 Nov 2026 + ${p.sesiTerjual ?? 0} sesi terjual${balik}`;
+  return `${p.sesiTerjual ?? 0} sesi terjual x modal per sesi${balik}`;
+}
+
+/** Kas payroll simpanan satu cabang saja bila laporan difilter ke cabang itu. */
+export function kasUntukCabang(kas: KasPayrollSimpanan, branchId: string): KasPayrollSimpanan {
+  if (!branchId || branchId === 'ALL') return kas;
+  const baris = kas.cabang.filter((c) => c.branchId === branchId);
+  const satu = baris[0];
+  return {
+    berlaku: kas.berlaku,
+    cabang: baris,
+    total: satu
+      ? {
+          saldoAwalRp: satu.saldoAwalRp,
+          masukRp: satu.masukRp,
+          keluarPayrollRp: satu.keluarPayrollRp,
+          keluarBalikRp: satu.keluarBalikRp,
+          saldoAkhirRp: satu.saldoAkhirRp,
+        }
+      : { saldoAwalRp: 0, masukRp: 0, keluarPayrollRp: 0, keluarBalikRp: 0, saldoAkhirRp: 0 },
+  };
+}
+
 export function FinanceView({
   client = browserFinanceClient,
+  kasClient = browserKeuanganClient,
   initialTab,
 }: {
   client?: FinanceClient;
+  kasClient?: Pick<KeuanganClient, 'ringkasanBulanan'>;
   initialTab?: MainTab;
 }) {
   const context = useSessionContext();
@@ -101,6 +142,8 @@ export function FinanceView({
 
   // 5 Laporan Finansial states
   const [profitData, setProfitData] = useState<ProfitData | null>(null);
+  const [kasPayroll, setKasPayroll] = useState<{ period: string; kas: KasPayrollSimpanan } | null>(null);
+  const [kasGagal, setKasGagal] = useState(false);
   const [omsetData, setOmsetData] = useState<OmsetReportData | null>(null);
   const [instructorRealtimeData, setInstructorRealtimeData] =
     useState<InstructorCostRealtimeData | null>(null);
@@ -180,7 +223,18 @@ export function FinanceView({
     } finally {
       setReportLoading(false);
     }
-  }, [client, selectedBranchId, reportRange]);
+    // Kas payroll simpanan per bulan: bulan dari tanggal akhir laporan. Gagal dimuat tidak
+    // menghalangi laporan laba; pesannya tampil di bagian kas.
+    const period = reportRange.until.slice(0, 7);
+    try {
+      const ringkasan = await kasClient.ringkasanBulanan(period);
+      setKasPayroll(ringkasan.kasPayroll ? { period, kas: ringkasan.kasPayroll } : null);
+      setKasGagal(false);
+    } catch {
+      setKasPayroll(null);
+      setKasGagal(true);
+    }
+  }, [client, kasClient, selectedBranchId, reportRange]);
 
   useEffect(() => {
     void loadReconciliation();
@@ -503,9 +557,9 @@ export function FinanceView({
                   tone="success"
                 />
                 <StatCard
-                  label="Modal Sesi Terpakai"
+                  label={labelModalLaporan(profitData)}
                   value={formatRupiah(profitData.modalSesiRp ?? 0)}
-                  helper={`${profitData.sesiTerpakai ?? 0} sesi x modal per sesi`}
+                  helper={dasarModalLaporan(profitData)}
                   tone="neutral"
                 />
                 <StatCard
@@ -536,7 +590,9 @@ export function FinanceView({
                       <span className="font-semibold">{formatRupiah(profitData.omsetRp)}</span>
                     </div>
                     <div className="flex justify-between pt-2 text-dd-warning">
-                      <span>(-) Modal Sesi ({profitData.sesiTerpakai ?? 0} sesi terpakai x modal per sesi):</span>
+                      <span>
+                        (-) {labelModalLaporan(profitData)} ({dasarModalLaporan(profitData)}):
+                      </span>
                       <span className="font-semibold">
                         - {formatRupiah(profitData.modalSesiRp ?? 0)}
                       </span>
@@ -563,13 +619,29 @@ export function FinanceView({
                     </div>
                     <p className="m-0 pt-3 text-dd-muted">
                       Honor instruktur yang dibayar periode ini {formatRupiah(profitData.costRealtimeRp)}{' '}
-                      (kelas ter-scan QR, tab 3) tidak mengurangi laba di atas.
+                      (kelas ter-scan QR, tab 3){' '}
+                      {profitData.metodeModal === 'PEMAKAIAN'
+                        ? 'tidak mengurangi laba di atas.'
+                        : 'dibayar dari kas payroll simpanan · tidak mengurangi laba.'}
                       {(profitData.sesiTanpaModal ?? 0) > 0 &&
                         ` ${profitData.sesiTanpaModal} sesi belum punya modal per sesi dan dihitung Rp0; atur di Master Data.`}
                     </p>
                   </div>
                 </Panel>
               </div>
+
+              {kasGagal && (
+                <Feedback kind="warning">
+                  Kas payroll simpanan belum dapat dimuat. Tekan Segarkan untuk mencoba lagi.
+                </Feedback>
+              )}
+              {kasPayroll?.kas.berlaku && (
+                <KasPayrollSimpananTabel
+                  kas={kasUntukCabang(kasPayroll.kas, selectedBranchId)}
+                  judul={`Kas payroll simpanan · ${new Intl.DateTimeFormat('id-ID', { month: 'long', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${kasPayroll.period}-01T00:00:00Z`))}`}
+                  judulId="finance-kas-payroll-title"
+                />
+              )}
             </div>
           )}
 

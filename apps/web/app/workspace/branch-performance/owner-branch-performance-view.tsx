@@ -42,8 +42,10 @@ interface PerformanceData {
   unverifiedClassCount: number;
   unconfiguredClassCount?: number;
   instructorFeeMissing?: boolean;
-  /** Sesi terpakai x modal per sesi; dasar profit. */
+  /** Modal yang mengurangi laba (mulai November 2026: modal paket terjual − pembalikan). */
   modalSesiRp?: number;
+  metodeModal?: 'PEMAKAIAN' | 'PAKET_TERJUAL' | 'CAMPURAN';
+  sesiTerjual?: number;
   sesiTerpakai?: number;
   sesiTanpaModal?: number;
   estimatedProfitRp: number;
@@ -214,12 +216,14 @@ export function OwnerBranchPerformanceView() {
           tone="success"
         />
         <StatCard
-          label="Modal Sesi Terpakai"
+          label={data?.metodeModal === 'PEMAKAIAN' ? 'Modal Sesi Terpakai' : 'Modal Paket Terjual'}
           value={formatRupiah(data?.modalSesiRp ?? 0)}
           helper={
             data && (data.sesiTanpaModal ?? 0) > 0
               ? `${data.sesiTanpaModal} sesi belum punya modal per sesi (dihitung Rp0)`
-              : `${data?.sesiTerpakai ?? 0} sesi x modal per sesi`
+              : data?.metodeModal === 'PEMAKAIAN'
+                ? `${data?.sesiTerpakai ?? 0} sesi terpakai x modal per sesi`
+                : `${data?.sesiTerjual ?? 0} sesi terjual x modal per sesi`
           }
           tone={data && (data.sesiTanpaModal ?? 0) > 0 ? 'warning' : 'neutral'}
         />

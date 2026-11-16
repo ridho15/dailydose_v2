@@ -44,9 +44,11 @@ Aturan teknis yang menyertainya:
 1. Fee instruktur hanya dari Data Master (per instruktur × cabang × tipe kelas, berlaku mulai tanggal).
 2. Honor dibayar dan dihitung **hanya** dari kelas yang presensi instrukturnya tercatat (scan QR atau
    verifikasi).
-3. Laba = omzet − modal sesi − pengeluaran. Modal sesi = sesi member yang terpakai (hadir/tidak hadir)
-   di kelas selesai bulan itu × modal per sesi; sesi hangus tidak punya modal. Payroll tidak mengurangi
-   laba.
+3. Laba = omzet − modal paket terjual − pengeluaran (pembelian lunas mulai 1 November 2026). Modal =
+   sesi paket × modal per sesi pada tanggal lunas, dibekukan di `modal_paket_terjual`; void/refund
+   membalik modal di bulan pembatalan. Sesi terpakai dan sesi hangus tidak mengubah laba. Payroll dibayar
+   dari kas payroll simpanan per cabang dan tidak mengurangi laba. Oktober 2026 ke belakang tetap aturan
+   lama (sesi terpakai × modal per sesi).
 4. Sesi member dipotong saat kelas selesai dan member hadir, bukan saat booking.
 5. Batas pembatalan dan reschedule H-12 jam (semua cabang). Pembatalan staf kurang dari H-12 menjadi
    pengajuan yang diputus Manager, Owner, atau Super Owner. Di produksi

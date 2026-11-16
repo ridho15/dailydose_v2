@@ -1,5 +1,5 @@
 import { PolicyService } from '../identity/policy.service';
-import { hitungModalSesi, ModalSesiService, tarifUntuk } from './modal-sesi.service';
+import { catatModalPaket, hitungModalSesi, ModalSesiService, tarifUntuk } from './modal-sesi.service';
 
 const tarif = (
   id: string,
@@ -92,7 +92,7 @@ describe('hitungModalSesi (mengikuti pemakaian sesi)', () => {
     const hasil = await hitungModalSesi(db as never, rentang);
     expect(hasil.totalRp).toBe(1_000_000);
     expect(4_000_000 - hasil.totalRp).toBe(3_000_000);
-    expect(hasil.sesi).toBe(20);
+    expect(hasil.sesiTerpakai).toBe(20);
     expect(hasil.perHari.get('2026-10-10')).toBe(1_000_000);
   });
 
@@ -134,9 +134,227 @@ describe('hitungModalSesi (mengikuti pemakaian sesi)', () => {
     };
     const hasil = await hitungModalSesi(db as never, rentang);
     expect(hasil.totalRp).toBe(95_000);
-    expect(hasil).toMatchObject({ sesi: 3, sesiTanpaModal: 1 });
+    expect(hasil).toMatchObject({ sesiTerpakai: 3, sesiTanpaModal: 1, metode: 'PEMAKAIAN' });
     expect(hasil.sesiTanpaModalPerCabang.get('pik')).toBe(1);
-    expect(hasil.sesiPerCabang.get('untar')).toBe(2);
+    expect(hasil.sesiTerpakaiPerCabang.get('untar')).toBe(2);
+  });
+});
+
+describe('hitungModalSesi (paket terjual, mulai November 2026)', () => {
+  const nov = {
+    branchIds: null,
+    fromDate: new Date('2026-11-01T00:00:00Z'),
+    untilExclusive: new Date('2026-12-01T00:00:00Z'),
+  };
+  const beli = (
+    id: string,
+    branchId: string,
+    sesi: number,
+    paidAt: string,
+    status = 'PAID',
+    classTypeId: string | null = 'grp',
+  ) => ({
+    id,
+    branchId,
+    status,
+    paidAt: new Date(paidAt),
+    package: { sessionCount: sesi, classTypeId },
+    customerPackage: { totalSessions: sesi },
+  });
+  const dbDengan = (o: {
+    pembelian?: ReturnType<typeof beli>[];
+    sumberLain?: ReturnType<typeof beli>[];
+    koreksi?: { purchaseId: string; branchId: string; createdAt: Date }[];
+    refund?: { purchaseId: string; branchId: string; sisaSesi: number; createdAt: Date }[];
+    snapshot?: Record<string, unknown>[];
+    tarif?: ReturnType<typeof tarif>[];
+  }) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const db: any = {
+      pemesananKelas: { findMany: jest.fn(async () => []) },
+      pembelian: {
+        findMany: jest.fn(async ({ where }: { where: { id?: unknown } }) =>
+          where.id ? (o.sumberLain ?? []) : (o.pembelian ?? []),
+        ),
+      },
+      pembelianKoreksi: {
+        findMany: jest.fn(async ({ where }: { where: { purchaseId?: { in: string[] } } }) =>
+          where.purchaseId
+            ? (o.koreksi ?? []).filter((k) => where.purchaseId!.in.includes(k.purchaseId))
+            : (o.koreksi ?? []),
+        ),
+      },
+      refundPaket: {
+        findMany: jest.fn(async ({ where }: { where: { purchaseId?: { in?: string[] } } }) =>
+          where.purchaseId?.in
+            ? (o.refund ?? []).filter((r) => where.purchaseId!.in!.includes(r.purchaseId))
+            : (o.refund ?? []),
+        ),
+      },
+      modalPaketTerjual: {
+        findMany: jest.fn(async () => o.snapshot ?? []),
+        createMany: jest.fn(async () => ({ count: 0 })),
+      },
+      modalSesi: {
+        findMany: jest.fn(async () => o.tarif ?? [tarif('t80', 'untar', 'grp', 80_000, '2026-01-01')]),
+      },
+    };
+    return db;
+  };
+
+  it('contoh pemilik: paket 20 sesi Rp4.000.000, modal Rp80.000/sesi → modal Rp1.600.000, laba Rp2.400.000', async () => {
+    const db = dbDengan({ pembelian: [beli('p1', 'untar', 20, '2026-11-05T03:00:00Z')] });
+    const hasil = await hitungModalSesi(db as never, nov);
+    expect(hasil).toMatchObject({
+      metode: 'PAKET_TERJUAL',
+      totalRp: 1_600_000,
+      sesiTerjual: 20,
+      modalTerjualRp: 1_600_000,
+      modalBalikRp: 0,
+      sesiTerpakai: 0,
+    });
+    expect(4_000_000 - hasil.totalRp).toBe(2_400_000);
+    expect(hasil.perHari.get('2026-11-05')).toBe(1_600_000);
+    // Sesi terpakai tidak dibaca untuk bulan aturan baru.
+    expect(db.pemesananKelas.findMany).not.toHaveBeenCalled();
+    // Snapshot dibekukan di tabel baru.
+    expect(db.modalPaketTerjual.createMany).toHaveBeenCalledWith({
+      data: [
+        expect.objectContaining({
+          purchaseId: 'p1',
+          sesi: 20,
+          modalPerSesiRp: 80_000,
+          modalTotalRp: 1_600_000,
+          modalSesiId: 't80',
+        }),
+      ],
+      skipDuplicates: true,
+    });
+  });
+
+  it('modal per sesi yang diubah setelah paket lunas tidak mengubah laba paket itu', async () => {
+    const db = dbDengan({
+      pembelian: [beli('p1', 'untar', 20, '2026-11-05T03:00:00Z')],
+      snapshot: [
+        {
+          purchaseId: 'p1',
+          branchId: 'untar',
+          classTypeId: 'grp',
+          sesi: 20,
+          modalPerSesiRp: 80_000,
+          modalTotalRp: 1_600_000,
+          modalSesiId: 't80',
+          paidAt: new Date('2026-11-05T03:00:00Z'),
+        },
+      ],
+      // Tarif baru Rp100.000 dengan tanggal berlaku mundur sebelum tanggal lunas.
+      tarif: [tarif('t100', 'untar', 'grp', 100_000, '2026-10-01')],
+    });
+    const hasil = await hitungModalSesi(db as never, nov);
+    expect(hasil.totalRp).toBe(1_600_000);
+    expect(db.modalPaketTerjual.createMany).not.toHaveBeenCalled();
+  });
+
+  it('VOID setelah lunas: modal tetap di bulan lunas, dibalik penuh di bulan pembatalan', async () => {
+    const p = beli('p1', 'untar', 20, '2026-11-05T03:00:00Z', 'CANCELLED');
+    const koreksi = [{ purchaseId: 'p1', branchId: 'untar', createdAt: new Date('2026-12-03T05:00:00Z') }];
+    const bulanLunas = await hitungModalSesi(dbDengan({ pembelian: [p], koreksi: [] , refund: [] }) as never, nov);
+    // Di bulan lunas tidak ada koreksi dalam rentang, tetapi pembelian CANCELLED tetap dihitung bila pernah VOID.
+    const dbNov = dbDengan({ pembelian: [p], koreksi });
+    dbNov.pembelianKoreksi.findMany = jest.fn(async ({ where }: { where: { purchaseId?: unknown } }) =>
+      where.purchaseId ? koreksi : [],
+    );
+    const nov2 = await hitungModalSesi(dbNov as never, nov);
+    expect(bulanLunas.totalRp).toBe(0);
+    expect(nov2.modalTerjualRp).toBe(1_600_000);
+    expect(nov2.modalBalikRp).toBe(0);
+
+    const des = {
+      branchIds: null,
+      fromDate: new Date('2026-12-01T00:00:00Z'),
+      untilExclusive: new Date('2027-01-01T00:00:00Z'),
+    };
+    const hasilDes = await hitungModalSesi(dbDengan({ pembelian: [], sumberLain: [p], koreksi }) as never, des);
+    expect(hasilDes).toMatchObject({ modalTerjualRp: 0, modalBalikRp: 1_600_000, totalRp: -1_600_000 });
+    expect(hasilDes.modalBalikPerCabang.get('untar')).toBe(1_600_000);
+  });
+
+  it('refund membalik modal sisa sesi di bulan refund', async () => {
+    const p = beli('p1', 'untar', 20, '2026-11-05T03:00:00Z');
+    const hasil = await hitungModalSesi(
+      dbDengan({
+        pembelian: [p],
+        refund: [{ purchaseId: 'p1', branchId: 'untar', sisaSesi: 5, createdAt: new Date('2026-11-20T03:00:00Z') }],
+      }) as never,
+      nov,
+    );
+    expect(hasil).toMatchObject({ modalTerjualRp: 1_600_000, modalBalikRp: 400_000, totalRp: 1_200_000 });
+  });
+
+  it('pembelian lunas sebelum November tidak punya snapshot; refund-nya tidak membalik apa pun', async () => {
+    const lama = beli('lama', 'untar', 10, '2026-10-20T03:00:00Z');
+    const db = dbDengan({
+      sumberLain: [lama],
+      refund: [{ purchaseId: 'lama', branchId: 'untar', sisaSesi: 4, createdAt: new Date('2026-11-10T03:00:00Z') }],
+    });
+    const hasil = await hitungModalSesi(db as never, nov);
+    expect(hasil.totalRp).toBe(0);
+    expect(db.modalPaketTerjual.createMany).not.toHaveBeenCalled();
+  });
+
+  it('paket 0 sesi (perpanjangan masa aktif) bermodal Rp0', async () => {
+    const hasil = await hitungModalSesi(
+      dbDengan({ pembelian: [beli('ext', 'untar', 0, '2026-11-07T03:00:00Z', 'PAID', null)] }) as never,
+      nov,
+    );
+    expect(hasil).toMatchObject({ totalRp: 0, sesiTerjual: 0, sesiTanpaModal: 0 });
+  });
+
+  it('rentang yang melewati 1 November: bagian Oktober tetap sesi terpakai', async () => {
+    const db = dbDengan({ pembelian: [beli('p1', 'untar', 20, '2026-11-05T03:00:00Z')] });
+    db.pemesananKelas.findMany = jest.fn(async () => [
+      { classSlot: { branchId: 'untar', classTypeId: 'grp', startAt: new Date('2026-10-30T02:00:00Z') } },
+    ]);
+    const hasil = await hitungModalSesi(db as never, {
+      branchIds: null,
+      fromDate: new Date('2026-10-15T00:00:00Z'),
+      untilExclusive: new Date('2026-11-16T00:00:00Z'),
+    });
+    expect(hasil).toMatchObject({ metode: 'CAMPURAN', sesiTerpakai: 1, sesiTerjual: 20, totalRp: 1_680_000 });
+    expect(db.pemesananKelas.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          classSlot: expect.objectContaining({
+            startAt: { gte: new Date('2026-10-15T00:00:00Z'), lt: new Date('2026-11-01T00:00:00Z') },
+          }),
+        }),
+      }),
+    );
+  });
+
+  it('tabel modal_paket_terjual belum ada: snapshot dihitung tanpa disimpan', async () => {
+    const db = dbDengan({ pembelian: [beli('p1', 'untar', 20, '2026-11-05T03:00:00Z')] });
+    const p2021 = Object.assign(new (require('@prisma/client').Prisma.PrismaClientKnownRequestError)('no table', {
+      code: 'P2021',
+      clientVersion: 'x',
+    }));
+    db.modalPaketTerjual.findMany = jest.fn(async () => {
+      throw p2021;
+    });
+    (db as Record<string, unknown>).$queryRawUnsafe = jest.fn(async () => []);
+    const hasil = await hitungModalSesi(db as never, nov);
+    expect(hasil.totalRp).toBe(1_600_000);
+    expect(db.modalPaketTerjual.createMany).not.toHaveBeenCalled();
+  });
+
+  it('catatModalPaket membekukan modal saat pembelian lunas', async () => {
+    const db = dbDengan({});
+    db.pembelian.findUnique = jest.fn(async () => beli('p9', 'untar', 10, '2026-11-12T03:00:00Z'));
+    await catatModalPaket(db as never, 'p9');
+    expect(db.modalPaketTerjual.createMany).toHaveBeenCalledWith({
+      data: [expect.objectContaining({ purchaseId: 'p9', modalTotalRp: 800_000 })],
+      skipDuplicates: true,
+    });
   });
 });
 

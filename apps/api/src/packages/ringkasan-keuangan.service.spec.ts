@@ -205,6 +205,61 @@ describe('RingkasanKeuanganService.ringkasanBulanan', () => {
     const { service } = setup();
     await expect(service.ringkasanBulanan(admin, {}, NOW)).rejects.toBeDefined();
   });
+
+  it('Oktober 2026 tetap aturan lama dan tanpa kas payroll simpanan', async () => {
+    const { service } = setup();
+    const hasil = await service.ringkasanBulanan(superOwner, { period: '2026-10' }, NOW);
+    expect(hasil.metodeModal).toBe('PEMAKAIAN');
+    expect(hasil.kasPayroll.berlaku).toBe(false);
+  });
+
+  it('mulai November: modal paket terjual, payroll keluar dari kas simpanan dan tidak mengurangi laba', async () => {
+    const { service, db } = setup();
+    // Setiap bulan GG menjual 1 paket Group 10 sesi Rp2.000.000 (modal Group GG Rp50.000/sesi).
+    db.pembelian.findMany = jest.fn(
+      async (args: { select?: Record<string, unknown>; where?: { paidAt?: { gte: Date } } }) => {
+        if (args.select?.package) {
+          const gte = args.where!.paidAt!.gte;
+          return [
+            {
+              id: `p-${gte.toISOString().slice(0, 7)}`,
+              branchId: 'gg',
+              status: 'PAID',
+              paidAt: new Date(gte.getTime() + 2 * 86_400_000),
+              package: { sessionCount: 10, classTypeId: 'grp' },
+              customerPackage: { totalSessions: 10 },
+            },
+          ];
+        }
+        return [{ branchId: 'gg', totalAmountRp: 2_000_000 }];
+      },
+    ) as never;
+    const hasil = await service.ringkasanBulanan(superOwner, { period: '2026-12' }, NOW);
+    expect(hasil.metodeModal).toBe('PAKET_TERJUAL');
+    const gg = hasil.cabang.find((c) => c.branchId === 'gg')!;
+    expect(gg).toMatchObject({
+      omsetRp: 2_000_000,
+      sesiTerjual: 10,
+      modalSesiRp: 500_000,
+      payrollRp: 400_000, // 2 kelas x 1 jam x 200.000; koreksi jam Oktober tidak ikut
+      // Laba tidak dikurangi payroll.
+      profitRp: 2_000_000 - 500_000 - gg.pengeluaranRp,
+    });
+    // Sesi terpakai tidak dibaca untuk bulan aturan baru.
+    expect(db.pemesananKelas.findMany).not.toHaveBeenCalled();
+    const kas = hasil.kasPayroll.cabang.find((c) => c.branchId === 'gg')!;
+    expect(hasil.kasPayroll.berlaku).toBe(true);
+    // Saldo awal Desember = November: masuk 500.000 − payroll 400.000.
+    expect(kas).toEqual({
+      branchId: 'gg',
+      branchName: 'Green Garden',
+      saldoAwalRp: 100_000,
+      masukRp: 500_000,
+      keluarPayrollRp: 400_000,
+      keluarBalikRp: 0,
+      saldoAkhirRp: 200_000,
+    });
+  });
 });
 
 describe('RingkasanKeuanganService.jurnalKas', () => {

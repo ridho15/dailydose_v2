@@ -48,8 +48,11 @@ export interface ProfitBreakdownDetails {
   discountRp: number;
   netRevenueRp: number;
   instructorCostRp: number;
-  /** Sesi terpakai x modal per sesi; dasar laba. */
+  /** Modal yang mengurangi laba (mulai November 2026: modal paket terjual − pembalikan). */
   modalSesiRp?: number;
+  metodeModal?: 'PEMAKAIAN' | 'PAKET_TERJUAL' | 'CAMPURAN';
+  sesiTerjual?: number;
+  sesiTerpakai?: number;
   grossProfitRp: number;
   grossMarginPercent: number;
   otherCostRp: number;

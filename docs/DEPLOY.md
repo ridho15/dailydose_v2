@@ -327,6 +327,30 @@ CREATE TABLE `akun_grup_tautan` (
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 ```
 
+`modal_paket_terjual` (snapshot modal paket yang lunas mulai 1 November 2026, dasar laba dan kas payroll simpanan,
+November 2026). Satu baris per pembelian: sesi paket x modal per sesi yang berlaku pada tanggal lunas. Baris dibuat saat
+pembayaran disetujui, dan untuk pembelian November yang lunas sebelum deploy, saat laporan keuangan pertama kali
+dibuka. Tanpa tabel ini laporan tetap jalan, tetapi modal dihitung ulang dari tarif saat ini setiap kali dibuka, jadi
+mengubah Modal per Sesi akan ikut mengubah bulan yang sudah lewat. Buat tabel ini **sebelum** ada yang mengubah tarif
+Modal per Sesi:
+
+```sql
+CREATE TABLE `modal_paket_terjual` (
+    `purchaseId` CHAR(36) NOT NULL,
+    `branchId` CHAR(36) NOT NULL,
+    `classTypeId` CHAR(36) NULL,
+    `sesi` INTEGER NOT NULL,
+    `modalPerSesiRp` INTEGER NOT NULL,
+    `modalTotalRp` INTEGER NOT NULL,
+    `modalSesiId` CHAR(36) NULL,
+    `paidAt` DATETIME(3) NOT NULL,
+    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+
+    INDEX `modal_paket_terjual_branchId_paidAt_idx`(`branchId`, `paidAt`),
+    PRIMARY KEY (`purchaseId`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+```
+
 ## Akun HR Group (SSO)
 
 Tombol "Masuk dengan Akun HR Group" di halaman masuk dan credential bridge untuk migrasi member lama. Kontraknya

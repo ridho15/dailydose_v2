@@ -378,8 +378,9 @@ export class FinanceService {
   }
 
   /**
-   * 4. Laporan Laba Bersih untuk rentang tanggal: omzet dikurangi modal sesi (sesi member yang
-   * terpakai x modal per sesi) dan biaya lain. Honor instruktur ditampilkan sebagai informasi.
+   * 4. Laporan Laba Bersih untuk rentang tanggal: omzet dikurangi modal (mulai November 2026: modal
+   * paket terjual; sebelumnya sesi terpakai x modal per sesi) dan biaya lain. Honor instruktur
+   * dibayar dari kas payroll simpanan dan hanya ditampilkan sebagai informasi.
    */
   async profitReport(principal: SessionPrincipal, input: FinanceQuery) {
     this.policy.requireCapability(principal.capabilities, 'finance:read');
@@ -407,7 +408,7 @@ export class FinanceService {
     ]);
 
     const omsetRp = omsetRes.totalOmsetRp;
-    // Honor instruktur (yang dibayar) ditampilkan, tetapi laba memakai modal sesi.
+    // Honor instruktur (dibayar dari kas payroll simpanan) hanya ditampilkan; laba memakai modal.
     const costRealtimeRp = realtimeRes.totalInstructorCostRp;
     const otherCostRp = otherCostRes.totalOtherCostRp;
     const grossProfitRp = omsetRp - modal.totalRp;
@@ -422,7 +423,11 @@ export class FinanceService {
       omsetRp,
       costRealtimeRp,
       modalSesiRp: modal.totalRp,
-      sesiTerpakai: modal.sesi,
+      metodeModal: modal.metode,
+      sesiTerjual: modal.sesiTerjual,
+      modalTerjualRp: modal.modalTerjualRp,
+      modalBalikRp: modal.modalBalikRp,
+      sesiTerpakai: modal.sesiTerpakai,
       sesiTanpaModal: modal.sesiTanpaModal,
       kelasBelumSelesai: realtimeRes.kelasBelumSelesai,
       grossProfitRp,
@@ -698,7 +703,7 @@ export class FinanceService {
     const endExclusive = new Date(until.getTime() + 86_400_000);
     const range = financeRange({ from: from.toISOString().slice(0, 10), until: until.toISOString().slice(0, 10) });
 
-    const [purchases, costs, branch] = await Promise.all([
+    const [purchases, costs, branch, modal] = await Promise.all([
       this.db.pembelian.findMany({
         where: { ...branchFilter, status: 'PAID', paidAt: { gte: from, lt: endExclusive } },
         include: {
@@ -717,6 +722,11 @@ export class FinanceService {
       input.branchId
         ? this.db.cabang.findUnique({ where: { id: input.branchId }, select: { code: true } })
         : Promise.resolve(null),
+      hitungModalSesi(this.db, {
+        branchIds: input.branchId ? [input.branchId] : isGlobal ? null : principal.branchIds,
+        fromDate: range.fromDate,
+        untilExclusive: range.untilExclusive,
+      }),
     ]);
     const truncated = purchases.length > EXPORT_MAX_ROWS || costs.length > EXPORT_MAX_ROWS;
     const salesRows = purchases.slice(0, EXPORT_MAX_ROWS);
@@ -755,6 +765,18 @@ export class FinanceService {
     lines.push(`,,TOTAL_PENJUALAN,,Penjualan paket lunas,${salesTotal}`);
     lines.push(`,,TOTAL_BIAYA_LAIN,,Biaya lain menurut tanggal pengeluaran,${costTotal}`);
     lines.push(`,,SELISIH,,Penjualan dikurangi biaya lain,${salesTotal - costTotal}`);
+    const dasarModal =
+      modal.metode === 'PEMAKAIAN'
+        ? `Modal sesi (${modal.sesiTerpakai} sesi terpakai x modal per sesi)`
+        : modal.metode === 'CAMPURAN'
+          ? `Modal (${modal.sesiTerpakai} sesi terpakai sebelum 1 Nov 2026 + ${modal.sesiTerjual} sesi terjual sejak 1 Nov 2026)`
+          : `Modal paket terjual (${modal.sesiTerjual} sesi terjual x modal per sesi)`;
+    lines.push(
+      `,,TOTAL_MODAL,,${csvText(
+        modal.modalBalikRp ? `${dasarModal}; dikurangi pembatalan/refund ${modal.modalBalikRp}` : dasarModal,
+      )},${modal.totalRp}`,
+    );
+    lines.push(`,,LABA,,Penjualan dikurangi modal dan biaya lain,${salesTotal - modal.totalRp - costTotal}`);
 
     const content = `\uFEFF${lines.join('\r\n')}\r\n`;
     await this.audit.catat(null, {
@@ -1170,7 +1192,7 @@ export class FinanceService {
     });
     const totalInstructorFeeRp =
       instructorBreakdown.reduce((sum, item) => sum + item.totalFeeRp, 0) + koreksi.totalRp;
-    // Laba memakai modal sesi; honor instruktur adalah yang dibayar dan hanya ditampilkan.
+    // Laba memakai modal; honor instruktur dibayar dari kas payroll simpanan dan hanya ditampilkan.
     const estimatedProfitRp = omsetRp - modal.totalRp - otherCostRp;
     const totalUnverifiedFeeRp = instructorBreakdown.reduce(
       (sum, item) => sum + item.unverifiedFeeRp,
@@ -1203,7 +1225,11 @@ export class FinanceService {
       unconfiguredClassCount: totalUnconfiguredClassCount,
       instructorFeeMissing,
       modalSesiRp: modal.totalRp,
-      sesiTerpakai: modal.sesi,
+      metodeModal: modal.metode,
+      sesiTerjual: modal.sesiTerjual,
+      modalTerjualRp: modal.modalTerjualRp,
+      modalBalikRp: modal.modalBalikRp,
+      sesiTerpakai: modal.sesiTerpakai,
       sesiTanpaModal: modal.sesiTanpaModal,
       estimatedProfitRp,
       instructorCount: instructorBreakdown.length,

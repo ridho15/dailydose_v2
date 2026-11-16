@@ -21,6 +21,7 @@ import { useSessionContext } from '../session-context';
 import { Feedback, Skeleton } from '../ui';
 import { keterangan, NAMA } from './antrean/antrean-view';
 import { OwnerExceptionsPanel } from './owner-exceptions-panel';
+import { catatanKasPayroll, KasPayrollSimpananTabel } from './kas-payroll-simpanan';
 
 const rp = (n: number) => `${n < 0 ? '−' : ''}Rp ${Math.abs(n).toLocaleString('id-ID')}`;
 
@@ -66,6 +67,25 @@ export function capaianTarget(omsetRp: number, targetRp: number | null): number 
   return Math.round((omsetRp / targetRp) * 100);
 }
 
+/**
+ * Aturan modal bulan itu: paket terjual mulai November 2026, sesi terpakai sebelumnya. API lama yang
+ * belum mengirim `metodeModal` ditentukan dari periodenya.
+ */
+export function pakaiSesiTerpakai(r: Pick<RingkasanBulanan, 'metodeModal' | 'period'>): boolean {
+  return (r.metodeModal ?? (r.period < '2026-11' ? 'PEMAKAIAN' : 'PAKET_TERJUAL')) === 'PEMAKAIAN';
+}
+
+export function labelModal(r: Pick<RingkasanBulanan, 'metodeModal' | 'period'>): string {
+  return pakaiSesiTerpakai(r) ? 'Modal sesi' : 'Modal paket terjual';
+}
+
+export function catatanModal(r: RingkasanBulanan): string {
+  const t = r.total;
+  if (pakaiSesiTerpakai(r)) return `${t.sesiTerpakai ?? 0} sesi terpakai x modal per sesi`;
+  const dasar = `${t.sesiTerjual ?? 0} sesi terjual x modal per sesi`;
+  return t.modalBalikRp ? `${dasar} · dikurangi pembatalan/refund ${rp(t.modalBalikRp)}` : dasar;
+}
+
 function KartuAngka({ label, nilai, catatan }: { label: string; nilai: number; catatan?: string }) {
   return (
     <div className="rounded-dd-lg border border-dd-line bg-white p-5">
@@ -102,8 +122,9 @@ function BarisCabang({ c, tebal = false }: { c: Omit<AngkaCabang, 'branchId'>; t
 
 /**
  * Beranda Owner dan Super Owner: yang perlu diputuskan lebih dulu, lalu angka satu bulan.
- * Laba = omzet − modal sesi (sesi terpakai x modal per sesi) − pengeluaran, total dan per
- * cabang. Payroll instruktur (yang dibayar per kelas ter-scan QR) ditampilkan terpisah.
+ * Laba = omzet − modal paket terjual − pengeluaran, total dan per cabang (bulan sebelum November
+ * 2026: modal sesi terpakai). Payroll instruktur dibayar dari kas payroll simpanan dan tidak
+ * mengurangi laba.
  */
 export function OwnerHome({
   client = browserKeuanganClient,
@@ -267,7 +288,8 @@ export function OwnerHome({
           <>
             {(ringkasan.total.sesiTanpaModal ?? 0) > 0 && (
               <Feedback kind="warning">
-                {ringkasan.total.sesiTanpaModal} sesi terpakai belum punya modal per sesi dan
+                {ringkasan.total.sesiTanpaModal}{' '}
+                {pakaiSesiTerpakai(ringkasan) ? 'sesi terpakai' : 'sesi terjual'} belum punya modal per sesi dan
                 dihitung Rp0, jadi laba terlihat lebih besar. Atur di Master Data, tab Modal per
                 Sesi.
               </Feedback>
@@ -291,7 +313,9 @@ export function OwnerHome({
                   </p>
                 </div>
                 <p className="m-0 mt-6 text-[15px] text-white/85">
-                  Omzet dikurangi modal sesi yang terpakai dan pengeluaran cabang bulan ini.
+                  {pakaiSesiTerpakai(ringkasan)
+                    ? 'Omzet dikurangi modal sesi yang terpakai dan pengeluaran cabang bulan ini.'
+                    : 'Omzet dikurangi modal paket terjual dan pengeluaran cabang bulan ini.'}
                 </p>
               </div>
               <div className="grid gap-3">
@@ -308,20 +332,31 @@ export function OwnerHome({
                   })()}
                 />
                 <KartuAngka
-                  label="Modal sesi"
+                  label={labelModal(ringkasan)}
                   nilai={ringkasan.total.modalSesiRp ?? 0}
-                  catatan={`${ringkasan.total.sesiTerpakai ?? 0} sesi terpakai x modal per sesi`}
+                  catatan={catatanModal(ringkasan)}
                 />
                 <KartuAngka
                   label="Payroll instruktur (dibayar)"
                   nilai={ringkasan.total.payrollRp}
-                  catatan={`Tidak mengurangi laba · ${ringkasan.total.kelasSelesai} kelas selesai${
+                  catatan={`${
+                    ringkasan.kasPayroll?.berlaku
+                      ? 'Dibayar dari kas payroll simpanan · tidak mengurangi laba'
+                      : 'Tidak mengurangi laba'
+                  } · ${ringkasan.total.kelasSelesai} kelas selesai${
                     ringkasan.total.koreksiPayrollRp
                       ? ` · termasuk koreksi jam ${rp(ringkasan.total.koreksiPayrollRp)}`
                       : ''
                   }`}
                 />
                 <KartuAngka label="Pengeluaran" nilai={ringkasan.total.pengeluaranRp} />
+                {ringkasan.kasPayroll?.berlaku && (
+                  <KartuAngka
+                    label="Kas payroll simpanan"
+                    nilai={ringkasan.kasPayroll.total.saldoAkhirRp}
+                    catatan={catatanKasPayroll(ringkasan.kasPayroll)}
+                  />
+                )}
               </div>
             </div>
 
@@ -340,7 +375,7 @@ export function OwnerHome({
                         Omzet
                       </th>
                       <th scope="col" className="py-3 pr-4 text-right font-medium">
-                        Modal sesi
+                        {labelModal(ringkasan)}
                       </th>
                       <th scope="col" className="py-3 pr-4 text-right font-medium">
                         Pengeluaran
@@ -361,6 +396,8 @@ export function OwnerHome({
                 </table>
               </div>
             </section>
+
+            {ringkasan.kasPayroll && <KasPayrollSimpananTabel kas={ringkasan.kasPayroll} />}
 
             {ringkasan.total.pengeluaranPerKategori.length > 0 && (
               <section aria-labelledby="kategori-title" className="space-y-2">

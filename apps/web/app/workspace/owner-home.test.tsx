@@ -120,6 +120,65 @@ describe('OwnerHome', () => {
     ).toBeVisible();
   });
 
+  it('November 2026: modal paket terjual, payroll dari kas simpanan, dan kartu kas payroll simpanan', async () => {
+    const r = ringkasan();
+    r.period = '2026-11';
+    r.from = '2026-11-01';
+    r.until = '2026-11-30';
+    r.metodeModal = 'PAKET_TERJUAL';
+    r.total.modalSesiRp = 73_250_000;
+    r.total.sesiTerjual = 877;
+    r.kasPayroll = {
+      berlaku: true,
+      cabang: [
+        {
+          branchId: 'gg',
+          branchName: 'Green Garden',
+          saldoAwalRp: 0,
+          masukRp: 19_520_000,
+          keluarPayrollRp: 1_000_000,
+          keluarBalikRp: 0,
+          saldoAkhirRp: 18_520_000,
+        },
+        {
+          branchId: 'mk',
+          branchName: 'Muara Karang',
+          saldoAwalRp: 0,
+          masukRp: 23_460_000,
+          keluarPayrollRp: 1_000_000,
+          keluarBalikRp: 0,
+          saldoAkhirRp: 22_460_000,
+        },
+      ],
+      total: {
+        saldoAwalRp: 0,
+        masukRp: 42_980_000,
+        keluarPayrollRp: 2_000_000,
+        keluarBalikRp: 0,
+        saldoAkhirRp: 40_980_000,
+      },
+    };
+    render(
+      <OwnerHome
+        now={new Date('2026-11-16T03:00:00Z').getTime()}
+        client={client(r)}
+        queueClient={queue}
+        ownerReportClient={ownerReport}
+      />,
+    );
+    const modal = (await screen.findByText('Modal paket terjual', { selector: 'p' })).parentElement!;
+    expect(within(modal).getByText('Rp 73.250.000')).toBeVisible();
+    expect(within(modal).getByText('877 sesi terjual x modal per sesi')).toBeVisible();
+    expect(screen.getByText(/Dibayar dari kas payroll simpanan · tidak mengurangi laba/)).toBeVisible();
+    const kas = screen.getByText('Kas payroll simpanan', { selector: 'p' }).parentElement!;
+    expect(within(kas).getByText('Rp 40.980.000')).toBeVisible();
+    expect(within(kas).getByText(/Saldo awal Rp 0 · masuk Rp 42.980.000 · keluar Rp 2.000.000/)).toBeVisible();
+    const tabel = screen.getByRole('heading', { name: 'Kas payroll simpanan' }).closest('section')!;
+    expect(within(tabel).getByRole('rowheader', { name: 'Muara Karang' })).toBeVisible();
+    expect(within(tabel).getByText('Rp 22.460.000')).toBeVisible();
+    expect(screen.queryByText(/sesi terpakai/)).toBeNull();
+  });
+
   it('memperingatkan sesi terpakai yang belum punya modal per sesi', async () => {
     const r = ringkasan();
     r.total.sesiTanpaModal = 12;
