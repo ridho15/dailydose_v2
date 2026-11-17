@@ -27,6 +27,7 @@ import { PaymentProofService } from './bukti-pembayaran.service';
 import { VoucherService } from './voucher.service';
 import { PackagePromotionService } from './package-promotion.service';
 import { KoreksiPembelianService } from './koreksi-pembelian.service';
+import { MaksTemanMassalService } from './maks-teman-massal.service';
 import { ApiProblem } from '../identity/security';
 import { HttpStatus } from '@nestjs/common';
 /** Hasil `IdempotencyService.execute` berbentuk `{ status, body, replay }`; klien hanya butuh isinya. */
@@ -44,6 +45,7 @@ export class PackagesController {
     private readonly vouchers: VoucherService,
     private readonly promotions: PackagePromotionService,
     private readonly koreksi: KoreksiPembelianService,
+    private readonly maksTemanMassal: MaksTemanMassalService,
   ) {}
   /** Super Owner: keadaan pembelian sebelum dibatalkan/dipindahkan (dan riwayat koreksinya). */
   @UseGuards(RolesGuard)
@@ -148,6 +150,7 @@ export class PackagesController {
     @Query('classTypeId') classTypeId?: string,
     @Query('status') status?: string,
     @Query('effectiveState') effectiveState?: string,
+    @Query('shareable') shareable?: string,
     @Query('q') q?: string,
     @Query('from') from?: string,
     @Query('until') until?: string,
@@ -160,6 +163,7 @@ export class PackagesController {
       classTypeId,
       status,
       effectiveState,
+      shareable,
       q,
       from,
       until,
@@ -167,6 +171,24 @@ export class PackagesController {
       limit,
       includeHistorical: includeHistorical === 'true',
     });
+  }
+  /** Semua paket yang cocok dengan filter Kelola Paket, untuk edit massal "Maksimal teman per kelas". */
+  @Get('package-bulk/max-friends/candidates') maksTemanKandidat(
+    @Req() r: AuthenticatedRequest,
+    @Query('branchId') branchId?: string,
+    @Query('classTypeId') classTypeId?: string,
+    @Query('effectiveState') effectiveState?: string,
+    @Query('shareable') shareable?: string,
+    @Query('q') q?: string,
+  ) {
+    return this.maksTemanMassal.kandidat(r.principal, { branchId, classTypeId, effectiveState, shareable, q });
+  }
+  /** Simpan "Maksimal teman per kelas" untuk banyak paket sekaligus (satu transaksi). */
+  @Post('package-bulk/max-friends') @HttpCode(200) simpanMaksTemanMassal(
+    @Req() r: AuthenticatedRequest,
+    @Body() b: { packageIds?: unknown; maksTeman?: unknown; reason?: unknown },
+  ) {
+    return this.maksTemanMassal.simpan(r.principal, b ?? {});
   }
   @Get('packages/:id') packageDetail(@Req() r: AuthenticatedRequest, @Param('id') id: string) {
     return this.promotions.packageDetail(r.principal, id);

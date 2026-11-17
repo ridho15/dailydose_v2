@@ -21,9 +21,13 @@ function setup(rows: ReturnType<typeof row>[], counts: Record<string, number>) {
   const db = {
     paket: {
       findMany: jest.fn().mockResolvedValue(rows),
-      count: jest.fn().mockImplementation(async ({ where }: { where: { status?: string } }) =>
-        where.status ? (counts[where.status] ?? 0) : Object.values(counts).reduce((a, b) => a + b, 0),
-      ),
+      // Ringkasan dihitung per status efektif: AND [filter, syarat status].
+      count: jest.fn().mockImplementation(async ({ where }: { where: unknown }) => {
+        const teks = JSON.stringify(where);
+        if (teks.includes('"status":"ACTIVE"')) return counts.ACTIVE ?? 0;
+        if (teks.includes('"INACTIVE","ARCHIVED"')) return (counts.INACTIVE ?? 0) + (counts.ARCHIVED ?? 0);
+        return 0;
+      }),
     },
     packagePromotion: { findMany: jest.fn().mockResolvedValue([]) },
   };
@@ -58,9 +62,8 @@ describe('daftar paket admin menampilkan seluruh katalog', () => {
   it('filter cabang juga mencakup paket untuk semua cabang', async () => {
     const { service, db } = setup([], {});
     await service.list(principal, { branchId: 'branch-1' });
-    expect(db.paket.findMany.mock.calls[0][0].where).toMatchObject({
-      OR: expect.arrayContaining([{ branchId: 'branch-1' }, { branchId: null }]),
-    });
+    const where = JSON.stringify(db.paket.findMany.mock.calls[0][0].where);
+    expect(where).toContain('{"OR":[{"branchId":"branch-1"},{"isMultiBranch":true},{"branchId":null}]}');
   });
 
   it('update paket tetap berhasil ketika tabel opsional paket_masa_jual dan paket_bawa_teman belum ada (P2021)', async () => {

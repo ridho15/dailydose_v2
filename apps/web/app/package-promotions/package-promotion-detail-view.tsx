@@ -22,6 +22,7 @@ import {
 import { browserMasterClient } from '@/api-clients/master-client';
 import { formatRupiah } from '../lib/formatters';
 import { pageOffset } from '../lib/pagination';
+import { EditPackageModal, jumlahTeman } from './packages-management-view';
 const stateLabels: Record<string, string> = {
   DRAFT: 'Draft',
   ACTIVE: 'Aktif',
@@ -76,8 +77,9 @@ export function PackagePromotionDetailView({ id }: { id: string }) {
   const [selectedOrderPromotionId, setSelectedOrderPromotionId] = useState<string>();
   const [editor, setEditor] = useState<PackagePromotionRecord | 'new' | null>(null);
   const [packageEditor, setPackageEditor] = useState<
-    'metadata' | 'revision' | 'scopes' | 'lifecycle' | null
+    'revision' | 'scopes' | 'lifecycle' | null
   >(null);
+  const [editOpen, setEditOpen] = useState(false);
   const [globalClassTypes, setGlobalClassTypes] = useState<
     Array<{ id: string; name: string; branchScopes: Array<{ branchId: string; active: boolean }> }>
   >([]);
@@ -204,6 +206,14 @@ export function PackagePromotionDetailView({ id }: { id: string }) {
                 pkg.isShareable ? 'Bisa Dipakai Bersama (Family / Duet)' : 'Individu (Single User)'
               }
             />
+            <PackageInfo
+              label="Maksimal teman per kelas"
+              value={
+                jumlahTeman(pkg) === 0
+                  ? 'Tidak boleh bawa teman'
+                  : `${jumlahTeman(pkg)} teman (pemilik datang ${jumlahTeman(pkg) + 1} orang; tiap kursi teman memotong 1 sesi)`
+              }
+            />
           </dl>
           <p className="mt-4 text-xs leading-5 text-dd-muted">
             Business key adalah identitas global. Ketersediaan paket ditentukan oleh cakupan
@@ -244,7 +254,7 @@ export function PackagePromotionDetailView({ id }: { id: string }) {
         <div className="flex flex-wrap gap-2">
           <Button
             leadingIcon={<Pencil className="size-4" aria-hidden="true" />}
-            onClick={() => setPackageEditor('metadata')}
+            onClick={() => setEditOpen(true)}
           >
             Edit paket
           </Button>
@@ -627,10 +637,8 @@ export function PackagePromotionDetailView({ id }: { id: string }) {
             {pkg.auditActivity.map((item) => (
               <li key={item.id} className="flex justify-between gap-3 border-b border-dd-line py-2">
                 <span className="text-sm font-medium">
-                  {item.action
-                    .replaceAll('_', ' ')
-                    .toLowerCase()
-                    .replace(/^./u, (value) => value.toUpperCase())}
+                  {labelAudit(item)}
+                  {item.reason && <span className="block text-xs font-normal text-dd-muted">Alasan: {item.reason}</span>}
                 </span>
                 <time className="text-xs text-dd-muted">
                   {new Date(item.occurredAt).toLocaleString('id-ID')}
@@ -652,6 +660,15 @@ export function PackagePromotionDetailView({ id }: { id: string }) {
             title: 'Promo tersimpan',
             message: 'Promo siap ditinjau dan diaktifkan.',
           });
+        }}
+      />
+      <EditPackageModal
+        pkg={pkg}
+        open={editOpen}
+        onClose={() => setEditOpen(false)}
+        onSaved={async () => {
+          setEditOpen(false);
+          await load();
         }}
       />
       <PackageLifecycleEditor
@@ -726,6 +743,25 @@ export function PackagePromotionDetailView({ id }: { id: string }) {
   );
 }
 
+/** Judul satu baris aktivitas audit paket. */
+export function labelAudit(item: {
+  action: string;
+  before?: Record<string, unknown> | null;
+  after?: Record<string, unknown> | null;
+}): string {
+  if (item.action === 'PACKAGE_MAX_FRIENDS_UPDATED') {
+    const angka = (v: unknown) => (typeof v === 'number' ? v : 0);
+    const jumlah = typeof item.after?.jumlahPaket === 'number' ? item.after.jumlahPaket : 1;
+    return `Maksimal teman per kelas: ${angka(item.before?.maksTeman)} → ${angka(item.after?.maksTeman)}${
+      jumlah > 1 ? ` (edit massal ${jumlah} paket)` : ''
+    }`;
+  }
+  return item.action
+    .replaceAll('_', ' ')
+    .toLowerCase()
+    .replace(/^./u, (value) => value.toUpperCase());
+}
+
 function PackageInfo({ label, value }: { label: string; value: string }) {
   return (
     <div>
@@ -744,7 +780,7 @@ function PackageLifecycleEditor({
   onSaved,
 }: {
   pkg: InternalPackageRecord;
-  mode: 'metadata' | 'revision' | 'scopes' | 'lifecycle' | null;
+  mode: 'revision' | 'scopes' | 'lifecycle' | null;
   branches: Array<{ id: string; name: string }>;
   classTypes: Array<{
     id: string;
@@ -869,28 +905,12 @@ function PackageLifecycleEditor({
                       expectedVersion: pkg.version,
                       reason,
                     })
-                  : mode === 'lifecycle'
-                    ? await browserPackagePromotionClient.transitionPackage(
-                        pkg.id,
-                        pkg.status === 'ACTIVE' ? 'deactivate' : 'reactivate',
-                        pkg.version,
-                        reason,
-                      )
-                    : await browserPackagePromotionClient.updatePackage(pkg.id, {
-                        expectedVersion: pkg.version,
-                        name: String(data.get('name')),
-                        isShareable: data.get('isShareable') === 'on',
-                        ...(canEditCommercialInPlace
-                          ? {
-                              sessionCount: Number(data.get('sessionCount')),
-                              durationDays: Number(data.get('durationDays')),
-                              priceRp: Number(data.get('priceRp')),
-                              effectiveFrom: String(data.get('effectiveFrom')),
-                              effectiveUntil: data.get('effectiveUntil') || null,
-                            }
-                          : {}),
-                        reason,
-                      });
+                  : await browserPackagePromotionClient.transitionPackage(
+                      pkg.id,
+                      pkg.status === 'ACTIVE' ? 'deactivate' : 'reactivate',
+                      pkg.version,
+                      reason,
+                    );
             setDirty(false);
             await onSaved(updated);
           } catch (cause) {
@@ -910,100 +930,6 @@ function PackageLifecycleEditor({
         )}
         {mode !== 'lifecycle' && mode !== 'scopes' && (
           <TextInput name="name" label="Nama paket" defaultValue={pkg.name} required />
-        )}
-        {mode === 'metadata' && (
-          <>
-            <AlertBanner
-              tone="info"
-              title={
-                canEditCommercialInPlace
-                  ? 'Paket belum digunakan'
-                  : 'Konfigurasi komersial dilindungi'
-              }
-              message={
-                canEditCommercialInPlace
-                  ? 'Harga, sesi, masa berlaku, dan periode dapat diubah sebelum paket mulai efektif.'
-                  : 'Cabang, tipe kelas, business key, harga, sesi, masa berlaku, dan periode tidak dapat diubah langsung. Gunakan revisi paket.'
-              }
-            />
-            <TextInput
-              label="Cabang / studio"
-              value={
-                pkg.branchScopes
-                  ?.map((scope) => scope.branch?.name)
-                  .filter(Boolean)
-                  .join(', ') || '—'
-              }
-              disabled
-            />
-            <TextInput
-              label="Tipe kelas"
-              value={
-                pkg.classTypeScopes
-                  ?.map((scope) => scope.classType?.name)
-                  .filter(Boolean)
-                  .join(', ') || '—'
-              }
-              disabled
-            />
-            <TextInput label="Business key" value={pkg.businessKey} disabled />
-            <label className="flex items-start gap-2 text-sm cursor-pointer border border-dd-line rounded-dd-md p-3">
-              <input
-                type="checkbox"
-                name="isShareable"
-                defaultChecked={pkg.isShareable}
-                className="mt-0.5 accent-dd-forest cursor-pointer size-4 shrink-0 rounded"
-              />
-              <div>
-                <span className="font-semibold text-dd-forest">
-                  Bisa Dipakai Bersama (Family / Duet Package)
-                </span>
-                <p className="text-xs text-dd-muted">
-                  Izinkan pemilik paket untuk mendaftarkan anggota keluarga atau rekan untuk
-                  menggunakan kuota sesi paket.
-                </p>
-              </div>
-            </label>
-            {canEditCommercialInPlace && (
-              <>
-                <TextInput
-                  name="sessionCount"
-                  label="Jumlah sesi"
-                  type="number"
-                  min={1}
-                  defaultValue={pkg.sessionCount}
-                  required
-                />
-                <TextInput
-                  name="durationDays"
-                  label="Masa berlaku (hari)"
-                  type="number"
-                  min={1}
-                  defaultValue={pkg.durationDays}
-                  required
-                />
-                <TextInput
-                  name="priceRp"
-                  label="Harga normal"
-                  type="number"
-                  min={1}
-                  defaultValue={pkg.priceRp}
-                  required
-                />
-                <DateInput
-                  name="effectiveFrom"
-                  label="Mulai berlaku"
-                  defaultValue={pkg.effectiveFrom.slice(0, 10)}
-                  required
-                />
-                <DateInput
-                  name="effectiveUntil"
-                  label="Berakhir"
-                  defaultValue={pkg.effectiveUntil?.slice(0, 10)}
-                />
-              </>
-            )}
-          </>
         )}
         {mode === 'revision' && (
           <>

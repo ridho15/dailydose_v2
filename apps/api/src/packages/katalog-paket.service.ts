@@ -9,7 +9,8 @@ import { ApiProblem, newId } from '../identity/security';
 import { PackageAccessService } from './package-access.service';
 import { bacaOpsional, tabelOpsionalAda } from '../foundation/tabel-opsional';
 import { maksTemanPaket } from './bawa-teman';
-import { bacaMasaJual, masaJualPaket, simpanMasaJual, type MasaJual } from './masa-jual';
+import { bacaMasaJual, masaJualPaket, sedangDijual, simpanMasaJual, type MasaJual } from './masa-jual';
+import { whereDaftarPaket } from './filter-paket';
 import {
   bacaTandaPerpanjangan,
   cekSesiPaketPerpanjangan,
@@ -18,6 +19,16 @@ import {
 } from './perpanjangan-masa-aktif';
 
 const PAGE_SIZE = 20;
+
+/**
+ * Status efektif yang tampil di layar dan dipakai filter: paket aktif di luar masa jualnya
+ * terjadwal (belum mulai) atau berakhir (sudah lewat).
+ */
+export function statusEfektif(status: string, masa?: MasaJual, now = new Date()): string {
+  if (status !== 'ACTIVE') return status;
+  if (sedangDijual(masa, now)) return 'LIVE';
+  return masa?.mulai && masa.mulai.getTime() > now.getTime() ? 'SCHEDULED' : 'EXPIRED';
+}
 
 function packageView(pkg: any, masa?: MasaJual) {
   const classTypeScopes = pkg.classType
@@ -45,7 +56,7 @@ function packageView(pkg: any, masa?: MasaJual) {
     branch: pkg.branch ?? null,
     isMultiBranch: Boolean(pkg.isMultiBranch),
     isShareable: Boolean(pkg.isShareable),
-    effectiveState: pkg.status === 'ACTIVE' ? 'LIVE' : pkg.status,
+    effectiveState: statusEfektif(pkg.status, masa),
     effectiveFrom: masa?.mulai ?? pkg.createdAt,
     effectiveUntil: masa?.berakhir ?? null,
     branchScopes,
@@ -169,6 +180,7 @@ export class PackageCatalogService {
       effectiveState?: string;
       branchId?: string;
       classTypeId?: string;
+      shareable?: string;
       q?: string;
       from?: string;
       until?: string;
@@ -182,37 +194,11 @@ export class PackageCatalogService {
 
     // Filter di luar status dipakai bersama untuk daftar dan ringkasan, sehingga angka ringkasan
     // mencerminkan seluruh katalog yang cocok, bukan hanya satu halaman.
-    const baseWhere: Prisma.PaketWhereInput = {
-      ...(query.classTypeId ? { classTypeId: query.classTypeId } : {}),
-      // Paket multi-cabang berlaku untuk semua cabang, jadi ikut tampil pada filter cabang mana pun.
-      ...(query.branchId
-        ? {
-          OR: [
-            { branchId: query.branchId },
-            { isMultiBranch: true },
-            { branchId: null },
-          ],
-        }
-        : {}),
-      ...(query.q?.trim()
-        ? {
-          AND: [
-            {
-              OR: [
-                { name: { contains: query.q.trim() } },
-                { code: { contains: query.q.trim() } },
-              ],
-            },
-          ],
-        }
-        : {}),
-    };
-    const where: Prisma.PaketWhereInput = {
-      ...baseWhere,
-      ...(query.status ? { status: query.status as PackageStatus } : {}),
-    };
+    const { baseWhere, where, perStatus } = await whereDaftarPaket(this.db, query);
 
-    const [items, activeCount, inactiveCount, archivedCount] = await Promise.all([
+    const hitung = (status: string) =>
+      this.db.paket.count({ where: { AND: [baseWhere, perStatus[status]!] } });
+    const [items, activeCount, inactiveCount, scheduledCount, expiredCount] = await Promise.all([
       this.db.paket.findMany({
         where,
         include: {
@@ -223,9 +209,10 @@ export class PackageCatalogService {
         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         ...(query.cursor ? { cursor: { id: query.cursor }, skip: 1 } : {}),
       }),
-      this.db.paket.count({ where: { ...baseWhere, status: 'ACTIVE' } }),
-      this.db.paket.count({ where: { ...baseWhere, status: 'INACTIVE' } }),
-      this.db.paket.count({ where: { ...baseWhere, status: 'ARCHIVED' } }),
+      hitung('ACTIVE'),
+      hitung('INACTIVE'),
+      hitung('SCHEDULED'),
+      hitung('EXPIRED'),
     ]);
 
     const hasNext = items.length > limit;
@@ -257,9 +244,9 @@ export class PackageCatalogService {
       })),
       summary: {
         ACTIVE: activeCount,
-        SCHEDULED: 0,
-        EXPIRED: 0,
-        INACTIVE: inactiveCount + archivedCount,
+        SCHEDULED: scheduledCount,
+        EXPIRED: expiredCount,
+        INACTIVE: inactiveCount,
       },
       nextCursor: hasNext ? pageItems[pageItems.length - 1]?.id ?? null : null,
       page: {

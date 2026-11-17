@@ -50,13 +50,16 @@ vi.mock('../session-context', () => ({
   }),
 }));
 
-    vi.mock('@/api-clients/package-promotion-client', () => ({
+    vi.mock('@/api-clients/package-promotion-client', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/api-clients/package-promotion-client')>()),
   browserPackagePromotionClient: {
     packages: vi.fn(),
     createPackage: vi.fn(),
     updatePackage: vi.fn(),
     revisePackage: vi.fn(),
     transitionPackage: vi.fn(),
+    maksTemanKandidat: vi.fn(),
+    simpanMaksTemanMassal: vi.fn(),
   },
   promotionFailure: vi.fn((_, fallback) => Promise.resolve(fallback)),
 }));
@@ -339,3 +342,119 @@ describe('PackagesManagementView duplicate feature', () => {
     expect(promotionFailure).toHaveBeenCalled();
   });
 });
+
+describe('Edit massal maksimal teman per kelas', () => {
+  const trio = (n: number, extra: Record<string, unknown> = {}) => ({
+    id: `trio-${n}`,
+    name: `TRIO PASS ${n}`,
+    businessKey: `TRIO-${n}`,
+    sessionCount: 10,
+    durationDays: 60,
+    priceRp: 1_500_000,
+    effectiveState: 'LIVE',
+    status: 'ACTIVE',
+    effectiveFrom: '2026-01-01',
+    effectiveUntil: null,
+    isMultiBranch: true,
+    isShareable: true,
+    maksTeman: 1,
+    bawaTeman: true,
+    branchScopes: [],
+    classTypeScopes: [],
+    ...extra,
+  });
+  const kandidat = (n: number, extra: Record<string, unknown> = {}) => ({
+    id: `trio-${n}`,
+    name: `TRIO PASS ${n}`,
+    businessKey: `TRIO-${n}`,
+    status: 'ACTIVE',
+    effectiveState: 'LIVE',
+    effectiveUntil: null,
+    maksTeman: 1,
+    perpanjanganMasaAktif: false,
+    ...extra,
+  });
+  const client = browserPackagePromotionClient as unknown as Record<string, ReturnType<typeof vi.fn>>;
+
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    // Halaman pertama 2 paket, total hasil filter 3 paket (satu di halaman berikutnya).
+    client.packages!.mockResolvedValue({
+      items: [trio(1), trio(2)],
+      summary: { ACTIVE: 2, INACTIVE: 1 },
+      page: { hasMore: true, nextCursor: 'trio-2' },
+    });
+    client.maksTemanKandidat!.mockResolvedValue({
+      items: [kandidat(1), kandidat(2), kandidat(3, { status: 'INACTIVE', effectiveState: 'INACTIVE', maksTeman: 0 })],
+    });
+    (browserMasterClient.listClassTypes as unknown as ReturnType<typeof vi.fn>).mockResolvedValue([]);
+  });
+
+  const render3 = () =>
+    render(
+      <AppFeedbackProvider>
+        <PackagesManagementView />
+      </AppFeedbackProvider>,
+    );
+
+  it('memilih semua hasil filter lintas halaman, mengisi 2, dan menyimpan dalam satu aksi', async () => {
+    client.simpanMaksTemanMassal!.mockResolvedValue({
+      batchId: 'b1',
+      maksTeman: 2,
+      updated: [1, 2, 3].map((n) => ({ id: `trio-${n}`, name: `TRIO PASS ${n}`, sebelum: 1, sesudah: 2 })),
+    });
+    const user = userEvent.setup();
+    render3();
+    await user.click((await screen.findAllByLabelText('Pilih semua paket di halaman ini'))[0]!);
+    await user.click(screen.getByRole('button', { name: 'Pilih semua hasil filter (3 paket)' }));
+    expect(await screen.findByText('3 paket dipilih')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Ubah maksimal teman (3 paket)' }));
+
+    const angka = await screen.findByLabelText('Maksimal teman per kelas');
+    await user.type(angka, '2');
+    await user.type(screen.getByLabelText('Alasan perubahan (Audit Log)'), 'TRIO PASS bisa bertiga');
+    // Ringkasan nilai lama → nilai baru dan peringatan paket tidak aktif.
+    expect(screen.getByText('TRIO PASS 3').closest('li')).toHaveTextContent('Tidak bawa teman → 2 teman');
+    expect(screen.getByText(/1 paket berstatus Tidak aktif atau Berakhir ikut diubah/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Simpan untuk 3 paket' }));
+    await waitFor(() =>
+      expect(client.simpanMaksTemanMassal).toHaveBeenCalledWith({
+        packageIds: ['trio-1', 'trio-2', 'trio-3'],
+        maksTeman: 2,
+        reason: 'TRIO PASS bisa bertiga',
+      }),
+    );
+    // Daftar dimuat ulang supaya badge "Bawa 2 teman" langsung tampil.
+    await waitFor(() => expect(client.packages).toHaveBeenCalledTimes(2));
+  });
+
+  it('menolak angka di luar 0 sampai 5: tombol simpan tidak aktif', async () => {
+    const user = userEvent.setup();
+    render3();
+    await user.click((await screen.findAllByLabelText('Pilih TRIO PASS 1'))[0]!);
+    await user.click(screen.getByRole('button', { name: 'Ubah maksimal teman (1 paket)' }));
+    await user.type(await screen.findByLabelText('Maksimal teman per kelas'), '6');
+    await user.type(screen.getByLabelText('Alasan perubahan (Audit Log)'), 'Coba enam');
+    expect(screen.getByText('Isi angka bulat 0 sampai 5.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Simpan untuk 1 paket' })).toBeDisabled();
+  });
+
+  it('bila server membatalkan semuanya, menyebut paket yang gagal beserta alasannya', async () => {
+    const { ApiError } = await import('../lib/api-client');
+    client.simpanMaksTemanMassal!.mockRejectedValue(
+      new ApiError('x', 422, { error: { code: 'BULK_UPDATE_FAILED', details: [{ field: 'trio-2', issue: 'NOT_FOUND' }] } }, 'BULK_UPDATE_FAILED'),
+    );
+    const user = userEvent.setup();
+    render3();
+    await user.click((await screen.findAllByLabelText('Pilih semua paket di halaman ini'))[0]!);
+    await user.click(screen.getByRole('button', { name: 'Ubah maksimal teman (2 paket)' }));
+    await user.type(await screen.findByLabelText('Maksimal teman per kelas'), '2');
+    await user.type(screen.getByLabelText('Alasan perubahan (Audit Log)'), 'Bertiga');
+    await user.click(screen.getByRole('button', { name: 'Simpan untuk 2 paket' }));
+    const gagal = await screen.findByRole('list', { name: 'Paket yang gagal' });
+    expect(gagal).toHaveTextContent('TRIO PASS 2: Paket tidak ditemukan');
+    expect(screen.getByText(/Tidak ada paket yang diubah/)).toBeInTheDocument();
+  });
+});
+

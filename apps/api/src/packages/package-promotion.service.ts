@@ -7,6 +7,9 @@ import { optionalReason } from '../foundation/reason';
 import type { SessionPrincipal } from '../identity/identity.service';
 import { ApiProblem, ENTITY_ID_REGEX } from '../identity/security';
 import { masaJualPaket } from './masa-jual';
+import { maksTemanPaket } from './bawa-teman';
+import { paketPerpanjanganIds } from './perpanjangan-masa-aktif';
+import { statusEfektif } from './katalog-paket.service';
 import { PackageAccessService } from './package-access.service';
 import { calculatePackagePromotion, promotionEffectiveState } from './kalkulasi-harga-paket.service';
 
@@ -203,6 +206,19 @@ export class PackagePromotionService {
     });
     const usage = await this.usageCounts(rows.map((row) => row.id));
     const promotions = rows.map((row) => this.view(row, pkg.priceRp, usage.get(row.id) ?? 0));
+    const [teman, perpanjangan, aktivitas] = await Promise.all([
+      maksTemanPaket(this.db, [packageId]),
+      paketPerpanjanganIds(this.db, [packageId]),
+      typeof this.db.auditLog?.findMany === 'function'
+        ? this.db.auditLog.findMany({
+            where: { objectType: 'Package', objectId: packageId },
+            orderBy: { createdAt: 'desc' },
+            take: 20,
+            select: { id: true, action: true, createdAt: true, reason: true, detail: true, correlationId: true },
+          })
+        : Promise.resolve([]),
+    ]);
+    const maksTeman = teman.get(packageId) ?? 0;
     const branchScopes = (pkg as any).isMultiBranch
       ? []
       : (pkg as any).branch
@@ -224,8 +240,11 @@ export class PackagePromotionService {
       isShareable: Boolean((pkg as any).isShareable),
       branchId: pkg.branchId ?? null,
       branch: (pkg as any).branch ?? null,
-      effectiveState: pkg.status === 'ACTIVE' ? 'LIVE' : pkg.status,
+      effectiveState: statusEfektif(pkg.status, masa),
       effectiveFrom: (masa?.mulai ?? pkg.createdAt).toISOString(),
+      bawaTeman: maksTeman > 0,
+      maksTeman,
+      perpanjanganMasaAktif: perpanjangan.has(packageId),
       effectiveUntil: masa?.berakhir?.toISOString() ?? null,
       branchScopes,
       classTypeScopes: pkg.classType ? [{ classType: pkg.classType }] : [],
@@ -250,7 +269,22 @@ export class PackagePromotionService {
       ...detail,
       package: detail,
       promotions,
-      auditActivity: [],
+      auditActivity: (aktivitas as Array<{
+        id: string;
+        action: string;
+        createdAt: Date;
+        reason: string | null;
+        detail: { before?: unknown; after?: unknown } | null;
+        correlationId: string | null;
+      }>).map((a) => ({
+        id: a.id,
+        action: a.action,
+        occurredAt: a.createdAt.toISOString(),
+        reason: a.reason ?? null,
+        before: a.detail?.before ?? null,
+        after: a.detail?.after ?? null,
+        batchId: a.correlationId ?? null,
+      })),
     };
   }
 

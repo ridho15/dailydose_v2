@@ -66,7 +66,15 @@ export type InternalPackageRecord = {
     effectiveFrom: string;
     effectiveUntil: string | null;
   }>;
-  auditActivity?: Array<{ id: string; action: string; occurredAt: string }>;
+  auditActivity?: Array<{
+    id: string;
+    action: string;
+    occurredAt: string;
+    reason?: string | null;
+    before?: Record<string, unknown> | null;
+    after?: Record<string, unknown> | null;
+    batchId?: string | null;
+  }>;
   publicProfile?: Record<string, unknown> | null;
 };
 
@@ -79,12 +87,52 @@ export type PackageManagementPage = {
 export type PackageManagementFilters = {
   branchId?: string;
   classTypeId?: string;
+  /** 'true' = Bisa Dipakai Bersama, 'false' = Biasa. */
+  shareable?: string;
   status?: string;
   effectiveState?: string;
   q?: string;
   from?: string;
   until?: string;
   cursor?: string;
+};
+
+/** Paket hasil filter untuk edit massal "Maksimal teman per kelas". */
+export type KandidatMaksTeman = {
+  id: string;
+  name: string;
+  businessKey: string;
+  status: string;
+  effectiveState: string;
+  effectiveUntil: string | null;
+  maksTeman: number;
+  perpanjanganMasaAktif: boolean;
+};
+
+export type HasilMaksTemanMassal = {
+  batchId: string;
+  maksTeman: number;
+  updated: Array<{ id: string; name: string; sebelum: number; sesudah: number }>;
+};
+
+/** Paket yang membatalkan aksi massal, dari galat `BULK_UPDATE_FAILED` (`details[].field` = ID paket). */
+export function paketGagalMassal(error: unknown): Array<{ id: string; issue: string }> {
+  const data = (error as ApiError | undefined)?.data as
+    | { error?: { details?: Array<{ field?: string; issue?: string }> }; details?: Array<{ field?: string; issue?: string }> }
+    | undefined;
+  const code = (error as ApiError | undefined)?.code ?? (data as any)?.error?.code ?? (data as any)?.code;
+  if (code !== 'BULK_UPDATE_FAILED') return [];
+  const details = data?.error?.details ?? data?.details ?? [];
+  return details
+    .filter((d): d is { field: string; issue: string } => typeof d?.field === 'string' && typeof d?.issue === 'string')
+    .map((d) => ({ id: d.field, issue: d.issue }));
+}
+
+export const ALASAN_GAGAL_MASSAL: Record<string, string> = {
+  NOT_FOUND: 'Paket tidak ditemukan (mungkin sudah dihapus). Muat ulang daftar lalu pilih ulang.',
+  EXTENSION_PACKAGE: 'Paket perpanjangan masa aktif tidak punya sesi, jadi tidak bisa membawa teman. Keluarkan dari pilihan.',
+  WRITE_FAILED: 'Gagal menyimpan ke database. Coba lagi; bila berulang, hubungi developer.',
+  AUDIT_FAILED: 'Gagal mencatat audit log, jadi perubahan dibatalkan. Coba lagi.',
 };
 
 export type PromotionOrderPage = {
@@ -205,6 +253,20 @@ export const browserPackagePromotionClient = {
       body: JSON.stringify(input),
     });
     return (res?.package ? { ...res.package, ...res } : (res?.body ?? res)) as InternalPackageRecord;
+  },
+  maksTemanKandidat(filters: PackageManagementFilters = {}) {
+    const query = new URLSearchParams();
+    for (const [key, value] of Object.entries(filters)) if (value && key !== 'cursor') query.set(key, value);
+    return request<{ items: KandidatMaksTeman[] }>(
+      `/package-bulk/max-friends/candidates${query.size ? `?${query}` : ''}`,
+    );
+  },
+  simpanMaksTemanMassal(input: { packageIds: string[]; maksTeman: number; reason: string }) {
+    return request<HasilMaksTemanMassal>('/package-bulk/max-friends', {
+      method: 'POST',
+      headers: headers(),
+      body: JSON.stringify(input),
+    });
   },
   async revisePackage(id: string, input: Record<string, unknown>) {
     const res = await request<any>(`/packages/${encodeURIComponent(id)}/revisions`, {

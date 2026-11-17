@@ -20,6 +20,7 @@ import { LifecycleDialog, type LifecycleAction } from '../components/admin/lifec
 import { browserMasterClient } from '@/api-clients/master-client';
 import { formatRupiah } from '../lib/formatters';
 import { ADMIN_PAGE_SIZE, pageOffset } from '../lib/pagination';
+import { BarAksiMassal, DialogMaksTemanMassal, type PaketTerpilih } from './maks-teman-massal';
 
 const stateLabels = {
   ACTIVE: 'Aktif',
@@ -96,17 +97,24 @@ export function PackagesManagementView() {
   const filters = {
     q: searchParams.get('q') ?? '',
     effectiveState: searchParams.get('state') ?? '',
+    shareable: searchParams.get('shareable') ?? '',
+    classTypeId: searchParams.get('classType') ?? '',
     branchId: session?.activeBranchId ?? '',
     cursor: searchParams.get('cursor') ?? '',
   };
   const [cursorHistory, setCursorHistory] = useState<string[]>([]);
-  const replaceFilter = (key: 'q' | 'state' | 'branch' | 'cursor', value: string) => {
+  // Pilihan untuk edit massal; bisa lintas halaman, dikosongkan saat filter berubah.
+  const [terpilih, setTerpilih] = useState<Map<string, PaketTerpilih>>(new Map());
+  const [massalOpen, setMassalOpen] = useState(false);
+  const [memilihSemua, setMemilihSemua] = useState(false);
+  const replaceFilter = (key: 'q' | 'state' | 'branch' | 'cursor' | 'shareable' | 'classType', value: string) => {
     const next = new URLSearchParams(searchParams.toString());
     if (value) next.set(key, value);
     else next.delete(key);
     if (key !== 'cursor') {
       next.delete('cursor');
       setCursorHistory([]);
+      setTerpilih(new Map());
     }
     router.replace(`${pathname}${next.size ? `?${next}` : ''}`);
   };
@@ -139,6 +147,8 @@ export function PackagesManagementView() {
       const result = await browserPackagePromotionClient.packages({
         q: filters.q || undefined,
         effectiveState: filters.effectiveState || undefined,
+        shareable: filters.shareable || undefined,
+        classTypeId: filters.classTypeId || undefined,
         branchId: filters.branchId || undefined,
         cursor: filters.cursor || undefined,
       });
@@ -156,16 +166,65 @@ export function PackagesManagementView() {
     } finally {
       setBusy(false);
     }
-  }, [canRead, filters.branchId, filters.cursor, filters.effectiveState, filters.q]);
+  }, [canRead, filters.branchId, filters.cursor, filters.effectiveState, filters.q, filters.shareable, filters.classTypeId]);
   useEffect(() => void load(), [load]);
   useEffect(() => {
-    if (createOpen)
+    // Tipe kelas dipakai filter daftar dan form paket.
+    if (canRead && classTypes.length === 0)
       void browserMasterClient
         .listClassTypes()
         .then((items) =>
           setClassTypes(items.map(({ id, name, branchScopes }) => ({ id, name, branchScopes }))),
-        );
-  }, [createOpen]);
+        )
+        .catch(() => undefined);
+  }, [canRead, classTypes.length]);
+
+  const keTerpilih = (item: InternalPackageRecord): PaketTerpilih => ({
+    id: item.id,
+    name: item.name,
+    maksTeman: jumlahTeman(item),
+    effectiveState: item.effectiveState ?? item.status ?? '',
+    effectiveUntil: item.effectiveUntil ?? null,
+    perpanjanganMasaAktif: Boolean(item.perpanjanganMasaAktif),
+  });
+  const semuaHalamanTerpilih = page.items.length > 0 && page.items.every((item) => terpilih.has(item.id));
+  const pilihHalaman = (pilih: boolean) =>
+    setTerpilih((prev) => {
+      const next = new Map(prev);
+      for (const item of page.items) {
+        if (pilih) next.set(item.id, keTerpilih(item));
+        else next.delete(item.id);
+      }
+      return next;
+    });
+  const pilihSatu = (item: InternalPackageRecord, pilih: boolean) =>
+    setTerpilih((prev) => {
+      const next = new Map(prev);
+      if (pilih) next.set(item.id, keTerpilih(item));
+      else next.delete(item.id);
+      return next;
+    });
+  const pilihSemuaHasilFilter = async () => {
+    setMemilihSemua(true);
+    try {
+      const { items } = await browserPackagePromotionClient.maksTemanKandidat({
+        q: filters.q || undefined,
+        effectiveState: filters.effectiveState || undefined,
+        shareable: filters.shareable || undefined,
+        classTypeId: filters.classTypeId || undefined,
+        branchId: filters.branchId || undefined,
+      });
+      setTerpilih(new Map(items.map((item) => [item.id, item])));
+    } catch (error) {
+      feedback.showAlert({
+        tone: 'danger',
+        title: 'Belum bisa memilih semua paket',
+        message: await promotionFailure(error, 'Daftar paket hasil filter belum dapat dimuat. Coba lagi.'),
+      });
+    } finally {
+      setMemilihSemua(false);
+    }
+  };
 
   const duplicatePackage = (source: InternalPackageRecord) => {
     const today = new Date().toISOString().slice(0, 10);
@@ -296,7 +355,7 @@ export function PackagesManagementView() {
           </button>
         ))}
       </div>
-      <Panel className="grid gap-3 p-4 md:grid-cols-[1fr_220px_220px]">
+      <Panel className="grid gap-3 p-4 md:grid-cols-2 xl:grid-cols-[1fr_200px_200px_200px]">
         <SearchInput
           label="Cari paket"
           value={filters.q}
@@ -315,8 +374,48 @@ export function PackagesManagementView() {
             </option>
           ))}
         </SelectInput>
+        <SelectInput
+          label="Tipe penggunaan"
+          value={filters.shareable}
+          onChange={(event) => replaceFilter('shareable', event.target.value)}
+        >
+          <option value="">Semua tipe</option>
+          <option value="true">Bisa Dipakai Bersama</option>
+          <option value="false">Biasa</option>
+        </SelectInput>
+        <SelectInput
+          label="Tipe kelas"
+          value={filters.classTypeId}
+          onChange={(event) => replaceFilter('classType', event.target.value)}
+        >
+          <option value="">Semua tipe kelas</option>
+          {classTypes.map((ct) => (
+            <option key={ct.id} value={ct.id}>
+              {ct.name}
+            </option>
+          ))}
+        </SelectInput>
       </Panel>
+      {canManage && semuaHalamanTerpilih && totalPackages > page.items.length && terpilih.size < totalPackages && (
+        <div className="flex flex-wrap items-center gap-3 rounded-dd-md border border-dd-line bg-dd-surface-muted px-4 py-2 text-sm">
+          <span>{page.items.length} paket di halaman ini terpilih.</span>
+          <Button size="sm" variant="secondary" loading={memilihSemua} onClick={() => void pilihSemuaHasilFilter()}>
+            Pilih semua hasil filter ({totalPackages} paket)
+          </Button>
+        </div>
+      )}
       {error && <AlertBanner tone="danger" title="Paket tidak tersedia" message={error} onDismiss={() => setError('')} />}
+      {canManage && page.items.length > 0 && (
+        <label className="flex min-h-11 cursor-pointer items-center gap-3 px-1 text-sm font-medium md:hidden">
+          <input
+            type="checkbox"
+            className="accent-dd-forest size-5 cursor-pointer"
+            checked={semuaHalamanTerpilih}
+            onChange={(event) => pilihHalaman(event.target.checked)}
+          />
+          Pilih semua di halaman ini
+        </label>
+      )}
       <Panel className="p-0">
         <DataTable
           items={page.items}
@@ -328,6 +427,39 @@ export function PackagesManagementView() {
           emptyTitle="Paket tidak ditemukan"
           emptyDescription="Ubah filter atau buat paket baru pada cabang yang sesuai."
           columns={[
+            ...(canManage
+              ? [
+                  {
+                    id: 'select',
+                    className: 'w-12',
+                    header: (
+                      <label className="-m-2 inline-flex size-11 cursor-pointer items-center justify-center">
+                        <input
+                          type="checkbox"
+                          className="accent-dd-forest size-5 cursor-pointer"
+                          aria-label="Pilih semua paket di halaman ini"
+                          checked={semuaHalamanTerpilih}
+                          onChange={(event) => pilihHalaman(event.target.checked)}
+                        />
+                      </label>
+                    ),
+                    cell: (item: InternalPackageRecord) => (
+                      <label
+                        className="-m-2 inline-flex size-11 cursor-pointer items-center justify-center"
+                        onClick={(event) => event.stopPropagation()}
+                      >
+                        <input
+                          type="checkbox"
+                          className="accent-dd-forest size-5 cursor-pointer"
+                          aria-label={`Pilih ${item.name}`}
+                          checked={terpilih.has(item.id)}
+                          onChange={(event) => pilihSatu(item, event.target.checked)}
+                        />
+                      </label>
+                    ),
+                  },
+                ]
+              : []),
             {
               id: 'package',
               header: 'Paket',
@@ -457,7 +589,21 @@ export function PackagesManagementView() {
             return (
               <div className="grid gap-2">
                 <div className="flex items-start justify-between gap-2">
-                  <div>
+                  {canManage && (
+                    <label
+                      className="-m-2 inline-flex size-11 shrink-0 cursor-pointer items-center justify-center"
+                      onClick={(event) => event.stopPropagation()}
+                    >
+                      <input
+                        type="checkbox"
+                        className="accent-dd-forest size-5 cursor-pointer"
+                        aria-label={`Pilih ${item.name}`}
+                        checked={terpilih.has(item.id)}
+                        onChange={(event) => pilihSatu(item, event.target.checked)}
+                      />
+                    </label>
+                  )}
+                  <div className="min-w-0 flex-1">
                     <strong>{item.name}</strong>
                     {item.isShareable && (
                       <div className="mt-0.5">
@@ -626,6 +772,33 @@ export function PackagesManagementView() {
         />
       </Drawer>
 
+      <BarAksiMassal
+        jumlah={canManage ? terpilih.size : 0}
+        onUbah={() => setMassalOpen(true)}
+        onBatal={() => setTerpilih(new Map())}
+      />
+      <DialogMaksTemanMassal
+        open={massalOpen}
+        paket={[...terpilih.values()]}
+        onClose={() => setMassalOpen(false)}
+        onKeluarkan={(ids) =>
+          setTerpilih((prev) => {
+            const next = new Map(prev);
+            for (const id of ids) next.delete(id);
+            return next;
+          })
+        }
+        onSaved={async (jumlah) => {
+          setMassalOpen(false);
+          setTerpilih(new Map());
+          feedback.showToast({
+            tone: 'success',
+            title: 'Maksimal teman tersimpan',
+            message: `${jumlah} paket diperbarui. Booking berikutnya langsung memakai angka baru.`,
+          });
+          await load();
+        }}
+      />
       <EditPackageModal
         pkg={editingPackage}
         open={Boolean(editingPackage)}
@@ -981,7 +1154,7 @@ function PackageCreateForm({
   );
 }
 
-function EditPackageModal({
+export function EditPackageModal({
   pkg,
   open,
   onClose,
