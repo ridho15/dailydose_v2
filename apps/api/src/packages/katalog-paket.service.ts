@@ -70,33 +70,68 @@ function packageView(pkg: any, masa?: MasaJual) {
   };
 }
 
-/** `bawaTeman` dari form paket: true/false mengubah, selain itu dibiarkan. */
-function bacaBawaTeman(body: any): boolean | undefined {
-  if (body?.bawaTeman === true || body?.bawaTeman === 'true') return true;
-  if (body?.bawaTeman === false || body?.bawaTeman === 'false') return false;
+/** Batas kursi teman per kelas yang boleh diisi di form paket. */
+export const MAKS_TEMAN_PAKET = 5;
+
+/**
+ * Jumlah kursi teman per kelas dari form paket: `maksTeman` (0 sampai 5) diutamakan; tanpa itu,
+ * `bawaTeman` true/false dari form lama (true = 1 teman bila belum diatur). Selain itu dibiarkan.
+ */
+function bacaMaksTeman(body: any): { maks: number } | { centang: boolean } | undefined {
+  if (body?.maksTeman !== undefined && body?.maksTeman !== null && body?.maksTeman !== '') {
+    const maks = Number(body.maksTeman);
+    if (!Number.isInteger(maks) || maks < 0 || maks > MAKS_TEMAN_PAKET)
+      throw new ApiProblem('VALIDATION_ERROR', HttpStatus.UNPROCESSABLE_ENTITY, false, [
+        { field: 'maksTeman', issue: 'INVALID_RANGE' },
+      ]);
+    return { maks };
+  }
+  if (body?.bawaTeman === true || body?.bawaTeman === 'true') return { centang: true };
+  if (body?.bawaTeman === false || body?.bawaTeman === 'false') return { centang: false };
   return undefined;
 }
 
-/** Menyimpan centang "boleh bawa teman" (satu teman per kelas) di tabel terpisah. */
+/**
+ * Menyimpan jumlah kursi teman per kelas di tabel terpisah (`paket_bawa_teman.maksTeman`).
+ * 0 berarti paket tidak boleh bawa teman. Mengembalikan jumlah yang tersimpan, atau undefined bila
+ * tidak diubah atau tabelnya belum ada.
+ */
 async function simpanBawaTeman(
   tx: any,
   packageId: string,
-  bawaTeman: boolean | undefined,
+  input: { maks: number } | { centang: boolean } | undefined,
   actorId: string,
-): Promise<boolean | undefined> {
-  if (bawaTeman === undefined || typeof tx.paketBawaTeman?.upsert !== 'function') return undefined;
+): Promise<number | undefined> {
+  if (input === undefined || typeof tx.paketBawaTeman?.upsert !== 'function') return undefined;
   if (!(await tabelOpsionalAda(tx, 'paket_bawa_teman'))) return undefined;
   return bacaOpsional(
     'paket_bawa_teman',
     async () => {
-      if (bawaTeman)
+      if ('centang' in input) {
+        if (!input.centang) {
+          await tx.paketBawaTeman.deleteMany({ where: { packageId } });
+          return 0;
+        }
+        // Form lama hanya mengirim centang: angka yang sudah diatur tidak diturunkan ke 1.
+        const ada = await tx.paketBawaTeman.findUnique?.({ where: { packageId } });
+        if (ada?.maksTeman > 0) return ada.maksTeman as number;
         await tx.paketBawaTeman.upsert({
           where: { packageId },
           create: { packageId, maksTeman: 1, updatedById: actorId },
-          update: { updatedById: actorId },
+          update: { maksTeman: 1, updatedById: actorId },
         });
-      else await tx.paketBawaTeman.deleteMany({ where: { packageId } });
-      return bawaTeman;
+        return 1;
+      }
+      if (input.maks === 0) {
+        await tx.paketBawaTeman.deleteMany({ where: { packageId } });
+        return 0;
+      }
+      await tx.paketBawaTeman.upsert({
+        where: { packageId },
+        create: { packageId, maksTeman: input.maks, updatedById: actorId },
+        update: { maksTeman: input.maks, updatedById: actorId },
+      });
+      return input.maks;
     },
     undefined,
   );
@@ -217,6 +252,7 @@ export class PackageCatalogService {
         ...packageView(item, masaJual.get(item.id)),
         livePromotion: livePackageIds.has(item.id),
         bawaTeman: (teman.get(item.id) ?? 0) > 0,
+        maksTeman: teman.get(item.id) ?? 0,
         perpanjanganMasaAktif: perpanjangan.has(item.id),
       })),
       summary: {
@@ -294,8 +330,7 @@ export class PackageCatalogService {
           },
         });
 
-        const bawaTeman = bacaBawaTeman(input);
-        const bawaTemanTersimpan = await simpanBawaTeman(tx, created.id, bawaTeman, principal.userId);
+        const bawaTemanTersimpan = await simpanBawaTeman(tx, created.id, bacaMaksTeman(input), principal.userId);
         const masa = bacaMasaJual(input);
         const masaTersimpan = await simpanMasaJual(tx, created.id, masa, principal.userId);
         // Tanpa tabel penanda, paket 0 sesi ditolak di sini (seluruh transaksi dibatalkan).
@@ -321,7 +356,8 @@ export class PackageCatalogService {
               mulai: masaTersimpan.mulai ?? null,
               berakhir: masaTersimpan.berakhir ?? null,
             }),
-            bawaTeman: bawaTemanTersimpan === true,
+            bawaTeman: (bawaTemanTersimpan ?? 0) > 0,
+            maksTeman: bawaTemanTersimpan ?? 0,
             perpanjanganMasaAktif: perpanjanganTersimpan === true,
           } as unknown as Prisma.InputJsonValue,
         };
@@ -402,13 +438,11 @@ export class PackageCatalogService {
           include: { classType: true, branch: true },
         });
 
-        const bawaTeman = bacaBawaTeman(body);
-        const bawaTemanTersimpan = await simpanBawaTeman(tx, id, bawaTeman, principal.userId);
+        const bawaTemanTersimpan = await simpanBawaTeman(tx, id, bacaMaksTeman(body), principal.userId);
         await simpanMasaJual(tx, id, bacaMasaJual(body), principal.userId);
         await simpanTandaPerpanjangan(tx, id, tandaDiminta, principal.userId);
         const masaSekarang = (await masaJualPaket(tx, [id])).get(id);
-        const temanSekarang =
-          bawaTemanTersimpan ?? ((await maksTemanPaket(tx, [id])).get(id) ?? 0) > 0;
+        const temanSekarang = bawaTemanTersimpan ?? (await maksTemanPaket(tx, [id])).get(id) ?? 0;
 
         this.auditService.record({
           action: 'PACKAGE_UPDATED',
@@ -422,7 +456,8 @@ export class PackageCatalogService {
           status: HttpStatus.OK,
           body: {
             ...packageView(updated, masaSekarang),
-            bawaTeman: temanSekarang,
+            bawaTeman: temanSekarang > 0,
+            maksTeman: temanSekarang,
             perpanjanganMasaAktif: perpanjanganAkhir,
           } as unknown as Prisma.InputJsonValue,
         };

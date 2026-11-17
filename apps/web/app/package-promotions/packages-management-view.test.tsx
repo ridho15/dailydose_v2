@@ -191,6 +191,36 @@ describe('PackagesManagementView duplicate feature', () => {
     });
   });
 
+  it('mengatur maksimal teman per kelas: isi 2 supaya pemilik paket bisa datang bertiga', async () => {
+    (browserPackagePromotionClient.updatePackage as unknown as { mockResolvedValue(v: unknown): void }).mockResolvedValue({
+      id: 'pkg-1',
+      version: 1,
+    });
+    const user = userEvent.setup();
+    render(
+      <AppFeedbackProvider>
+        <PackagesManagementView />
+      </AppFeedbackProvider>,
+    );
+    expect((await screen.findAllByText('10x Group Reformer'))[0]).toBeInTheDocument();
+    await user.click(screen.getAllByRole('button', { name: /Pilihan tindakan untuk 10x Group Reformer/i })[0]!);
+    await user.click((await screen.findAllByRole('menuitem', { name: /Edit/i }))[0]!);
+    const teman = (await screen.findByLabelText('Maksimal teman per kelas')) as HTMLInputElement;
+    expect(teman.value).toBe('0');
+    await user.clear(teman);
+    await user.type(teman, '2');
+    await user.type(screen.getByLabelText('Alasan perubahan (Audit Log)'), 'Paket bisa bertiga');
+    await user.click(screen.getByRole('button', { name: 'Simpan perubahan' }));
+    const konfirmasi = await screen.findAllByRole('button', { name: 'Simpan perubahan' });
+    await user.click(konfirmasi[konfirmasi.length - 1]!);
+    await waitFor(() =>
+      expect(browserPackagePromotionClient.updatePackage).toHaveBeenCalledWith(
+        'pkg-1',
+        expect.objectContaining({ maksTeman: 2 }),
+      ),
+    );
+  });
+
   const openPackageMenu = async (itemName: RegExp) => {
     const user = userEvent.setup();
     render(

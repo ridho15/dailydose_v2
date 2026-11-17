@@ -102,4 +102,66 @@ describe('daftar paket admin menampilkan seluruh katalog', () => {
     expect(res.status).toBe(200);
     expect(res.body).toMatchObject({ name: 'Paket 1 Baru', bawaTeman: false, effectiveUntil: null });
   });
+
+  describe('maksimal teman per kelas', () => {
+    const baseRow = row(1);
+    const buat = (tersimpan: number | null) => {
+      const tx = {
+        paket: {
+          findUnique: jest.fn().mockResolvedValue(baseRow),
+          update: jest.fn().mockResolvedValue({ ...baseRow, branch: null }),
+        },
+        paketBawaTeman: {
+          findUnique: jest.fn().mockResolvedValue(tersimpan === null ? null : { packageId: baseRow.id, maksTeman: tersimpan }),
+          upsert: jest.fn().mockResolvedValue({}),
+          deleteMany: jest.fn().mockResolvedValue({ count: 1 }),
+          findMany: jest.fn().mockResolvedValue(tersimpan === null ? [] : [{ packageId: baseRow.id, maksTeman: tersimpan }]),
+        },
+        paketMasaJual: { upsert: jest.fn(), findMany: jest.fn().mockResolvedValue([]) },
+      };
+      const service = new PackageCatalogService(
+        {} as never,
+        { catalog: jest.fn() } as never,
+        { execute: (_o: unknown, fn: (t: unknown) => Promise<unknown>) => fn(tx) } as never,
+        { record: jest.fn() } as never,
+      );
+      const ubah = (body: Record<string, unknown>) =>
+        service.update(principal, baseRow.id, { name: 'Paket 1', ...body }, 'idem', 'corr');
+      return { tx, ubah };
+    };
+
+    it('menyimpan 2 teman per kelas supaya pemilik paket bisa datang bertiga', async () => {
+      const { tx, ubah } = buat(1);
+      const res = await ubah({ maksTeman: 2 });
+      expect(tx.paketBawaTeman.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          create: expect.objectContaining({ maksTeman: 2 }),
+          update: expect.objectContaining({ maksTeman: 2 }),
+        }),
+      );
+      expect(res.body).toMatchObject({ bawaTeman: true, maksTeman: 2 });
+    });
+
+    it('0 berarti tidak boleh bawa teman', async () => {
+      const { tx, ubah } = buat(2);
+      const res = await ubah({ maksTeman: 0 });
+      expect(tx.paketBawaTeman.deleteMany).toHaveBeenCalled();
+      expect(res.body).toMatchObject({ bawaTeman: false, maksTeman: 0 });
+    });
+
+    it('menolak angka di luar 0 sampai 5 atau pecahan', async () => {
+      for (const salah of [6, -1, 1.5, 'dua']) {
+        const { tx, ubah } = buat(1);
+        await expect(ubah({ maksTeman: salah })).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+        expect(tx.paketBawaTeman.upsert).not.toHaveBeenCalled();
+      }
+    });
+
+    it('form lama yang hanya mengirim centang tidak menurunkan 2 teman menjadi 1', async () => {
+      const { tx, ubah } = buat(2);
+      const res = await ubah({ bawaTeman: true });
+      expect(tx.paketBawaTeman.upsert).not.toHaveBeenCalled();
+      expect(res.body).toMatchObject({ maksTeman: 2 });
+    });
+  });
 });

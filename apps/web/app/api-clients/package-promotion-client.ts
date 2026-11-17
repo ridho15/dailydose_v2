@@ -35,6 +35,8 @@ export type InternalPackageRecord = {
   isMultiBranch?: boolean;
   /** Pemilik paket boleh menambah 1 kursi teman per kelas. */
   bawaTeman?: boolean;
+  /** Kursi teman per kelas (0 sampai 5). */
+  maksTeman?: number;
   /** Paket 0 sesi yang menambah masa aktif satu paket member yang masih aktif. */
   perpanjanganMasaAktif?: boolean;
   isShareable?: boolean;

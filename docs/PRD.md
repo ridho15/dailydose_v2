@@ -147,7 +147,7 @@ Aturan kerahasiaan per peran ada di [Rules.md](./Rules.md#2-kerahasiaan-data-keu
    1 November yang membuat November terlihat minus). Oktober 2026 dan sebelumnya tidak dihitung ulang.
 5. Admin hanya boleh melihat omzet cabangnya sendiri; instruktur hanya fee dirinya sendiri.
 6. Pembatalan kurang dari H-12 perlu persetujuan Manager atau Owner.
-7. Paket tertentu boleh membawa teman; member juga bisa booking kursi teman sendiri.
+7. Paket tertentu boleh membawa teman; member juga bisa booking kursi teman sendiri. Jumlah teman per kelas diatur per paket di Data Master > Paket ("Maksimal teman per kelas", 0 sampai 5; 2 = datang bertiga) (17 November 2026).
 8. Kursi teman memotong 1 sesi paket pemiliknya.
 9. Batas pembatalan dan reschedule H-12 jam, semua cabang (diubah dari H-24 pada 5 November 2026; pembatalan staf kurang dari itu perlu persetujuan; member mengikuti
    batas yang sama).

@@ -45,6 +45,7 @@ export type PackageFormValues = {
   selectedBranches?: string[];
   selectedClassTypes?: string[];
   bawaTeman?: boolean;
+  maksTeman?: number;
   perpanjanganMasaAktif?: boolean;
   reason?: string;
 };
@@ -200,6 +201,7 @@ export function PackagesManagementView() {
       effectiveUntil,
       isMultiBranch: Boolean(source.isMultiBranch),
       bawaTeman: Boolean(source.bawaTeman),
+      maksTeman: jumlahTeman(source),
       perpanjanganMasaAktif: Boolean(source.perpanjanganMasaAktif),
       isShareable: Boolean(source.isShareable),
       selectedBranches: branchIds,
@@ -384,7 +386,11 @@ export function PackagesManagementView() {
                     {packageStateLabel(item.effectiveState)}
                   </Badge>
                   {item.livePromotion && <Badge tone="warning">Promo live</Badge>}
-                  {item.bawaTeman && <Badge tone="neutral">Bawa teman</Badge>}
+                  {jumlahTeman(item) > 0 && (
+                    <Badge tone="neutral">
+                      {jumlahTeman(item) === 1 ? 'Bawa teman' : `Bawa ${jumlahTeman(item)} teman`}
+                    </Badge>
+                  )}
                 </div>
               ),
             },
@@ -737,7 +743,7 @@ function PackageCreateForm({
           priceRp: Number(data.get('priceRp')),
           effectiveFrom: String(data.get('effectiveFrom')),
           effectiveUntil: data.get('effectiveUntil') || null,
-          bawaTeman: data.get('bawaTeman') === 'on',
+          maksTeman: Number(data.get('maksTeman') || 0),
           perpanjanganMasaAktif: perpanjangan,
           reason: String(data.get('reason')),
         });
@@ -962,21 +968,7 @@ function PackageCreateForm({
           defaultValue={initialValues?.effectiveUntil ?? ''}
         />
       </div>
-      <label className="flex items-start gap-2 rounded-dd-md border border-dd-line p-3 text-sm cursor-pointer">
-        <input
-          type="checkbox"
-          name="bawaTeman"
-          defaultChecked={Boolean(initialValues?.bawaTeman)}
-          className="accent-dd-forest mt-0.5 size-4 cursor-pointer rounded"
-        />
-        <span>
-          <span className="block font-semibold text-dd-ink">Boleh bawa teman</span>
-          <span className="block text-dd-muted">
-            Pemilik paket boleh menambah 1 kursi untuk temannya (bukan member) di kelas yang sama.
-            Kursi teman memakai 1 sesi paket ini. Bisa ditambahkan admin dari roster atau oleh member sendiri saat booking.
-          </span>
-        </span>
-      </label>
+      <MaksTemanInput defaultValue={initialValues ? jumlahTeman(initialValues) : 0} />
       <TextInput
         name="reason"
         label="Alasan"
@@ -1071,7 +1063,7 @@ function EditPackageModal({
           const priceRp = Number(data.get('priceRp'));
           const effectiveUntil = data.get('effectiveUntil') ? String(data.get('effectiveUntil')) : null;
           const reason = String(data.get('reason') || '').trim();
-          const bawaTeman = data.get('bawaTeman') === 'on';
+          const maksTeman = Number(data.get('maksTeman') || 0);
 
           const commercialChanged =
             sessionCount !== pkg.sessionCount ||
@@ -1101,7 +1093,7 @@ function EditPackageModal({
                 priceRp,
                 effectiveFrom: new Date().toISOString().slice(0, 10),
                 effectiveUntil,
-                bawaTeman,
+                maksTeman,
                 isShareable,
                 perpanjanganMasaAktif: perpanjangan,
                 reason,
@@ -1115,7 +1107,7 @@ function EditPackageModal({
                 ...(canEditCommercialInPlace
                   ? { sessionCount, durationDays, priceRp }
                   : {}),
-                bawaTeman,
+                maksTeman,
                 perpanjanganMasaAktif: perpanjangan,
                 reason,
               });
@@ -1252,21 +1244,7 @@ function EditPackageModal({
           />
         </div>
 
-        <label className="flex items-start gap-2 rounded-dd-md border border-dd-line p-3 text-sm cursor-pointer">
-          <input
-            type="checkbox"
-            name="bawaTeman"
-            defaultChecked={Boolean(pkg.bawaTeman)}
-            className="accent-dd-forest mt-0.5 size-4 cursor-pointer rounded"
-          />
-          <span>
-            <span className="block font-semibold text-dd-ink">Boleh bawa teman</span>
-            <span className="block text-dd-muted">
-              Pemilik paket boleh menambah 1 kursi untuk temannya (bukan member) di kelas yang sama.
-              Kursi teman memakai 1 sesi paket ini. Bisa ditambahkan admin dari roster atau oleh member sendiri saat booking.
-            </span>
-          </span>
-        </label>
+        <MaksTemanInput defaultValue={jumlahTeman(pkg)} />
         <TextInput
           name="reason"
           label="Alasan perubahan (Audit Log)"
@@ -1299,5 +1277,29 @@ function PerpanjanganCheckbox({ checked, onChange }: { checked: boolean; onChang
         </p>
       </div>
     </label>
+  );
+}
+
+/** Kursi teman per kelas sebuah paket; data lama hanya punya centang `bawaTeman` (= 1 teman). */
+export function jumlahTeman(item: { bawaTeman?: boolean; maksTeman?: number }): number {
+  if (typeof item.maksTeman === 'number') return item.maksTeman;
+  return item.bawaTeman ? 1 : 0;
+}
+
+/** Isian jumlah teman per kelas; 0 berarti paket tidak boleh bawa teman. */
+function MaksTemanInput({ defaultValue }: { defaultValue: number }) {
+  return (
+    <TextInput
+      name="maksTeman"
+      label="Maksimal teman per kelas"
+      type="number"
+      min={0}
+      max={5}
+      step={1}
+      inputMode="numeric"
+      defaultValue={String(defaultValue)}
+      description="Isi 0 bila paket tidak boleh bawa teman. Isi 2 supaya pemilik paket bisa datang bertiga. Setiap kursi teman memakai 1 sesi paket ini dan bisa ditambahkan admin dari roster atau oleh member saat booking."
+      required
+    />
   );
 }
