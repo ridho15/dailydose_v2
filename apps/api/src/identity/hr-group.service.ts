@@ -5,6 +5,8 @@ import { PrismaService } from '../database/prisma.service';
 import { AuditService } from '../foundation/audit.service';
 import { bacaOpsional, tabelOpsionalAda } from '../foundation/tabel-opsional';
 import { IdentityService } from './identity.service';
+import { PolicyService } from './policy.service';
+import type { ApplicationRole } from './role-capabilities';
 import { RateLimitService } from './rate-limit.service';
 import { canonicalRole } from './role-aliases';
 import { normalizeEmail, verifyPassword } from './credential-security';
@@ -44,6 +46,19 @@ export interface HrgClaims {
   email?: string | null;
   email_verified?: boolean;
   hrg_links?: Record<string, string>;
+  roles?: string[];
+}
+
+export function mapKeycloakBaseRole(roles?: string[]): ApplicationRole | null {
+  if (!roles || roles.length === 0) return null;
+  if (roles.includes('super-owner') || roles.includes('SUPER_OWNER')) return 'SUPER_OWNER';
+  if (roles.includes('owner') || roles.includes('OWNER')) return 'OWNER';
+  if (roles.includes('studio-manager') || roles.includes('MANAGER')) return 'MANAGER';
+  if (roles.includes('admin') || roles.includes('ADMIN')) return 'ADMIN';
+  if (roles.includes('finance') || roles.includes('FINANCE')) return 'FINANCE';
+  if (roles.includes('instructor') || roles.includes('INSTRUCTOR')) return 'INSTRUCTOR';
+  if (roles.includes('member') || roles.includes('CUSTOMER')) return 'CUSTOMER';
+  return null;
 }
 
 export type HrgMatchStep = 'link' | 'hrg_links' | 'phone' | 'email' | 'created';
@@ -71,6 +86,7 @@ export class HrGroupService {
     private readonly identities: IdentityService,
     private readonly rateLimit: RateLimitService,
     @Optional() private readonly audit?: AuditService,
+    @Optional() private readonly policy?: PolicyService,
   ) {}
 
   // ---------------------------------------------------------------- OIDC
@@ -173,6 +189,22 @@ export class HrGroupService {
         this.logger.warn(`Userinfo HR Group gagal dibaca, memakai klaim id_token: ${(error as Error).message}`);
       }
     }
+
+    if (tokens.access_token) {
+      try {
+        const parts = tokens.access_token.split('.');
+        if (parts.length === 3 && parts[1]) {
+          const tokenPayload = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf8'));
+          const clientRoles = tokenPayload?.resource_access?.[config.clientId]?.roles;
+          if (Array.isArray(clientRoles) && clientRoles.length > 0) {
+            claims.roles = clientRoles;
+          }
+        }
+      } catch (error) {
+        this.logger.warn(`Gagal membaca resource_access client roles dari access_token: ${(error as Error).message}`);
+      }
+    }
+
     return claims;
   }
 
@@ -265,6 +297,23 @@ export class HrGroupService {
     if (user.status !== 'ACTIVE') throw new HrgLoginError('inactive');
     let linked = false;
     if (createLink) linked = await this.saveLink(claims.sub, user.id, correlationId);
+
+    // Sinkronisasi base role dari Keycloak jika ada
+    const mappedRole = mapKeycloakBaseRole(claims.roles);
+    if (mappedRole && user.role !== mappedRole) {
+      await this.db.user.update({
+        where: { id: user.id },
+        data: { role: mappedRole as any },
+      });
+      user.role = mappedRole;
+    }
+
+    // Injeksi capability overrides dari client roles Keycloak
+    if (claims.roles && this.policy) {
+      const customCaps = claims.roles.filter((r) => r.includes(':'));
+      this.policy.setUserOverrides(user.id, customCaps);
+    }
+
     await this.audit?.catat(null, {
       actorId: user.id,
       correlationId,
@@ -310,13 +359,14 @@ export class HrGroupService {
       (typeof claims.name === 'string' && claims.name.trim()) ||
       email?.split('@')[0] ||
       'Member HR Group';
+    const mappedRole = mapKeycloakBaseRole(claims.roles);
     return this.db.user.create({
       data: {
         id: newId(),
         displayName: displayName.slice(0, 128),
         phone: phoneFree ? phone : null,
         email: emailFree ? email : null,
-        role: 'CUSTOMER',
+        role: (mappedRole ?? 'CUSTOMER') as any,
         status: 'ACTIVE',
       },
       select: { id: true, role: true, status: true },

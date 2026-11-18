@@ -184,5 +184,36 @@ describe('PolicyService role catalog', () => {
     ]);
     expect(customerAccess.capabilities).not.toContain('branch:all');
   });
+
+  describe('User capability overrides (SSO-driven granular permissions)', () => {
+    it('grants add-on capabilities to an instructor via setUserOverrides', () => {
+      const policy = new PolicyService();
+      const userId = 'user-instructor-override-1';
+
+      // Kontrol negatif: instruktur biasa tanpa override tidak punya master:manage
+      const baselineAccess = policy.resolveAccess(userId, [{ role: 'INSTRUCTOR', branchId: null }]);
+      expect(baselineAccess.capabilities).not.toContain('master:manage');
+      expect(policy.hasCapability(baselineAccess, 'master:manage')).toBe(false);
+
+      // Injeksi izin khusus dari Keycloak SSO: master:manage
+      policy.setUserOverrides(userId, ['master:manage', 'voucher:manage']);
+
+      const updatedAccess = policy.resolveAccess(userId, [{ role: 'INSTRUCTOR', branchId: null }]);
+      expect(updatedAccess.capabilities).toContain('master:manage');
+      expect(updatedAccess.capabilities).toContain('voucher:manage');
+      expect(policy.hasCapability(updatedAccess, 'master:manage')).toBe(true);
+      expect(policy.hasGlobalCapability(updatedAccess, 'master:manage')).toBe(true);
+
+      const grant = updatedAccess.grants.find((g) => g.capability === 'master:manage');
+      expect(grant).toBeDefined();
+      expect(grant?.source).toBe('USER_OVERRIDE');
+      expect(grant?.sourceId).toBe('KEYCLOAK_SSO');
+
+      // Bersihkan override dan pastikan kembali ke hak akses awal
+      policy.clearUserOverrides(userId);
+      const revertedAccess = policy.resolveAccess(userId, [{ role: 'INSTRUCTOR', branchId: null }]);
+      expect(revertedAccess.capabilities).not.toContain('master:manage');
+    });
+  });
 });
 

@@ -60,7 +60,7 @@ const routeCapabilities: Array<[string, string[]]> = [
   ['/workspace/bookings', ['booking:read', 'reschedule:read']],
   ['/workspace/branches', ['master:read', 'master:manage']],
   ['/workspace/branch-performance', ['finance:read']],
-  ['/workspace/packages', ['package-promotion:read', 'package-promotion:manage']],
+  ['/workspace/packages', ['package-promotion:read', 'package-promotion:manage', 'master:manage']],
   ['/workspace/vouchers', ['voucher:read', 'voucher:manage']],
   ['/purchases', ['package:read', 'payment:review', 'purchase:review']],
   ['/finance', ['finance:reconcile']],

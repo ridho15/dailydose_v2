@@ -1,3 +1,5 @@
+import * as fs from 'fs';
+import * as path from 'path';
 import { HttpStatus, Injectable, Optional } from '@nestjs/common';
 import type { ApplicationRole } from './role-capabilities';
 import { ROLE_CAPABILITIES } from './role-capabilities';
@@ -40,6 +42,71 @@ const isStaffRole = (role: ApplicationRole): boolean => !NON_STAFF_ROLES.has(rol
 
 @Injectable()
 export class PolicyService {
+  private readonly overridesFile = path.resolve(
+    process.env.PRIVATE_UPLOAD_ROOT
+      ? path.dirname(process.env.PRIVATE_UPLOAD_ROOT)
+      : path.join(process.cwd(), '.local-data'),
+    'user-capability-overrides.json',
+  );
+  private readonly userOverrides = new Map<string, string[]>();
+
+  constructor() {
+    this.loadOverridesFromDisk();
+  }
+
+  private loadOverridesFromDisk(): void {
+    try {
+      if (fs.existsSync(this.overridesFile)) {
+        const raw = fs.readFileSync(this.overridesFile, 'utf8');
+        const data = JSON.parse(raw);
+        if (data && typeof data === 'object') {
+          for (const [userId, caps] of Object.entries(data)) {
+            if (Array.isArray(caps)) {
+              this.userOverrides.set(userId, caps as string[]);
+            }
+          }
+        }
+      }
+    } catch {
+      // Abaikan jika berkas belum ada atau korup
+    }
+  }
+
+  private saveOverridesToDisk(): void {
+    try {
+      const dir = path.dirname(this.overridesFile);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+      const data: Record<string, string[]> = {};
+      for (const [userId, caps] of this.userOverrides.entries()) {
+        data[userId] = caps;
+      }
+      fs.writeFileSync(this.overridesFile, JSON.stringify(data, null, 2), 'utf8');
+    } catch {
+      // Abaikan kegagalan penulisan lokal disk
+    }
+  }
+
+  setUserOverrides(userId: string, capabilities: string[]): void {
+    const clean = [...new Set(capabilities)].sort();
+    if (clean.length === 0) {
+      this.userOverrides.delete(userId);
+    } else {
+      this.userOverrides.set(userId, clean);
+    }
+    this.saveOverridesToDisk();
+  }
+
+  getUserOverrides(userId: string): string[] {
+    return this.userOverrides.get(userId) || [];
+  }
+
+  clearUserOverrides(userId: string): void {
+    this.userOverrides.delete(userId);
+    this.saveOverridesToDisk();
+  }
+
   capabilities(roles: readonly EffectiveRole[]): string[] {
     const caps = roles.flatMap(({ role, branchId }) => {
       const roleCaps = [...(ROLE_CAPABILITIES[role] || [])];
@@ -74,11 +141,28 @@ export class PolicyService {
   }
 
   resolveAccess(
-    _userId: string,
+    userId: string,
     roles: readonly EffectiveRole[],
     _at = new Date(),
   ): EffectiveAccess {
-    return this.staticAccess(roles);
+    const access = this.staticAccess(roles);
+    const overrides = this.getUserOverrides(userId);
+    if (!overrides || overrides.length === 0) {
+      return access;
+    }
+
+    const extraGrants: CapabilityGrant[] = overrides.map((capability) => ({
+      capability,
+      branchId: null,
+      source: 'USER_OVERRIDE' as const,
+      sourceId: 'KEYCLOAK_SSO',
+    }));
+
+    return {
+      ...access,
+      capabilities: [...new Set([...access.capabilities, ...overrides])].sort(),
+      grants: [...access.grants, ...extraGrants],
+    };
   }
 
   staticAccessForRoles(roles: readonly ApplicationRole[]): EffectiveAccess {

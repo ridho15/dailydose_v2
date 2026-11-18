@@ -78,7 +78,8 @@ export function PackagesManagementView() {
   >([]);
   const canRead =
     session?.status === 'authenticated' &&
-    session.hasCapability('package-promotion:read', 'package-promotion:manage');
+    (session.hasCapability('package-promotion:read', 'package-promotion:manage') ||
+      session.hasCapability('master:manage', 'package:read'));
   const canManage = session?.status === 'authenticated' && session.hasCapability('master:manage');
   const confirmDiscardCreate = () =>
     feedback.confirm({

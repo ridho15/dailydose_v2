@@ -16,10 +16,16 @@ export class PackageAccessService {
   ) {}
 
   catalog(principal: SessionPrincipal, mutation = false) {
-    this.policy.requireCapability(
-      principal.capabilities,
-      mutation ? 'master:manage' : 'package:read',
-    );
+    if (mutation) {
+      this.policy.requireCapability(principal.capabilities, 'master:manage');
+    } else {
+      this.policy.requireAnyCapability(principal.capabilities, [
+        'package:read',
+        'master:manage',
+        'package-promotion:read',
+        'package-promotion:manage',
+      ]);
+    }
   }
 
   paymentAccount(principal: SessionPrincipal, mutation = false) {
