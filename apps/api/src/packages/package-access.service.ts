@@ -13,7 +13,7 @@ export class PackageAccessService {
     private readonly db: PrismaService,
     private readonly policy: PolicyService,
     private readonly auditService: AuditService,
-  ) {}
+  ) { }
 
   catalog(principal: SessionPrincipal, mutation = false) {
     if (mutation) {

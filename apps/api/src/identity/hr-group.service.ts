@@ -87,7 +87,7 @@ export class HrGroupService {
     private readonly rateLimit: RateLimitService,
     @Optional() private readonly audit?: AuditService,
     @Optional() private readonly policy?: PolicyService,
-  ) {}
+  ) { }
 
   // ---------------------------------------------------------------- OIDC
 
