@@ -31,6 +31,7 @@ import { RolesGuard } from './roles.guard';
 import { RoleAliasMigrationService } from './role-alias-migration.service';
 import { HrGroupController } from './hr-group.controller';
 import { HrGroupService } from './hr-group.service';
+import { KeycloakJitService } from './keycloak-jit.service';
 
 @Module({
   imports: [DatabaseModule],
@@ -44,6 +45,7 @@ import { HrGroupService } from './hr-group.service';
   providers: [
     RoleAliasMigrationService,
     IdentityService,
+    KeycloakJitService,
     HrGroupService,
     CustomerProfileService,
     IdentityReviewQueryService,
@@ -83,6 +85,6 @@ import { HrGroupService } from './hr-group.service';
     },
     AuthGuard,
   ],
-  exports: [IdentityService, PolicyService, RateLimitService, AuthGuard, RolesGuard, PRIVATE_FILE_STORAGE],
+  exports: [IdentityService, KeycloakJitService, PolicyService, RateLimitService, AuthGuard, RolesGuard, PRIVATE_FILE_STORAGE],
 })
 export class IdentityModule {}

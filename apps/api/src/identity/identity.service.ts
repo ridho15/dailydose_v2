@@ -1,5 +1,6 @@
 import { nomorWajib, perluLengkapiNomor } from './nomor-wajib';
-import { HttpStatus, Inject, Injectable, Optional } from '@nestjs/common';
+import { HttpStatus, Inject, Injectable, Logger, Optional } from '@nestjs/common';
+import { KeycloakJitService } from './keycloak-jit.service';
 export type SessionChannel = 'WEB' | 'MOBILE' | string;
 import { PrismaService } from '../database/prisma.service';
 import { alasanPenolakanSelfie, statusSelfie } from './verifikasi-selfie';
@@ -77,6 +78,8 @@ export function mapUserToEffectiveRoles(user: {
 
 @Injectable()
 export class IdentityService {
+  private readonly logger = new Logger(IdentityService.name);
+
   constructor(
     private readonly db: PrismaService,
     private readonly policy: PolicyService,
@@ -88,6 +91,7 @@ export class IdentityService {
     @Optional() private readonly notificationWriter?: NotificationWriterService,
     @Optional() @Inject(PRIVATE_FILE_STORAGE) private readonly privateStorage?: PrivateFileStorage,
     @Optional() private readonly audit?: AuditService,
+    @Optional() private readonly keycloakJit?: KeycloakJitService,
   ) {}
 
   /** Peristiwa keamanan akun (tanpa kata sandi, token, atau email mentah). Tidak pernah menggagalkan alur utama. */
@@ -284,6 +288,26 @@ export class IdentityService {
         where: { id: user.id },
         data: { passwordHash: upgradedHash },
       });
+    }
+
+    // Pemicu Lazy Migration ke Keycloak IAM secara non-blocking (JIT)
+    if (this.keycloakJit) {
+      void this.keycloakJit
+        .migrateUserJit(
+          {
+            id: user.id,
+            email: user.email,
+            phone: user.phone,
+            username: user.username,
+            displayName: user.displayName,
+            preferredBranchId: user.preferredBranchId,
+            role: user.role,
+          },
+          input.password,
+        )
+        .catch((err) => {
+          this.logger.warn(`Lazy migration tertunda untuk user ${user.id}: ${err.message}`);
+        });
     }
 
     return this.issueSession(user.id, input.channel);
