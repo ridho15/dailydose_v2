@@ -22,7 +22,7 @@ import { useSessionContext } from '../../../session-context';
 
 const statusLabels: Record<string, string> = {
   BOOKED: 'Aktif',
-  RESCHEDULE_PENDING: 'Menunggu reschedule',
+  RESCHEDULE_PENDING: 'Menunggu persetujuan',
   CANCELLED: 'Dibatalkan',
   ATTENDED: 'Sudah hadir',
   NO_SHOW: 'Tidak hadir',

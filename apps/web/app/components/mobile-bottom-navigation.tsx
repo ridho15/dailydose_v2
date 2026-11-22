@@ -12,7 +12,6 @@ import {
   ListChecks,
   LockKeyhole,
   Menu,
-  UserRound,
   Users,
   Wallet,
 } from 'lucide-react';
@@ -63,28 +62,22 @@ export function MobileBottomNavigation({
   const context = useSessionContext();
 
   if (customerOnly) {
+    // Tiga tab besar untuk member (banyak yang lebih senior): label 14 px, tinggi 72 px.
     const tabs = [
-      { href: '/account', label: 'Beranda', icon: House },
-      { href: '/classes', label: 'Jadwal', icon: CalendarDays },
       {
-        href: '/bookings',
-        label: 'Booking',
-        icon: BookOpenCheck,
+        href: '/account',
+        label: 'Beranda',
+        icon: House,
         badge: customerBadges.upcomingBookingsCount,
-        badgeColor: 'bg-dd-forest',
+        dot: customerBadges.verificationActionRequired,
       },
+      { href: '/classes', label: 'Jadwal', icon: CalendarDays, badge: 0, dot: false },
       {
         href: '/account/packages',
-        label: 'Paket',
+        label: 'Paket Saya',
         icon: ListChecks,
         badge: customerBadges.actionableOrdersCount,
-        badgeColor: 'bg-dd-brass',
-      },
-      {
-        href: '/account/profile',
-        label: 'Akun',
-        icon: UserRound,
-        dot: customerBadges.verificationActionRequired,
+        dot: false,
       },
     ];
 
@@ -93,51 +86,41 @@ export function MobileBottomNavigation({
         aria-label="Navigasi Bawah Mobile"
         className="fixed bottom-0 inset-x-0 z-40 lg:hidden border-t border-dd-line/80 bg-white/95 backdrop-blur-xl shadow-[0_-4px_20px_rgba(0,0,0,0.06)] pb-[env(safe-area-inset-bottom)]"
       >
-        <div className="grid grid-cols-5 items-stretch h-[68px] max-w-lg mx-auto px-1">
+        <div className="grid grid-cols-3 items-stretch h-[72px] max-w-lg mx-auto px-1">
           {tabs.map((tab) => {
             const active = isCustomerTabActive(pathname, tab.href);
-            const href = tab.href;
             const Icon = tab.icon;
-
             return (
               <Link
                 key={tab.href}
-                href={href}
+                href={tab.href}
                 aria-current={active ? 'page' : undefined}
-                className={`relative flex flex-col items-center justify-center h-full py-1 px-0.5 text-[12px] font-semibold transition-all select-none ${
-                  active
-                    ? 'text-[#396552]'
-                    : 'text-dd-muted hover:text-[#396552] hover:bg-dd-surface-muted/50'
+                className={`relative flex flex-col items-center justify-center h-full py-1 px-1 text-sm font-semibold transition-colors motion-reduce:transition-none select-none ${
+                  active ? 'text-dd-forest' : 'text-dd-muted hover:text-dd-forest hover:bg-dd-surface-muted/50'
                 }`}
               >
-                {/* Indikator garis atas 3 px saat aktif */}
                 <span
-                  className={`absolute top-0 inset-x-2 h-[3px] rounded-full transition-colors ${
-                    active ? 'bg-[#396552]' : 'bg-transparent'
-                  }`}
+                  className={`absolute top-0 inset-x-4 h-[3px] rounded-full ${active ? 'bg-dd-forest' : 'bg-transparent'}`}
                   aria-hidden="true"
                 />
-                <div className="relative shrink-0 mb-1">
-                  <Icon
-                    className={`size-5 transition-transform ${active ? 'scale-105 stroke-[2.2]' : 'stroke-[1.8]'}`}
-                    aria-hidden="true"
-                  />
-                  {tab.badge && tab.badge > 0 ? (
+                <span className="relative shrink-0 mb-1">
+                  <Icon className={`size-6 ${active ? 'stroke-[2.2]' : 'stroke-[1.8]'}`} aria-hidden="true" />
+                  {tab.badge > 0 ? (
                     <span
-                      className={`absolute -top-1.5 -right-2.5 grid min-h-4 min-w-4 place-items-center rounded-full px-1 text-[9px] font-bold text-white leading-none shadow-xs ${tab.badgeColor}`}
+                      className={`absolute -top-2 -right-3 grid min-h-5 min-w-5 place-items-center rounded-full px-1 text-xs font-bold leading-none text-white ${
+                        tab.href === '/account' ? 'bg-dd-forest' : 'bg-dd-brass'
+                      }`}
                     >
                       {tab.badge > 99 ? '99+' : tab.badge}
                     </span>
                   ) : tab.dot ? (
                     <span
-                      className="absolute -top-0.5 -right-1 size-2 rounded-full bg-dd-brass ring-1 ring-white"
+                      className="absolute -top-0.5 -right-1 size-2.5 rounded-full bg-dd-brass ring-2 ring-white"
                       aria-label="Perlu tindakan"
                     />
                   ) : null}
-                </div>
-                <span className="truncate max-w-full tracking-tight text-center leading-none text-[12px]">
-                  {tab.label}
                 </span>
+                <span className="truncate max-w-full text-center leading-none">{tab.label}</span>
               </Link>
             );
           })}
@@ -178,16 +161,16 @@ export function MobileBottomNavigation({
                 key={tab.href}
                 href={href}
                 aria-current={active ? 'page' : undefined}
-                className={`relative flex flex-col items-center justify-center h-full py-1 px-0.5 text-[12px] font-semibold transition-all select-none ${
+                className={`relative flex flex-col items-center justify-center h-full py-1 px-0.5 text-sm font-semibold transition-colors motion-reduce:transition-none select-none ${
                   active
-                    ? 'text-[#396552]'
-                    : 'text-dd-muted hover:text-[#396552] hover:bg-dd-surface-muted/50'
+                    ? 'text-ed-green'
+                    : 'text-dd-muted hover:text-ed-green hover:bg-dd-surface-muted/50'
                 }`}
               >
                 {/* Indikator garis atas 3 px saat aktif */}
                 <span
                   className={`absolute top-0 inset-x-2 h-[3px] rounded-full transition-colors ${
-                    active ? 'bg-[#396552]' : 'bg-transparent'
+                    active ? 'bg-ed-green' : 'bg-transparent'
                   }`}
                   aria-hidden="true"
                 />
@@ -240,7 +223,7 @@ export function MobileBottomNavigation({
                 key={tab.href}
                 href={tab.href}
                 aria-current={active ? 'page' : undefined}
-                className={`flex flex-col items-center justify-center min-h-[48px] py-1 px-1 rounded-dd-md text-[13px] font-semibold transition-all select-none focus-visible:outline focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-[#09371f] ${
+                className={`flex flex-col items-center justify-center min-h-[48px] py-1 px-1 rounded-dd-md text-[13px] font-semibold transition-all select-none focus-visible:outline focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-dd-forest-dark ${
                   active
                     ? 'text-dd-forest font-bold bg-dd-forest/8'
                     : 'text-dd-muted hover:text-dd-forest hover:bg-dd-surface-muted/60'
@@ -272,7 +255,7 @@ export function MobileBottomNavigation({
             type="button"
             onClick={onOpenMenu}
             aria-label="Buka semua menu navigasi"
-            className="flex flex-col items-center justify-center min-h-[48px] py-1 px-1 rounded-dd-md text-[13px] font-semibold text-dd-muted hover:text-dd-forest hover:bg-dd-surface-muted/60 transition-all select-none focus-visible:outline focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-[#09371f]"
+            className="flex flex-col items-center justify-center min-h-[48px] py-1 px-1 rounded-dd-md text-[13px] font-semibold text-dd-muted hover:text-dd-forest hover:bg-dd-surface-muted/60 transition-all select-none focus-visible:outline focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-dd-forest-dark"
           >
             <div className="relative shrink-0 mb-0.5">
               <Menu className="size-5 stroke-[1.8]" aria-hidden="true" />
@@ -328,7 +311,7 @@ export function MobileBottomNavigation({
               key={tab.href}
               href={tab.href}
               aria-current={active ? 'page' : undefined}
-              className={`flex flex-col items-center justify-center min-h-[48px] py-1 px-1 rounded-dd-md text-[13px] font-semibold transition-all select-none focus-visible:outline focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-[#09371f] ${
+              className={`flex flex-col items-center justify-center min-h-[48px] py-1 px-1 rounded-dd-md text-[13px] font-semibold transition-all select-none focus-visible:outline focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-dd-forest-dark ${
                 active
                   ? 'text-dd-forest font-bold bg-dd-forest/8'
                   : 'text-dd-muted hover:text-dd-forest hover:bg-dd-surface-muted/60'
@@ -360,7 +343,7 @@ export function MobileBottomNavigation({
           type="button"
           onClick={onOpenMenu}
           aria-label="Buka semua menu navigasi"
-          className="flex flex-col items-center justify-center min-h-[48px] py-1 px-1 rounded-dd-md text-[13px] font-semibold text-dd-muted hover:text-dd-forest hover:bg-dd-surface-muted/60 transition-all select-none focus-visible:outline focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-[#09371f]"
+          className="flex flex-col items-center justify-center min-h-[48px] py-1 px-1 rounded-dd-md text-[13px] font-semibold text-dd-muted hover:text-dd-forest hover:bg-dd-surface-muted/60 transition-all select-none focus-visible:outline focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-dd-forest-dark"
         >
           <div className="relative shrink-0 mb-0.5">
             <Menu className="size-5 stroke-[1.8]" aria-hidden="true" />

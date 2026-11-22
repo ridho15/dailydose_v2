@@ -33,18 +33,6 @@ import { AlertBanner, useAppFeedback } from '../app-feedback';
 import { formatRupiah } from '../../lib/formatters';
 import { useStudioPreference } from '../public/public-experience';
 
-const steps = ['Ringkasan', 'Pembayaran', 'Unggah bukti', 'Status'];
-
-function currentStep(
-  order: CustomerOrder,
-  file: File | null,
-  uploadSession?: PaymentProofUploadSession,
-) {
-  if (['PENDING', 'APPROVED', 'REJECTED', 'EXPIRED'].includes(order.status)) return 4;
-  if (order.status === 'ACTION_REQUIRED' || file || uploadSession) return 3;
-  return 2;
-}
-
 const uploadStageLabels = {
   IDLE: '',
   ISSUING: 'Menyiapkan upload aman…',
@@ -75,7 +63,6 @@ export function CustomerPaymentFlow({
   const [paymentMethod, setPaymentMethod] = useState<'BANK_TRANSFER' | 'QRIS'>('BANK_TRANSFER');
   const [copiedField, setCopiedField] = useState<'nominal' | 'account' | null>(null);
   const [now, setNow] = useState(() => Date.now());
-  const step = currentStep(order, file, uploadSession);
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
@@ -221,34 +208,6 @@ export function CustomerPaymentFlow({
 
   return (
     <div className="space-y-6">
-      <ol
-        aria-label="Tahapan checkout"
-        className="grid grid-cols-2 gap-2 rounded-none border border-ed-line bg-white p-2.5 sm:grid-cols-4"
-      >
-        {steps.map((label, index) => {
-          const number = index + 1;
-          const complete = number < step;
-          const active = number === step;
-          return (
-            <li
-              key={label}
-              aria-current={active ? 'step' : undefined}
-              className={`flex items-center gap-2.5 rounded-none px-3 py-2 text-xs font-semibold sm:text-sm ${
-                active
-                  ? 'bg-ed-forest text-white'
-                  : complete
-                    ? 'border border-ed-line bg-ed-tint text-ed-forest'
-                    : 'text-ed-muted bg-ed-tint/30'
-              }`}
-            >
-              <span className="grid size-5 shrink-0 place-items-center rounded-none border border-current font-serif text-[13px]">
-                {complete ? <Check className="size-3.5" /> : number}
-              </span>
-              <span className="tracking-tight">{label}</span>
-            </li>
-          );
-        })}
-      </ol>
 
       {order.status === 'ACTION_REQUIRED' && (
         <AlertBanner

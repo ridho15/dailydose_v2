@@ -1,5 +1,6 @@
 'use client';
 
+import { orderStatusLabels } from '@/lib/order-presenters';
 import { useEffect, useMemo, useState } from 'react';
 import {
   browserPurchaseClient,
@@ -25,14 +26,8 @@ const scanLabels: Record<string, string> = {
   ERROR: 'Pemeriksaan gagal',
 };
 
-const purchaseStatusLabels: Record<string, string> = {
-  AWAITING_PAYMENT: 'Menunggu pembayaran',
-  PENDING: 'Menunggu verifikasi',
-  ACTION_REQUIRED: 'Perlu perbaikan',
-  APPROVED: 'Disetujui',
-  REJECTED: 'Ditolak',
-  EXPIRED: 'Kedaluwarsa',
-};
+// Satu sumber label status pesanan dengan halaman member dan antrean staf.
+const purchaseStatusLabels: Record<string, string> = orderStatusLabels;
 type PurchaseAction = 'packages' | 'proof' | 'scan' | 'submit';
 
 export function PurchaseView({

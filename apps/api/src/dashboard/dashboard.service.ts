@@ -15,6 +15,7 @@ import {
 import { verificationStatusWhere } from '../identity/manajemen-pelanggan.service';
 import { alasanPenolakanSelfie, statusSelfie } from '../identity/verifikasi-selfie';
 import { tertahanPerPaket } from '../packages/sesi-terpesan';
+import { bookingTeman, maksTemanPaket } from '../packages/bawa-teman';
 import { bookingLagiUntuk } from './booking-lagi';
 
 /**
@@ -159,9 +160,10 @@ export class DashboardService {
               branch: { select: { id: true, name: true, timezone: true } },
             },
           },
+          customerPackage: { select: { packageId: true, package: { select: { isShareable: true } } } },
         },
         orderBy: { classSlot: { startAt: 'asc' } },
-        take: 3,
+        take: 6,
       }),
       this.db.paketPelanggan.findMany({
         where: { userId: principal.userId, status: 'ACTIVE', validUntil: { gt: now } },
@@ -208,12 +210,31 @@ export class DashboardService {
     // angka di Beranda langsung turun setelah booking walau sesinya baru dipotong saat hadir.
     const tertahan = await tertahanPerPaket(this.db, packages.map((item) => item.id));
     const bookingLagi = await bookingLagiUntuk(this.db, principal.userId, now);
+    // Kursi teman: booking mana yang kursi teman, dan apakah paket booking itu masih boleh menambah teman.
+    const temanPerBooking = await bookingTeman(this.db, upcomingBookings.map((b) => b.id));
+    const maksTeman = await maksTemanPaket(
+      this.db,
+      upcomingBookings.map((b) => b.customerPackage?.packageId),
+    );
+    const bolehTambahTeman = (booking: (typeof upcomingBookings)[number]) => {
+      if (temanPerBooking.has(booking.id) || !booking.customerPackage) return false;
+      const dariPaket = maksTeman.get(booking.customerPackage.packageId) ?? 0;
+      const maks = booking.customerPackage.package?.isShareable && dariPaket < 1 ? 1 : dariPaket;
+      const sudah = upcomingBookings.filter(
+        (b) => b.classSlotId === booking.classSlotId && temanPerBooking.has(b.id),
+      ).length;
+      return maks > sudah;
+    };
 
     const result = {
       generatedAt: now,
       upcomingBookings: upcomingBookings.map((booking) => ({
         id: booking.id,
         classSlotId: booking.classSlotId,
+        customerPackageId: booking.customerPackageId,
+        kursiTeman: temanPerBooking.has(booking.id),
+        namaTeman: temanPerBooking.get(booking.id) ?? null,
+        bisaTambahTeman: bolehTambahTeman(booking),
         status: booking.status,
         className: booking.classSlot.classType.name,
         branchName: booking.classSlot.branch.name,

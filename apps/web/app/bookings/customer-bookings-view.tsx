@@ -17,7 +17,7 @@ import { VerificationStatusBanner } from '../components/verification-status-bann
 
 const statusLabels: Record<string, string> = {
   BOOKED: 'Terjadwal',
-  RESCHEDULE_PENDING: 'Perubahan jadwal diproses',
+  RESCHEDULE_PENDING: 'Menunggu persetujuan',
   CANCELLED: 'Dibatalkan',
   ATTENDED: 'Hadir',
   NO_SHOW: 'Tidak hadir',

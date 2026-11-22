@@ -23,6 +23,7 @@ import { EmptyState, Feedback, Skeleton, StatusBadge } from '../ui';
 import { AdminPageHeader } from '../components/admin/admin-page-header';
 import { useSessionContext } from '../session-context';
 import { isInstructorOnlySession } from '@/lib/session-audience';
+import { useLayarKecil } from '@/lib/use-layar-kecil';
 import { CreatePanel, DetailPanel, type CreateTemplate } from './class-slot-panels';
 import { LifecycleDialog } from '../components/admin/lifecycle-dialog';
 import {
@@ -131,6 +132,7 @@ export function ClassSlotView({
     () => (branch || globalMode ? weekWindow(reference, displayTimezone) : null),
     [branch, displayTimezone, globalMode, reference],
   );
+  const layarKecil = useLayarKecil();
   const load = useCallback(async () => {
     if (!canRead || (!branch && !globalMode) || !week) return;
     setBusy(true);
@@ -488,10 +490,8 @@ export function ClassSlotView({
     );
   };
 
-  return (
-    <section className="space-y-[22px]" aria-labelledby="classes-title">
-      {week && (
-        <TopBarSlot>
+  const navigasiMinggu = week ? (
+    <>
           <button
             type="button"
             aria-label="Minggu sebelumnya"
@@ -521,7 +521,18 @@ export function ClassSlotView({
           >
             {week.label.replace(' – ', ' sampai ')}
           </p>
-        </TopBarSlot>
+    </>
+  ) : null;
+
+  return (
+    <section className="space-y-[22px]" aria-labelledby="classes-title">
+      {/* Bilah atas HP terlalu sempit untuk navigasi minggu (tombol ">" tertutup ikon lain), jadi di
+          layar kecil navigasinya ditaruh di badan halaman. */}
+      {week && !layarKecil && <TopBarSlot>{navigasiMinggu}</TopBarSlot>}
+      {week && layarKecil && (
+        <div className="flex min-w-0 items-center gap-2 [&>*]:shrink-0 [&>:last-child]:shrink" aria-label="Navigasi minggu">
+          {navigasiMinggu}
+        </div>
       )}
 
       <div className="flex flex-wrap items-end justify-between gap-4">

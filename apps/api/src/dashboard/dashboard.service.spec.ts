@@ -273,4 +273,39 @@ describe('DashboardService', () => {
     await service.customerOverview(p, { ttlMs: 10_000 });
     expect(db.pemesananKelas.findMany).toHaveBeenCalledTimes(9);
   });
+
+  it('upcoming bookings say which seat is a friend seat and whether another friend may still be added', async () => {
+    const db = database() as any;
+    const service = new DashboardService(db as never);
+    const slot = {
+      startAt: new Date(Date.now() + 86_400_000),
+      endAt: new Date(Date.now() + 90_000_000),
+      classType: { id: 'ct', name: 'Reformer' },
+      branch: { id: 'b', name: 'Senopati', timezone: 'Asia/Jakarta' },
+    };
+    const booking = (id: string) => ({
+      id,
+      classSlotId: 'slot-1',
+      customerPackageId: 'cp-1',
+      status: 'BOOKED',
+      classSlot: slot,
+      customerPackage: { packageId: 'pkg-dt', package: { isShareable: false } },
+    });
+    db.pemesananKelas = { ...db.pemesananKelas, findMany: jest.fn().mockResolvedValue([booking('own'), booking('friend')]) };
+    db.paketBawaTeman = { findMany: jest.fn().mockResolvedValue([{ packageId: 'pkg-dt', maksTeman: 2 }]) };
+    db.bookingTeman = { findMany: jest.fn().mockResolvedValue([{ bookingId: 'friend', namaTeman: 'Rani' }]) };
+
+    const hasil = await service.customerOverview(principal({ roles: [{ role: 'CUSTOMER', branchId: null }] }));
+    expect(hasil.upcomingBookings).toEqual([
+      expect.objectContaining({ id: 'own', kursiTeman: false, bisaTambahTeman: true, customerPackageId: 'cp-1' }),
+      expect.objectContaining({ id: 'friend', kursiTeman: true, namaTeman: 'Rani', bisaTambahTeman: false }),
+    ]);
+
+    // Batas paket 1 teman sudah terpakai: tombol Kursi teman tidak ditawarkan lagi.
+    db.paketBawaTeman.findMany.mockResolvedValue([{ packageId: 'pkg-dt', maksTeman: 1 }]);
+    const penuh = await service.customerOverview(principal({ roles: [{ role: 'CUSTOMER', branchId: null }] }), {
+      forceRefresh: true,
+    });
+    expect(penuh.upcomingBookings[0]).toMatchObject({ id: 'own', bisaTambahTeman: false });
+  });
 });

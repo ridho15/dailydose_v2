@@ -133,6 +133,8 @@ const auditActionLabels: Record<string, string> = {
   'finance.month_closed': 'Tutup buku bulanan',
   'reschedule.approved': 'Ubah jadwal disetujui',
   'reschedule.rejected': 'Ubah jadwal ditolak',
+  'reschedule.auto_approved': 'Ubah jadwal disetujui otomatis (sebelum H-12)',
+  'booking.late_cancellation_requested_by_member': 'Member mengajukan pembatalan kurang dari H-12',
   'operations.email_retried': 'Pengiriman email dicoba ulang',
   'booking.created_by_staff': 'Booking dibuat oleh staf',
   'booking.backdated_by_staff': 'Booking susulan dibuat oleh staf',

@@ -1,12 +1,8 @@
 'use client';
 
 import {
-  BookOpenCheck,
   CalendarDays,
-  CreditCard,
-  Gauge,
   House,
-  ListChecks,
   LockKeyhole,
   LogOut,
   MapPin,
@@ -33,42 +29,38 @@ export type CustomerNavigationItem = {
   requiresApproval?: boolean;
 };
 
+/** Tiga tujuan utama member; booking, pesanan, dan QR semuanya dibuka dari Beranda. */
 export const CUSTOMER_PRIMARY_NAVIGATION: CustomerNavigationItem[] = [
   { href: '/account', label: 'Beranda', icon: House },
   { href: '/classes', label: 'Jadwal', icon: CalendarDays },
-  { href: '/bookings', label: 'Booking', icon: BookOpenCheck },
-  { href: '/packages', label: 'Paket', icon: ListChecks },
+  { href: '/account/packages', label: 'Paket Saya', icon: PackageCheck },
 ];
 
 export const CUSTOMER_ACCOUNT_NAVIGATION: CustomerNavigationItem[] = [
   { href: '/account/profile', label: 'Profil Saya', icon: UserRound },
   { href: '/account/verification', label: 'Foto selfie', icon: ShieldCheck },
   { href: '/account/security', label: 'Keamanan & Password', icon: LockKeyhole },
-  { href: '/orders', label: 'Pesanan Saya', icon: CreditCard },
-  { href: '/account/packages', label: 'Paket Saya', icon: PackageCheck },
 ];
 
-export function isCustomerNavigationActive(pathname: string, href: string) {
+export function isCustomerNavigationActive(pathname: string, href: string): boolean {
   if (href === '/account') return pathname === '/account';
+  if (href === '/account/packages') return isCustomerTabActive(pathname, href);
   if (href === '/orders') return pathname === '/checkout' || pathname.startsWith('/orders');
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-export function isCustomerTabActive(pathname: string, href: string) {
-  if (href === '/account') return pathname === '/account';
-  if (href === '/account/profile') {
+export function isCustomerTabActive(pathname: string, href: string): boolean {
+  if (href === '/account')
+    return pathname === '/account' || pathname === '/bookings' || pathname.startsWith('/bookings/');
+  if (href === '/account/packages') {
     return (
-      pathname === '/account/profile' ||
-      (pathname.startsWith('/account/') && !pathname.startsWith('/account/packages')) ||
+      pathname.startsWith('/account/packages') ||
+      pathname === '/packages' ||
+      pathname.startsWith('/packages/') ||
       pathname === '/orders' ||
       pathname.startsWith('/orders/') ||
-      pathname === '/checkout' ||
-      pathname.startsWith('/checkout/') ||
-      pathname === '/check-in-pass'
+      pathname === '/checkout'
     );
-  }
-  if (href === '/account/packages') {
-    return pathname.startsWith('/account/packages') || pathname === '/packages' || pathname.startsWith('/packages/');
   }
   return isCustomerNavigationActive(pathname, href);
 }
@@ -137,10 +129,7 @@ export function CustomerNavigation({
           </IconButton>
         </div>
         <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto">
-          {[
-            ['Utama', CUSTOMER_PRIMARY_NAVIGATION],
-            ['Akun', CUSTOMER_ACCOUNT_NAVIGATION],
-          ].map(([group, items]) => (
+          {[['Akun', CUSTOMER_ACCOUNT_NAVIGATION]].map(([group, items]) => (
             <div key={group as string}>
               <p className="mb-2 px-3 text-[13px] font-bold text-dd-forest/80">
                 {group as string}

@@ -306,13 +306,14 @@ describe('CheckoutView paket perpanjangan masa aktif', () => {
 
     expect(await screen.findByText('Paket yang diperpanjang')).toBeVisible();
     expect(screen.getByText('Perpanjangan masa aktif')).toBeVisible();
-    const submit = screen.getByRole('button', { name: /Buat pesanan dan lanjutkan pembayaran/ });
+    const submit = screen.getByRole('button', { name: 'Buat pesanan' });
     expect(submit).toBeDisabled();
 
     await user.click(screen.getByRole('radio', { name: /Paket 4 Sesi/ }));
     expect(submit).toBeEnabled();
+    // Tanpa dialog konfirmasi: satu tekan langsung membuat pesanan.
     await user.click(submit);
-    await user.click(await screen.findByRole('button', { name: 'Buat pesanan' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
 
     expect(vi.mocked(browserOrderClient.create).mock.calls[0]?.[6]).toBe('cp-2');
     expect(
@@ -340,6 +341,39 @@ describe('CheckoutView paket perpanjangan masa aktif', () => {
       </AppFeedbackProvider>,
     );
     expect(await screen.findByText('Belum ada paket aktif')).toBeVisible();
-    expect(screen.getByRole('button', { name: /Buat pesanan dan lanjutkan pembayaran/ })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Buat pesanan' })).toBeDisabled();
+  });
+
+  it('tombol Perpanjang 30 hari membawa target: paket itu langsung terpilih', async () => {
+    mockSearchParams.set('target', 'cp-2');
+    vi.mocked(browserOrderClient.checkout).mockResolvedValue(
+      options([target(), target({ customerPackageId: 'cp-2', packageName: 'Paket 4 Sesi' })]),
+    );
+    render(
+      <AppFeedbackProvider>
+        <CheckoutView />
+      </AppFeedbackProvider>,
+    );
+    expect(await screen.findByRole('radio', { name: /Paket 4 Sesi/ })).toBeChecked();
+    expect(screen.getByRole('radio', { name: /Paket 8 Sesi/ })).not.toBeChecked();
+    expect(screen.getByRole('button', { name: 'Buat pesanan' })).toBeEnabled();
+  });
+
+  it('target yang tidak boleh diperpanjang lagi diabaikan, member tetap memilih sendiri', async () => {
+    mockSearchParams.set('target', 'cp-1');
+    vi.mocked(browserOrderClient.checkout).mockResolvedValue(
+      options([
+        target({ extensionsUsed: 3, extensionsLeft: 0 }),
+        target({ customerPackageId: 'cp-2', packageName: 'Paket 4 Sesi' }),
+      ]),
+    );
+    render(
+      <AppFeedbackProvider>
+        <CheckoutView />
+      </AppFeedbackProvider>,
+    );
+    // Satu-satunya paket yang masih bisa diperpanjang terpilih otomatis seperti sebelumnya.
+    expect(await screen.findByRole('radio', { name: /Paket 4 Sesi/ })).toBeChecked();
+    expect(screen.getByRole('radio', { name: /Paket 8 Sesi/ })).not.toBeChecked();
   });
 });

@@ -1,8 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { ChevronRight, Flame, House } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { ChevronRight, Flame, Repeat } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
 import { AlertBanner } from '../components/app-feedback';
 import { ButtonLink } from '../components/actions';
 import { orderStatusLabels } from '@/lib/order-presenters';
@@ -67,6 +67,11 @@ type CustomerDashboardOverview = {
   generatedAt: string;
   upcomingBookings: Array<{
     id: string;
+    classSlotId: string;
+    customerPackageId: string | null;
+    kursiTeman?: boolean;
+    namaTeman?: string | null;
+    bisaTambahTeman?: boolean;
     status: string;
     className: string;
     branchName: string;
@@ -81,7 +86,17 @@ type CustomerDashboardOverview = {
     branchName: string;
     expiryAt: string;
     available: number;
+    reserved?: number;
   }>;
+  bookingLagi?: {
+    classSlotId: string;
+    className: string;
+    branchName: string;
+    timezone: string;
+    startAt: string;
+    endAt: string;
+    instructorName: string | null;
+  } | null;
   actionableOrders: Array<{
     id: string;
     packageName: string;
@@ -100,6 +115,9 @@ type CustomerDashboardOverview = {
 import { formatRupiah } from '../lib/formatters';
 import { VerificationStatusBanner } from '../components/verification-status-banner';
 import { UlasanInstruktur } from '../components/customer/ulasan-instruktur';
+import { AksiBooking } from '../components/customer/aksi-booking';
+import { ambilPenandaBerandaSegar } from '@/lib/beranda-segar';
+import { hrefPerpanjang } from './packages/packages-view';
 import type { UlasanInstrukturClient } from '@/api-clients/ulasan-instruktur-client';
 
 export function CustomerDashboard({
@@ -112,7 +130,7 @@ export function CustomerDashboard({
 }: {
   classCatalogClient?: PublicClassCatalogClient;
   packageCatalogClient?: PublicPackageCatalogClient;
-  bookingClient?: Pick<BookingClient, 'list'>;
+  bookingClient?: Partial<BookingClient> & Pick<BookingClient, 'list'>;
   /** Hanya untuk tes. */
   muatQr?: () => Promise<string>;
   ulasanClient?: Pick<UlasanInstrukturClient, 'tertunda' | 'kirim'>;
@@ -122,23 +140,47 @@ export function CustomerDashboard({
   const [overview, setOverview] = useState<CustomerDashboardOverview | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [katalog, setKatalog] = useState<PublicPackage[]>([]);
 
-  useEffect(() => {
-    fetch('/api/v1/me/dashboard', { credentials: 'include' })
+  const muat = useCallback((segar: boolean) => {
+    return fetch(`/api/v1/me/dashboard${segar ? '?segar=1' : ''}`, { credentials: 'include' })
       .then(async (response) => {
         if (!response.ok) throw new Error('DASHBOARD_UNAVAILABLE');
         return response.json() as Promise<CustomerDashboardOverview>;
       })
-      .then(setOverview)
-      .catch(() => setError('Ringkasan akun belum dapat dimuat. Silakan coba kembali.'))
+      .then((value) => {
+        setOverview(value);
+        setError('');
+      })
+      .catch(() =>
+        setError('Ringkasan akun belum dapat dimuat. Periksa koneksi internet, lalu muat ulang halaman.'),
+      )
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    void muat(ambilPenandaBerandaSegar());
+  }, [muat]);
+
+  const activeBranchId = session?.preferredBranch?.id ?? session?.branches?.[0]?.id ?? '';
+
+  useEffect(() => {
+    if (!activeBranchId) return;
+    let batal = false;
+    Promise.resolve()
+      .then(() => packageCatalogClient.list(activeBranchId))
+      .then((r) => !batal && setKatalog(Array.isArray(r?.items) ? r.items : []))
+      .catch(() => !batal && setKatalog([]));
+    return () => {
+      batal = true;
+    };
+  }, [activeBranchId, packageCatalogClient]);
 
   if (!session) return null;
   if (loading)
     return (
-      <section className="rounded-none border border-ed-line bg-white p-6 shadow-none">
-        <Skeleton label="Menyiapkan dashboard" />
+      <section className="rounded-dd-xl border border-dd-line bg-white p-6">
+        <Skeleton label="Menyiapkan Beranda" />
       </section>
     );
 
@@ -146,14 +188,11 @@ export function CustomerDashboard({
     overview?.verification?.status ??
     (session.identityVerificationStatus === 'APPROVED'
       ? 'APPROVED'
-      : session.identityVerificationStatus === 'PENDING'
-        ? 'PENDING'
-        : session.identityVerificationStatus === 'REJECTED'
-          ? 'REJECTED'
-          : 'ACTION_REQUIRED');
+      : session.identityVerificationStatus === 'REJECTED'
+        ? 'REJECTED'
+        : 'ACTION_REQUIRED');
   const rejectionReason = overview?.verification?.rejectionReason;
 
-  const activeBranchId = session.preferredBranch?.id ?? session.branches?.[0]?.id ?? '';
   // Member dengan paket aktif dibiarkan memilih studio di halaman jadwal: halaman itu membuka studio paketnya
   // bila studio utamanya tidak punya paket yang cocok. Tanpa paket, jadwal studio utama yang dibuka.
   const bookingHref =
@@ -161,88 +200,36 @@ export function CustomerDashboard({
       ? `/classes?branch=${encodeURIComponent(activeBranchId)}`
       : '/classes';
 
-  const nearestBooking = overview?.upcomingBookings?.[0];
-  const otherBookings = overview?.upcomingBookings?.slice(1) ?? [];
+  const upcoming = overview?.upcomingBookings ?? [];
+  const nearestBooking = upcoming[0];
+  const otherBookings = upcoming.slice(1);
   const firstName = session.displayName.trim().split(/\s+/)[0] ?? session.displayName;
   const homeStudio = session.preferredBranch?.name ?? session.branches?.[0]?.name;
   const nearest = nearestBooking
     ? formatBookingSchedule(nearestBooking.startAt, nearestBooking.endAt, nearestBooking.timezone)
     : null;
+  const paketPerpanjangan = katalog.find((item) => (item as { perpanjanganMasaAktif?: boolean }).perpanjanganMasaAktif);
+  const segarkan = () => {
+    void muat(true);
+  };
 
   return (
     <main className="space-y-6 font-sans" aria-labelledby="customer-dashboard-title">
       <header className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1
-            id="customer-dashboard-title"
-            className="m-0 text-[26px] font-semibold tracking-[-0.02em] text-dd-ink sm:text-[30px]"
-          >
-            Halo, {firstName}
-          </h1>
-        </div>
-        <ButtonLink href={bookingHref}>Booking kelas</ButtonLink>
+        <h1
+          id="customer-dashboard-title"
+          className="m-0 text-[28px] font-semibold tracking-[-0.02em] text-dd-ink sm:text-[32px]"
+        >
+          Halo, {firstName}
+        </h1>
+        <ButtonLink href={bookingHref} size="lg" className="text-base">
+          Booking kelas
+        </ButtonLink>
       </header>
 
-      {/* QR di paling atas: yang paling sering dibutuhkan member saat tiba di studio. */}
-      <QrKehadiran nama={session.displayName} peran="member" muat={muatQr} />
+      {error && <AlertBanner tone="danger" title="Beranda belum lengkap" message={error} />}
 
-      {/* Kelas yang baru dihadiri: minta nilai untuk instruktur selagi masih segar. */}
-      <UlasanInstruktur client={ulasanClient} />
-
-      {overview && overview.packages.length > 0 && (
-        <section aria-labelledby="my-packages" className="space-y-3">
-          <div className="flex items-center justify-between">
-            <h2 id="my-packages" className="m-0 text-xl font-semibold text-dd-ink">
-              Sisa paket saya
-            </h2>
-            <Link href="/account/packages" className="text-sm font-semibold text-dd-forest">
-              Lihat semua
-            </Link>
-          </div>
-          <ul className="m-0 grid list-none gap-3 p-0 sm:grid-cols-2">
-            {overview.packages.map((item) => (
-              <li
-                key={item.id}
-                className="flex items-center justify-between gap-4 rounded-dd-xl border border-dd-line bg-white p-5"
-              >
-                <span className="min-w-0">
-                  <strong className="block text-[16px] text-dd-ink">{item.packageName}</strong>
-                  <span className="block text-sm text-dd-muted">
-                    {item.branchName} · berlaku sampai{' '}
-                    {new Date(item.expiryAt).toLocaleDateString('id-ID', {
-                      day: 'numeric',
-                      month: 'short',
-                      year: 'numeric',
-                    })}
-                  </span>
-                </span>
-                <span className="shrink-0 text-right">
-                  <strong
-                    className={`block text-[34px] font-semibold leading-none tabular-nums ${
-                      item.available <= 1 ? 'text-dd-warning' : 'text-dd-forest'
-                    }`}
-                  >
-                    {item.available}
-                  </strong>
-                  <span className="block text-sm text-dd-muted">sesi tersisa</span>
-                </span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-
-      {error && (
-        <div className="grid gap-3">
-          <AlertBanner tone="danger" title="Dashboard belum lengkap" message={error} />
-          <div>
-            <ButtonLink href="/" variant="secondary" leadingIcon={<House className="size-4" />}>
-              Kunjungi situs utama
-            </ButtonLink>
-          </div>
-        </div>
-      )}
-
+      {/* 1. Yang perlu tindakan member lebih dulu: selfie, lalu pesanan yang belum dibayar. */}
       <VerificationStatusBanner
         status={verificationStatus}
         rejectionReason={rejectionReason}
@@ -253,45 +240,54 @@ export function CustomerDashboard({
         <Link
           href={`/checkout?order=${encodeURIComponent(order.id)}`}
           key={order.id}
-          className="flex items-center justify-between gap-3 rounded-dd-lg border border-dd-warning-line/60 bg-dd-warning-soft p-4 text-dd-ink no-underline"
+          className="flex min-h-16 items-center justify-between gap-3 rounded-dd-lg border border-dd-warning-line/60 bg-dd-warning-soft p-4 text-dd-ink no-underline"
         >
           <span>
-            <strong className="block text-[15px]">{order.packageName}</strong>
-            <span className="block text-sm text-dd-muted">
+            <strong className="block text-base">{order.packageName}</strong>
+            <span className="block text-base text-dd-muted">
               {order.branchName} · {orderStatusLabels[order.status]}
             </span>
           </span>
-          <strong className="shrink-0 text-[15px] text-dd-warning">
-            {formatRupiah(order.payableAmountRp)}
-          </strong>
+          <span className="shrink-0 text-right">
+            <strong className="block text-base text-dd-warning">{formatRupiah(order.payableAmountRp)}</strong>
+            <span className="block text-sm font-semibold text-dd-forest">
+              {order.status === 'PENDING' ? 'Lihat status' : 'Bayar sekarang'}
+            </span>
+          </span>
         </Link>
       ))}
 
+      {/* 2. Booking terdekat: QR untuk check-in dan semua tindakannya di satu kartu. */}
       {nearestBooking && nearest ? (
         <section
           aria-label="Booking terdekat"
-          className="rounded-dd-xl border border-dd-line bg-white p-5 sm:p-6"
+          className="space-y-4 rounded-dd-xl border border-dd-line bg-white p-5 sm:p-6"
         >
-          <p className="m-0 text-sm font-semibold text-dd-forest">Booking terdekat</p>
-          <h2 className="m-0 mt-1 text-[22px] font-semibold text-dd-ink">
-            {nearestBooking.className}
-          </h2>
-          <p className="m-0 mt-2 text-[17px] text-dd-ink">{nearest.date}</p>
-          <p className="m-0 text-[17px] text-dd-ink">{nearest.time}</p>
-          <p className="m-0 mt-1 text-[15px] text-dd-muted">{nearestBooking.branchName}</p>
-          <Link
-            href={`/bookings/${encodeURIComponent(nearestBooking.id)}`}
-            className="mt-3 block text-center text-[15px] font-semibold text-dd-forest underline"
-          >
-            Batalkan booking ini
-          </Link>
+          <div>
+            <p className="m-0 text-base font-semibold text-dd-forest">Booking terdekat</p>
+            <h2 className="m-0 mt-1 text-2xl font-semibold text-dd-ink">{nearestBooking.className}</h2>
+            <p className="m-0 mt-2 text-lg text-dd-ink">{nearest.date}</p>
+            <p className="m-0 text-lg font-semibold text-dd-ink">{nearest.time}</p>
+            <p className="m-0 mt-1 text-base text-dd-muted">{nearestBooking.branchName}</p>
+            {nearestBooking.kursiTeman && (
+              <p className="m-0 mt-1 text-base font-semibold text-dd-forest">
+                Kursi teman{nearestBooking.namaTeman ? `: ${nearestBooking.namaTeman}` : ''}
+              </p>
+            )}
+          </div>
+          <QrKehadiran nama={session.displayName} peran="member" muat={muatQr} />
+          <AksiBooking
+            booking={nearestBooking}
+            client={bookingClient as BookingClient}
+            onBerubah={segarkan}
+          />
         </section>
       ) : (
         <section
           aria-label="Booking terdekat"
           className="rounded-dd-xl border border-dashed border-dd-line bg-white p-5 text-center sm:p-6"
         >
-          <p className="m-0 text-[15px] text-dd-muted">
+          <p className="m-0 text-base text-dd-muted">
             {overview?.packages.length
               ? 'Belum ada booking mendatang. Pilih jadwal kelas untuk mulai latihan.'
               : 'Belum ada paket aktif. Kamu perlu paket sesi sebelum bisa booking kelas.'}
@@ -300,7 +296,8 @@ export function CustomerDashboard({
             <ButtonLink
               href={overview?.packages.length ? bookingHref : '/packages'}
               variant="secondary"
-              className="min-h-[44px]"
+              size="lg"
+              className="text-base"
             >
               {overview?.packages.length ? 'Lihat jadwal kelas' : 'Lihat pilihan paket'}
             </ButtonLink>
@@ -308,32 +305,41 @@ export function CustomerDashboard({
         </section>
       )}
 
+      {overview?.bookingLagi && overview.packages.length > 0 && (
+        <BookingLagi saran={overview.bookingLagi} />
+      )}
+
       {otherBookings.length > 0 && (
         <section aria-labelledby="other-bookings" className="space-y-3">
-          <h2 id="other-bookings" className="m-0 text-xl font-semibold text-dd-ink">
-            Booking lainnya
-          </h2>
+          <div className="flex items-center justify-between">
+            <h2 id="other-bookings" className="m-0 text-xl font-semibold text-dd-ink">
+              Booking lainnya
+            </h2>
+            <Link href="/bookings" className="inline-flex min-h-11 items-center text-base font-semibold text-dd-forest">
+              Semua booking
+            </Link>
+          </div>
           <ul className="m-0 grid list-none gap-2 p-0">
             {otherBookings.map((booking) => {
-              const jadwal = formatBookingSchedule(
-                booking.startAt,
-                booking.endAt,
-                booking.timezone,
-              );
+              const jadwal = formatBookingSchedule(booking.startAt, booking.endAt, booking.timezone);
               return (
-                <li key={booking.id}>
+                <li key={booking.id} className="space-y-3 rounded-dd-lg border border-dd-line bg-white p-4">
                   <Link
                     href={`/bookings/${encodeURIComponent(booking.id)}`}
-                    className="flex items-center justify-between gap-3 rounded-dd-lg border border-dd-line bg-white p-4 text-dd-ink no-underline hover:border-dd-forest"
+                    className="flex items-center justify-between gap-3 text-dd-ink no-underline"
                   >
                     <span>
-                      <strong className="block text-[15px]">{booking.className}</strong>
-                      <span className="block text-sm text-dd-muted">
+                      <strong className="block text-base">
+                        {booking.className}
+                        {booking.kursiTeman ? ` · Kursi teman${booking.namaTeman ? ` (${booking.namaTeman})` : ''}` : ''}
+                      </strong>
+                      <span className="block text-base text-dd-muted">
                         {jadwal.date} · {jadwal.time}
                       </span>
                     </span>
                     <ChevronRight className="size-5 shrink-0 text-dd-muted" aria-hidden="true" />
                   </Link>
+                  <AksiBooking booking={booking} client={bookingClient as BookingClient} onBerubah={segarkan} />
                 </li>
               );
             })}
@@ -341,11 +347,66 @@ export function CustomerDashboard({
         </section>
       )}
 
+      {/* 3. Sisa paket: angka sudah dikurangi sesi yang dibooking. */}
+      {overview && overview.packages.length > 0 && (
+        <section aria-labelledby="my-packages" className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 id="my-packages" className="m-0 text-xl font-semibold text-dd-ink">
+              Sisa paket saya
+            </h2>
+            <Link href="/account/packages" className="inline-flex min-h-11 items-center text-base font-semibold text-dd-forest">
+              Lihat semua
+            </Link>
+          </div>
+          <ul className="m-0 grid list-none gap-3 p-0 sm:grid-cols-2">
+            {overview.packages.map((item) => {
+              const perpanjang = hrefPerpanjang(item, paketPerpanjangan, now);
+              return (
+                <li key={item.id} className="space-y-3 rounded-dd-xl border border-dd-line bg-white p-5">
+                  <div className="flex items-center justify-between gap-4">
+                    <span className="min-w-0">
+                      <strong className="block text-lg text-dd-ink">{item.packageName}</strong>
+                      <span className="block text-base text-dd-muted">
+                        {item.branchName} · berlaku sampai{' '}
+                        {new Date(item.expiryAt).toLocaleDateString('id-ID', {
+                          day: 'numeric',
+                          month: 'short',
+                          year: 'numeric',
+                        })}
+                      </span>
+                      {Boolean(item.reserved) && (
+                        <span className="block text-base text-dd-muted">{item.reserved} sesi sudah dibooking</span>
+                      )}
+                    </span>
+                    <span className="shrink-0 text-right">
+                      <strong
+                        className={`block text-[34px] font-semibold leading-none tabular-nums ${
+                          item.available <= 1 ? 'text-dd-warning' : 'text-dd-forest'
+                        }`}
+                      >
+                        {item.available}
+                      </strong>
+                      <span className="block text-base text-dd-muted">sesi tersisa</span>
+                    </span>
+                  </div>
+                  {perpanjang && (
+                    <ButtonLink href={perpanjang} variant="secondary" size="lg" fullWidth className="text-base">
+                      Perpanjang 30 hari
+                    </ButtonLink>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
+
+      {/* Kelas yang baru dihadiri: minta nilai untuk instruktur selagi masih segar. */}
+      <UlasanInstruktur client={ulasanClient} />
+
       <RiwayatKelas client={bookingClient} />
 
-      {activeBranchId && (
-        <PromoHot branchId={activeBranchId} client={packageCatalogClient} now={now} />
-      )}
+      <PromoHot items={katalog} now={now} />
 
       {homeStudio && activeBranchId && (
         <WeekClasses
@@ -356,6 +417,28 @@ export function CustomerDashboard({
         />
       )}
     </main>
+  );
+}
+
+/** "Booking lagi": kelas yang sama minggu depan, langsung ke konfirmasi booking. */
+function BookingLagi({ saran }: { saran: NonNullable<CustomerDashboardOverview['bookingLagi']> }) {
+  const jadwal = formatBookingSchedule(saran.startAt, saran.endAt, saran.timezone);
+  return (
+    <Link
+      href={`/bookings/new?slot=${encodeURIComponent(saran.classSlotId)}`}
+      aria-label={`Booking lagi ${saran.className}, ${jadwal.full}`}
+      className="flex min-h-16 items-center gap-4 rounded-dd-xl border-2 border-dd-forest bg-dd-success-soft p-4 text-dd-ink no-underline hover:bg-white"
+    >
+      <Repeat className="size-6 shrink-0 text-dd-forest" aria-hidden="true" />
+      <span className="min-w-0 flex-1">
+        <strong className="block text-lg">Booking lagi: {saran.className}</strong>
+        <span className="block text-base text-dd-muted">
+          {jadwal.date} · {jadwal.time}
+          {saran.instructorName ? ` · ${saran.instructorName}` : ''}
+        </span>
+      </span>
+      <ChevronRight className="size-6 shrink-0 text-dd-forest" aria-hidden="true" />
+    </Link>
   );
 }
 
@@ -538,27 +621,8 @@ export function pilihPromoHot(items: readonly PublicPackage[], now: number): Pub
     .slice(0, 3);
 }
 
-function PromoHot({
-  branchId,
-  client,
-  now,
-}: {
-  branchId: string;
-  client: PublicPackageCatalogClient;
-  now: number;
-}) {
-  const [promo, setPromo] = useState<PublicPackage[]>([]);
-
-  useEffect(() => {
-    let batal = false;
-    Promise.resolve()
-      .then(() => client.list(branchId))
-      .then((r) => !batal && setPromo(pilihPromoHot(Array.isArray(r?.items) ? r.items : [], now)))
-      .catch(() => !batal && setPromo([]));
-    return () => {
-      batal = true;
-    };
-  }, [branchId, client, now]);
+function PromoHot({ items, now }: { items: readonly PublicPackage[]; now: number }) {
+  const promo = pilihPromoHot(items, now);
 
   if (promo.length === 0) return null;
 

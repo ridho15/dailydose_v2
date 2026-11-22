@@ -129,7 +129,7 @@ export function RegisterView() {
     if (session) {
       const searchParams = new URLSearchParams(window.location.search);
       const destination =
-        searchParams.get('returnTo') || searchParams.get('returnUrl') || '/account/profile';
+        searchParams.get('returnTo') || searchParams.get('returnUrl') || '/account';
       await session.completeSignIn(destination);
     }
   };
@@ -253,7 +253,8 @@ export function RegisterView() {
             });
             const searchParams = new URLSearchParams(window.location.search);
             const returnTo =
-              searchParams.get('returnTo') || searchParams.get('returnUrl') || '/classes#schedule';
+              // Akun baru langsung ke Beranda: dari sana tombol beli paket dan booking sudah terlihat.
+              searchParams.get('returnTo') || searchParams.get('returnUrl') || '/account';
             const completed = await session?.completeSignIn(returnTo);
             if (!completed) throw new Error('session');
           } catch (error) {

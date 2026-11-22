@@ -27,6 +27,8 @@ export type LedgerBalance = {
   allowedBranchIds?: string[] | 'SEMUA';
   isMultiBranch?: boolean;
   isShareable?: boolean;
+  /** Kursi teman yang boleh ditambahkan per kelas (paket bawa teman, atau 1 untuk paket bersama). */
+  maksTeman?: number;
   sharedWithUserIds?: string[];
   sharedMembers?: SharedPackageMember[];
   customer?: { id: string; displayName: string; phoneMasked: string | null };

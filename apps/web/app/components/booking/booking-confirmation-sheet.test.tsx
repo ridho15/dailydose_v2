@@ -383,12 +383,13 @@ describe('BookingConfirmationSheet (Tiket T-05 / Spesifikasi 5.3)', () => {
     );
   });
 
-  it("supports bring-a-friend input when package is shareable", async () => {
-    const shareablePackage: LedgerBalance = {
+  it("shows the friend field for a package with friend seats (maksTeman), and sends the name", async () => {
+    const paketBawaTeman: LedgerBalance = {
       ...mockPackage,
-      id: "pkg-shareable",
+      id: "pkg-bawa-teman",
       packageName: "Double Trouble Deal",
-      isShareable: true,
+      maksTeman: 1,
+      isShareable: false,
     };
 
     const mockBookingClient = {
@@ -405,14 +406,16 @@ describe('BookingConfirmationSheet (Tiket T-05 / Spesifikasi 5.3)', () => {
         isOpen={true}
         onClose={vi.fn()}
         slot={mockSlot}
-        packageItem={shareablePackage}
+        packageItem={paketBawaTeman}
         studioName="Daily Dose Kemang"
         bookingClient={mockBookingClient}
       />,
     );
 
-    const friendInput = screen.getByLabelText("Bawa Teman (Opsional)");
+    const friendInput = screen.getByLabelText("Datang bersama teman? (opsional)");
     expect(friendInput).toBeVisible();
+    // Kotak isian cukup besar untuk jari dan huruf 16 px.
+    expect(friendInput).toHaveClass("min-h-12", "text-base");
     await userEvent.type(friendInput, "Jessica");
 
     await userEvent.click(screen.getByRole("button", { name: "Konfirmasi booking sekarang" }));
@@ -420,11 +423,50 @@ describe('BookingConfirmationSheet (Tiket T-05 / Spesifikasi 5.3)', () => {
     expect(mockBookingClient.create).toHaveBeenCalledWith(
       expect.objectContaining({
         classSlotId: mockSlot.id,
-        customerPackageId: "pkg-shareable",
+        customerPackageId: "pkg-bawa-teman",
         namaTeman: "Jessica",
       }),
       expect.any(String),
     );
+  });
+
+  it("hides the friend field for a family/duet package without friend seats (isShareable only)", () => {
+    render(
+      <BookingConfirmationSheet
+        isOpen={true}
+        onClose={vi.fn()}
+        slot={mockSlot}
+        packageItem={{ ...mockPackage, isShareable: true, maksTeman: 0 }}
+        studioName="Daily Dose Kemang"
+        bookingClient={{ create: vi.fn() } as unknown as BookingClient}
+      />,
+    );
+    expect(screen.queryByLabelText("Datang bersama teman? (opsional)")).not.toBeInTheDocument();
+  });
+
+  it("closes with Esc, but not while the booking is being sent", async () => {
+    const onClose = vi.fn();
+    let selesai: (value: Booking) => void = () => undefined;
+    const mockBookingClient = {
+      create: vi.fn(() => new Promise<Booking>((resolve) => (selesai = resolve))),
+    } as unknown as BookingClient;
+    render(
+      <BookingConfirmationSheet
+        isOpen={true}
+        onClose={onClose}
+        slot={mockSlot}
+        packageItem={mockPackage}
+        studioName="Daily Dose Kemang"
+        bookingClient={mockBookingClient}
+      />,
+    );
+    await userEvent.keyboard("{Escape}");
+    expect(onClose).toHaveBeenCalledTimes(1);
+
+    await userEvent.click(screen.getByRole("button", { name: "Konfirmasi booking sekarang" }));
+    await userEvent.keyboard("{Escape}");
+    expect(onClose).toHaveBeenCalledTimes(1);
+    selesai({ id: "bk-1", status: "BOOKED", createdAt: new Date(), version: 1 } as Booking);
   });
 
   it("handles SCHEDULE_CONFLICT error with a clear Indonesian message", async () => {

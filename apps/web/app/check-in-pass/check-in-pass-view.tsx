@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import QRCode from 'qrcode';
 import { AlertCircle, ArrowLeft, CalendarX2, Check, Clock, Download, QrCode } from 'lucide-react';
+import { isInstructorOnlySession } from '@/lib/session-audience';
 import { useSessionContext } from '../session-context';
 
 function formatPassSchedule(startAtStr: string, endAtStr: string, timezone = 'Asia/Jakarta') {
@@ -45,8 +46,8 @@ function formatPassSchedule(startAtStr: string, endAtStr: string, timezone = 'As
   }
 }
 
-/** QR baru dapat dipindai 30 menit sebelum kelas (sama dengan aturan pemindaian di server). */
-const OPENS_BEFORE_MS = 30 * 60_000;
+/** QR dapat dipindai 45 menit sebelum kelas (sama dengan SCAN_OPENS_MINUTES_BEFORE di server). */
+const OPENS_BEFORE_MS = 45 * 60_000;
 const QR_UNAVAILABLE = 'Pass QR tidak valid atau sudah tidak tersedia.';
 
 interface PassInfo {
@@ -152,6 +153,7 @@ async function linkInfo(rawToken: string): Promise<PassInfo | null> {
 
 export function CheckInPassView() {
   const session = useSessionContext()?.session;
+  const instruktur = isInstructorOnlySession(session);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [payload, setPayload] = useState('');
   const [error, setError] = useState('');
@@ -318,11 +320,11 @@ export function CheckInPassView() {
   const state = info?.startAt && info.endAt ? passWindow(info, now) : null;
 
   return (
-    <main className="flex min-h-dvh min-w-0 flex-col items-center justify-center overflow-x-hidden bg-[#0d5132] px-4 py-8 text-white">
+    <main className="flex min-h-dvh min-w-0 flex-col items-center justify-center overflow-x-hidden bg-dd-forest px-4 py-8 text-white">
       <meta name="referrer" content="no-referrer" />
 
       <header className="text-center">
-        <p className="text-[13px] font-bold text-[#faeceb]">Daily Dose Pilates</p>
+        <p className="text-[13px] font-bold text-dd-danger-soft">Daily Dose Pilates</p>
         <h1 className="mt-1 font-serif text-2xl font-normal tracking-tight text-white sm:text-3xl">
           {statis ? 'QR kehadiran Anda' : 'QR Pass Kelas'}
         </h1>
@@ -345,7 +347,7 @@ export function CheckInPassView() {
           <div className="mt-6 space-y-2">
             <Link
               href="/classes#schedule"
-              className="inline-flex h-11 min-h-[44px] w-full items-center justify-center rounded-xl bg-[#396552] text-sm font-bold text-white transition hover:bg-[#2e5243]"
+              className="inline-flex h-11 min-h-[44px] w-full items-center justify-center rounded-xl bg-ed-green text-sm font-bold text-white transition hover:bg-ed-ink"
             >
               Lihat jadwal kelas
             </Link>
@@ -368,7 +370,7 @@ export function CheckInPassView() {
           <div className="mt-6">
             <Link
               href="/account"
-              className="inline-flex h-11 min-h-[44px] w-full items-center justify-center rounded-xl bg-[#396552] text-sm font-bold text-white transition hover:bg-[#2e5243]"
+              className="inline-flex h-11 min-h-[44px] w-full items-center justify-center rounded-xl bg-ed-green text-sm font-bold text-white transition hover:bg-ed-ink"
             >
               Kembali ke Beranda
             </Link>
@@ -383,7 +385,7 @@ export function CheckInPassView() {
                 data-pass-state={state}
                 className={`mb-4 flex items-start justify-center gap-2 rounded-xl border p-2.5 text-left text-xs font-semibold leading-relaxed ${
                   state === 'OPEN'
-                    ? 'border-[#396552]/30 bg-[#e8f1ec] text-[#1f4a37]'
+                    ? 'border-ed-green/30 bg-ed-tint text-ed-forest'
                     : 'border-amber-800/25 bg-amber-50 text-amber-900'
                 }`}
               >
@@ -394,7 +396,7 @@ export function CheckInPassView() {
                 )}
                 <span>
                   {state === 'TOO_EARLY' &&
-                    `Belum aktif. QR dapat dipindai mulai pukul ${formatOpensAt(info!.startAt, info!.timezone)} WIB, 30 menit sebelum kelas.`}
+                    `Belum aktif. QR dapat dipindai mulai pukul ${formatOpensAt(info!.startAt, info!.timezone)} WIB, 45 menit sebelum kelas.`}
                   {state === 'OPEN' && 'QR aktif. Tunjukkan ke petugas saat tiba di studio.'}
                   {state === 'ENDED' && 'Kelas sudah selesai. QR ini tidak berlaku lagi.'}
                 </span>
@@ -414,8 +416,9 @@ export function CheckInPassView() {
                     <h2 className="font-serif text-lg font-bold text-ed-ink">{passHolder}</h2>
                   )}
                   <p className="text-sm text-ed-muted">
-                    QR ini sama untuk semua kelas Anda. Kehadiran tercatat bila Anda punya kelas di
-                    studio itu, mulai 45 menit sebelum kelas sampai kelas selesai.
+                    {instruktur
+                      ? 'QR ini sama untuk semua kelas yang Anda ajar. Presensi tercatat bila staf memindainya mulai 45 menit sebelum kelas sampai 10 menit setelah kelas mulai. Lewat dari itu, presensi dicatat manual oleh admin.'
+                      : 'QR ini sama untuk semua kelas Anda. Kehadiran tercatat bila Anda punya kelas di studio itu, mulai 45 menit sebelum kelas sampai kelas selesai.'}
                   </p>
                 </>
               ) : info ? (
@@ -453,8 +456,8 @@ export function CheckInPassView() {
             </div>
 
             {!statis && (
-              <p className="mt-4 rounded-xl border border-[#396552]/20 bg-[#faeceb]/60 p-2.5 text-center text-xs leading-relaxed text-[#396552]">
-                Kode berlaku mulai 30 menit sebelum sesi dimulai hingga kelas selesai.
+              <p className="mt-4 rounded-xl border border-ed-green/20 bg-dd-danger-soft/60 p-2.5 text-center text-xs leading-relaxed text-ed-green">
+                Kode berlaku mulai 45 menit sebelum sesi dimulai hingga kelas selesai.
               </p>
             )}
 
@@ -462,7 +465,7 @@ export function CheckInPassView() {
               type="button"
               onClick={downloadQr}
               aria-label="Simpan ke galeri"
-              className="mt-4 inline-flex h-11 min-h-[44px] w-full items-center justify-center gap-2 rounded-xl bg-[#396552] px-6 text-sm font-bold text-white shadow-xs transition hover:bg-[#2e5243] active:scale-[0.99]"
+              className="mt-4 inline-flex h-11 min-h-[44px] w-full items-center justify-center gap-2 rounded-xl bg-ed-green px-6 text-sm font-bold text-white shadow-xs transition hover:bg-ed-ink active:scale-[0.99]"
             >
               {saved ? <Check className="size-4" /> : <Download className="size-4" />}
               <span>{saved ? 'Tersimpan di galeri ✓' : 'Simpan ke galeri'}</span>
@@ -477,8 +480,8 @@ export function CheckInPassView() {
 
           <nav className="mt-6">
             <Link
-              href="/account"
-              className="inline-flex items-center gap-2 text-sm font-medium text-white/80 transition hover:text-white"
+              href={instruktur ? '/workspace' : '/account'}
+              className="inline-flex min-h-11 items-center gap-2 text-sm font-medium text-white/80 transition hover:text-white"
             >
               <ArrowLeft className="size-4" />
               <span>Kembali ke Beranda</span>

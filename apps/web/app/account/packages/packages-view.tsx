@@ -14,6 +14,11 @@ import {
   type BookingClient,
   type CustomerBookingRecord,
 } from '@/api-clients/booking-client';
+import {
+  browserPublicPackageCatalogClient,
+  type PublicPackage,
+  type PublicPackageCatalogClient,
+} from '@/api-clients/public-package-catalog-client';
 import { Button, ButtonLink } from '../../components/actions';
 import { useStudioPreference } from '../../components/public/public-experience';
 import { SharedPackageMembersDialog } from '../../components/shared-package-members-dialog';
@@ -137,14 +142,32 @@ function KartuPesanan({ order, waHref }: { order: CustomerOrder; waHref: string 
   );
 }
 
+/** Masa aktif tinggal sebanyak ini atau kurang: tawarkan perpanjangan 30 hari. */
+export const BATAS_HARI_PERPANJANG = 14;
+
+/** Tautan checkout paket perpanjangan dengan paket member ini sudah terpilih sebagai target. */
+export function hrefPerpanjang(
+  item: { id: string; expiryAt: Date | string },
+  perpanjangan: Pick<PublicPackage, 'id' | 'branchId'> | null | undefined,
+  now: number,
+) {
+  if (!perpanjangan) return null;
+  const sisaHari = Math.ceil((new Date(item.expiryAt).getTime() - now) / 86_400_000);
+  if (sisaHari < 0 || sisaHari > BATAS_HARI_PERPANJANG) return null;
+  const query = new URLSearchParams({ package: perpanjangan.id, branch: perpanjangan.branchId, target: item.id });
+  return `/checkout?${query.toString()}`;
+}
+
 function KartuPaket({
   item,
   milikSendiri,
   onAnggota,
+  perpanjangHref,
 }: {
   item: LedgerBalance;
   milikSendiri: boolean;
   onAnggota(): void;
+  perpanjangHref?: string | null;
 }) {
   const hampirHabis = item.available > 0 && item.available <= 2;
   return (
@@ -179,6 +202,11 @@ function KartuPaket({
         >
           Booking kelas
         </ButtonLink>
+        {milikSendiri && perpanjangHref && (
+          <ButtonLink variant="secondary" href={perpanjangHref}>
+            Perpanjang 30 hari
+          </ButtonLink>
+        )}
         {item.isShareable && (
           <Button variant="secondary" onClick={onAnggota}>
             {milikSendiri ? `Kelola Anggota (${item.sharedMembers?.length ?? 0})` : 'Lihat Anggota Bersama'}
@@ -198,12 +226,35 @@ export function CustomerPackagesView({
   ledger = browserLedgerClient,
   orders = browserOrderClient,
   bookings = browserBookingClient,
+  katalog = browserPublicPackageCatalogClient,
+  now = Date.now(),
 }: {
   ledger?: Pick<LedgerClient, 'list'>;
   orders?: OrderClient;
   bookings?: Pick<BookingClient, 'list'>;
+  katalog?: Pick<PublicPackageCatalogClient, 'list'>;
+  now?: number;
 } = {}) {
   const session = useSessionContext();
+  const cabangUtama = session?.session?.preferredBranch?.id ?? session?.session?.branches?.[0]?.id ?? '';
+  const [paketPerpanjangan, setPaketPerpanjangan] = useState<PublicPackage | null>(null);
+  useEffect(() => {
+    if (!cabangUtama) return;
+    let batal = false;
+    Promise.resolve()
+      .then(() => katalog.list(cabangUtama))
+      .then((r) => {
+        if (batal) return;
+        const items = Array.isArray(r?.items) ? r.items : [];
+        setPaketPerpanjangan(
+          items.find((item) => (item as { perpanjanganMasaAktif?: boolean }).perpanjanganMasaAktif) ?? null,
+        );
+      })
+      .catch(() => !batal && setPaketPerpanjangan(null));
+    return () => {
+      batal = true;
+    };
+  }, [cabangUtama, katalog]);
   const currentUserId = session?.session?.id;
   const studio = useStudioPreference();
   const [paket, setPaket] = useState<LedgerBalance[] | null>(null);
@@ -325,6 +376,7 @@ export function CustomerPackagesView({
                 item={item}
                 milikSendiri={!item.customer?.id || item.customer.id === currentUserId}
                 onAnggota={() => setAnggota(item)}
+                perpanjangHref={hrefPerpanjang(item, paketPerpanjangan, now)}
               />
             ))}
           </ul>

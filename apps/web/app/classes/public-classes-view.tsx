@@ -28,6 +28,7 @@ import {
 } from '@/api-clients/ledger-client';
 import { browserBookingClient, type BookingClient } from '@/api-clients/booking-client';
 import { BookingConfirmationSheet } from '../components/booking/booking-confirmation-sheet';
+import { tandaiBerandaSegar } from '@/lib/beranda-segar';
 import { PublicFooter } from '../components/public/public-footer';
 import { PublicHeader } from '../components/public/public-header';
 import { useSessionContext } from '../session-context';
@@ -132,28 +133,23 @@ export function PublicClassesView({
   );
   const [bookedBySlot, setBookedBySlot] = useState<Map<string, string>>(() => new Map());
 
-  useEffect(() => {
-    let active = true;
-    if (session && inCustomerShell) {
-      ledgerClient
-        .list(undefined, undefined, undefined, 'ACTIVE', undefined, undefined, 100)
-        .then((res) => {
-          if (!active) return;
-          setCustomerPackages(
-            res.items.filter((item) => item.status === 'ACTIVE' && item.available > 0),
-          );
-        })
-        .catch(() => {
-          if (!active) return;
-          setCustomerPackages([]);
-        });
-    } else {
+  // Dipanggil saat halaman dibuka dan setelah booking berhasil: sisa sesi di bar paket langsung turun.
+  const muatPaket = useCallback(async () => {
+    if (!session || !inCustomerShell) {
+      setCustomerPackages([]);
+      return;
+    }
+    try {
+      const res = await ledgerClient.list(undefined, undefined, undefined, 'ACTIVE', undefined, undefined, 100);
+      setCustomerPackages(res.items.filter((item) => item.status === 'ACTIVE' && item.available > 0));
+    } catch {
       setCustomerPackages([]);
     }
-    return () => {
-      active = false;
-    };
   }, [session, inCustomerShell, ledgerClient]);
+
+  useEffect(() => {
+    void muatPaket();
+  }, [muatPaket]);
 
   const loadBookedSlots = useCallback(async () => {
     if (!isCustomer) {
@@ -538,8 +534,8 @@ export function PublicClassesView({
                     aria-pressed={isSelected}
                     className={`flex h-[64px] min-h-[64px] w-[56px] min-w-[56px] shrink-0 flex-col items-center justify-center rounded-dd-md transition-colors cursor-pointer ${
                       isSelected
-                        ? 'border-transparent bg-[#396552] text-white shadow-xs'
-                        : 'border-[1.5px] border-[#7a848f] bg-white text-dd-ink hover:bg-dd-surface-muted'
+                        ? 'border-transparent bg-ed-green text-white shadow-xs'
+                        : 'border-[1.5px] border-dd-line bg-white text-dd-ink hover:bg-dd-surface-muted'
                     }`}
                   >
                     <span
@@ -762,7 +758,7 @@ export function PublicClassesView({
                                   </h3>
                                   {isFull ? (
                                     <span
-                                      className="inline-flex items-center rounded-dd-sm border border-[#e8d5be] bg-[#fbf4eb] px-2 py-0.5 text-xs font-semibold text-[#8a5b17]"
+                                      className="inline-flex items-center rounded-dd-sm border border-dd-brass-soft bg-dd-warning-soft px-2 py-0.5 text-xs font-semibold text-dd-brass"
                                       aria-disabled="true"
                                     >
                                       Penuh, 0 slot
@@ -809,20 +805,20 @@ export function PublicClassesView({
                               {bookedId ? (
                                 <a
                                   href={`/bookings/${bookedId}`}
-                                  className="inline-flex min-h-[48px] w-full sm:w-auto items-center justify-center rounded-dd-md border-[1.5px] border-dd-border-interactive bg-white px-5 py-2.5 text-sm font-bold text-dd-forest shadow-xs transition hover:bg-dd-surface-muted focus-visible:outline focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-[#09371f]"
+                                  className="inline-flex min-h-[48px] w-full sm:w-auto items-center justify-center rounded-dd-md border-[1.5px] border-dd-border-interactive bg-white px-5 py-2.5 text-sm font-bold text-dd-forest shadow-xs transition hover:bg-dd-surface-muted focus-visible:outline focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-dd-forest-dark"
                                 >
                                   Lihat booking
                                 </a>
                               ) : isFull ? (
                                 <span
-                                  className="inline-flex min-h-[44px] w-full sm:w-auto items-center justify-center rounded-dd-md border border-[#e8d5be] bg-[#fbf4eb] px-4 py-2 text-xs font-bold text-[#8a5b17] pointer-events-none select-none cursor-not-allowed"
+                                  className="inline-flex min-h-[44px] w-full sm:w-auto items-center justify-center rounded-dd-md border border-dd-brass-soft bg-dd-warning-soft px-4 py-2 text-xs font-bold text-dd-brass pointer-events-none select-none cursor-not-allowed"
                                   aria-disabled="true"
                                 >
                                   Penuh, 0 slot
                                 </span>
                               ) : !actionable ? (
                                 <span
-                                  className="inline-flex min-h-[48px] w-full sm:w-auto items-center justify-center rounded-dd-md border border-dd-border-interactive bg-[#f8faf9] px-4 py-2 text-xs font-bold text-dd-muted pointer-events-none cursor-not-allowed"
+                                  className="inline-flex min-h-[48px] w-full sm:w-auto items-center justify-center rounded-dd-md border border-dd-border-interactive bg-dd-surface-muted px-4 py-2 text-xs font-bold text-dd-muted pointer-events-none cursor-not-allowed"
                                   aria-disabled="true"
                                 >
                                   Pemesanan ditutup
@@ -847,7 +843,7 @@ export function PublicClassesView({
                                       setIsBookingSheetOpen(true);
                                     }
                                   }}
-                                  className={`inline-flex min-h-[48px] w-full sm:w-auto items-center justify-center rounded-dd-md px-5 py-2.5 text-sm font-bold shadow-xs transition cursor-pointer focus-visible:outline focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-[#09371f] ${
+                                  className={`inline-flex min-h-[48px] w-full sm:w-auto items-center justify-center rounded-dd-md px-5 py-2.5 text-sm font-bold shadow-xs transition cursor-pointer focus-visible:outline focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-dd-forest-dark ${
                                     isCustomer && !matchingPkg
                                       ? 'border-[1.5px] border-dd-border-interactive bg-white text-dd-forest hover:bg-dd-surface-muted'
                                       : 'bg-dd-forest text-white hover:bg-dd-forest-dark'
@@ -881,7 +877,7 @@ export function PublicClassesView({
           role="dialog"
           aria-modal="true"
           aria-label="Pilih Lokasi Studio"
-          className="fixed inset-0 z-50 flex flex-col justify-end bg-[#111827]/45 backdrop-blur-xs"
+          className="fixed inset-0 z-50 flex flex-col justify-end bg-dd-ink/45 backdrop-blur-xs"
           onClick={() => setIsStudioSheetOpen(false)}
         >
           <div
@@ -940,7 +936,7 @@ export function PublicClassesView({
           role="dialog"
           aria-modal="true"
           aria-label="Pilih Tipe Kelas"
-          className="fixed inset-0 z-50 flex flex-col justify-end bg-[#111827]/45 backdrop-blur-xs"
+          className="fixed inset-0 z-50 flex flex-col justify-end bg-dd-ink/45 backdrop-blur-xs"
           onClick={() => setIsTypeSheetOpen(false)}
         >
           <div
@@ -1030,6 +1026,8 @@ export function PublicClassesView({
         onBookingSuccess={() => {
           if (branchId) void load(branchId);
           void loadBookedSlots();
+          void muatPaket();
+          tandaiBerandaSegar();
         }}
         onSlotUnavailable={() => {
           if (branchId) void load(branchId);

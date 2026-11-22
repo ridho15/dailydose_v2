@@ -4,6 +4,7 @@ import { axe } from 'vitest-axe';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { BookingClient, CustomerRescheduleOptions } from '@/api-clients/booking-client';
 import { BookingDetailView } from './booking-detail-view';
+import { AppFeedbackProvider } from '../../components/app-feedback';
 
 const sessionState = vi.hoisted(() => ({ context: null as any }));
 vi.mock('../../session-context', () => ({
@@ -90,44 +91,64 @@ const makeClient = (options: CustomerRescheduleOptions): BookingClient => ({
   decideReschedule: vi.fn(),
 });
 
-describe('BookingDetailView reschedule customer', () => {
+const tampilkan = (client: BookingClient) =>
+  render(
+    <AppFeedbackProvider>
+      <BookingDetailView id={bookingId} client={client} />
+    </AppFeedbackProvider>,
+  );
+
+const bolehBatal = { canCancel: true, unavailableReason: null, supportAction: null, cutoffAt: '2026-08-09T15:00:00Z' };
+const lewatBatas = {
+  canCancel: false,
+  unavailableReason: 'CANCELLATION_CUTOFF_PASSED',
+  supportAction: 'CONTACT_STUDIO',
+  cutoffAt: '2026-08-09T15:00:00Z',
+};
+
+describe('BookingDetailView: ganti jadwal dan pembatalan member', () => {
   beforeEach(() => {
     sessionState.context = null;
   });
 
-  it('submits an eligible request through an explicit confirmation step', async () => {
-    const client = makeClient(eligible);
-    vi.mocked(client.rescheduleOptions)
-      .mockResolvedValueOnce(eligible)
-      .mockResolvedValueOnce({
-        ...eligible,
-        canRequest: false,
-        unavailableReason: 'RESCHEDULE_PENDING',
-        latestRequest: request,
-        targets: [],
-      });
-    const view = render(<BookingDetailView id={bookingId} client={client} />);
+  it('ganti jadwal: tekan, pilih jam pengganti, Pindah; langsung terkirim tanpa tahap tinjau', async () => {
     const user = userEvent.setup();
+    const client = makeClient(eligible);
+    client.cancellationOptions = vi.fn().mockResolvedValue(bolehBatal);
+    tampilkan(client);
 
-    await user.click(await screen.findByRole('button', { name: 'Ajukan reschedule' }));
-    expect((await axe(view.container)).violations).toHaveLength(0);
-    await user.click(screen.getByRole('button', { name: 'Tinjau permintaan' }));
-    expect(screen.getByText('Konfirmasi perubahan jadwal')).toBeVisible();
-    await user.click(screen.getByRole('button', { name: 'Kirim permintaan' }));
+    await user.click(await screen.findByRole('button', { name: 'Ganti jadwal' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Ganti jadwal' });
+    await user.click(await within(dialog).findByRole('button', { name: /3 tempat tersisa/ }));
+    await user.click(within(dialog).getByRole('button', { name: 'Pindah ke jadwal ini' }));
 
-    expect(client.requestReschedule).toHaveBeenCalledWith(
-      {
-        bookingId,
-        targetClassSlotId: targetId,
-        reasonCode: 'PERSONAL_UNAVAILABLE',
-        expectedBookingVersion: 0,
-      },
-      expect.any(String),
+    await waitFor(() =>
+      expect(client.requestReschedule).toHaveBeenCalledWith(
+        expect.objectContaining({ bookingId, targetClassSlotId: targetId, expectedBookingVersion: 0 }),
+        expect.any(String),
+      ),
     );
-    expect(await screen.findByText('Reschedule sedang ditinjau')).toBeVisible();
+    // Detail dimuat ulang setelah pindah.
+    await waitFor(() => expect(client.detail).toHaveBeenCalledTimes(2));
   });
 
-  it('shows studio guidance after the inclusive cutoff has passed', async () => {
+  it('kegagalan pindah tetap di dalam dialog dengan pesan yang jelas', async () => {
+    const user = userEvent.setup();
+    const client = makeClient(eligible);
+    client.cancellationOptions = vi.fn().mockResolvedValue(bolehBatal);
+    vi.mocked(client.requestReschedule).mockRejectedValue({ code: 'SCHEDULE_CONFLICT' });
+    tampilkan(client);
+
+    await user.click(await screen.findByRole('button', { name: 'Ganti jadwal' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Ganti jadwal' });
+    await user.click(await within(dialog).findByRole('button', { name: /3 tempat tersisa/ }));
+    await user.click(within(dialog).getByRole('button', { name: 'Pindah ke jadwal ini' }));
+
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('bertabrakan');
+  });
+
+  it('lewat batas ganti jadwal: dialog mengarahkan ke Ajukan pembatalan', async () => {
+    const user = userEvent.setup();
     const client = makeClient({
       ...eligible,
       canRequest: false,
@@ -135,185 +156,74 @@ describe('BookingDetailView reschedule customer', () => {
       supportAction: 'CONTACT_STUDIO',
       targets: [],
     });
-    render(<BookingDetailView id={bookingId} client={client} />);
-    expect(await screen.findByText('Batas reschedule telah lewat')).toBeVisible();
-    expect(screen.queryByRole('button', { name: 'Ajukan reschedule' })).not.toBeInTheDocument();
+    client.cancellationOptions = vi.fn().mockResolvedValue(lewatBatas);
+    client.statusPembatalanSaya = vi.fn().mockResolvedValue({ bisaMengajukan: true, pengajuan: null });
+    tampilkan(client);
+
+    await user.click(await screen.findByRole('button', { name: 'Ganti jadwal' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Ganti jadwal' });
+    expect(await within(dialog).findByText(/hanya bisa sampai 12 jam sebelum kelas/)).toBeVisible();
+    expect(within(dialog).getByRole('button', { name: 'Ajukan pembatalan' })).toBeVisible();
   });
 
-  describe('cancel button follows what the API allows (T-16)', () => {
-    const cutoff = {
-      canCancel: false,
-      unavailableReason: 'CANCELLATION_CUTOFF_PASSED',
-      supportAction: 'CONTACT_STUDIO',
-      cutoffAt: '2026-08-09T03:00:00Z',
-    };
-    const withCancelCheck = (result: unknown) => {
-      const client = makeClient(eligible);
-      client.cancellationOptions = result instanceof Error ? vi.fn().mockRejectedValue(result) : vi.fn().mockResolvedValue(result);
-      return client;
-    };
-
-    it('offers the button while cancelling is still possible', async () => {
-      const client = withCancelCheck({ ...cutoff, canCancel: true, unavailableReason: null, supportAction: null });
-      render(<BookingDetailView id={bookingId} client={client} />);
-      expect(await screen.findByRole('button', { name: 'Batalkan booking' })).toBeVisible();
-      expect(client.cancellationOptions).toHaveBeenCalledWith(bookingId);
-    });
-
-    it('states the self-service limit from the API cutoff, not a fixed H-24', async () => {
-      // Kelas mulai 2026-08-10T03:00Z, cutoff 12 jam sebelumnya.
-      const client = withCancelCheck({ ...cutoff, canCancel: true, unavailableReason: null, supportAction: null, cutoffAt: '2026-08-09T15:00:00Z' });
-      render(<BookingDetailView id={bookingId} client={client} />);
-      expect(await screen.findByText(/dapat dilakukan paling lambat 12 jam sebelum kelas dimulai\./)).toBeVisible();
-      expect(screen.queryByText(/H-24/)).not.toBeInTheDocument();
-    });
-
-    it('hides the button after the cutoff and says why, with the time', async () => {
-      render(<BookingDetailView id={bookingId} client={withCancelCheck(cutoff)} />);
-      expect(await screen.findByRole('note')).toHaveTextContent(/Batas pembatalan mandiri ditutup pada/);
-      expect(screen.getByRole('note')).toHaveTextContent(/Hubungi studio/);
-      expect(screen.queryByRole('button', { name: 'Batalkan booking' })).not.toBeInTheDocument();
-    });
-
-    it('does not repeat the explanation when the reschedule banner already gives it', async () => {
-      const client = withCancelCheck(cutoff);
-      vi.mocked(client.rescheduleOptions).mockResolvedValue({
-        ...eligible,
-        canRequest: false,
-        unavailableReason: 'RESCHEDULE_CUTOFF_PASSED',
-        supportAction: 'CONTACT_STUDIO',
-        targets: [],
-      });
-      render(<BookingDetailView id={bookingId} client={client} />);
-      expect(await screen.findByText('Batas reschedule telah lewat')).toBeVisible();
-      expect(screen.queryByRole('button', { name: 'Batalkan booking' })).not.toBeInTheDocument();
-      expect(screen.queryByRole('note')).not.toBeInTheDocument();
-    });
-
-    it('keeps the button when the check itself fails, so the server still decides', async () => {
-      render(<BookingDetailView id={bookingId} client={withCancelCheck(new Error('offline'))} />);
-      expect(await screen.findByRole('button', { name: 'Batalkan booking' })).toBeVisible();
-    });
-
-    it('executes cancellation successfully and shows success message with quota refund note', async () => {
-      const client = withCancelCheck({ ...cutoff, canCancel: true, unavailableReason: null, supportAction: null });
-      render(<BookingDetailView id={bookingId} client={client} />);
-      const user = userEvent.setup();
-
-      await user.click(await screen.findByRole('button', { name: 'Batalkan booking' }));
-      expect(screen.getByText('Konfirmasi Pembatalan Booking')).toBeVisible();
-      expect(screen.getByText(/Kuota sesi paket Anda akan otomatis dikembalikan secara utuh/)).toBeVisible();
-
-      await user.click(screen.getByRole('button', { name: 'Ya, Batalkan' }));
-      expect(client.cancel).toHaveBeenCalledWith(bookingId);
-      expect(await screen.findByText('Booking berhasil dibatalkan')).toBeVisible();
-      expect(screen.getByText(/Kuota sesi paket Anda telah dikembalikan secara utuh/)).toBeVisible();
-    });
-
-    it('displays cutoff error in dialog when cancellation cutoff passes during submission', async () => {
-      const client = withCancelCheck({ ...cutoff, canCancel: true, unavailableReason: null, supportAction: null });
-      vi.mocked(client.cancel!).mockRejectedValueOnce({ code: 'CANCELLATION_CUTOFF_PASSED' });
-      render(<BookingDetailView id={bookingId} client={client} />);
-      const user = userEvent.setup();
-
-      await user.click(await screen.findByRole('button', { name: 'Batalkan booking' }));
-      await user.click(screen.getByRole('button', { name: 'Ya, Batalkan' }));
-
-      expect(
-        await screen.findByText(
-          'Batas waktu pembatalan mandiri (24 jam sebelum kelas dimulai) telah terlewati. Hubungi admin studio jika terdapat kondisi darurat medis.',
-        ),
-      ).toBeVisible();
-    });
-
-    it('displays error in dialog when attendance has already been recorded', async () => {
-      const client = withCancelCheck({ ...cutoff, canCancel: true, unavailableReason: null, supportAction: null });
-      vi.mocked(client.cancel!).mockRejectedValueOnce({ code: 'ATTENDANCE_RECORDED' });
-      render(<BookingDetailView id={bookingId} client={client} />);
-      const user = userEvent.setup();
-
-      await user.click(await screen.findByRole('button', { name: 'Batalkan booking' }));
-      await user.click(screen.getByRole('button', { name: 'Ya, Batalkan' }));
-
-      expect(
-        await screen.findByText(
-          'Kehadiran kelas sudah tercatat atau sesi telah berjalan. Booking tidak dapat dibatalkan.',
-        ),
-      ).toBeVisible();
-    });
-  });
-
-  it('keeps booking detail readable while reschedule policy is disabled', async () => {
-    const client = makeClient(eligible);
-    vi.mocked(client.rescheduleOptions).mockRejectedValue({ code: 'CONFIGURATION_REQUIRED' });
-    render(<BookingDetailView id={bookingId} client={client} />);
-
-    expect(await screen.findByRole('heading', { name: 'Reformer' })).toBeVisible();
-    expect(screen.getByText('Perubahan jadwal sedang tidak tersedia')).toBeVisible();
-    expect(screen.getByText(/Booking Anda tetap aktif/)).toBeVisible();
-    expect(screen.queryByText('Permintaan belum dapat diproses')).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Coba lagi' })).toBeVisible();
-    expect(screen.getByRole('link', { name: 'Hubungi studio' })).toHaveAttribute(
-      'href',
-      '/contact',
-    );
-  });
-
-  it('retries only reschedule options without reloading booking detail', async () => {
-    const client = makeClient(eligible);
-    vi.mocked(client.rescheduleOptions)
-      .mockRejectedValueOnce({ code: 'OFFLINE_OR_REQUEST_FAILED' })
-      .mockResolvedValueOnce(eligible);
-    render(<BookingDetailView id={bookingId} client={client} />);
+  it('sebelum batas: Batalkan memakai dialog konfirmasi lalu memanggil server', async () => {
     const user = userEvent.setup();
+    const client = makeClient(eligible);
+    client.cancellationOptions = vi.fn().mockResolvedValue(bolehBatal);
+    tampilkan(client);
 
-    await user.click(await screen.findByRole('button', { name: 'Coba lagi' }));
-    expect(await screen.findByRole('button', { name: 'Ajukan reschedule' })).toBeVisible();
-    expect(client.detail).toHaveBeenCalledTimes(1);
-    expect(client.rescheduleOptions).toHaveBeenCalledTimes(2);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Batalkan' })).toBeEnabled());
+    await user.click(screen.getByRole('button', { name: 'Batalkan' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Batalkan booking ini?' });
+    await user.click(within(dialog).getByRole('button', { name: 'Ya, batalkan' }));
+
+    await waitFor(() => expect(client.cancel).toHaveBeenCalledWith(bookingId, expect.any(String), expect.any(String)));
+  });
+
+  it('Esc menutup dialog batal', async () => {
+    const user = userEvent.setup();
+    const client = makeClient(eligible);
+    client.cancellationOptions = vi.fn().mockResolvedValue(bolehBatal);
+    tampilkan(client);
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Batalkan' })).toBeEnabled());
+    await user.click(screen.getByRole('button', { name: 'Batalkan' }));
+    await screen.findByRole('dialog', { name: 'Batalkan booking ini?' });
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Batalkan booking ini?' })).not.toBeInTheDocument());
+    expect(client.cancel).not.toHaveBeenCalled();
+  });
+
+  it('pengajuan pembatalan yang menunggu keputusan ditampilkan, tombolnya tidak ditawarkan lagi', async () => {
+    const client = makeClient(eligible);
+    client.cancellationOptions = vi.fn().mockResolvedValue(lewatBatas);
+    client.statusPembatalanSaya = vi.fn().mockResolvedValue({
+      bisaMengajukan: false,
+      pengajuan: { id: 'req-1', status: 'PENDING', diajukanPada: '2026-08-10T00:00:00Z' },
+    });
+    tampilkan(client);
+
+    expect(await screen.findByText(/Pengajuan pembatalan sudah terkirim/)).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Ajukan pembatalan' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Batalkan' })).not.toBeInTheDocument();
+  });
+
+  it('menyebut batas dari cutoff API, bukan angka tetap', async () => {
+    const client = makeClient(eligible);
+    client.cancellationOptions = vi.fn().mockResolvedValue({ ...bolehBatal, cutoffAt: '2026-08-09T15:00:00Z' });
+    tampilkan(client);
+    expect(await screen.findByText(/sampai 12 jam sebelum kelas dimulai/)).toBeVisible();
   });
 
   it('shows a blocking error only when booking detail cannot be loaded', async () => {
     const client = makeClient(eligible);
     vi.mocked(client.detail).mockRejectedValue({ code: 'RESOURCE_NOT_FOUND' });
-    render(<BookingDetailView id={bookingId} client={client} />);
+    tampilkan(client);
 
     expect(await screen.findByRole('heading', { name: 'Booking tidak tersedia' })).toBeVisible();
     expect(screen.getByText('Detail belum dapat dimuat')).toBeVisible();
     expect(screen.queryByRole('heading', { name: 'Reformer' })).not.toBeInTheDocument();
     expect(client.rescheduleOptions).not.toHaveBeenCalled();
-  });
-
-  it('keeps submit failures inside the reschedule form', async () => {
-    const client = makeClient(eligible);
-    vi.mocked(client.requestReschedule).mockRejectedValue({ code: 'TARGET_CLASS_FULL' });
-    render(<BookingDetailView id={bookingId} client={client} />);
-    const user = userEvent.setup();
-
-    await user.click(await screen.findByRole('button', { name: 'Ajukan reschedule' }));
-    await user.click(screen.getByRole('button', { name: 'Tinjau permintaan' }));
-    await user.click(screen.getByRole('button', { name: 'Kirim permintaan' }));
-
-    const form = screen.getByRole('form', { name: 'Pengajuan reschedule' });
-    expect(await within(form).findByText('Permintaan belum dapat diproses')).toBeVisible();
-    expect(within(form).getByText('Kelas tujuan sudah penuh.')).toBeVisible();
-  });
-
-  it('displays schedule conflict error inside the reschedule form', async () => {
-    const client = makeClient(eligible);
-    vi.mocked(client.requestReschedule).mockRejectedValue({ code: 'SCHEDULE_CONFLICT' });
-    render(<BookingDetailView id={bookingId} client={client} />);
-    const user = userEvent.setup();
-
-    await user.click(await screen.findByRole('button', { name: 'Ajukan reschedule' }));
-    await user.click(screen.getByRole('button', { name: 'Tinjau permintaan' }));
-    await user.click(screen.getByRole('button', { name: 'Kirim permintaan' }));
-
-    const form = screen.getByRole('form', { name: 'Pengajuan reschedule' });
-    expect(await within(form).findByText('Permintaan belum dapat diproses')).toBeVisible();
-    expect(
-      within(form).getByText('Jadwal kelas bertabrakan dengan jadwal kelas lain yang sudah Anda ikuti.'),
-    ).toBeVisible();
   });
 
   it('does not request reschedule options without the customer capability', async () => {
@@ -323,11 +233,18 @@ describe('BookingDetailView reschedule customer', () => {
       hasCapability: () => false,
     };
     const client = makeClient(eligible);
-    render(<BookingDetailView id={bookingId} client={client} />);
+    tampilkan(client);
 
     expect(await screen.findByRole('heading', { name: 'Reformer' })).toBeVisible();
     await waitFor(() => expect(client.detail).toHaveBeenCalledTimes(1));
     expect(client.rescheduleOptions).not.toHaveBeenCalled();
-    expect(screen.queryByText('Perubahan jadwal sedang tidak tersedia')).not.toBeInTheDocument();
+  });
+
+  it('has no accessibility violations on the detail page', async () => {
+    const client = makeClient(eligible);
+    client.cancellationOptions = vi.fn().mockResolvedValue(bolehBatal);
+    const { container } = tampilkan(client);
+    await screen.findByRole('button', { name: 'Ganti jadwal' });
+    expect((await axe(container)).violations).toEqual([]);
   });
 });

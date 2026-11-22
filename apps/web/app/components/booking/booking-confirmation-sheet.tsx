@@ -23,6 +23,7 @@ import type { PublicClassSlot } from '@/api-clients/public-class-catalog-client'
 import type { LedgerBalance } from '@/api-clients/ledger-client';
 import type { UlasanInstrukturClient } from '@/api-clients/ulasan-instruktur-client';
 import { UlasanInstruktur } from '../customer/ulasan-instruktur';
+import { tandaiBerandaSegar } from '@/lib/beranda-segar';
 
 function formatFullDate(dateStr: string, timezone: string) {
   try {
@@ -126,6 +127,16 @@ export function BookingConfirmationSheet({
     }
   }, [isOpen, slot?.id, packageItem?.id, availablePkgIds, isVerified]);
 
+  // Esc menutup lembar seperti dialog lain; tidak saat booking sedang dikirim (kunci loading).
+  useEffect(() => {
+    if (!isOpen) return;
+    const tekan = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !isSubmittingRef.current) onClose();
+    };
+    window.addEventListener('keydown', tekan);
+    return () => window.removeEventListener('keydown', tekan);
+  }, [isOpen, onClose]);
+
   if (!isOpen || !slot) return null;
 
   const hasActionFooter = status !== 'success' && status !== 'slot_full' && status !== 'unverified';
@@ -156,6 +167,7 @@ export function BookingConfirmationSheet({
 
       setBookingResult(result);
       setStatus('success');
+      tandaiBerandaSegar();
       onBookingSuccess?.(result);
     } catch (err: unknown) {
       const problem = await bookingProblem(err);
@@ -195,7 +207,7 @@ export function BookingConfirmationSheet({
       role="dialog"
       aria-modal="true"
       aria-labelledby="booking-sheet-title"
-      className="fixed inset-0 z-50 flex flex-col justify-end bg-[#111827]/45 backdrop-blur-xs transition-opacity"
+      className="fixed inset-0 z-50 flex flex-col justify-end bg-dd-ink/45 backdrop-blur-xs transition-opacity"
       onClick={handleOverlayClick}
     >
       <div
@@ -282,7 +294,7 @@ export function BookingConfirmationSheet({
             /* KEADAAN 4A: SLOT HABIS (FULL CONCURRENCY 409) */
             /* ======================================================== */
             <div className="space-y-5 text-center py-2" aria-live="polite">
-              <div className="inline-flex size-14 items-center justify-center rounded-full bg-[#fbf4eb] text-[#8a5b17] border border-[#e8d5be] mx-auto">
+              <div className="inline-flex size-14 items-center justify-center rounded-full bg-dd-warning-soft text-dd-brass border border-dd-brass-soft mx-auto">
                 <AlertTriangle className="size-8" />
               </div>
               <div>
@@ -292,7 +304,7 @@ export function BookingConfirmationSheet({
                 >
                   Slot kelas ini baru saja penuh
                 </h2>
-                <p className="mt-2 text-sm text-[#8a5b17] leading-relaxed">
+                <p className="mt-2 text-sm text-dd-brass leading-relaxed">
                   Slot kelas ini baru saja penuh. Pilih jam lain di hari yang sama.
                 </p>
               </div>
@@ -312,7 +324,7 @@ export function BookingConfirmationSheet({
             /* KEADAAN 4B: BELUM VERIFIKASI IDENTITAS */
             /* ======================================================== */
             <div className="space-y-5 text-center py-2" aria-live="polite">
-              <div className="inline-flex size-14 items-center justify-center rounded-full bg-dd-surface-muted text-[#27607c] mx-auto">
+              <div className="inline-flex size-14 items-center justify-center rounded-full bg-dd-surface-muted text-dd-info mx-auto">
                 <ShieldAlert className="size-8" />
               </div>
               <div>
@@ -412,14 +424,14 @@ export function BookingConfirmationSheet({
               </div>
 
               {/* Kotak #e8f0ec berisi nama paket dan sisa sesi setelah booking */}
-              <div className="rounded-dd-md border border-dd-forest/20 bg-[#e8f0ec] p-4 space-y-2">
+              <div className="rounded-dd-md border border-dd-forest/20 bg-ed-tint p-4 space-y-2">
                 <span className="text-[13px] font-bold text-dd-forest">Paket yang Digunakan</span>
 
                 {availablePackages.length > 1 ? (
                   <div className="space-y-2 pt-1">
                     {availablePackages.map((pkg) => {
                       const isChecked = selectedPkgId === pkg.id;
-                      const remainingAfter = Math.max(0, pkg.available - 1);
+                      const remainingAfter = Math.max(0, pkg.available - (namaTeman.trim() ? 2 : 1));
                       return (
                         <label
                           key={pkg.id}
@@ -456,7 +468,7 @@ export function BookingConfirmationSheet({
                       </strong>
                       <p className="mt-1 text-xs text-dd-forest font-medium">
                         Sisa sesi setelah booking:{' '}
-                        <strong>{Math.max(0, currentPkg.available - 1)} sesi</strong> (dari{' '}
+                        <strong>{Math.max(0, currentPkg.available - (namaTeman.trim() ? 2 : 1))} sesi</strong> (dari{' '}
                         {currentPkg.available} sesi aktif).
                       </p>
                     </div>
@@ -472,22 +484,26 @@ export function BookingConfirmationSheet({
                   </div>
                 )}
 
-                {currentPkg?.isShareable && (
+                {Boolean(currentPkg?.maksTeman) && (
                   <div className="pt-2 border-t border-dd-forest/20 space-y-1.5">
-                    <label htmlFor="booking-sheet-friend-name" className="block text-xs font-semibold text-dd-forest">
-                      Bawa Teman (Opsional)
+                    <label htmlFor="booking-sheet-friend-name" className="block text-base font-semibold text-dd-forest">
+                      Datang bersama teman? (opsional)
                     </label>
+                    <p className="m-0 text-sm text-dd-muted">
+                      Isi nama teman bila ia ikut. Kursinya dibuat sekaligus dan memakai 1 sesi paket Anda.
+                    </p>
                     <input
                       id="booking-sheet-friend-name"
                       type="text"
                       value={namaTeman}
+                      maxLength={128}
                       onChange={(e) => {
                         setNamaTeman(e.target.value);
                         setErrorMessage('');
                       }}
-                      placeholder="Nama teman Anda (jika mendaftarkan teman)"
+                      placeholder="Nama teman"
                       disabled={status === 'submitting'}
-                      className="w-full min-h-10 rounded-dd-md border border-dd-forest/30 bg-white px-3 py-1.5 text-xs text-dd-ink placeholder:text-dd-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#09371f]"
+                      className="w-full min-h-12 rounded-dd-md border border-dd-forest/30 bg-white px-3 py-2 text-base text-dd-ink placeholder:text-dd-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-dd-forest-dark"
                     />
                   </div>
                 )}

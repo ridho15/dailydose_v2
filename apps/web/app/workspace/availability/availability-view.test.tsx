@@ -111,6 +111,8 @@ describe('AvailabilityView', () => {
     const client = makeClient();
     renderView(client);
     await waitFor(() => expect(client.list).toHaveBeenCalled());
+    // Grid Pagi/Siang/Sore memuat minggunya sendiri; yang diuji di sini daftar dimuat ulang sekali lagi.
+    await waitFor(() => expect(client.list).toHaveBeenCalledTimes(2));
 
     await user.type(screen.getByLabelText('Tanggal'), '2026-12-01');
     await user.type(screen.getByLabelText('Mulai'), '08:00');
@@ -125,7 +127,7 @@ describe('AvailabilityView', () => {
       expect.objectContaining({ branchId: 'branch-1' }),
     );
     expect(await screen.findByText('Ketersediaan berhasil diajukan.')).toBeVisible();
-    expect(client.list).toHaveBeenCalledTimes(2);
+    expect(client.list).toHaveBeenCalledTimes(3);
   });
 
   it('surfaces the overlap conflict message from the API', async () => {

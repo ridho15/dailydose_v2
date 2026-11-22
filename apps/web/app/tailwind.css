@@ -48,6 +48,8 @@
   --color-dd-danger-soft: #faeceb;
   --color-dd-info: #35677b;
   --color-dd-info-soft: #e7f0f3;
+  /* Hijau tombol WhatsApp di situs publik. */
+  --color-dd-whatsapp: #1f8f5f;
   --color-admin-group: #4b5563;
   --color-admin-line: #7a848f;
 
