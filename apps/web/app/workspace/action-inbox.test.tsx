@@ -118,6 +118,29 @@ describe('ActionInbox', () => {
     await waitFor(() => expect(screen.queryByText('Rina')).toBeNull());
   });
 
+  it('QRIS yang dicatat staf tanpa gambar bukti tetap bisa disetujui', async () => {
+    const user = userEvent.setup();
+    const c = setup([item({ id: 'p-1', metode: 'QRIS', buktiAda: false })]);
+    c.purchaseClient.detail.mockResolvedValue({
+      purchase: { ...purchase, paymentMethod: 'QRIS', paymentProof: null },
+    });
+    await user.click(await screen.findByRole('button', { name: 'Periksa bukti' }));
+    const viewer = await screen.findByRole('dialog', { name: 'Bukti transfer Rina' });
+    expect(await within(viewer).findByText(/dicatat staf di meja tanpa gambar bukti/)).toBeVisible();
+    expect(within(viewer).getByRole('button', { name: 'Setujui dan aktifkan paket' })).toBeEnabled();
+    expect(c.purchaseClient.loadProof).not.toHaveBeenCalled();
+  });
+
+  it('transfer bank tanpa bukti tidak bisa disetujui dari penampil', async () => {
+    const user = userEvent.setup();
+    const c = setup([item({ id: 'p-1' })]);
+    c.purchaseClient.detail.mockResolvedValue({ purchase: { ...purchase, paymentProof: null } });
+    await user.click(await screen.findByRole('button', { name: 'Periksa bukti' }));
+    const viewer = await screen.findByRole('dialog', { name: 'Bukti transfer Rina' });
+    expect(await within(viewer).findByText(/Bukti transfer belum ada/)).toBeVisible();
+    expect(within(viewer).getByRole('button', { name: 'Setujui dan aktifkan paket' })).toBeDisabled();
+  });
+
   it('transfer dibatalkan dalam 10 detik: tidak ada yang dikirim', async () => {
     const user = userEvent.setup();
     const c = setup([item({ id: 'p-1', buktiAda: true })]);

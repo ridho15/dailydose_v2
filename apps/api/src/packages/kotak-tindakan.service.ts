@@ -241,17 +241,30 @@ export class KotakTindakanService {
 
     if (jenis === 'TRANSFER' || jenis === 'PENJUALAN_LANGSUNG') {
       const transfer = jenis === 'TRANSFER';
-      const where: Prisma.PembelianWhereInput = {
-        status: { in: STATUS_MENUNGGU },
-        paymentMethod: { in: [...(transfer ? METODE_TRANSFER : METODE_LANGSUNG)] },
-        ...(cabang ? { branchId: cabang } : {}),
-        // Transfer baru bisa diputus setelah bukti diunggah; yang belum ada bukti masih menunggu member.
-        ...(transfer ? { paymentProof: { isNot: null } } : {}),
-        // Pemisahan tugas: pembeli dan pencatat tidak memutus transaksinya sendiri.
-        ...(bebasPisah
-          ? {}
-          : { userId: { not: saya }, OR: [{ recordedById: null }, { recordedById: { not: saya } }] }),
-      };
+      const syarat: Prisma.PembelianWhereInput[] = [
+        {
+          status: { in: STATUS_MENUNGGU },
+          paymentMethod: { in: [...(transfer ? METODE_TRANSFER : METODE_LANGSUNG)] },
+          ...(cabang ? { branchId: cabang } : {}),
+        },
+      ];
+      // Transfer baru bisa diputus setelah bukti diunggah; yang belum ada bukti masih menunggu
+      // member. QRIS yang dicatat staf di meja boleh tanpa gambar bukti (server hanya mewajibkan
+      // bukti untuk transfer bank).
+      if (transfer)
+        syarat.push({
+          OR: [
+            { paymentProof: { isNot: null } },
+            { paymentMethod: 'QRIS', recordedById: { not: null } },
+          ],
+        });
+      // Pemisahan tugas: pembeli dan pencatat tidak memutus transaksinya sendiri.
+      if (!bebasPisah)
+        syarat.push(
+          { userId: { not: saya } },
+          { OR: [{ recordedById: null }, { recordedById: { not: saya } }] },
+        );
+      const where: Prisma.PembelianWhereInput = { AND: syarat };
       const [jumlah, rows] = await Promise.all([
         this.db.pembelian.count({ where }),
         this.db.pembelian.findMany({

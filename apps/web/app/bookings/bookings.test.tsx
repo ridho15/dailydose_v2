@@ -216,7 +216,7 @@ describe('BookingView', () => {
     expect(create.mock.calls[0]?.[1]).toBe(create.mock.calls[1]?.[1]);
   });
 
-  it('lets authorised staff cancel a booking with a mandatory reason and maps the H-24 rule', async () => {
+  it('lets authorised staff cancel a booking with a mandatory reason and maps the H-12 rule', async () => {
     const withCustomer = {
       ...booking,
       customer: { id: customerId, displayName: 'Customer Synthetic' },
@@ -253,7 +253,7 @@ describe('BookingView', () => {
     await user.type(screen.getByLabelText('Alasan pembatalan'), 'Pelanggan sakit');
     expect(confirm).toBeEnabled();
     await user.click(confirm);
-    expect(await screen.findByText(/Batas pembatalan H-24 sudah terlewati/)).toBeVisible();
+    expect(await screen.findByText(/perlu disetujui Manager atau Owner/)).toBeVisible();
     const adjLink = screen.getByRole("link", { name: /Buka Form Penyesuaian Sesi/i });
     expect(adjLink).toBeVisible();
     expect(adjLink).toHaveAttribute("href", `/ledger/${packageId}?tab=adjustments`);
@@ -263,7 +263,7 @@ describe('BookingView', () => {
     expect(await screen.findByText(/sesi pelanggan tidak terpotong/)).toBeVisible();
   });
 
-  it('does not open the cancel dialog when the API says the H-24 cutoff has passed, and points to Penyesuaian Sesi', async () => {
+  it('does not open the cancel dialog when the API says the H-12 cutoff has passed, and points to the late-cancel request', async () => {
     const withCustomer = { ...booking, customer: { id: customerId, displayName: 'Customer Synthetic' } };
     const cancellationOptions = vi.fn().mockResolvedValue({
       canCancel: false,
@@ -283,7 +283,7 @@ describe('BookingView', () => {
     const user = userEvent.setup();
     await user.click((await screen.findAllByRole('button', { name: /Aksi booking/i }))[0]!);
     await user.click(screen.getByRole('menuitem', { name: /Batalkan booking/i }));
-    expect(await screen.findByText(/Gunakan Penyesuaian Sesi/)).toBeVisible();
+    expect(await screen.findByText(/klik X pada peserta untuk mengajukan pembatalan/)).toBeVisible();
     expect(cancellationOptions).toHaveBeenCalledWith(booking.id);
     expect(screen.queryByRole('dialog', { name: /Batalkan booking pelanggan/ })).not.toBeInTheDocument();
     expect(cancelAsStaff).not.toHaveBeenCalled();

@@ -80,7 +80,9 @@ export function TransferProofViewer({
         setPurchase(detail.purchase);
         const bukti = detail.purchase.paymentProof;
         if (!bukti) {
-          setGalat('Bukti transfer belum ada. Buka detail pembayaran untuk mengunggah bukti manual.');
+          // QRIS yang dicatat staf boleh tanpa gambar; transfer bank wajib bukti (dicek ulang server).
+          if (detail.purchase.paymentMethod === 'QRIS') setTerbuka(true);
+          else setGalat('Bukti transfer belum ada. Buka detail pembayaran untuk mengunggah bukti manual.');
           return;
         }
         if (bukti.scanStatus !== 'CLEAN') {
@@ -168,6 +170,12 @@ export function TransferProofViewer({
           Cocokkan nominal <strong className="tabular-nums">{rp(nominal)}</strong> (kode unik{' '}
           {String(purchase.paymentUniqueCode).padStart(3, '0')}) dengan mutasi rekening.
         </p>
+      )}
+      {purchase && !purchase.paymentProof && purchase.paymentMethod === 'QRIS' && (
+        <Feedback kind="info">
+          QRIS ini dicatat staf di meja tanpa gambar bukti. Cocokkan nominalnya dengan riwayat QRIS
+          studio sebelum menyetujui.
+        </Feedback>
       )}
       {url &&
         (mime === 'application/pdf' ? (

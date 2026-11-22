@@ -109,12 +109,17 @@ describe('KotakTindakanService: jenis mengikuti izin MEMUTUS, bukan izin membaca
     const { db, service } = setup();
     const hasil = await service.daftar(sebagai('MANAGER', 'mgr-1'), { branchId: GG }, NOW);
     const panggilan = db.pembelian.count.mock.calls as unknown as [{ where: Record<string, unknown> }][];
-    const transfer = panggilan.find(([a]) =>
-      (a.where.paymentMethod as { in: string[] }).in.includes('BANK_TRANSFER'),
-    )![0].where;
-    expect(transfer.paymentProof).toEqual({ isNot: null });
-    expect(transfer.userId).toEqual({ not: 'mgr-1' });
-    expect(transfer.OR).toEqual([{ recordedById: null }, { recordedById: { not: 'mgr-1' } }]);
+    const syarat = (w: Record<string, unknown>) => w.AND as Record<string, unknown>[];
+    const transfer = syarat(
+      panggilan.find(([a]) =>
+        (syarat(a.where)[0]!.paymentMethod as { in: string[] }).in.includes('BANK_TRANSFER'),
+      )![0].where,
+    );
+    expect(transfer).toContainEqual({
+      OR: [{ paymentProof: { isNot: null } }, { paymentMethod: 'QRIS', recordedById: { not: null } }],
+    });
+    expect(transfer).toContainEqual({ userId: { not: 'mgr-1' } });
+    expect(transfer).toContainEqual({ OR: [{ recordedById: null }, { recordedById: { not: 'mgr-1' } }] });
     expect(hasil.items[0]).toMatchObject({
       id: 'p-1',
       jenis: 'TRANSFER',
@@ -128,10 +133,10 @@ describe('KotakTindakanService: jenis mengikuti izin MEMUTUS, bukan izin membaca
   it('Super Owner boleh memutus catatannya sendiri, jadi filter pemisahan tugas tidak dipasang', async () => {
     const { db, service } = setup();
     await service.daftar(sebagai('SUPER_OWNER'), {}, NOW);
-    const where = (db.pembelian.count.mock.calls[0] as unknown as [{ where: Record<string, unknown> }])[0]
+    const where = (db.pembelian.count.mock.calls[0] as unknown as [{ where: { AND: Record<string, unknown>[] } }])[0]
       .where;
-    expect(where.userId).toBeUndefined();
-    expect(where.branchId).toBeUndefined();
+    expect(where.AND.some((w) => 'userId' in w)).toBe(false);
+    expect(where.AND[0]!.branchId).toBeUndefined();
   });
 
   it('pengajuan sendiri tidak muncul untuk Manager di pembatalan maupun penyesuaian', async () => {

@@ -107,7 +107,7 @@ export function BookingView({
     injectedAccess?.canDecide ??
     (sessionContext?.status === 'authenticated' &&
       sessionContext.hasCapability('reschedule:decide'));
-  // Pembatalan atas nama pelanggan (izin API `booking:cancel:assisted`; batas H-24 berlaku).
+  // Pembatalan atas nama pelanggan (izin API `booking:cancel:assisted`; batas H-12 berlaku).
   const canCancelBookings =
     injectedAccess?.canCancel ??
     Boolean(
@@ -509,7 +509,7 @@ export function BookingView({
     }
   };
 
-  /** Buka dialog batal hanya bila API menyatakan bisa; setelah batas H-24 jalurnya Penyesuaian Sesi. */
+  /** Buka dialog batal hanya bila API menyatakan bisa; kurang dari H-12 jalurnya pengajuan pembatalan. */
   const requestCancel = async (booking: CustomerBookingRecord) => {
     setCancelError('');
     if (client.cancellationOptions) {
@@ -521,7 +521,7 @@ export function BookingView({
             title: 'Booking ini tidak bisa dibatalkan dari sini',
             message:
               options.unavailableReason === 'CANCELLATION_CUTOFF_PASSED'
-                ? 'Batas H-24 sudah lewat. Gunakan Penyesuaian Sesi di menu Ledger sesi.'
+                ? 'Kelas mulai kurang dari 12 jam lagi. Buka kelasnya di Jadwal lalu klik X pada peserta untuk mengajukan pembatalan ke Manager atau Owner.'
                 : 'Status booking atau kelas sudah tidak memungkinkan pembatalan.',
           });
           return;
@@ -799,13 +799,13 @@ export function BookingView({
             <li>Aksi ini dicatat permanen dalam jejak audit beserta identitas staf dan timestamp.</li>
           </ul>
         </div>
-        {cancelError && (cancelError.includes('H-24') || cancelError.includes('Penyesuaian Sesi')) && (
+        {cancelError && (cancelError.includes('12 jam') || cancelError.includes('Penyesuaian Sesi')) && (
           <div className="rounded-xl border border-rose-200 bg-rose-50/90 p-3.5 space-y-2 text-xs">
             <strong className="block text-[13px] font-bold text-rose-900">
               Pintasan Penyesuaian Sesi Medis:
             </strong>
             <p className="text-rose-800 leading-relaxed">
-              Untuk pembatalan mendesak karena izin sakit/surat dokter di bawah H-24, ajukan pengembalian sesi melalui menu Penyesuaian Sesi.
+              Untuk pembatalan mendesak karena izin sakit/surat dokter kurang dari 12 jam sebelum kelas, ajukan pengembalian sesi melalui menu Penyesuaian Sesi.
             </p>
             <div className="pt-1">
               <Link

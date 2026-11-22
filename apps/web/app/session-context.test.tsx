@@ -90,7 +90,9 @@ describe('capability-aware session shell', () => {
     );
     expect(screen.getByRole('status', { name: 'Memuat sesi' })).toBeInTheDocument();
     expect(await screen.findByText('Admin Jakarta')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Member & Paket' })).toBeInTheDocument();
+    expect(screen.getAllByRole('link', { name: 'Hari ini' }).length).toBeGreaterThan(0);
+    // Menu utama hanya halaman yang boleh dibuka: tanpa customer:read, Member tidak tampil.
+    expect(screen.queryByRole('link', { name: 'Member' })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Evaluasi kuota H-24' })).not.toBeInTheDocument();
     const branchSelect = screen.getByRole('combobox', { name: 'Cabang aktif' });
     expect(branchSelect).toHaveValue('');
@@ -144,10 +146,12 @@ describe('capability-aware session shell', () => {
     );
 
     const navigationRegion = await screen.findByRole('navigation', { name: 'Navigasi utama' });
-    expect(within(navigationRegion).getByRole('link', { name: /^(Kelola )?Paket$/ })).toHaveAttribute(
+    expect(within(navigationRegion).getByRole('link', { name: 'Paket & Promo' })).toHaveAttribute(
       'href',
       '/workspace/packages',
     );
+    // Voucher ada di bagian Pengaturan Super Owner, terbuka setelah diklik.
+    await user.click(within(navigationRegion).getByRole('button', { name: 'Pengaturan' }));
     expect(within(navigationRegion).getByRole('link', { name: 'Voucher' })).toHaveAttribute(
       'href',
       '/workspace/vouchers',

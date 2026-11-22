@@ -1231,7 +1231,7 @@ const messages: Record<string, string> = {
   FORBIDDEN: 'Anda tidak memiliki izin untuk tindakan ini.',
   VALIDATION_ERROR: 'Data booking belum valid.',
   OFFLINE_OR_REQUEST_FAILED: 'Layanan tidak dapat dijangkau. Periksa koneksi lalu coba lagi.',
-  RESCHEDULE_CUTOFF_PASSED: 'Batas pengajuan reschedule H-24 sudah terlewati.',
+  RESCHEDULE_CUTOFF_PASSED: 'Batas pengajuan reschedule H-12 sudah terlewati.',
   PENDING_RESCHEDULE_EXISTS: 'Booking ini sudah memiliki reschedule yang sedang ditinjau.',
   TARGET_CLASS_FULL: 'Kelas tujuan sudah penuh.',
   TARGET_CLASS_INELIGIBLE: 'Kelas tujuan tidak lagi memenuhi syarat.',
@@ -1251,7 +1251,7 @@ const messages: Record<string, string> = {
   PACKAGE_EXHAUSTED: 'Sisa sesi paket Anda sudah habis. Silakan beli paket baru untuk melanjutkan booking.',
   DUPLICATE_BOOKING: 'Anda sudah memiliki booking aktif untuk kelas ini.',
   CANCELLATION_CUTOFF_PASSED:
-    'Batas pembatalan H-24 sudah terlewati. Untuk kondisi darurat medis, ajukan Penyesuaian Sesi.',
+    'Kelas mulai kurang dari 12 jam lagi, jadi pembatalan perlu disetujui Manager atau Owner. Ajukan pembatalan; sesi dikembalikan bila disetujui.',
   ATTENDANCE_RECORDED: 'Kehadiran sudah tercatat, booking tidak dapat dibatalkan.',
   INVALID_TOKEN: 'QR tidak dikenali. Minta staf studio menampilkan QR presensi terbaru.',
   TOKEN_ALREADY_USED: 'QR ini sudah dipakai atau sudah diganti. Minta staf studio menampilkan QR terbaru.',
