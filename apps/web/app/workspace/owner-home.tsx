@@ -16,6 +16,7 @@ import { labelKategori } from '../lib/kategori-pengeluaran';
 import { useSessionContext } from '../session-context';
 import { Feedback, Skeleton } from '../ui';
 import { ActionInbox } from './action-inbox';
+import { AwalBulanCards } from './awal-bulan-cards';
 import { OwnerExceptionsPanel } from './owner-exceptions-panel';
 import { catatanKasPayroll, KasPayrollSimpananTabel } from './kas-payroll-simpanan';
 
@@ -187,6 +188,8 @@ export function OwnerHome({
         queueClient={queueClient}
         now={now}
       />
+
+      <AwalBulanCards client={client} now={now} />
 
       {/* Minggu tanpa kelas: hanya untuk cabang yang dipilih, supaya tidak berulang lima kali. */}
       {context?.activeBranch && (

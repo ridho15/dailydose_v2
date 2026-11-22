@@ -40,7 +40,7 @@ const tanggal = (iso: string) =>
     timeZone: 'UTC',
   }).format(new Date(`${iso}T00:00:00Z`));
 
-function simpanBerkas(nama: string, base64: string) {
+export function simpanBerkas(nama: string, base64: string) {
   const biner = atob(base64);
   const bytes = new Uint8Array(biner.length);
   for (let i = 0; i < biner.length; i++) bytes[i] = biner.charCodeAt(i);
