@@ -255,7 +255,7 @@ export function CreatePanel({
         />
         <div>
           <TextInput
-            label="Selesai eksklusif"
+            label="Selesai"
             name="endTime"
             type="time"
             value={endTime}

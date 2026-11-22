@@ -173,7 +173,7 @@ describe('FASE 1 UAT & NEGATIVE VERIFICATION (QA REPORT)', () => {
     );
 
     const startTimeInput = screen.getByLabelText('Mulai');
-    const endTimeInput = screen.getByLabelText('Selesai eksklusif');
+    const endTimeInput = screen.getByLabelText('Selesai');
 
     // NO HAPPY PATH: Sebelum Mulai diisi, tombol preset durasi cepat tidak ada (aman dari salah kalkulasi)
     expect(screen.queryByRole('button', { name: '+50 mnt' })).toBeNull();

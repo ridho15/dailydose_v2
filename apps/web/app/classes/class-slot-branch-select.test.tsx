@@ -47,7 +47,7 @@ describe('ClassSlotView - Mode Semua Cabang (Poin 22)', () => {
     await user.click(createButton);
 
     // Dialog buat draft kelas terbuka
-    const dialog = await screen.findByRole('dialog', { name: 'Buat draft kelas' });
+    const dialog = await screen.findByRole('dialog', { name: 'Buat kelas' });
     expect(dialog).toBeInTheDocument();
 
     // Pilihan Cabang Studio tersedia di dalam dialog

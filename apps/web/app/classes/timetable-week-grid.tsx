@@ -48,6 +48,7 @@ export function TimetableWeekGrid({
   namaInstruktur,
   onSelect,
   onStage,
+  onCreateAt,
 }: {
   days: readonly string[];
   hours: readonly number[];
@@ -63,6 +64,8 @@ export function TimetableWeekGrid({
   onSelect(slot: ClassSlot): void;
   /** `null` membatalkan pemindahan kelas itu. */
   onStage(slot: ClassSlot, tujuan: PosisiKalender | null): void;
+  /** Bila diisi, sel kosong bisa diklik untuk membuat kelas pada hari dan jam itu. */
+  onCreateAt?(posisi: PosisiKalender): void;
 }) {
   const [seret, setSeret] = useState<ClassSlot | null>(null);
   const [sasaran, setSasaran] = useState<string | null>(null);
@@ -285,6 +288,16 @@ export function TimetableWeekGrid({
                 }}
               >
                 {tampil.map(chip)}
+                {onCreateAt && diSini.length === 0 && !seret && (
+                  <button
+                    type="button"
+                    aria-label={`Buat kelas ${labelHari(day)} ${String(hour).padStart(2, '0')}.00`}
+                    onClick={() => onCreateAt({ hari: day, jam: hour })}
+                    className="flex min-h-11 w-full flex-1 items-center justify-center rounded-[7px] text-[13px] font-bold text-dd-forest opacity-0 transition-opacity hover:bg-dd-success-soft hover:opacity-100 focus-visible:opacity-100 focus-visible:outline focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-[#09371f] motion-reduce:transition-none"
+                  >
+                    + Kelas
+                  </button>
+                )}
                 {jadiTujuan && (
                   <div className="flex min-h-[50px] w-full items-center justify-center rounded-[7px] border-2 border-dashed border-dd-forest bg-dd-success-soft p-1">
                     <span className="text-center text-[13px] font-bold text-dd-forest">

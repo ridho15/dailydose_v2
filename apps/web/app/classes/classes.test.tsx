@@ -196,7 +196,7 @@ describe('ClassSlotView', () => {
     ).toHaveLength(0);
   });
 
-  it('creates a draft from branch-local fields without technical IDs', async () => {
+  it('creates and publishes a class in one save, from branch-local fields without technical IDs', async () => {
     const client = fake({ discover: vi.fn().mockResolvedValue({ ...workspace, slots: [] }) });
     render(
       <ClassSlotView
@@ -208,7 +208,7 @@ describe('ClassSlotView', () => {
     const user = userEvent.setup();
     await screen.findByText('Belum ada kelas pada minggu ini');
     await user.click(screen.getByRole('button', { name: 'Buat kelas' }));
-    const dialog = screen.getByRole('dialog', { name: 'Buat draft kelas' });
+    const dialog = screen.getByRole('dialog', { name: 'Buat kelas' });
     const classType = within(dialog).getByRole('combobox', { name: /Tipe kelas/ });
     await user.click(classType);
     await user.click(within(dialog).getByRole('option', { name: /Reformer/ }));
@@ -220,15 +220,13 @@ describe('ClassSlotView', () => {
     await user.click(within(dialog).getByRole('option', { name: /Ayu Instructor/ }));
     await user.type(within(dialog).getByLabelText('Tanggal'), '2026-07-27');
     await user.type(within(dialog).getByLabelText('Mulai'), '09:00');
-    await user.type(within(dialog).getByLabelText('Selesai eksklusif'), '10:00');
+    await user.type(within(dialog).getByLabelText('Selesai'), '10:00');
     // Fee instruktur diatur di Data Master, bukan di jadwal; admin tidak melihat nominal apa pun.
     expect(within(dialog).queryByLabelText(/Honor|Modal|Fee/i)).toBeNull();
-    await user.click(within(dialog).getByRole('button', { name: 'Buat draft' }));
-    await user.click(
-      within(screen.getByRole('dialog', { name: 'Buat draft kelas?' })).getByRole('button', {
-        name: 'Buat draft',
-      }),
-    );
+    // Tanpa dialog konfirmasi: satu klik menyimpan dan menerbitkan.
+    await user.click(within(dialog).getByRole('button', { name: 'Simpan & terbitkan' }));
+    await waitFor(() => expect(client.publish).toHaveBeenCalledTimes(1));
+    expect(screen.queryByRole('dialog', { name: /kelas\?$/ })).toBeNull();
     expect(client.create).toHaveBeenCalledWith(
       expect.objectContaining({
         branchId: 'branch-1',
@@ -240,6 +238,31 @@ describe('ClassSlotView', () => {
       }),
     );
     expect(vi.mocked(client.create).mock.calls[0]![0]).not.toHaveProperty('instructorFeeRp');
+  });
+
+  it('klik sel kosong di kalender membuka form dengan tanggal dan jam sel itu', async () => {
+    const client = fake({ discover: vi.fn().mockResolvedValue({ ...workspace, slots: [] }) });
+    render(
+      <ClassSlotView client={client} branchOverride={branch} capabilitiesOverride={manageCapabilities} />,
+    );
+    const user = userEvent.setup();
+    await screen.findByText('Belum ada kelas pada minggu ini');
+    const sel = within(screen.getByRole('region', { name: 'Kalender kelas tujuh hari' })).getAllByRole(
+      'button',
+      { name: /^Buat kelas .* 09\.00$/ },
+    )[0]!;
+    await user.click(sel);
+    const dialog = screen.getByRole('dialog', { name: 'Buat kelas' });
+    expect(within(dialog).getByLabelText('Mulai')).toHaveValue('09:00');
+    expect(within(dialog).getByLabelText('Selesai')).toHaveValue('10:00');
+    expect((within(dialog).getByLabelText('Tanggal') as HTMLInputElement).value).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+
+  it('tanpa izin mengelola, sel kosong tidak bisa diklik', async () => {
+    const client = fake({ discover: vi.fn().mockResolvedValue({ ...workspace, slots: [] }) });
+    render(<ClassSlotView client={client} branchOverride={branch} capabilitiesOverride={['class-slot:read']} />);
+    await screen.findByText('Belum ada kelas pada minggu ini');
+    expect(screen.queryAllByRole('button', { name: /^Buat kelas .* 09\.00$/ })).toHaveLength(0);
   });
 
   it('keeps the create form open with its input when saving fails (e.g. a schedule clash)', async () => {
@@ -261,21 +284,17 @@ describe('ClassSlotView', () => {
     const user = userEvent.setup();
     await screen.findByText('Belum ada kelas pada minggu ini');
     await user.click(screen.getByRole('button', { name: 'Buat kelas' }));
-    const dialog = screen.getByRole('dialog', { name: 'Buat draft kelas' });
+    const dialog = screen.getByRole('dialog', { name: 'Buat kelas' });
     await user.click(within(dialog).getByRole('combobox', { name: /Tipe kelas/ }));
     await user.click(within(dialog).getByRole('option', { name: /Reformer/ }));
     await user.click(within(dialog).getByRole('combobox', { name: /Area Studio/ }));
     await user.click(within(dialog).getByRole('option', { name: /Area Studio Utama/ }));
     await user.type(within(dialog).getByLabelText('Tanggal'), '2026-07-27');
     await user.type(within(dialog).getByLabelText('Mulai'), '09:00');
-    await user.type(within(dialog).getByLabelText('Selesai eksklusif'), '10:00');
-    await user.click(within(dialog).getByRole('button', { name: 'Buat draft' }));
-    await user.click(
-      within(screen.getByRole('dialog', { name: 'Buat draft kelas?' })).getByRole('button', {
-        name: 'Buat draft',
-      }),
-    );
-    const formulir = await screen.findByRole('dialog', { name: 'Buat draft kelas' });
+    await user.type(within(dialog).getByLabelText('Selesai'), '10:00');
+    await user.click(within(dialog).getByRole('button', { name: 'Simpan & terbitkan' }));
+    expect(client.publish).not.toHaveBeenCalled();
+    const formulir = await screen.findByRole('dialog', { name: 'Buat kelas' });
     expect(within(formulir).getByText(/Kelas belum tersimpan\. Instruktur ini sudah mengajar/)).toBeVisible();
     expect(within(formulir).getByLabelText('Tanggal')).toHaveValue('2026-07-27');
   });
@@ -882,7 +901,7 @@ describe('ClassSlotView duplicate and delete', () => {
     return { user, client, target, dialog: screen.getByRole('dialog', { name: 'Reformer' }) };
   };
 
-  it('duplicates a class into a prefilled draft one week later and creates it only after confirmation', async () => {
+  it('duplicates a class into a prefilled form one week later and saves it as a draft on request', async () => {
     const { user, client, target, dialog } = await openDetail({ status: 'PUBLISHED', instructorUserId: 'instructor-1' });
     await user.click(within(dialog).getByRole('button', { name: 'Duplikat sebagai draft' }));
 
@@ -893,17 +912,15 @@ describe('ClassSlotView duplicate and delete', () => {
     const dateKey = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jakarta' }).format(nextWeek);
     expect(within(form).getByLabelText('Tanggal')).toHaveValue(dateKey);
     expect(within(form).getByLabelText('Mulai')).toHaveValue(clock(target.startAt));
-    expect(within(form).getByLabelText('Selesai eksklusif')).toHaveValue(clock(target.endAt));
+    expect(within(form).getByLabelText('Selesai')).toHaveValue(clock(target.endAt));
     expect(within(form).getByRole('combobox', { name: /Tipe kelas/ })).toHaveValue('Reformer');
     expect(within(form).getByRole('combobox', { name: /Area Studio/ })).toHaveValue('Area Studio Utama');
     expect(within(form).getByRole('combobox', { name: /Instruktur/ })).toHaveValue('Ayu Instructor');
     expect(client.create).not.toHaveBeenCalled();
 
-    await user.click(within(form).getByRole('button', { name: 'Buat draft' }));
-    await user.click(
-      within(screen.getByRole('dialog', { name: 'Buat draft kelas?' })).getByRole('button', { name: 'Buat draft' }),
-    );
+    await user.click(within(form).getByRole('button', { name: 'Simpan sebagai draf' }));
     await waitFor(() => expect(client.create).toHaveBeenCalledTimes(1));
+    expect(client.publish).not.toHaveBeenCalled();
     expect(client.create).toHaveBeenCalledWith(
       expect.objectContaining({
         branchId: 'branch-1',

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import {
   browserClassSlotClient,
@@ -105,6 +105,8 @@ export function ClassSlotView({
   const globalMode = !branch && (canViewAllBranches || isInstructor);
   const canOperate = Boolean(branch && canManage);
   const canOperateAttendance = Boolean((branch || canViewAllBranches) && canManageAttendance);
+  /** Tombol mana yang mengirim form buat kelas: draf atau langsung terbit. */
+  const createModeRef = useRef<'draf' | 'terbit'>('terbit');
   const canCreateSlot = Boolean((branch || (globalMode && branches.length > 0)) && canManage);
   const isSuperOwner = Boolean(sessionContext?.session?.roles?.includes('SUPER_OWNER'));
   const [reference, setReference] = useState(new Date());
@@ -581,7 +583,13 @@ export function ClassSlotView({
       {busy && <Skeleton label="Memuat timetable kelas" />}
       {failure && <Feedback kind="error" onDismiss={() => setFailure('')}>{failure}</Feedback>}
       {message && !busy && <Feedback kind="status" onDismiss={() => setMessage('')}>{message}</Feedback>}
-      {!busy && slots.length === 0 ? (
+      {!busy && slots.length === 0 && canCreateSlot && (
+        <Feedback kind="info">
+          <strong>Belum ada kelas pada minggu ini</strong>. Klik jam kosong di kalender untuk membuat
+          kelas, atau pakai Salin minggu.
+        </Feedback>
+      )}
+      {!busy && slots.length === 0 && !canCreateSlot ? (
         <EmptyState
           title="Belum ada kelas pada minggu ini"
           description={
@@ -590,7 +598,7 @@ export function ClassSlotView({
               : 'Ubah minggu atau buat draft kelas baru.'
           }
         />
-      ) : !busy && visible.length === 0 ? (
+      ) : !busy && visible.length === 0 && slots.length > 0 ? (
         <EmptyState
           title={
             batal > 0 && !classTypeFilter
@@ -681,6 +689,23 @@ export function ClassSlotView({
                 namaInstruktur={(slot) => firstName(instructorName(slot.instructorUserId, slot))}
                 onSelect={pilihKelas}
                 onStage={stage}
+                onCreateAt={
+                  canCreateSlot
+                    ? ({ hari, jam }) => {
+                        const pad = (n: number) => String(n).padStart(2, '0');
+                        openPanel({
+                          kind: 'create',
+                          template: {
+                            classTypeId: '',
+                            studioId: '',
+                            date: hari,
+                            startTime: `${pad(jam)}:00`,
+                            endTime: `${pad((jam + 1) % 24)}:00`,
+                          },
+                        });
+                      }
+                    : undefined
+                }
               />
             </div>
             {canManage && (
@@ -862,9 +887,9 @@ export function ClassSlotView({
         open={Boolean(panel)}
         title={
           panel?.kind === 'create'
-            ? panel.template
+            ? panel.template?.classTypeId
               ? 'Duplikat kelas'
-              : 'Buat draft kelas'
+              : 'Buat kelas'
             : panel?.kind === 'detail'
               ? classTypeName(panel.slot.classTypeId, panel.slot)
               : 'Kelas'
@@ -920,10 +945,21 @@ export function ClassSlotView({
                 <Button
                   type="submit"
                   form="class-slot-create-form"
+                  variant="secondary"
+                  disabled={busy}
+                  className="w-full sm:w-auto"
+                  onClick={() => (createModeRef.current = 'draf')}
+                >
+                  Simpan sebagai draf
+                </Button>
+                <Button
+                  type="submit"
+                  form="class-slot-create-form"
                   loading={busy}
                   className="w-full sm:w-auto"
+                  onClick={() => (createModeRef.current = 'terbit')}
                 >
-                  Buat draft
+                  Simpan &amp; terbitkan
                 </Button>
               </div>
             </div>
@@ -955,16 +991,28 @@ export function ClassSlotView({
               }
             }}
             onCreate={async (input) => {
-              const accepted = await feedback.confirm({
-                tone: 'warning',
-                title: 'Buat draft kelas?',
-                message: 'Jadwal akan dibuat sebagai draft.',
-                confirmLabel: 'Buat draft',
-              });
-              if (!accepted) return;
-              // Gagal (mis. jadwal bentrok): form tetap terbuka dengan isiannya dan pesan di bawahnya.
-              if (await run(() => client.create(input), 'Draft kelas berhasil dibuat.'))
+              // Tanpa dialog konfirmasi: jadwal bentrok ditolak server dan form tetap terbuka
+              // dengan isiannya dan rincian bentroknya.
+              if (createModeRef.current === 'draf') {
+                if (await run(() => client.create(input), 'Draf kelas tersimpan.')) closePanel();
+                return;
+              }
+              let draf: ClassSlot | null = null;
+              const terbit = await run(async () => {
+                draf = await client.create(input);
+                return client.publish(draf.id, draf.version);
+              }, 'Kelas tersimpan dan sudah terbit di jadwal member.');
+              if (terbit) closePanel();
+              else if (draf) {
+                // Kelasnya sudah tersimpan; yang gagal hanya penerbitan (mis. instruktur belum ada).
+                const tersimpan: ClassSlot = draf;
+                setSlots((current) =>
+                  current.some((slot) => slot.id === tersimpan.id) ? current : [tersimpan, ...current],
+                );
                 closePanel();
+                setPanel({ kind: 'detail', slot: tersimpan });
+                setMessage('Kelas tersimpan sebagai draf, tetapi belum bisa diterbitkan. Lihat pesan di atas.');
+              }
             }}
           />
         ) : panel?.kind === 'detail' ? (
