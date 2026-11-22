@@ -29,6 +29,7 @@ import { LedgerService } from './ledger.service';
 import { FinanceController } from './finance.controller';
 import { AntreanTertinggalController, RetentionController } from './retention.controller';
 import { AntreanTertinggalService } from './antrean-tertinggal.service';
+import { KotakTindakanService } from './kotak-tindakan.service';
 import { TargetController } from './target.controller';
 import { TargetService } from './target.service';
 import { RetentionService } from './retention.service';
@@ -81,6 +82,7 @@ import { RefundPaketController } from './refund-paket.controller';
     FinanceService,
     RetentionService,
     AntreanTertinggalService,
+    KotakTindakanService,
     TargetService,
     PaymentExpirationWorkerService,
   ],

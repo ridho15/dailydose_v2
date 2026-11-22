@@ -1,6 +1,7 @@
 import { Controller, Get, Query, Req, UseGuards } from '@nestjs/common';
 import { AuthGuard, type AuthenticatedRequest } from '../identity/auth.guard';
 import { AntreanTertinggalService } from './antrean-tertinggal.service';
+import { KotakTindakanService } from './kotak-tindakan.service';
 import { RetentionService } from './retention.service';
 
 @Controller()
@@ -38,7 +39,25 @@ export class RetentionController {
 @Controller()
 @UseGuards(AuthGuard)
 export class AntreanTertinggalController {
-  constructor(private readonly antrean: AntreanTertinggalService) {}
+  constructor(
+    private readonly antrean: AntreanTertinggalService,
+    private readonly tindakan: KotakTindakanService,
+  ) {}
+
+  /**
+   * Kotak masuk "Perlu tindakan": keputusan yang boleh diambil pengguna ini, per jenis. Tanpa
+   * `jenis`: ringkasan + lima item tertua per jenis. Dengan `jenis`: satu halaman berkursor.
+   */
+  @Get('work-queue/actions')
+  actions(
+    @Req() req: AuthenticatedRequest,
+    @Query('branchId') branchId?: string,
+    @Query('jenis') jenis?: string,
+    @Query('cursor') cursor?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.tindakan.daftar(req.principal, { branchId, jenis, cursor, limit });
+  }
 
   /** Pekerjaan yang tertinggal lintas antrean, dari yang paling merugikan bila dibiarkan. */
   @Get('work-queue/overdue')

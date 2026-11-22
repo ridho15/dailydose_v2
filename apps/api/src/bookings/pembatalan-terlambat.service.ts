@@ -9,6 +9,7 @@ import {
   CAP_PUTUS_PEMBATALAN,
   KODE_PEMBATALAN_TERLAMBAT,
   jalankanPembatalanTerlambat,
+  kirimNotifikasiPengajuanPembatalan,
   sesiTerpotong,
 } from './pembatalan-terlambat';
 
@@ -26,6 +27,18 @@ export interface PengajuanPembatalan {
   requestedById: string;
   requestedByName: string | null;
   createdAt: string;
+}
+
+export interface HalamanPengajuan {
+  items: (PengajuanPembatalan & {
+    customerName: string | null;
+    className: string | null;
+    classStartAt: string | null;
+    branchId: string | null;
+    branchName: string | null;
+    canDecide: boolean;
+  })[];
+  nextCursor: string | null;
 }
 
 const alasanTidakValid = () =>
@@ -122,32 +135,31 @@ export class PembatalanTerlambatService {
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );
 
-    if (this.notificationWriter) {
-      const b = await this.db.pemesananKelas.findUnique({
-        where: { id: bookingId },
-        select: { branchId: true, bookingNumber: true, user: { select: { displayName: true } } },
-      });
-      if (b && b.branchId) {
-        void this.notificationWriter
-          .writeForUsersInBranch(this.db, {
-            branchId: b.branchId,
-            roles: ['MANAGER', 'SUPER_OWNER'],
-            eventKey: `late_cancel.requested:${dibuat.id}`,
-            category: 'APPROVAL',
-            tone: 'WARNING',
-            title: 'Pengajuan Batal Terlambat',
-            message: `${b.user?.displayName || 'Member'} mengajukan pembatalan terlambat (booking #${b.bookingNumber}). Menunggu disposisi.`,
-            href: '/workspace/bookings',
-          })
-          .catch(() => {});
-      }
-    }
+    await kirimNotifikasiPengajuanPembatalan(this.notificationWriter, this.db, {
+      pengajuanId: dibuat.id,
+      bookingId,
+    });
 
     return this.tampilan(dibuat);
   }
 
-  /** Pengajuan yang menunggu keputusan untuk satu kelas; dipakai daftar peserta di timetable. */
-  async tertunda(principal: SessionPrincipal, classSlotId: string): Promise<PengajuanPembatalan[]> {
+  /**
+   * Pengajuan yang menunggu keputusan. Dengan `classSlotId`: untuk satu kelas (daftar peserta di
+   * timetable). Tanpa `classSlotId`: semua cabang yang boleh diputus pengguna, untuk kotak masuk
+   * penyetuju, dengan paginasi kursor.
+   */
+  async tertunda(principal: SessionPrincipal, classSlotId: string): Promise<PengajuanPembatalan[]>;
+  async tertunda(
+    principal: SessionPrincipal,
+    classSlotId: '',
+    halaman: { branchId?: string; cursor?: string; limit?: string | number },
+  ): Promise<HalamanPengajuan>;
+  async tertunda(
+    principal: SessionPrincipal,
+    classSlotId: string,
+    halaman?: { branchId?: string; cursor?: string; limit?: string | number },
+  ): Promise<PengajuanPembatalan[] | HalamanPengajuan> {
+    if (!classSlotId) return this.tertundaSemua(principal, halaman ?? {});
     this.policy.requireAnyCapability(principal.capabilities, [
       'booking:read',
       'booking:cancel:assisted',
@@ -175,6 +187,92 @@ export class PembatalanTerlambatService {
       orderBy: { createdAt: 'asc' },
     });
     return rows.map((row) => this.tampilan(row));
+  }
+
+  private async tertundaSemua(
+    principal: SessionPrincipal,
+    input: { branchId?: string; cursor?: string; limit?: string | number },
+  ): Promise<HalamanPengajuan> {
+    this.policy.requireAnyCapability(principal.capabilities, [
+      CAP_PUTUS_PEMBATALAN,
+      'ledger:adjust:decide',
+    ]);
+    const limit = Math.min(50, Math.max(1, Number(input.limit) || 20));
+    // Cabang yang boleh diputus: gabungan kedua kapabilitas penyetuju.
+    const cakupan = [CAP_PUTUS_PEMBATALAN, 'ledger:adjust:decide']
+      .filter((cap) => principal.capabilities.includes(cap))
+      .map((cap) => this.policy.capabilityBranchScope(principal, cap));
+    const semua = cakupan.some((c) => c.all);
+    const izin = [...new Set(cakupan.flatMap((c) => c.included))];
+    let cabang: Prisma.StringFilter | string | undefined = semua ? undefined : { in: izin };
+    if (input.branchId) {
+      if (!semua && !izin.includes(input.branchId))
+        throw new ApiProblem('FORBIDDEN', HttpStatus.FORBIDDEN);
+      cabang = input.branchId;
+    }
+    let kursor: { createdAt: Date; id: string } | null = null;
+    if (input.cursor) {
+      const [iso, id] = Buffer.from(input.cursor, 'base64url').toString('utf8').split('|');
+      const createdAt = new Date(iso ?? '');
+      if (!id || Number.isNaN(createdAt.getTime()))
+        throw new ApiProblem('VALIDATION_ERROR', HttpStatus.UNPROCESSABLE_ENTITY, false, [
+          { field: 'cursor', issue: 'INVALID' },
+        ]);
+      kursor = { createdAt, id };
+    }
+    const rows = await this.db.sessionAdjustRequest.findMany({
+      where: {
+        reasonCode: KODE_PEMBATALAN_TERLAMBAT,
+        status: 'PENDING',
+        ...(cabang ? { booking: { is: { classSlot: { branchId: cabang } } } } : {}),
+        ...(kursor
+          ? {
+              OR: [
+                { createdAt: { gt: kursor.createdAt } },
+                { createdAt: kursor.createdAt, id: { gt: kursor.id } },
+              ],
+            }
+          : {}),
+      },
+      include: {
+        requestedBy: { select: { displayName: true } },
+        booking: {
+          select: {
+            user: { select: { displayName: true } },
+            classSlot: {
+              select: {
+                branchId: true,
+                startAt: true,
+                branch: { select: { name: true } },
+                classType: { select: { name: true } },
+              },
+            },
+          },
+        },
+      },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      take: limit + 1,
+    });
+    const lebih = rows.length > limit;
+    const dipakai = lebih ? rows.slice(0, limit) : rows;
+    const akhir = dipakai.at(-1);
+    const superOwner = principal.roles.some((r) => r.role === 'SUPER_OWNER');
+    return {
+      items: dipakai.map((row) => ({
+        ...this.tampilan(row),
+        customerName: row.booking?.user?.displayName ?? null,
+        className: row.booking?.classSlot.classType?.name ?? null,
+        classStartAt: row.booking?.classSlot.startAt.toISOString() ?? null,
+        branchId: row.booking?.classSlot.branchId ?? null,
+        branchName: row.booking?.classSlot.branch?.name ?? null,
+        // Pengaju tidak memutus pengajuannya sendiri, kecuali Super Owner (lihat putuskan()).
+        canDecide: superOwner || row.requestedById !== principal.userId,
+      })),
+      nextCursor:
+        lebih && akhir
+          ? Buffer.from(`${akhir.createdAt.toISOString()}|${akhir.id}`, 'utf8').toString('base64url')
+          : null,
+    };
   }
 
   async putuskan(

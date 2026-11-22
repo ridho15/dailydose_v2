@@ -31,10 +31,21 @@ export class BookingsController {
     private readonly pembatalan: PembatalanTerlambatService,
   ) {}
 
-  /** Pembatalan setelah batas H-24: admin mengajukan, Manager/Owner memutuskan. */
+  /**
+   * Pembatalan kurang dari H-12 yang menunggu keputusan Manager/Owner/Super Owner. Dengan
+   * `classSlotId`: satu kelas. Tanpanya: semua cabang yang boleh diputus, berhalaman kursor.
+   */
   @Get('late-cancellations')
-  pembatalanTertunda(@Req() request: AuthenticatedRequest, @Query('classSlotId') classSlotId = '') {
-    return this.pembatalan.tertunda(request.principal, classSlotId);
+  pembatalanTertunda(
+    @Req() request: AuthenticatedRequest,
+    @Query('classSlotId') classSlotId = '',
+    @Query('branchId') branchId?: string,
+    @Query('cursor') cursor?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return classSlotId
+      ? this.pembatalan.tertunda(request.principal, classSlotId)
+      : this.pembatalan.tertunda(request.principal, '', { branchId, cursor, limit });
   }
 
   @Post('late-cancellations/:requestId/:decision')
