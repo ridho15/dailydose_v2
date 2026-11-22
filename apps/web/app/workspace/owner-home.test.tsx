@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { KeuanganClient, RingkasanBulanan } from '@/api-clients/keuangan-client';
 import type { WorkQueueClient } from '@/api-clients/work-queue-client';
 import { capaianTarget, OwnerHome, tigaBulan } from './owner-home';
+import { AppFeedbackProvider } from '../components/app-feedback';
 
 const caps = vi.hoisted(() => ({ list: ['finance:read'] as string[] }));
 vi.mock('next/link', () => ({
@@ -233,38 +234,42 @@ describe('OwnerHome', () => {
     expect(screen.queryByRole('link', { name: 'Laporan keuangan lengkap' })).toBeNull();
   });
 
-  it('menaruh keputusan yang telat atau bertenggat di atas angka', async () => {
+  it('menaruh kotak Perlu tindakan (pembatalan kurang dari H-12) di atas angka keuangan', async () => {
     const q: WorkQueueClient = {
-      tertinggal: vi.fn().mockResolvedValue({
+      tertinggal: vi.fn(),
+      tindakan: vi.fn().mockResolvedValue({
         dibuatPada: '',
-        gagal: [],
+        ringkasan: [{ jenis: 'PEMBATALAN', jumlah: 1 }],
         items: [
           {
-            key: 'bukti',
-            jumlah: 7,
-            nada: 'TELAT',
-            acuanPada: null,
-            umurJam: 60,
-            nilaiRp: 12_000_000,
-            href: '/workspace/payments',
-          },
-          {
-            key: 'ubahJadwal',
-            jumlah: 1,
-            nada: 'MENUNGGU',
-            acuanPada: null,
-            umurJam: 2,
-            href: '/x',
+            id: 'lc-1',
+            jenis: 'PEMBATALAN',
+            version: 1,
+            masukPada: '2026-10-28T01:00:00.000Z',
+            branchId: 'gg',
+            branchName: 'Green Garden',
+            nama: 'Rina',
+            rincian: 'Reformer',
+            alasan: 'Sakit mendadak pagi ini',
+            sesi: 0,
+            kelas: { nama: 'Reformer', mulai: '2026-10-28T05:00:00.000Z' },
           },
         ],
+        nextCursor: null,
+        pengingat: [],
+        gagal: [],
       }),
     };
     render(
-      <OwnerHome now={NOW} client={client()} queueClient={q} ownerReportClient={ownerReport} />,
+      <AppFeedbackProvider>
+        <OwnerHome now={NOW} client={client()} queueClient={q} ownerReportClient={ownerReport} />
+      </AppFeedbackProvider>,
     );
-    const bagian = await screen.findByRole('region', { name: 'Perlu keputusan Anda' });
-    expect(within(bagian).getAllByRole('listitem')).toHaveLength(1);
-    expect(within(bagian).getByText(/Total Rp 12.000.000/)).toBeVisible();
+    const kotak = await screen.findByRole('region', { name: 'Perlu tindakan (1)' });
+    expect(within(kotak).getByText('Rina')).toBeVisible();
+    expect(within(kotak).getByText('Alasan: Sakit mendadak pagi ini')).toBeVisible();
+    const keuangan = screen.getByRole('heading', { name: /^Keuangan/ });
+    expect(kotak.compareDocumentPosition(keuangan) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });
 

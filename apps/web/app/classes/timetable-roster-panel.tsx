@@ -147,10 +147,6 @@ export function TimetableRosterPanel({
   dalamLaci?: boolean;
 }) {
   const [peserta, setPeserta] = useState<CustomerBookingRecord[]>([]);
-  const [query, setQuery] = useState('');
-  const [hasilCari, setHasilCari] = useState<Calon[]>([]);
-  const [mencari, setMencari] = useState(false);
-  const [busyId, setBusyId] = useState<string | null>(null);
   const [failure, setFailure] = useState('');
   const [loading, setLoading] = useState(true);
   const [verifyingInstructor, setVerifyingInstructor] = useState(false);
@@ -168,17 +164,6 @@ export function TimetableRosterPanel({
       setVerifyingInstructor(false);
     }
   };
-  const intentKeys = useRef(new Map<string, string>());
-
-  /** Satu kunci per niat, supaya klik ganda tidak membuat dua booking. */
-  const kunciNiat = (niat: string) => {
-    const ada = intentKeys.current.get(niat);
-    if (ada) return ada;
-    const baru = crypto.randomUUID();
-    intentKeys.current.set(niat, baru);
-    return baru;
-  };
-
   const muatPeserta = useCallback(async () => {
     const page = await client.list({ classSlotId: slot.id, branchId: slot.branchId, limit: 50 });
     setPeserta(page.items.filter((b) => b.status !== 'CANCELLED'));
@@ -188,7 +173,6 @@ export function TimetableRosterPanel({
     let batal = false;
     setLoading(true);
     setFailure('');
-    setQuery('');
     client
       .list({ classSlotId: slot.id, limit: 50 })
       .then((page) => {
@@ -212,68 +196,7 @@ export function TimetableRosterPanel({
     return peta;
   }, [peserta]);
 
-  useEffect(() => {
-    const kata = query.trim();
-    if (!canAdd || !client.searchRosterCandidates || kata.length < MIN_HURUF) {
-      setHasilCari([]);
-      setMencari(false);
-      return;
-    }
-    let batal = false;
-    setMencari(true);
-    const timer = window.setTimeout(() => {
-      client.searchRosterCandidates!(slot.branchId, kata)
-        .then(({ customers, packages }) => {
-          if (batal) return;
-          setHasilCari(
-            customers
-              .map((customer) => calonUntuk(customer, packages, slot, kursiMember))
-              .filter((calon): calon is Calon => calon !== null)
-              .sort((a, b) => Number(Boolean(a.kendala)) - Number(Boolean(b.kendala))),
-          );
-        })
-        .catch(async (error) => {
-          if (!batal) setFailure(await bookingFailure(error));
-        })
-        .finally(() => {
-          if (!batal) setMencari(false);
-        });
-    }, JEDA_CARI_MS);
-    return () => {
-      batal = true;
-      window.clearTimeout(timer);
-    };
-  }, [canAdd, client, query, slot, kursiMember]);
-
-  const hasil = hasilCari;
-
   const penuh = slot.bookedCount >= slot.capacity;
-
-  const tambah = async (calon: Calon) => {
-    if (!calon.paket || !client.create) return;
-    const niat = `tambah:${calon.customer.id}:${calon.teman ? 'teman' : 'member'}`;
-    setBusyId(calon.customer.id);
-    setFailure('');
-    try {
-      await client.create(
-        {
-          classSlotId: slot.id,
-          customerPackageId: calon.paket.id,
-          customerUserId: calon.customer.id,
-          source: 'ADMIN_ASSISTED',
-        },
-        kunciNiat(niat),
-      );
-      intentKeys.current.delete(niat);
-      setQuery('');
-      await muatPeserta();
-      onChanged();
-    } catch (error) {
-      setFailure(await bookingFailure(error));
-    } finally {
-      setBusyId(null);
-    }
-  };
 
   const waktu = waktuKelas(slot);
 
@@ -376,94 +299,16 @@ export function TimetableRosterPanel({
         )}
         {canAdd && (
           <div className="min-w-0 flex-[1_1_320px]">
-            <label htmlFor="tt-add" className="mb-2 block text-[15px] font-bold text-dd-ink">
-              Tambah member ke kelas ini
-            </label>
-            <div
-              className={`flex h-12 items-center gap-2.5 border border-dd-border-interactive bg-white px-3 focus-within:border-dd-forest ${
-                hasil.length ? 'rounded-t-dd-sm' : 'rounded-dd-sm'
-              }`}
-            >
-              <Search className="size-[18px] shrink-0 text-dd-muted" aria-hidden="true" />
-              <input
-                id="tt-add"
-                type="search"
-                value={query}
-                disabled={loading || penuh}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder={penuh ? 'Kelas sudah penuh' : 'Ketik nama atau nomor WhatsApp'}
-                className="h-full min-w-0 flex-1 border-0 bg-transparent text-base text-dd-ink outline-none placeholder:text-dd-muted"
-              />
-            </div>
-            {hasil.length > 0 && (
-              <ul
-                aria-label="Hasil pencarian member"
-                className="m-0 list-none overflow-hidden rounded-b-dd-sm border border-t-0 border-dd-border-interactive p-0"
-              >
-                {hasil.map((calon, index) => (
-                  <li
-                    key={`${calon.customer.id}:${calon.teman ? 'teman' : 'member'}`}
-                    className={index > 0 ? 'border-t border-dd-line/60' : undefined}
-                  >
-                    {calon.kendala ? (
-                      <div className="flex min-h-14 items-center justify-between gap-2.5 p-3">
-                        <span className="min-w-0">
-                          <span className="block text-base font-bold text-dd-muted">
-                            {calon.customer.displayName}
-                          </span>
-                          <span className="block text-sm text-dd-danger">{calon.kendala}</span>
-                        </span>
-                        <span className="shrink-0 text-sm text-dd-muted">Perlu paket</span>
-                      </div>
-                    ) : (
-                      <button
-                        type="button"
-                        disabled={busyId !== null}
-                        onClick={() => void tambah(calon)}
-                        className="flex min-h-14 w-full items-center justify-between gap-2.5 border-0 bg-dd-success-soft p-3 text-left transition hover:bg-dd-success-soft/70 disabled:opacity-60"
-                      >
-                        <span className="min-w-0">
-                          <span className="block text-base font-bold text-dd-ink">
-                            {calon.teman
-                              ? `Teman dari ${calon.customer.displayName}`
-                              : calon.customer.displayName}
-                          </span>
-                          <span className="block text-sm text-dd-forest">
-                            {calon.teman ? 'Kursi teman · ' : ''}
-                            {calon.paket?.packageName ?? calon.paket?.name ?? 'Paket aktif'} · sisa{' '}
-                            {calon.paket?.available}
-                            {calon.paket?.customer?.id &&
-                              calon.paket.customer.id !== calon.customer.id && (
-                                <span className="block text-xs font-semibold text-dd-forest/80">
-                                  Milik {calon.paket.customer.displayName} (Paket Bersama)
-                                </span>
-                              )}
-                          </span>
-                        </span>
-                        <span className="shrink-0 rounded-[6px] bg-dd-forest px-3 py-1.5 text-sm font-bold text-white">
-                          {busyId === calon.customer.id
-                            ? 'Menambah…'
-                            : calon.teman
-                              ? 'Tambah teman'
-                              : 'Tambah'}
-                        </span>
-                      </button>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            )}
-            {mencari && <p className="m-0 mt-2 text-sm text-dd-muted">Mencari…</p>}
-            {query.trim().length >= MIN_HURUF && hasil.length === 0 && !loading && !mencari && (
-              <p className="m-0 mt-2 text-sm text-dd-muted">
-                Tidak ada member aktif bernama &ldquo;{query.trim()}&rdquo; yang belum terdaftar di
-                kelas ini. Coba nomor WhatsApp atau email-nya.
-              </p>
-            )}
-            <p className="m-0 mt-2 text-sm text-dd-muted">
-              Satu tekan langsung masuk roster. Sesi baru terpotong saat kelas selesai dan member
-              hadir.
-            </p>
+            <TambahPeserta
+              slot={slot}
+              client={client}
+              kursiMember={kursiMember}
+              disabled={loading || penuh}
+              onAdded={async () => {
+                await muatPeserta();
+                onChanged();
+              }}
+            />
           </div>
         )}
 
@@ -538,6 +383,208 @@ export function TimetableRosterPanel({
         </div>
       </div>
     </Wadah>
+  );
+}
+
+/**
+ * Pencarian member untuk dimasukkan ke satu kelas: ketik nama/WA, lalu satu klik "Tambah". Paket
+ * dipilih otomatis (lihat `pilihCalon`). Dipakai di laci timetable dan di kartu kelas Hari ini.
+ */
+export function TambahPeserta({
+  slot,
+  client,
+  kursiMember,
+  disabled = false,
+  onAdded,
+  inputId = 'tt-add',
+  label = 'Tambah member ke kelas ini',
+  autoFocus = false,
+}: {
+  slot: ClassSlot;
+  client: Partial<Pick<BookingClient, 'searchRosterCandidates' | 'create'>>;
+  kursiMember: ReadonlyMap<string, number>;
+  disabled?: boolean;
+  onAdded(): void | Promise<void>;
+  inputId?: string;
+  label?: string;
+  autoFocus?: boolean;
+}) {
+  const [query, setQuery] = useState('');
+  const [hasil, setHasil] = useState<Calon[]>([]);
+  const [mencari, setMencari] = useState(false);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [failure, setFailure] = useState('');
+  const intentKeys = useRef(new Map<string, string>());
+
+  /** Satu kunci per niat, supaya klik ganda tidak membuat dua booking. */
+  const kunciNiat = (niat: string) => {
+    const ada = intentKeys.current.get(niat);
+    if (ada) return ada;
+    const baru = crypto.randomUUID();
+    intentKeys.current.set(niat, baru);
+    return baru;
+  };
+
+  useEffect(() => {
+    setQuery('');
+  }, [slot.id]);
+
+  useEffect(() => {
+    const kata = query.trim();
+    if (!client.searchRosterCandidates || kata.length < MIN_HURUF) {
+      setHasil([]);
+      setMencari(false);
+      return;
+    }
+    let batal = false;
+    setMencari(true);
+    const timer = window.setTimeout(() => {
+      client.searchRosterCandidates!(slot.branchId, kata)
+        .then(({ customers, packages }) => {
+          if (batal) return;
+          setHasil(
+            customers
+              .map((customer) => calonUntuk(customer, packages, slot, kursiMember))
+              .filter((calon): calon is Calon => calon !== null)
+              .sort((a, b) => Number(Boolean(a.kendala)) - Number(Boolean(b.kendala))),
+          );
+        })
+        .catch(async (error) => {
+          if (!batal) setFailure(await bookingFailure(error));
+        })
+        .finally(() => {
+          if (!batal) setMencari(false);
+        });
+    }, JEDA_CARI_MS);
+    return () => {
+      batal = true;
+      window.clearTimeout(timer);
+    };
+  }, [client, query, slot, kursiMember]);
+
+  const tambah = async (calon: Calon) => {
+    if (!calon.paket || !client.create) return;
+    const niat = `tambah:${calon.customer.id}:${calon.teman ? 'teman' : 'member'}`;
+    setBusyId(calon.customer.id);
+    setFailure('');
+    try {
+      await client.create(
+        {
+          classSlotId: slot.id,
+          customerPackageId: calon.paket.id,
+          customerUserId: calon.customer.id,
+          source: 'ADMIN_ASSISTED',
+        },
+        kunciNiat(niat),
+      );
+      intentKeys.current.delete(niat);
+      setQuery('');
+      await onAdded();
+    } catch (error) {
+      setFailure(await bookingFailure(error));
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const penuh = slot.bookedCount >= slot.capacity;
+  return (
+    <div className="min-w-0">
+      <label htmlFor={inputId} className="mb-2 block text-[15px] font-bold text-dd-ink">
+        {label}
+      </label>
+      <div
+        className={`flex h-12 items-center gap-2.5 border border-dd-border-interactive bg-white px-3 focus-within:border-dd-forest ${
+          hasil.length ? 'rounded-t-dd-sm' : 'rounded-dd-sm'
+        }`}
+      >
+        <Search className="size-[18px] shrink-0 text-dd-muted" aria-hidden="true" />
+        <input
+          id={inputId}
+          type="search"
+          value={query}
+          disabled={disabled}
+          autoFocus={autoFocus}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder={penuh ? 'Kelas sudah penuh' : 'Ketik nama atau nomor WhatsApp'}
+          className="h-full min-w-0 flex-1 border-0 bg-transparent text-base text-dd-ink outline-none placeholder:text-dd-muted"
+        />
+      </div>
+      {hasil.length > 0 && (
+        <ul
+          aria-label="Hasil pencarian member"
+          className="m-0 list-none overflow-hidden rounded-b-dd-sm border border-t-0 border-dd-border-interactive p-0"
+        >
+          {hasil.map((calon, index) => (
+            <li
+              key={`${calon.customer.id}:${calon.teman ? 'teman' : 'member'}`}
+              className={index > 0 ? 'border-t border-dd-line/60' : undefined}
+            >
+              {calon.kendala ? (
+                <div className="flex min-h-14 items-center justify-between gap-2.5 p-3">
+                  <span className="min-w-0">
+                    <span className="block text-base font-bold text-dd-muted">
+                      {calon.customer.displayName}
+                    </span>
+                    <span className="block text-sm text-dd-danger">{calon.kendala}</span>
+                  </span>
+                  <span className="shrink-0 text-sm text-dd-muted">Perlu paket</span>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  disabled={busyId !== null}
+                  onClick={() => void tambah(calon)}
+                  className="flex min-h-14 w-full items-center justify-between gap-2.5 border-0 bg-dd-success-soft p-3 text-left transition hover:bg-dd-success-soft/70 disabled:opacity-60"
+                >
+                  <span className="min-w-0">
+                    <span className="block text-base font-bold text-dd-ink">
+                      {calon.teman
+                        ? `Teman dari ${calon.customer.displayName}`
+                        : calon.customer.displayName}
+                    </span>
+                    <span className="block text-sm text-dd-forest">
+                      {calon.teman ? 'Kursi teman · ' : ''}
+                      {calon.paket?.packageName ?? calon.paket?.name ?? 'Paket aktif'} · sisa{' '}
+                      {calon.paket?.available}
+                      {calon.paket?.customer?.id &&
+                        calon.paket.customer.id !== calon.customer.id && (
+                          <span className="block text-xs font-semibold text-dd-forest/80">
+                            Milik {calon.paket.customer.displayName} (Paket Bersama)
+                          </span>
+                        )}
+                    </span>
+                  </span>
+                  <span className="shrink-0 rounded-[6px] bg-dd-forest px-3 py-1.5 text-sm font-bold text-white">
+                    {busyId === calon.customer.id
+                      ? 'Menambah…'
+                      : calon.teman
+                        ? 'Tambah teman'
+                        : 'Tambah'}
+                  </span>
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      {failure && (
+        <div className="mt-2">
+          <Feedback kind="error">{failure}</Feedback>
+        </div>
+      )}
+      {mencari && <p className="m-0 mt-2 text-sm text-dd-muted">Mencari…</p>}
+      {query.trim().length >= MIN_HURUF && hasil.length === 0 && !disabled && !mencari && (
+        <p className="m-0 mt-2 text-sm text-dd-muted">
+          Tidak ada member aktif bernama &ldquo;{query.trim()}&rdquo; yang belum terdaftar di kelas
+          ini. Coba nomor WhatsApp atau email-nya.
+        </p>
+      )}
+      <p className="m-0 mt-2 text-sm text-dd-muted">
+        Satu klik langsung masuk daftar peserta. Sesi baru terpotong saat kelas selesai dan member
+        hadir.
+      </p>
+    </div>
   );
 }
 

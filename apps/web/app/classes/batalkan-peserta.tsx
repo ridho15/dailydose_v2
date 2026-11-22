@@ -23,6 +23,21 @@ type Mode = 'langsung' | 'pengajuan';
 
 const MIN_ALASAN = 10;
 
+/** Alasan yang paling sering dipakai meja depan; tetap bisa diubah di kolom alasan. */
+export const ALASAN_BATAL_UMUM = [
+  'Member minta batal lewat WhatsApp',
+  'Member sakit atau kurang sehat',
+  'Ada pekerjaan mendadak',
+  'Salah pilih kelas saat booking',
+] as const;
+
+const chipKelas = (aktif: boolean) =>
+  `min-h-11 rounded-dd-md border px-3 text-left text-sm ${
+    aktif
+      ? 'border-dd-forest bg-dd-success-soft font-semibold text-dd-forest'
+      : 'border-dd-border-interactive bg-white text-dd-ink hover:border-dd-forest'
+  }`;
+
 /**
  * Tombol X untuk membatalkan booking satu peserta, dengan konfirmasi.
  *
@@ -248,7 +263,7 @@ export function BatalkanPeserta({
                   className="mt-0.5 size-4 rounded border-dd-border-interactive text-dd-forest focus:ring-dd-forest"
                 />
                 <label htmlFor="check-medical" className="cursor-pointer text-dd-ink font-medium">
-                  🏥 Izin Sakit / Medis (Surat Dokter)
+                  Izin sakit dengan surat dokter
                   <span className="block text-xs font-normal text-dd-muted mt-0.5">
                     Kursi kelas langsung dibuka seketika agar bisa diisi peserta lain. Tiket pengembalian sesi dikirim ke Studio Manager.
                   </span>
@@ -261,29 +276,44 @@ export function BatalkanPeserta({
                   <button
                     type="button"
                     onClick={() => setAlasan('Member sakit dengan surat dokter resmi')}
-                    className="rounded border border-dd-border-interactive bg-white px-2 py-0.5 text-xs text-dd-ink hover:border-dd-forest"
+                    className={chipKelas(alasan === 'Member sakit dengan surat dokter resmi')}
                   >
-                    📄 Surat Dokter
+                    Surat dokter
                   </button>
                   <button
                     type="button"
                     onClick={() => setAlasan('Member rawat inap / tindakan medis darurat di RS')}
-                    className="rounded border border-dd-border-interactive bg-white px-2 py-0.5 text-xs text-dd-ink hover:border-dd-forest"
+                    className={chipKelas(alasan === 'Member rawat inap / tindakan medis darurat di RS')}
                   >
-                    🏥 Rawat Inap RS
+                    Rawat inap
                   </button>
                   <button
                     type="button"
                     onClick={() => setAlasan('Member cedera fisik mendadak tidak dapat latihan')}
-                    className="rounded border border-dd-border-interactive bg-white px-2 py-0.5 text-xs text-dd-ink hover:border-dd-forest"
+                    className={chipKelas(alasan === 'Member cedera fisik mendadak tidak dapat latihan')}
                   >
-                    🩹 Cedera Fisik
+                    Cedera fisik
                   </button>
                 </div>
               )}
             </div>
           )}
 
+          {!isMedical && (
+            <div className="flex flex-wrap gap-2" role="group" aria-label="Pilihan cepat">
+              {ALASAN_BATAL_UMUM.map((teks) => (
+                <button
+                  key={teks}
+                  type="button"
+                  aria-pressed={alasan === teks}
+                  onClick={() => setAlasan(teks)}
+                  className={chipKelas(alasan === teks)}
+                >
+                  {teks}
+                </button>
+              ))}
+            </div>
+          )}
           <Textarea
             label="Alasan"
             required

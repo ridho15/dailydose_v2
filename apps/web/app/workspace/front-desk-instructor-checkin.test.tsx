@@ -96,7 +96,6 @@ describe('FrontDeskTodayView - Instructor Check-in Visibility & Verification', (
         <FrontDeskTodayView
           client={mockClassClient}
           bookingClient={mockBookingClient}
-          dashboardClient={mockDashboardClient}
           initialNow={now}
         />
       </AppFeedbackProvider>,
@@ -154,7 +153,6 @@ describe('FrontDeskTodayView - Instructor Check-in Visibility & Verification', (
         <FrontDeskTodayView
           client={mockClassClient}
           bookingClient={mockBookingClient}
-          dashboardClient={mockDashboardClient}
           initialNow={now}
         />
       </AppFeedbackProvider>,

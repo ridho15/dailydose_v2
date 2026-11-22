@@ -1,4 +1,5 @@
 import { render, screen, within } from '@testing-library/react';
+import { AppFeedbackProvider } from '../components/app-feedback';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Dashboard } from '@/dashboard';
 import type { DashboardClient, DashboardOverview } from '@/api-clients/dashboard-client';
@@ -117,33 +118,52 @@ describe('Dashboard', () => {
     expect(screen.getByText(/belum boleh digunakan/)).toBeVisible();
   });
 
-  it('puts the work queue before the KPI cards', async () => {
-    const data = response();
-    data.queues = [
-      { key: 'payments', label: 'Pembayaran menunggu', count: 3, href: '/workspace/payments' },
-    ];
-    render(<Dashboard client={{ overview: vi.fn().mockResolvedValue(data) } as never} />);
-
-    const queue = await screen.findByRole('heading', { name: 'Perlu perhatian Anda' });
-    const kpi = screen.getByText('Omzet bersih');
-    expect(queue.compareDocumentPosition(kpi) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(screen.getByRole('link', { name: /Pembayaran menunggu/ })).toHaveAttribute(
-      'href',
-      '/workspace/payments',
+  it('puts the Perlu tindakan inbox before the KPI cards, fed by the decide-gated endpoint', async () => {
+    const tindakan = vi.fn().mockResolvedValue({
+      dibuatPada: '',
+      ringkasan: [{ jenis: 'PENYESUAIAN', jumlah: 1 }],
+      items: [
+        {
+          id: 'adj-1',
+          jenis: 'PENYESUAIAN',
+          version: 1,
+          masukPada: new Date().toISOString(),
+          branchId: 'b',
+          branchName: 'Gading',
+          nama: 'Rina',
+          rincian: '10 Sesi',
+          sesi: 1,
+          alasan: 'Salah potong sesi',
+        },
+      ],
+      nextCursor: null,
+      pengingat: [],
+      gagal: [],
+    });
+    render(
+      <AppFeedbackProvider>
+        <Dashboard
+          client={{ overview: vi.fn().mockResolvedValue(response()) } as never}
+          queueClient={{ tertinggal: vi.fn(), tindakan }}
+        />
+      </AppFeedbackProvider>,
     );
+
+    const kotak = await screen.findByRole('heading', { name: 'Perlu tindakan (1)' });
+    const kpi = await screen.findByText('Omzet bersih');
+    expect(kotak.compareDocumentPosition(kpi) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Setujui' })).toBeVisible();
+    expect(screen.queryByRole('heading', { name: 'Perlu perhatian Anda' })).toBeNull();
   });
 
-  it('shows the queue to roles without the risk section (Finance) and hides the class-risk panel', async () => {
+  it('hides the class-risk panel for roles without the risk section (Finance)', async () => {
     sessionState.roles = ['FINANCE'];
     const data = response();
     data.views = { finance: true, operations: false };
     data.sections = { ...data.sections, risk: false, queue: true };
-    data.queues = [
-      { key: 'payments', label: 'Pembayaran menunggu', count: 2, href: '/workspace/payments' },
-    ];
     render(<Dashboard client={{ overview: vi.fn().mockResolvedValue(data) } as never} />);
 
-    expect(await screen.findByRole('heading', { name: 'Perlu perhatian Anda' })).toBeVisible();
+    expect(await screen.findByText('Omzet bersih')).toBeVisible();
     expect(screen.queryByRole('heading', { name: 'Kelas berisiko' })).not.toBeInTheDocument();
   });
 

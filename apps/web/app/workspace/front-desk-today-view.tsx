@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, Check, MessageSquare, ScanLine, Sparkles, UserPlus } from 'lucide-react';
+import { AlertTriangle, Check, MessageSquare, Plus, ReceiptText, ScanLine, ShoppingCart, UserPlus } from 'lucide-react';
 import { WalkInDrawer } from './walk-in-drawer';
 import { WhatsAppReminderDialog } from './whatsapp-reminder-dialog';
 import type { WhatsAppReminderContext, WhatsAppPreset } from './whatsapp-reminder-presets';
@@ -17,10 +17,17 @@ import {
   type CustomerBookingRecord,
 } from '../api-clients/booking-client';
 import {
-  browserDashboardClient,
-  type DashboardClient,
-  type DashboardQueueSummary,
-} from '../api-clients/dashboard-client';
+  browserCheckInDeskClient,
+  type CheckInDeskClient,
+} from '../api-clients/check-in-desk-client';
+import { browserKeuanganClient, type KeuanganClient } from '../api-clients/keuangan-client';
+import type { WorkQueueClient } from '../api-clients/work-queue-client';
+import { AssistedSaleDrawer } from '../purchases/assisted-sale-drawer';
+import { BatalkanPeserta } from '../classes/batalkan-peserta';
+import { TambahPeserta } from '../classes/timetable-roster-panel';
+import { ActionInbox } from './action-inbox';
+import { DURASI_HASIL_MS, PemindaiMeja } from './check-in/pemindai-meja';
+import { FormPengeluaran } from './kas/kas-view';
 import { useSessionContext } from '../session-context';
 import { EmptyWeeksNotice } from './empty-weeks-notice';
 import { TargetCabang, ambilTargetCabang, type PaceCabang } from '../components/target-cabang';
@@ -44,12 +51,9 @@ import {
 export interface FrontDeskTodayViewProps {
   client?: ClassSlotClient;
   bookingClient?: BookingClient;
-  dashboardClient?: DashboardClient;
-  /**
-   * Antrean cabang yang sudah dimuat induknya (null = masih memuat). Bila diisi, halaman ini tidak memanggil
-   * ringkasan dashboard sendiri.
-   */
-  queues?: DashboardQueueSummary[] | null;
+  checkInClient?: CheckInDeskClient;
+  keuanganClient?: KeuanganClient;
+  queueClient?: WorkQueueClient;
   /** Hanya untuk tes: jam acuan. */
   initialNow?: Date;
   /** Target cabang dari pusat; tes mengganti pemuatnya. */
@@ -68,8 +72,9 @@ export interface FrontDeskTodayViewProps {
 export function FrontDeskTodayView({
   client = browserClassSlotClient,
   bookingClient = browserBookingClient,
-  dashboardClient = browserDashboardClient,
-  queues: queuesFromParent,
+  checkInClient = browserCheckInDeskClient,
+  keuanganClient = browserKeuanganClient,
+  queueClient,
   initialNow,
   muatTarget = ambilTargetCabang,
 }: FrontDeskTodayViewProps) {
@@ -89,8 +94,6 @@ export function FrontDeskTodayView({
   const [attendees, setAttendees] = useState<CustomerBookingRecord[]>([]);
   const [attendeesLoading, setAttendeesLoading] = useState(false);
   const [attendeesError, setAttendeesError] = useState<string | null>(null);
-  const [fetchedQueues, setFetchedQueues] = useState<DashboardQueueSummary[] | null>(null);
-  const queues = queuesFromParent !== undefined ? queuesFromParent : fetchedQueues;
   const [markTarget, setMarkTarget] = useState<CustomerBookingRecord | null>(null);
   const [reason, setReason] = useState('');
   const [marking, setMarking] = useState(false);
@@ -100,6 +103,9 @@ export function FrontDeskTodayView({
     defaultPresetId?: WhatsAppPreset['id'];
   } | null>(null);
   const [walkInOpen, setWalkInOpen] = useState(false);
+  const [saleOpen, setSaleOpen] = useState(false);
+  const [expenseOpen, setExpenseOpen] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
   const [verifyingInstructor, setVerifyingInstructor] = useState(false);
 
   useEffect(() => {
@@ -138,22 +144,6 @@ export function FrontDeskTodayView({
   useEffect(() => {
     void loadClasses();
   }, [loadClasses]);
-
-  useEffect(() => {
-    if (!branch?.id || queuesFromParent !== undefined) return;
-    let cancelled = false;
-    dashboardClient
-      .overview({ branchId: branch.id })
-      .then((overview) => {
-        if (!cancelled) setFetchedQueues(overview.queues.filter((queue) => queue.count > 0));
-      })
-      .catch(() => {
-        if (!cancelled) setFetchedQueues([]);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [branch?.id, dashboardClient, queuesFromParent]);
 
   const slots = useMemo(() => liveSlots(workspace?.slots ?? []), [workspace?.slots]);
   const { running, next } = useMemo(() => pickRunningAndNext(slots, now), [slots, now]);
@@ -266,6 +256,8 @@ export function FrontDeskTodayView({
         tone: 'success',
         title: 'Presensi dicatat',
         message: 'Presensi instruktur berhasil diverifikasi.',
+        // Sama dengan hasil pindai di meja, supaya konfirmasi tidak hilang sebelum terbaca.
+        durationMs: DURASI_HASIL_MS,
       });
     } catch (err) {
       feedback.showToast({
@@ -328,7 +320,7 @@ export function FrontDeskTodayView({
                   className="font-semibold text-dd-forest hover:border-dd-forest"
                   onClick={() => sessionContext?.setActiveBranchId(b.id)}
                 >
-                  🏢 {b.name}
+                  {b.name}
                 </Button>
               ))}
             </div>
@@ -350,9 +342,19 @@ export function FrontDeskTodayView({
   const finished = slots.filter(
     (slot) => slot.id !== selected?.id && slotPhase(slot, now) === 'Selesai',
   );
-  const queueTotal = (queues ?? []).reduce((sum, queue) => sum + queue.count, 0);
   const canReadRenewal = Boolean(sessionContext?.hasCapability('package:read'));
   const canManageAttendance = Boolean(sessionContext?.hasCapability('attendance:manage'));
+  const canSell = Boolean(sessionContext?.hasCapability('purchase:record'));
+  const canExpense = Boolean(
+    sessionContext?.hasCapability('expense:create') || sessionContext?.hasCapability('finance:manage'),
+  );
+  const canAddMember = Boolean(sessionContext?.hasCapability('booking:create:assisted'));
+  const canCancelBooking = Boolean(sessionContext?.hasCapability('booking:cancel:assisted'));
+  /** Kursi yang sudah dipakai tiap member di kelas terpilih, untuk aturan kursi teman. */
+  const kursiMember = new Map<string, number>();
+  for (const item of attendees)
+    if (item.status !== 'CANCELLED')
+      kursiMember.set(item.customerUserId, (kursiMember.get(item.customerUserId) ?? 0) + 1);
 
   const slotRow = (slot: ClassSlot) => {
     const ended = slotPhase(slot, now) === 'Selesai';
@@ -426,63 +428,52 @@ export function FrontDeskTodayView({
           <Button
             type="button"
             variant="primary"
-            leadingIcon={<Sparkles className="size-4" aria-hidden="true" />}
+            leadingIcon={<UserPlus className="size-4" aria-hidden="true" />}
             onClick={() => setWalkInOpen(true)}
           >
-            + Member Baru Walk-In (Ikut Kelas)
+            Walk-in
           </Button>
-          <ButtonLink
-            href="/workspace/check-in"
-            variant="secondary"
-            leadingIcon={<ScanLine className="size-4" aria-hidden="true" />}
-          >
-            Buka Check-in
-          </ButtonLink>
-          <ButtonLink
-            href="/customers"
-            variant="secondary"
-            leadingIcon={<UserPlus className="size-4" aria-hidden="true" />}
-          >
-            Daftarkan member baru
-          </ButtonLink>
+          {canSell && (
+            <Button
+              type="button"
+              variant="secondary"
+              leadingIcon={<ShoppingCart className="size-4" aria-hidden="true" />}
+              onClick={() => setSaleOpen(true)}
+            >
+              Jual paket
+            </Button>
+          )}
+          {canExpense && (
+            <Button
+              type="button"
+              variant="secondary"
+              leadingIcon={<ReceiptText className="size-4" aria-hidden="true" />}
+              onClick={() => setExpenseOpen(true)}
+            >
+              Catat pengeluaran
+            </Button>
+          )}
         </div>
       </header>
 
-      <TargetCabang branchId={branch?.id} muat={muatTarget} />
-
-      {queues && queueTotal > 0 && (
-        <section
-          aria-labelledby="decision-heading"
-          className="flex flex-col gap-4 rounded-dd-lg border border-dd-warning-line/60 bg-dd-warning-soft p-5 sm:flex-row sm:items-center"
-        >
-          <span
-            aria-hidden="true"
-            className="grid size-11 shrink-0 place-items-center rounded-dd-lg bg-dd-warning text-lg font-bold text-white"
-          >
-            {queueTotal}
-          </span>
-          <div className="min-w-0 flex-1">
-            <h2 id="decision-heading" className="m-0 text-lg font-semibold text-dd-warning">
-              {queueTotal} hal menunggu keputusan Anda
-            </h2>
-            <p className="m-0 mt-0.5 text-sm text-dd-ink">
-              {queues.map((queue) => `${queue.count} ${queue.label.toLowerCase()}`).join(', ')}.
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {queues.slice(0, 2).map((queue, index) => (
-              <ButtonLink
-                key={queue.key}
-                href={queue.href}
-                size="sm"
-                variant={index === 0 ? 'primary' : 'secondary'}
-              >
-                {queue.label}
-              </ButtonLink>
-            ))}
-          </div>
-        </section>
+      {canManageAttendance && (
+        <div className="space-y-2">
+          <PemindaiMeja
+            pindai={(pass) => checkInClient.pindai(branch.id, pass)}
+            onTercatat={() => {
+              void loadAttendees();
+              void loadClasses();
+            }}
+          />
+          <ButtonLink href="/workspace/check-in" variant="ghost" size="sm" leadingIcon={<ScanLine className="size-4" aria-hidden="true" />}>
+            Layar check-in dengan foto member
+          </ButtonLink>
+        </div>
       )}
+
+      <ActionInbox branchId={branch.id} queueClient={queueClient} now={now.getTime()} />
+
+      <TargetCabang branchId={branch?.id} muat={muatTarget} />
 
       <EmptyWeeksNotice
         branchId={branch.id}
@@ -580,9 +571,42 @@ export function FrontDeskTodayView({
                     )}
                   </div>
 
-                  <h3 id="attendance-heading" className="m-0 mt-5 text-[15px] font-semibold">
-                    Presensi peserta
-                  </h3>
+                  <div className="mt-5 flex flex-wrap items-center justify-between gap-2">
+                    <h3 id="attendance-heading" className="m-0 text-[15px] font-semibold">
+                      Presensi peserta
+                    </h3>
+                    {canAddMember &&
+                      selected.status === 'PUBLISHED' &&
+                      slotPhase(selected, now) !== 'Selesai' && (
+                        <Button
+                          size="sm"
+                          variant={addOpen ? 'secondary' : 'primary'}
+                          aria-expanded={addOpen}
+                          leadingIcon={<Plus className="size-4" aria-hidden="true" />}
+                          onClick={() => setAddOpen((v) => !v)}
+                        >
+                          {addOpen ? 'Tutup pencarian' : 'Tambah member'}
+                        </Button>
+                      )}
+                  </div>
+                  {addOpen && canAddMember && (
+                    <div className="mt-3 rounded-dd-lg border border-dd-line bg-dd-surface p-4">
+                      <TambahPeserta
+                        slot={selected}
+                        client={bookingClient}
+                        kursiMember={kursiMember}
+                        inputId="fd-tambah"
+                        label={`Tambah member ke ${className(selected)}`}
+                        autoFocus
+                        disabled={selected.bookedCount >= selected.capacity}
+                        onAdded={async () => {
+                          feedback.showToast({ tone: 'success', title: 'Member masuk kelas', durationMs: 8000 });
+                          await loadAttendees();
+                          await loadClasses();
+                        }}
+                      />
+                    </div>
+                  )}
                   {!window.open && 'reason' in window && window.reason && (
                     <p className="m-0 mt-1 text-sm text-dd-muted" role="note">
                       {window.reason}
@@ -673,6 +697,17 @@ export function FrontDeskTodayView({
                                         <MessageSquare className="size-3.5 text-dd-forest" aria-hidden="true" />
                                         <span>Kirim WA</span>
                                       </Button>
+                                    )}
+                                    {canCancelBooking && !cancelled && (
+                                      <BatalkanPeserta
+                                        booking={booking}
+                                        kelasMulai={selected.startAt}
+                                        client={bookingClient}
+                                        onBerubah={() => {
+                                          void loadAttendees();
+                                          void loadClasses();
+                                        }}
+                                      />
                                     )}
                                     {present ? (
                                       <span className="text-sm text-dd-muted">Sudah tercatat</span>
@@ -873,6 +908,41 @@ export function FrontDeskTodayView({
         context={whatsAppModal?.context ?? null}
         defaultPresetId={whatsAppModal?.defaultPresetId}
       />
+
+      {canSell && (
+        <AssistedSaleDrawer
+          open={saleOpen}
+          branch={branch}
+          onClose={() => setSaleOpen(false)}
+          onRecorded={() => {
+            setSaleOpen(false);
+            feedback.showToast({
+              tone: 'success',
+              title: 'Penjualan tercatat',
+              message: 'Paket aktif setelah Manager atau Super Owner menyetujuinya.',
+              durationMs: 8000,
+            });
+          }}
+        />
+      )}
+
+      <Modal
+        open={expenseOpen}
+        title="Catat pengeluaran"
+        description={`Untuk ${branch.name}`}
+        onClose={() => setExpenseOpen(false)}
+      >
+        <FormPengeluaran
+          client={keuanganClient}
+          branchId={branch.id}
+          branchName={branch.name}
+          now={now.getTime()}
+          onSaved={() => {
+            setExpenseOpen(false);
+            feedback.showToast({ tone: 'success', title: 'Pengeluaran tercatat', durationMs: 8000 });
+          }}
+        />
+      </Modal>
 
       {/* Drawer Alur Cepat Walk-In & Booking Kasir (Fase 3) */}
       {branch && (

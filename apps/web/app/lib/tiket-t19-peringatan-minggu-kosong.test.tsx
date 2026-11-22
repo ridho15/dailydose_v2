@@ -268,8 +268,6 @@ describe('Tiket T-19: Papan Peringatan Minggu Kosong', () => {
           <FrontDeskTodayView
             client={slotClient}
             bookingClient={{} as any}
-            dashboardClient={mockDashboardClient}
-            queues={[]}
             initialNow={testNow}
           />
         </AppFeedbackProvider>,

@@ -22,8 +22,45 @@ export interface AntreanTertinggal {
   gagal: KunciAntrean[];
 }
 
+export type JenisTindakan =
+  | 'TRANSFER'
+  | 'PENJUALAN_LANGSUNG'
+  | 'RESCHEDULE'
+  | 'PEMBATALAN'
+  | 'PENYESUAIAN';
+
+export interface ItemTindakan {
+  id: string;
+  jenis: JenisTindakan;
+  version: number;
+  masukPada: string;
+  branchId: string | null;
+  branchName: string | null;
+  nama: string;
+  rincian: string;
+  nilaiRp?: number;
+  metode?: string;
+  pencatat?: string | null;
+  alasan?: string | null;
+  sesi?: number;
+  kelas?: { nama: string; mulai: string } | null;
+  kelasTujuan?: { nama: string; mulai: string } | null;
+  buktiAda?: boolean;
+}
+
+export interface KotakTindakan {
+  dibuatPada: string;
+  ringkasan: { jenis: JenisTindakan; jumlah: number }[];
+  items: ItemTindakan[];
+  nextCursor: string | null;
+  pengingat: { key: 'renewal' | 'kuota'; jumlah: number; href: string }[];
+  gagal: JenisTindakan[];
+}
+
 export interface WorkQueueClient {
   tertinggal(branchId?: string): Promise<AntreanTertinggal>;
+  /** Kotak masuk "Perlu tindakan"; dengan `jenis` mengembalikan satu halaman berkursor. */
+  tindakan?(input: { branchId?: string; jenis?: JenisTindakan; cursor?: string }): Promise<KotakTindakan>;
 }
 
 export const browserWorkQueueClient: WorkQueueClient = {
@@ -34,5 +71,23 @@ export const browserWorkQueueClient: WorkQueueClient = {
     });
     if (!Array.isArray(hasil?.items)) throw new Error('ANTREAN_TIDAK_DIKENAL');
     return { ...hasil, gagal: Array.isArray(hasil.gagal) ? hasil.gagal : [] };
+  },
+  async tindakan({ branchId, jenis, cursor }) {
+    const qs = new URLSearchParams();
+    if (branchId) qs.set('branchId', branchId);
+    if (jenis) qs.set('jenis', jenis);
+    if (cursor) qs.set('cursor', cursor);
+    const hasil = await apiFetch<KotakTindakan>(
+      `/work-queue/actions${qs.size ? `?${qs.toString()}` : ''}`,
+      { label: 'Memuat yang perlu diputuskan…' },
+    );
+    if (!Array.isArray(hasil?.items) || !Array.isArray(hasil?.ringkasan))
+      throw new Error('KOTAK_TINDAKAN_TIDAK_DIKENAL');
+    return {
+      ...hasil,
+      pengingat: Array.isArray(hasil.pengingat) ? hasil.pengingat : [],
+      gagal: Array.isArray(hasil.gagal) ? hasil.gagal : [],
+      nextCursor: hasil.nextCursor ?? null,
+    };
   },
 };

@@ -252,7 +252,6 @@ describe('FrontDeskTodayView - WhatsApp action buttons integration', () => {
           client={mockSlotClient as ClassSlotClient}
           bookingClient={mockBookingClient as BookingClient}
           initialNow={new Date('2026-10-30T02:05:00.000Z')} // 09:05 WIB
-          queues={[]}
         />
       </AppFeedbackProvider>,
     );
@@ -299,7 +298,6 @@ describe('FrontDeskTodayView - WhatsApp action buttons integration', () => {
           client={mockSlotClient as ClassSlotClient}
           bookingClient={mockBookingClient as BookingClient}
           initialNow={new Date('2026-10-30T02:05:00.000Z')}
-          queues={[]}
         />
       </AppFeedbackProvider>,
     );

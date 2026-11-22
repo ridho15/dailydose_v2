@@ -111,7 +111,6 @@ describe('FASE 1 UAT & NEGATIVE VERIFICATION (QA REPORT)', () => {
         <FrontDeskTodayView
           client={c.classClient}
           bookingClient={c.bookingClient}
-          dashboardClient={c.dashboardClient}
           initialNow={now}
         />
       </AppFeedbackProvider>,
@@ -133,7 +132,6 @@ describe('FASE 1 UAT & NEGATIVE VERIFICATION (QA REPORT)', () => {
         <FrontDeskTodayView
           client={c.classClient}
           bookingClient={c.bookingClient}
-          dashboardClient={c.dashboardClient}
           initialNow={now}
         />
       </AppFeedbackProvider>,
@@ -145,8 +143,8 @@ describe('FASE 1 UAT & NEGATIVE VERIFICATION (QA REPORT)', () => {
     expect(screen.getByText('Atau pilih cabang bertugas Anda hari ini:')).toBeVisible();
 
     // Verifikasi tombol cabang interaktif muncul untuk seluruh cabang yang dimiliki staf
-    const btnGG = screen.getByRole('button', { name: /🏢 Daily Dose Green Garden/ });
-    const btnMK = screen.getByRole('button', { name: /🏢 Daily Dose Muara Karang/ });
+    const btnGG = screen.getByRole('button', { name: /^Daily Dose Green Garden$/ });
+    const btnMK = screen.getByRole('button', { name: /^Daily Dose Muara Karang$/ });
     expect(btnGG).toBeVisible();
     expect(btnMK).toBeVisible();
 

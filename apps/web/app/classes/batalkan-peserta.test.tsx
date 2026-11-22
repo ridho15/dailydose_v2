@@ -103,6 +103,35 @@ describe('BatalkanPeserta', () => {
     expect(onBerubah).toHaveBeenCalled();
   });
 
+  it('lebih dari H-12: satu klik chip alasan umum mengisi alasan, lalu booking langsung batal', async () => {
+    session = { id: 'admin-1', roles: ['ADMIN'], capabilities: ['booking:cancel:assisted'] };
+    const client = {
+      ...klien(),
+      cancellationOptions: vi.fn().mockResolvedValue({ canCancel: true, cutoffAt: '' }),
+    };
+    render(
+      <BatalkanPeserta
+        booking={{ ...booking, status: 'BOOKED' }}
+        kelasMulai={besok}
+        client={client}
+        onBerubah={vi.fn()}
+      />,
+    );
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Batalkan booking Theresia' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Batalkan booking Theresia?' });
+    const kirim = within(dialog).getByRole('button', { name: 'Batalkan booking' });
+    expect(kirim).toBeDisabled();
+    await user.click(within(dialog).getByRole('button', { name: 'Member sakit atau kurang sehat' }));
+    expect(within(dialog).getByLabelText(/Alasan/)).toHaveValue('Member sakit atau kurang sehat');
+    await user.click(kirim);
+    expect(client.cancelAsStaff).toHaveBeenCalledWith(
+      'b1',
+      'Member sakit atau kurang sehat',
+      expect.any(String),
+    );
+  });
+
   it('tidak ada tombol untuk kelas yang sudah dimulai', () => {
     session = { id: 'admin-1', roles: ['ADMIN'], capabilities: ['booking:cancel:assisted'] };
     const { container } = render(
@@ -136,7 +165,7 @@ describe('BatalkanPeserta', () => {
     await user.click(checkMedis);
 
     // Klik preset Surat Dokter
-    const presetBtn = within(dialog).getByRole('button', { name: /Surat Dokter/ });
+    const presetBtn = within(dialog).getByRole('button', { name: /Surat dokter/i });
     await user.click(presetBtn);
 
     expect(within(dialog).getByLabelText(/Alasan/)).toHaveValue('Member sakit dengan surat dokter resmi');

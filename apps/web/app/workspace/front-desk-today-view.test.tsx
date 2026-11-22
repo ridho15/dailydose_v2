@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppFeedbackProvider } from '../components/app-feedback';
 import type { ClassSlotClient, ClassWorkspace } from '../api-clients/class-slot-client';
 import type { BookingClient } from '../api-clients/booking-client';
-import type { DashboardClient } from '../api-clients/dashboard-client';
+import type { KotakTindakan, WorkQueueClient } from '../api-clients/work-queue-client';
 import { FrontDeskTodayView } from './front-desk-today-view';
 
 const capabilities = vi.hoisted(() => ({
@@ -30,6 +30,7 @@ vi.mock('../session-context', () => ({
       id: 'u-admin',
       displayName: 'Admin Meja Depan',
       roles: ['ADMIN'],
+      capabilities: capabilities.list,
       branches: [branch],
     },
     activeBranchId: 'branch-1',
@@ -93,20 +94,32 @@ const clients = (
       }),
     backfillAttendance: vi.fn().mockResolvedValue({ ok: true }),
   } as unknown as BookingClient;
-  const dashboardClient = {
-    overview: vi.fn().mockResolvedValue({
-      queues: overrides.queues ?? [
-        {
-          key: 'payments',
-          label: 'Pembayaran menunggu',
-          count: 3,
-          href: '/workspace/payments?status=PENDING',
-        },
-        { key: 'x', label: 'Kosong', count: 0, href: '/x' },
-      ],
-    }),
-  } as unknown as DashboardClient;
-  return { classClient, bookingClient, dashboardClient };
+  const items = (overrides.queues ?? [
+    {
+      id: 'rs-1',
+      jenis: 'RESCHEDULE',
+      version: 1,
+      masukPada: '2026-10-27T02:00:00.000Z',
+      branchId: 'branch-1',
+      branchName: 'Daily Dose Green Garden',
+      nama: 'Rina Wijaya',
+      rincian: 'Reformer Flow pindah ke Reformer Flow',
+      kelas: { nama: 'Reformer Flow', mulai: '2026-10-28T02:00:00.000Z' },
+      kelasTujuan: { nama: 'Reformer Flow', mulai: '2026-10-29T02:00:00.000Z' },
+    },
+  ]) as KotakTindakan['items'];
+  const queueClient: WorkQueueClient = {
+    tertinggal: vi.fn(),
+    tindakan: vi.fn().mockResolvedValue({
+      dibuatPada: '',
+      ringkasan: items.length ? [{ jenis: 'RESCHEDULE', jumlah: items.length }] : [],
+      items,
+      nextCursor: null,
+      pengingat: [],
+      gagal: [],
+    } satisfies KotakTindakan),
+  };
+  return { classClient, bookingClient, queueClient };
 };
 
 const renderDesk = (c: ReturnType<typeof clients>) =>
@@ -115,7 +128,7 @@ const renderDesk = (c: ReturnType<typeof clients>) =>
       <FrontDeskTodayView
         client={c.classClient}
         bookingClient={c.bookingClient}
-        dashboardClient={c.dashboardClient}
+        queueClient={c.queueClient}
         initialNow={now}
       />
     </AppFeedbackProvider>,
@@ -228,24 +241,66 @@ describe('FrontDeskTodayView', () => {
     expect(screen.queryByRole('button', { name: 'Tandai hadir' })).toBeNull();
   });
 
-  it('opens the Check-in scanner and registers members, and shows only decisions that exist', async () => {
+  it('memindai QR langsung di Hari ini dan menampilkan keputusan yang boleh diambil', async () => {
     renderDesk(clients());
-    // Staf memindai QR statis di ponsel member di halaman Check-in, bukan menampilkan QR.
-    expect(await screen.findByRole('link', { name: /Buka Check-in/ })).toHaveAttribute(
+    expect(
+      await screen.findByRole('heading', { name: 'Pindai QR member atau instruktur' }),
+    ).toBeVisible();
+    expect(screen.getByLabelText('Isi QR')).toBeVisible();
+    expect(screen.getByRole('link', { name: /Layar check-in dengan foto member/ })).toHaveAttribute(
       'href',
       '/workspace/check-in',
     );
-    expect(screen.getByRole('link', { name: /Daftarkan member baru/ })).toHaveAttribute(
-      'href',
-      '/customers',
-    );
     expect(screen.queryByRole('button', { name: /Tampilkan QR check-in/ })).toBeNull();
-    const todo = await screen.findByRole('region', { name: '3 hal menunggu keputusan Anda' });
-    expect(within(todo).getByRole('link', { name: /Pembayaran menunggu/ })).toHaveAttribute(
-      'href',
-      '/workspace/payments?status=PENDING',
-    );
-    expect(within(todo).queryByText('Kosong')).toBeNull();
+    const kotak = await screen.findByRole('region', { name: 'Perlu tindakan (1)' });
+    expect(within(kotak).getByText('Rina Wijaya')).toBeVisible();
+    expect(within(kotak).getByRole('button', { name: 'Setujui' })).toBeVisible();
+  });
+
+  it('tanpa izin presensi, pemindai tidak tampil', async () => {
+    capabilities.list = ['class-slot:read', 'booking:read'];
+    renderDesk(clients());
+    await screen.findByRole('region', { name: 'Berjalan sekarang' });
+    expect(screen.queryByLabelText('Isi QR')).toBeNull();
+  });
+
+  it('satu baris tombol: Walk-in, Jual paket, Catat pengeluaran sesuai izin', async () => {
+    capabilities.list = [
+      'attendance:manage',
+      'class-slot:read',
+      'booking:read',
+      'purchase:record',
+      'expense:create',
+    ];
+    const user = userEvent.setup();
+    renderDesk(clients());
+    expect(await screen.findByRole('button', { name: 'Walk-in' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Jual paket' })).toBeVisible();
+    await user.click(screen.getByRole('button', { name: 'Catat pengeluaran' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Catat pengeluaran' });
+    expect(within(dialog).getByRole('button', { name: 'Simpan pengeluaran' })).toBeDisabled();
+  });
+
+  it('kartu kelas punya Tambah member dan tombol X batal per peserta', async () => {
+    capabilities.list = [
+      'attendance:manage',
+      'class-slot:read',
+      'booking:read',
+      'booking:create:assisted',
+      'booking:cancel:assisted',
+    ];
+    // Tombol X hanya untuk kelas yang belum dimulai menurut jam sebenarnya.
+    const c = clients({ slots: workspace([slot('next', '2099-10-27T07:00:00Z', '2099-10-27T08:00:00Z', 'PUBLISHED')]) });
+    (c.bookingClient as unknown as Record<string, unknown>).cancelAsStaff = vi.fn();
+    (c.bookingClient as unknown as Record<string, unknown>).searchRosterCandidates = vi
+      .fn()
+      .mockResolvedValue({ customers: [], packages: [] });
+    const user = userEvent.setup();
+    renderDesk(c);
+    await screen.findByText('Pelanggan Satu');
+    expect(screen.getByRole('button', { name: 'Batalkan booking Pelanggan Satu' })).toBeVisible();
+    await user.click(screen.getByRole('button', { name: 'Tambah member' }));
+    expect(screen.getByLabelText('Tambah member ke Reformer Flow')).toBeVisible();
   });
 
   it('lists members coming today whose package is almost used up, once per person', async () => {
@@ -296,7 +351,7 @@ describe('FrontDeskTodayView', () => {
       '/workspace/classes',
     );
     // Keputusan yang menunggu tetap tampil meski belum ada kelas.
-    expect(await screen.findByRole('link', { name: /Pembayaran menunggu/ })).toBeVisible();
+    expect(await screen.findByRole('region', { name: 'Perlu tindakan (1)' })).toBeVisible();
   });
 
   it('shows no decision banner when nothing needs attention', async () => {
@@ -305,37 +360,11 @@ describe('FrontDeskTodayView', () => {
     expect(screen.queryByText(/menunggu keputusan Anda/)).toBeNull();
   });
 
-  it('uses the branch problems the parent already loaded instead of calling the dashboard again', async () => {
-    const c = clients();
-    render(
-      <AppFeedbackProvider>
-        <FrontDeskTodayView
-          client={c.classClient}
-          bookingClient={c.bookingClient}
-          dashboardClient={c.dashboardClient}
-          queues={[
-            {
-              key: 'verifications',
-              label: 'Verifikasi identitas menunggu',
-              count: 5,
-              href: '/identity-verifications?status=PENDING',
-            },
-          ]}
-          initialNow={now}
-        />
-      </AppFeedbackProvider>,
-    );
-    expect(
-      await screen.findByRole('link', { name: /Verifikasi identitas menunggu/ }),
-    ).toBeVisible();
-    expect(c.dashboardClient.overview).not.toHaveBeenCalled();
-  });
-
-  it('opens Walk-In drawer when clicking the primary "+ Member Baru Walk-In (Ikut Kelas)" button', async () => {
+  it('opens Walk-In drawer when clicking the primary "Walk-in" button', async () => {
     const user = userEvent.setup();
     const c = clients();
     renderDesk(c);
-    const walkInBtn = await screen.findByRole('button', { name: /Member Baru Walk-In/i });
+    const walkInBtn = await screen.findByRole('button', { name: 'Walk-in' });
     expect(walkInBtn).toBeVisible();
 
     await user.click(walkInBtn);

@@ -51,7 +51,7 @@ export function bacaNominal(teks: string): number | null {
   return Number.isSafeInteger(nilai) && nilai > 0 ? nilai : null;
 }
 
-function FormPengeluaran({
+export function FormPengeluaran({
   client,
   branchId,
   branchName,

@@ -150,7 +150,6 @@ const renderView = (c: ReturnType<typeof createTestClients>) =>
       <FrontDeskTodayView
         client={c.classClient}
         bookingClient={c.bookingClient}
-        dashboardClient={c.dashboardClient}
         initialNow={now}
       />
     </AppFeedbackProvider>,
@@ -184,10 +183,11 @@ describe('Tiket T-20: Halaman Hari Ini untuk Front Desk (Papan 14)', () => {
     expect(within(next).getByText(/6 dari 6 peserta/)).toBeVisible();
   });
 
-  it('3. Tidak menampilkan QR untuk dipindai member; meja depan membuka halaman Check-in', async () => {
+  it('3. Tidak menampilkan QR untuk dipindai member; meja depan memindai langsung di Hari ini', async () => {
     renderView(createTestClients());
     // Arah yang disepakati: member menyimpan QR statis, studio yang memindai.
-    expect(await screen.findByRole('link', { name: /Buka Check-in/ })).toHaveAttribute(
+    expect(await screen.findByLabelText('Isi QR')).toBeVisible();
+    expect(screen.getByRole('link', { name: /Layar check-in dengan foto member/ })).toHaveAttribute(
       'href',
       '/workspace/check-in',
     );
@@ -225,24 +225,15 @@ describe('Tiket T-20: Halaman Hari Ini untuk Front Desk (Papan 14)', () => {
     });
   });
 
-  it('5. Menandai kelas kelebihan kapasitas dan menampilkan keputusan yang menunggu', async () => {
+  it('5. Menandai kelas kelebihan kapasitas', async () => {
     renderView(createTestClients());
     const next = await screen.findByRole('region', { name: 'Berikutnya hari ini' });
     expect(within(next).getByText(/Kelebihan kapasitas \(6\/4\)/)).toBeVisible();
-
-    const decisions = await screen.findByRole('region', { name: '2 hal menunggu keputusan Anda' });
-    expect(within(decisions).getByRole('link', { name: /Pembayaran menunggu/ })).toHaveAttribute(
-      'href',
-      '/workspace/payments?status=PENDING',
-    );
   });
 
-  it('6. Menyediakan pendaftaran member dan bebas dari kartu statistik pasif', async () => {
+  it('6. Menyediakan pendaftaran member walk-in dan bebas dari kartu statistik pasif', async () => {
     renderView(createTestClients());
-    expect(await screen.findByRole('link', { name: /Daftarkan member baru/ })).toHaveAttribute(
-      'href',
-      '/customers',
-    );
+    expect(await screen.findByRole('button', { name: 'Walk-in' })).toBeVisible();
     expect(screen.queryByText(/Total Omzet|Pendapatan Harian|Rata-rata/i)).toBeNull();
   });
 });

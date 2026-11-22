@@ -8,18 +8,14 @@ import {
   type KeuanganClient,
   type RingkasanBulanan,
 } from '@/api-clients/keuangan-client';
-import {
-  browserWorkQueueClient,
-  type AntreanTertinggal,
-  type WorkQueueClient,
-} from '@/api-clients/work-queue-client';
+import { browserWorkQueueClient, type WorkQueueClient } from '@/api-clients/work-queue-client';
 import type { OwnerReportClient } from '@/api-clients/owner-report-client';
 import type { ClassSlotClient } from '@/api-clients/class-slot-client';
 import { EmptyWeeksNotice } from './empty-weeks-notice';
 import { labelKategori } from '../lib/kategori-pengeluaran';
 import { useSessionContext } from '../session-context';
 import { Feedback, Skeleton } from '../ui';
-import { keterangan, NAMA } from './antrean/antrean-view';
+import { ActionInbox } from './action-inbox';
 import { OwnerExceptionsPanel } from './owner-exceptions-panel';
 import { catatanKasPayroll, KasPayrollSimpananTabel } from './kas-payroll-simpanan';
 
@@ -145,7 +141,6 @@ export function OwnerHome({
   const [periode, setPeriode] = useState(bulan[0]!);
   const [ringkasan, setRingkasan] = useState<RingkasanBulanan | null>(null);
   const [gagal, setGagal] = useState(false);
-  const [antrean, setAntrean] = useState<AntreanTertinggal | null>(null);
 
   useEffect(() => {
     let batal = false;
@@ -160,16 +155,6 @@ export function OwnerHome({
     };
   }, [client, periode]);
 
-  useEffect(() => {
-    let batal = false;
-    Promise.resolve()
-      .then(() => queueClient.tertinggal(context?.activeBranchId || undefined))
-      .then((a) => !batal && setAntrean(a))
-      .catch(() => !batal && setAntrean(null));
-    return () => {
-      batal = true;
-    };
-  }, [context?.activeBranchId, queueClient]);
 
   if (!session) return null;
   const namaDepan = session.displayName.trim().split(/\s+/)[0] ?? session.displayName;
@@ -180,7 +165,6 @@ export function OwnerHome({
     year: 'numeric',
     timeZone: 'Asia/Jakarta',
   }).format(new Date(now));
-  const keputusan = (antrean?.items ?? []).filter((i) => i.nada !== 'MENUNGGU').slice(0, 3);
   const bisaLaporan = Boolean(context?.hasCapability?.('finance:reconcile'));
   const bisaJurnal = Boolean(
     context?.hasCapability?.('finance:read') || context?.hasCapability?.('expense:create'),
@@ -198,49 +182,11 @@ export function OwnerHome({
         </p>
       </header>
 
-      {keputusan.length > 0 && (
-        <section aria-labelledby="keputusan-title" className="space-y-3">
-          <h2 id="keputusan-title" className="m-0 text-xl font-semibold">
-            Perlu keputusan Anda
-          </h2>
-          <ul className="m-0 grid list-none gap-3 p-0">
-            {keputusan.map((item) => (
-              <li
-                key={item.key}
-                className={`flex flex-col gap-3 rounded-dd-lg border p-4 sm:flex-row sm:items-center ${
-                  item.nada === 'TELAT'
-                    ? 'border-dd-danger/40 bg-white'
-                    : 'border-dd-warning-line/60 bg-dd-warning-soft'
-                }`}
-              >
-                <span
-                  aria-hidden="true"
-                  className={`grid size-11 shrink-0 place-items-center rounded-dd-lg text-lg font-bold text-white ${
-                    item.nada === 'TELAT' ? 'bg-dd-danger' : 'bg-dd-warning'
-                  }`}
-                >
-                  {item.jumlah}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="m-0 text-[17px] font-semibold text-dd-ink">{NAMA[item.key]}</p>
-                  <p className="m-0 mt-0.5 text-[15px] text-dd-muted">
-                    {keterangan(item, now, 'Asia/Jakarta')}
-                  </p>
-                </div>
-                <Link
-                  href={item.href}
-                  className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-dd-lg border border-dd-border-interactive bg-white px-4 text-[15px] font-semibold text-dd-ink no-underline hover:border-dd-forest"
-                >
-                  Buka
-                </Link>
-              </li>
-            ))}
-          </ul>
-          <Link href="/workspace/antrean" className="text-[15px] font-semibold text-dd-forest">
-            Lihat semua antrean
-          </Link>
-        </section>
-      )}
+      <ActionInbox
+        branchId={context?.activeBranchId || undefined}
+        queueClient={queueClient}
+        now={now}
+      />
 
       {/* Minggu tanpa kelas: hanya untuk cabang yang dipilih, supaya tidak berulang lima kali. */}
       {context?.activeBranch && (

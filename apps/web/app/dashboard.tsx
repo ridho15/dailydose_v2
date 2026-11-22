@@ -35,6 +35,8 @@ import type { AvailabilityClient } from '@/api-clients/availability-client';
 import { EmptyWeeksNotice } from './workspace/empty-weeks-notice';
 import { OwnerExceptionsPanel } from './workspace/owner-exceptions-panel';
 import { OwnerHome } from './workspace/owner-home';
+import { ActionInbox } from './workspace/action-inbox';
+import type { WorkQueueClient } from '@/api-clients/work-queue-client';
 import type { OwnerReportClient } from '@/api-clients/owner-report-client';
 
 const number = new Intl.NumberFormat('id-ID');
@@ -210,9 +212,11 @@ export function Dashboard({
   bookingClient,
   availabilityClient,
   ownerReportClient,
+  queueClient,
 }: {
   client?: DashboardClient;
   ownerReportClient?: OwnerReportClient;
+  queueClient?: WorkQueueClient;
   slotClient?: ClassSlotClient;
   bookingClient?: BookingClient;
   availabilityClient?: AvailabilityClient;
@@ -237,7 +241,7 @@ export function Dashboard({
   const load = useCallback(async () => {
     if (!session) return;
     // Beranda instruktur tidak memakai ringkasan ini dan API menjawab 403 untuk perannya.
-    if (isInstructorOnlySession(session) || isOwnerSession(session)) {
+    if (isInstructorOnlySession(session) || isOwnerSession(session) || isFrontDeskOnlySession(session)) {
       setLoading(false);
       return;
     }
@@ -275,18 +279,14 @@ export function Dashboard({
       <FrontDeskTodayView
         client={slotClient}
         bookingClient={bookingClient}
-        dashboardClient={client}
-        queues={overview ? overview.queues.filter((queue) => queue.count > 0) : null}
       />
     );
   }
   const views = overview?.views ?? fallbackViews(session.roles);
   const copy = dashboardCopy[views.finance && views.operations ? 'both' : views.finance ? 'finance' : 'operations'];
-  const queueTotal = overview?.queues.reduce((sum, item) => sum + item.count, 0) ?? 0;
   const queueCounts = Object.fromEntries(
     (overview?.queues ?? []).map((item) => [item.key, item.count]),
   );
-  const showQueue = Boolean(overview?.sections.queue);
   const showRisk = Boolean(overview?.sections.risk);
   const canReadOwnerReport = Boolean(
     typeof context?.hasCapability === 'function'
@@ -418,107 +418,47 @@ export function Dashboard({
       {/* ========================================================================= */}
       {/* ZONE 2: ACTION CENTER (URGENT FIRST)                                     */}
       {/* ========================================================================= */}
-      {overview && (showQueue || showRisk) && (
-        <section aria-label="Pusat Tindakan & Antrean" className="space-y-3">
-          <div className="flex items-center justify-between">
-            <span className="text-[13px] font-bold text-dd-forest">
-              Pusat Tindakan & Antrean
-            </span>
-            {queueTotal > 0 && (
-              <span className="text-xs font-semibold text-dd-brass">
-                {queueTotal} pekerjaan menunggu tindakan
-              </span>
-            )}
-          </div>
-          <div className={`grid gap-6 ${showQueue && showRisk ? 'xl:grid-cols-[1.5fr_1fr]' : ''}`}>
-            {showQueue && (
-              <Panel className="p-6" aria-labelledby="dashboard-queue-title">
-                <div className="flex items-center justify-between gap-3 border-b border-dd-line/60 pb-4">
-                  <div>
-                    <span className="text-[13px] font-bold text-dd-forest">
-                      Antrean kerja
-                    </span>
-                    <h2
-                      id="dashboard-queue-title"
-                      className="mt-1 font-sans text-xl font-bold text-dd-ink"
-                    >
-                      Perlu perhatian Anda
-                    </h2>
-                  </div>
-                  <Badge tone={queueTotal > 0 ? 'warning' : 'success'}>{queueTotal} item</Badge>
-                </div>
-                <div className="mt-2 divide-y divide-dd-line/60">
-                  {overview.queues.length ? (
-                    overview.queues.map((item) => (
-                      <Link
-                        key={item.key}
-                        href={item.href}
-                        className="group flex items-center gap-4 rounded-dd-md px-2 py-4 text-dd-ink no-underline transition hover:bg-dd-surface-muted/30"
-                      >
-                        <span className="grid size-10 place-items-center rounded-dd-md bg-dd-brass-soft font-bold text-dd-brass-dark shadow-sm">
-                          {item.count}
-                        </span>
-                        <span className="text-sm font-semibold sm:text-base">{item.label}</span>
-                        <ArrowRight className="ml-auto size-4 text-dd-muted transition group-hover:translate-x-1 group-hover:text-dd-forest" />
-                      </Link>
-                    ))
-                  ) : (
-                    <div className="py-10 text-center text-sm text-dd-muted">
-                      <CheckCircle2 className="mx-auto mb-2 size-8 text-dd-success/60" />
-                      Tidak ada antrean yang membutuhkan tindakan.
-                    </div>
-                  )}
-                </div>
-              </Panel>
-            )}
+      <ActionInbox branchId={branchId || undefined} queueClient={queueClient} />
 
-            {showRisk && (
-              <Panel className="p-6" aria-labelledby="dashboard-risk-title">
-                <div className="border-b border-dd-line/60 pb-4">
-                  <span className="text-[13px] font-bold text-dd-forest">
-                    Pantauan H-24
+      {overview && showRisk && (
+        <Panel className="p-6" aria-labelledby="dashboard-risk-title">
+          <div className="border-b border-dd-line/60 pb-4">
+            <span className="text-[13px] font-bold text-dd-forest">Pantauan kuota</span>
+            <h2 id="dashboard-risk-title" className="mt-1 font-sans text-xl font-bold text-dd-ink">
+              Kelas berisiko
+            </h2>
+          </div>
+          <div className="mt-4 space-y-3">
+            {overview.risks.length ? (
+              overview.risks.map((item) => (
+                <Link
+                  key={item.id}
+                  href={item.href}
+                  className="flex gap-3.5 rounded-dd-md border border-dd-line/80 bg-dd-surface-muted/30 p-3.5 text-dd-ink no-underline transition hover:border-dd-forest/60 hover:bg-white"
+                >
+                  <AlertTriangle className="mt-0.5 size-4 shrink-0 text-dd-warning" />
+                  <span className="min-w-0 flex-1">
+                    <strong className="block truncate text-sm font-bold text-dd-ink">
+                      {item.className}
+                    </strong>
+                    <span className="mt-1 block text-xs text-dd-muted">
+                      {item.bookedCount}/{item.minimumQuota} kuota minimum ·{' '}
+                      {new Date(item.startAt).toLocaleString('id-ID', {
+                        dateStyle: 'medium',
+                        timeStyle: 'short',
+                      })}
+                    </span>
                   </span>
-                  <h2
-                    id="dashboard-risk-title"
-                    className="mt-1 font-sans text-xl font-bold text-dd-ink"
-                  >
-                    Kelas berisiko
-                  </h2>
-                </div>
-                <div className="mt-4 space-y-3">
-                  {overview.risks.length ? (
-                    overview.risks.map((item) => (
-                      <Link
-                        key={item.id}
-                        href={item.href}
-                        className="flex gap-3.5 rounded-dd-md border border-dd-line/80 bg-dd-surface-muted/30 p-3.5 text-dd-ink no-underline transition hover:border-dd-forest/60 hover:bg-white"
-                      >
-                        <AlertTriangle className="mt-0.5 size-4 shrink-0 text-dd-warning" />
-                        <span className="min-w-0 flex-1">
-                          <strong className="block truncate text-sm font-bold text-dd-ink">
-                            {item.className}
-                          </strong>
-                          <span className="mt-1 block text-xs text-dd-muted">
-                            {item.bookedCount}/{item.minimumQuota} kuota minimum ·{' '}
-                            {new Date(item.startAt).toLocaleString('id-ID', {
-                              dateStyle: 'medium',
-                              timeStyle: 'short',
-                            })}
-                          </span>
-                        </span>
-                      </Link>
-                    ))
-                  ) : (
-                    <div className="py-10 text-center text-sm text-dd-muted">
-                      <CheckCircle2 className="mx-auto mb-2 size-8 text-dd-success/60" />
-                      Tidak ada kelas berisiko dalam 24 jam.
-                    </div>
-                  )}
-                </div>
-              </Panel>
+                </Link>
+              ))
+            ) : (
+              <div className="py-10 text-center text-sm text-dd-muted">
+                <CheckCircle2 className="mx-auto mb-2 size-8 text-dd-success/60" />
+                Tidak ada kelas berisiko dalam 24 jam.
+              </div>
             )}
           </div>
-        </section>
+        </Panel>
       )}
 
       {overview && canReadOwnerReport && (
