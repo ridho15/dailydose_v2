@@ -82,20 +82,6 @@ export const frontendPages: FrontendPageDefinition[] = [
     dashboardDeepLink: '/workspace/bookings?tab=reschedules&status=PENDING',
   },
   {
-    href: '/workspace/antrean',
-    label: 'Antrean yang tertinggal',
-    shortLabel: 'Antrean',
-    description:
-      'Semua pekerjaan yang menunggu, dari yang paling lama dan paling merugikan bila dibiarkan.',
-    group: 'Operasional Studio',
-    capabilities: ['payment:review', 'purchase:review', 'identity-verification:read', 'reschedule:read', 'package:read'],
-    priority: 1,
-    branchScope: 'topbar',
-    accent: 'warning',
-    roleRelevance: ['SUPER_OWNER', 'OWNER', 'ADMIN', 'MANAGER'],
-    queueBadgeSource: 'total',
-  },
-  {
     href: '/workspace/check-in',
     label: 'Check-in hari ini',
     shortLabel: 'Check-in',
@@ -588,20 +574,139 @@ export const frontendPageGroups: FrontendPageGroup[] = [
   'Pengaturan & Sistem',
 ];
 
+/** Peran yang menentukan susunan menu staf; akun berperan ganda memakai yang tertinggi. */
+export type PeranMenu = 'SUPER_OWNER' | 'OWNER' | 'MANAGER' | 'FINANCE' | 'ADMIN';
+
+const URUTAN_PERAN: readonly PeranMenu[] = ['SUPER_OWNER', 'OWNER', 'MANAGER', 'FINANCE', 'ADMIN'];
+
+export interface MenuUtama {
+  href: string;
+  label: string;
+}
+
 /**
- * 4 Menu inti untuk staf meja depan (Front Desk / Admin Cabang):
- * 1. Hari Ini & Presensi (/workspace)
- * 2. Kalender Kelas (/workspace/classes)
- * 3. Member & Booking (/workspace/bookings)
- * 4. Kasir & Pengeluaran (/workspace/kas)
+ * Menu utama per peran: hanya pekerjaan harian, maksimal enam. Halaman lain yang boleh dibuka
+ * akun tidak hilang, tetapi dikumpulkan di bagian "Lainnya" (atau "Pengaturan" untuk Super Owner).
  */
-export const MENU_FRONT_DESK = [
-  '/workspace',
-  '/workspace/classes',
-  '/workspace/bookings',
-  '/customers',
-  '/workspace/kas',
-] as const;
+export const MENU_PERAN: Record<PeranMenu, { utama: readonly MenuUtama[]; lainnyaLabel: string }> = {
+  ADMIN: {
+    utama: [
+      { href: '/workspace', label: 'Hari ini' },
+      { href: '/workspace/classes', label: 'Jadwal' },
+      { href: '/customers', label: 'Member' },
+      { href: '/workspace/kas', label: 'Pengeluaran' },
+    ],
+    lainnyaLabel: 'Lainnya',
+  },
+  MANAGER: {
+    utama: [
+      { href: '/workspace', label: 'Beranda' },
+      { href: '/workspace/check-in', label: 'Check-in' },
+      { href: '/workspace/classes', label: 'Jadwal' },
+      { href: '/customers', label: 'Member' },
+      { href: '/workspace/kas', label: 'Pengeluaran' },
+    ],
+    lainnyaLabel: 'Lainnya',
+  },
+  OWNER: {
+    utama: [
+      { href: '/workspace', label: 'Beranda' },
+      { href: '/workspace/branch-performance', label: 'Laporan' },
+      { href: '/workspace/classes', label: 'Jadwal' },
+    ],
+    lainnyaLabel: 'Lainnya',
+  },
+  SUPER_OWNER: {
+    utama: [
+      { href: '/workspace', label: 'Beranda' },
+      { href: '/workspace/classes', label: 'Jadwal' },
+      { href: '/customers', label: 'Member' },
+      { href: '/finance', label: 'Keuangan' },
+      { href: '/workspace/packages', label: 'Paket & Promo' },
+      { href: '/instructors', label: 'Instruktur & Staf' },
+    ],
+    lainnyaLabel: 'Pengaturan',
+  },
+  FINANCE: {
+    utama: [
+      { href: '/workspace', label: 'Beranda' },
+      { href: '/finance', label: 'Keuangan' },
+      { href: '/workspace/vouchers', label: 'Voucher' },
+      { href: '/ledger', label: 'Paket & Sesi' },
+    ],
+    lainnyaLabel: 'Lainnya',
+  },
+};
+
+/** Menu utama Admin Cabang (meja depan). */
+export const MENU_FRONT_DESK = MENU_PERAN.ADMIN.utama.map((item) => item.href);
+
+export function peranMenu(roles: readonly string[] | undefined): PeranMenu | null {
+  return URUTAN_PERAN.find((peran) => roles?.includes(peran)) ?? null;
+}
+
+/**
+ * Susunan menu staf untuk satu sesi: menu utama perannya (yang boleh dibuka) dan semua halaman
+ * lain yang boleh dibuka, urut grup lalu prioritas, untuk bagian "Lainnya".
+ */
+export function menuStaf(session: { roles: readonly string[]; capabilities: readonly string[] }) {
+  const peran = peranMenu(session.roles);
+  if (!peran) return null;
+  const capabilities = [...session.capabilities];
+  const halaman = (href: string) => frontendPages.find((page) => page.href === href);
+  const utama = MENU_PERAN[peran].utama
+    .map((item) => ({ ...item, page: halaman(item.href) }))
+    .filter((item): item is MenuUtama & { page: FrontendPageDefinition } =>
+      Boolean(item.page && canReadPage(capabilities, item.page)),
+    );
+  const dipakai = new Set(utama.map((item) => item.href));
+  const lainnya = frontendPages
+    .filter(
+      (page) =>
+        !dipakai.has(page.href) &&
+        !page.hideFromNav &&
+        !page.isDormant &&
+        page.capabilities.length > 0 &&
+        !page.capabilities.includes('customer:self') &&
+        canReadPage(capabilities, page),
+    )
+    .sort(
+      (a, b) =>
+        frontendPageGroups.indexOf(a.group) - frontendPageGroups.indexOf(b.group) ||
+        a.priority - b.priority,
+    );
+  return { peran, utama, lainnya, lainnyaLabel: MENU_PERAN[peran].lainnyaLabel };
+}
+
+/**
+ * Halaman yang isinya satu tema dan dulu terpisah di menu: ditampilkan sebagai tab di atas
+ * halaman supaya terasa satu tempat, tanpa memindahkan isi atau rutenya.
+ */
+export const GRUP_TAB: readonly { label: string; hrefs: readonly string[] }[] = [
+  { label: 'Keuangan', hrefs: ['/finance', '/workspace/kas', '/workspace/branch-performance'] },
+  { label: 'Paket & Promo', hrefs: ['/workspace/packages', '/workspace/vouchers'] },
+  { label: 'Instruktur & Staf', hrefs: ['/instructors', '/users', '/assignments'] },
+  { label: 'Member', hrefs: ['/customers', '/ledger', '/ledger/adjustments', '/workspace/renewal'] },
+  {
+    label: 'Notifikasi & Otomasi',
+    hrefs: ['/workspace/reminders', '/operations', '/notification-management', '/health'],
+  },
+];
+
+/** Tab untuk halaman aktif: hanya halaman grup yang boleh dibuka; kosong bila kurang dari dua. */
+export function tabUntuk(pathname: string, capabilities: readonly string[]) {
+  const aktif = pageForPath(pathname);
+  if (!aktif) return [];
+  const grup = GRUP_TAB.find((g) => g.hrefs.includes(aktif.href));
+  if (!grup) return [];
+  const tab = grup.hrefs
+    .map((href) => frontendPages.find((page) => page.href === href))
+    .filter((page): page is FrontendPageDefinition =>
+      Boolean(page && canReadPage([...capabilities], page)),
+    )
+    .map((page) => ({ href: page.href, label: page.shortLabel, aktif: page.href === aktif.href }));
+  return tab.length >= 2 ? tab : [];
+}
 
 /** Halaman registry yang paling spesifik untuk sebuah path (detail `/x/[id]` memakai halaman `/x`). */
 export function pageForPath(pathname: string): FrontendPageDefinition | undefined {

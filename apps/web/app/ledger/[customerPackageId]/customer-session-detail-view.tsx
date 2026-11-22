@@ -291,7 +291,7 @@ export function CustomerSessionDetailView({ id }: { id: string }) {
           </div>
         )}
         {balance.customer?.id && (
-          <ButtonLink className="mt-4" variant="secondary" href={`/users/${balance.customer.id}`}>
+          <ButtonLink className="mt-4" variant="secondary" href={`/customers/${encodeURIComponent(balance.customer.id)}`}>
             Buka detail pelanggan
           </ButtonLink>
         )}

@@ -15,7 +15,7 @@ import {
   Users,
   X,
 } from 'lucide-react';
-import { frontendPageGroups, frontendPages, MENU_FRONT_DESK } from '@/lib/frontend-pages';
+import { frontendPageGroups, frontendPages, MENU_FRONT_DESK, menuStaf } from '@/lib/frontend-pages';
 import { PreviewTag } from './components/admin/preview-tag';
 import {
   isCustomerOnlySession,
@@ -83,8 +83,12 @@ export function AppNavigation({
   const customerOnly = isCustomerOnlySession(session);
   const instructorOnly = !customerOnly && isInstructorOnlySession(session);
   const frontDeskOnly = !customerOnly && isFrontDeskOnlySession(session);
+  // Staf (Admin, Manager, Owner, Finance, Super Owner): menu utama per peran + "Lainnya".
+  const menu = !customerOnly && !instructorOnly && session ? menuStaf(session) : null;
+  const lainnyaAktif = Boolean(menu?.lainnya.some((item) => item.href === activeHref));
+  const tampilLainnya = advancedOpen || lainnyaAktif;
   const advancedPages = frontendPages
-    .filter((item) => item.isAdvanced && !item.isDormant && !item.hideFromNav && !instructorOnly && !frontDeskOnly)
+    .filter((item) => item.isAdvanced && !item.isDormant && !item.hideFromNav && !instructorOnly && !menu)
     .filter(
       (item) => item.capabilities.length === 0 || context?.hasCapability(...item.capabilities),
     )
@@ -246,73 +250,71 @@ export function AppNavigation({
                   </select>
                 </div>
               )}
-              {frontDeskOnly ? (
-                <section
-                  className="space-y-1"
-                  aria-labelledby="nav-menu-studio"
-                >
-                  {!collapsed && (
-                    <h2
-                      id="nav-menu-studio"
-                      className="mb-1 px-2 text-[13px] font-bold text-dd-muted"
+              {menu ? (
+                <>
+                  <section className="space-y-1" aria-labelledby="nav-menu-utama">
+                    {!collapsed && (
+                      <h2 id="nav-menu-utama" className="mb-1 px-2 text-[13px] font-bold text-dd-muted">
+                        Menu utama
+                      </h2>
+                    )}
+                    {menu.utama.map((item) => {
+                      const badge = item.href === '/workspace' ? (queueCounts.tindakan ?? 0) : 0;
+                      return (
+                        <TautanMenu
+                          key={item.href}
+                          href={item.href}
+                          label={item.label}
+                          active={item.href === activeHref}
+                          badge={badge}
+                          collapsed={collapsed}
+                          className={linkClass(item.href === activeHref)}
+                          onClick={onClose}
+                        />
+                      );
+                    })}
+                  </section>
+                  {menu.lainnya.length > 0 && (
+                    <section
+                      className="space-y-1 border-t border-dd-line/60 pt-3"
+                      aria-label={menu.lainnyaLabel}
                     >
-                      Menu Utama Cabang
-                    </h2>
+                      {!collapsed ? (
+                        <button
+                          type="button"
+                          onClick={() => setAdvancedOpen((prev) => !prev)}
+                          className="flex min-h-11 w-full items-center justify-between px-3 py-2 text-[13px] font-bold text-dd-muted transition hover:text-dd-ink"
+                          aria-expanded={tampilLainnya}
+                        >
+                          <span className="flex items-center gap-2">
+                            <Sliders className="size-3.5" aria-hidden="true" />
+                            <span>{menu.lainnyaLabel}</span>
+                          </span>
+                          <ChevronDown
+                            aria-hidden="true"
+                            className={`size-3.5 transition-transform duration-200 motion-reduce:transition-none ${tampilLainnya ? 'rotate-180' : ''}`}
+                          />
+                        </button>
+                      ) : (
+                        <div className="my-1 border-t border-dd-line/60" />
+                      )}
+                      {(collapsed || tampilLainnya) &&
+                        menu.lainnya.map((item) => (
+                          <TautanMenu
+                            key={item.href}
+                            href={item.href}
+                            label={item.shortLabel}
+                            active={item.href === activeHref}
+                            badge={0}
+                            preview={item.maturity === 'preview'}
+                            collapsed={collapsed}
+                            className={linkClass(item.href === activeHref)}
+                            onClick={onClose}
+                          />
+                        ))}
+                    </section>
                   )}
-                  {MENU_FRONT_DESK.map((href) => {
-                    const item = frontendPages.find((p) => p.href === href);
-                    if (!item) return null;
-                    const active = item.href === activeHref;
-                    const Icon = iconForPage(item.href);
-                    const displayLabel =
-                      item.href === '/workspace'
-                        ? 'Hari Ini & Presensi'
-                        : item.href === '/workspace/classes'
-                          ? 'Kalender Kelas'
-                          : item.href === '/workspace/bookings'
-                            ? 'Booking Kelas'
-                            : item.href === '/customers'
-                              ? 'Member & Paket'
-                              : item.href === '/workspace/kas'
-                                ? 'Kasir & Pengeluaran'
-                                : item.shortLabel;
-                    return (
-                      <Link
-                        href={item.href}
-                        aria-current={active ? 'page' : undefined}
-                        key={item.href}
-                        title={
-                          collapsed
-                            ? `${displayLabel}${item.queueBadgeSource && (queueCounts[item.queueBadgeSource] ?? 0) > 0 ? ` (${queueCounts[item.queueBadgeSource]})` : ''}`
-                            : undefined
-                        }
-                        onClick={onClose}
-                        className={linkClass(active)}
-                      >
-                        <div className="relative shrink-0">
-                          <Icon className="size-[18px]" aria-hidden="true" />
-                          {collapsed &&
-                            item.queueBadgeSource &&
-                            (queueCounts[item.queueBadgeSource] ?? 0) > 0 && (
-                              <span
-                                aria-label={`${queueCounts[item.queueBadgeSource]} antrean`}
-                                className="absolute -top-1 -right-1 size-2.5 rounded-full bg-dd-danger ring-2 ring-white"
-                              />
-                            )}
-                        </div>
-                        {!collapsed && <span className="truncate">{displayLabel}</span>}
-                        {!collapsed && item.maturity === 'preview' && <PreviewTag tone="light" />}
-                        {!collapsed &&
-                          item.queueBadgeSource &&
-                          (queueCounts[item.queueBadgeSource] ?? 0) > 0 && (
-                            <span className="ml-auto rounded-full bg-dd-danger px-2 py-0.5 text-[13px] font-bold text-white">
-                              {queueCounts[item.queueBadgeSource]}
-                            </span>
-                          )}
-                      </Link>
-                    );
-                  })}
-                </section>
+                </>
               ) : (
                 frontendPageGroups.map((group) => {
                 const pagesInGroup = frontendPages
@@ -491,6 +493,58 @@ export function AppNavigation({
         )}
       </nav>
     </>
+  );
+}
+
+/** Satu tautan menu staf: ikon, label, badge jumlah keputusan, dan mode sidebar ciut. */
+function TautanMenu({
+  href,
+  label,
+  active,
+  badge,
+  preview = false,
+  collapsed,
+  className,
+  onClick,
+}: {
+  href: string;
+  label: string;
+  active: boolean;
+  badge: number;
+  preview?: boolean;
+  collapsed: boolean;
+  className: string;
+  onClick?(): void;
+}) {
+  const Icon = iconForPage(href);
+  return (
+    <Link
+      href={href}
+      aria-current={active ? 'page' : undefined}
+      title={collapsed ? `${label}${badge > 0 ? ` (${badge})` : ''}` : undefined}
+      onClick={onClick}
+      className={className}
+    >
+      <div className="relative shrink-0">
+        <Icon className="size-[18px]" aria-hidden="true" />
+        {collapsed && badge > 0 && (
+          <span
+            aria-label={`${badge} perlu tindakan`}
+            className="absolute -top-1 -right-1 size-2.5 rounded-full bg-dd-danger ring-2 ring-white"
+          />
+        )}
+      </div>
+      {!collapsed && <span className="truncate">{label}</span>}
+      {!collapsed && preview && <PreviewTag tone="light" />}
+      {!collapsed && badge > 0 && (
+        <span
+          aria-label={`${badge} perlu tindakan`}
+          className="ml-auto rounded-full bg-dd-danger px-2 py-0.5 text-[13px] font-bold text-white"
+        >
+          {badge}
+        </span>
+      )}
+    </Link>
   );
 }
 

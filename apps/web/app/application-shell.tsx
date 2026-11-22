@@ -18,7 +18,7 @@ import { AppNavigation } from './app-navigation';
 import { isRecognizedProtectedPath, useSessionContext } from './session-context';
 import { routes } from '@/lib/routes';
 import { roleLabel } from './lib/role-labels';
-import { canReadPage, frontendPages, pageForPath } from '@/lib/frontend-pages';
+import { canReadPage, frontendPages, pageForPath, tabUntuk } from '@/lib/frontend-pages';
 import { PreviewTag } from './components/admin/preview-tag';
 import { PageMetaProvider } from './components/admin/page-meta';
 import { useStudioPreference } from './components/public/public-experience';
@@ -648,6 +648,27 @@ export function ApplicationShell({ children }: { children: React.ReactNode }) {
           className="mx-auto w-full max-w-[1600px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8 pb-24 lg:pb-8"
           id="main-content"
         >
+          {(() => {
+            const tab = tabUntuk(pathname, session.capabilities);
+            return tab.length > 0 ? (
+              <nav aria-label="Halaman terkait" className="-mx-1 mb-6 flex gap-2 overflow-x-auto px-1 pb-1">
+                {tab.map((item) => (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    aria-current={item.aktif ? 'page' : undefined}
+                    className={`inline-flex min-h-11 shrink-0 items-center rounded-dd-md border px-4 text-[15px] no-underline ${
+                      item.aktif
+                        ? 'border-dd-forest bg-dd-success-soft font-semibold text-dd-forest'
+                        : 'border-dd-border-interactive bg-white text-dd-ink hover:border-dd-forest'
+                    }`}
+                  >
+                    {item.label}
+                  </Link>
+                ))}
+              </nav>
+            ) : null;
+          })()}
           <PageMetaProvider value={currentPage}>{children}</PageMetaProvider>
         </main>
         <MobileBottomNavigation

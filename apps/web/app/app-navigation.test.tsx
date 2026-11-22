@@ -71,76 +71,72 @@ describe('AppNavigation - Fase 5 Perampingan Navigasi Admin Cabang', () => {
     expect(badgePeran(['FINANCE'], false)).toBe('Finance');
   });
 
-  it('merampingkan sidebar Admin Cabang menjadi tepat 5 Menu Inti studio', () => {
+  it('Admin Cabang: empat menu utama, sisanya terlipat di Lainnya', async () => {
     render(<AppNavigation mobileOpen={false} />);
     const nav = screen.getByRole('navigation', { name: 'Navigasi utama' });
-
-    // Header khusus studio cabang
-    expect(screen.getByRole('heading', { name: 'Menu Utama Cabang' })).toBeVisible();
-
-    // Pastikan tidak ada kategori grup rumit yang membingungkan admin awam
-    expect(screen.queryByRole('heading', { name: 'Operasional Studio' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: 'Member & Pelanggan' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: 'Penjualan & Keuangan' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: 'Pengaturan & Sistem' })).not.toBeInTheDocument();
-
-    // Memverifikasi 5 menu inti
-    const links = within(nav).getAllByRole('link');
-    const linkTexts = links
-      .map((l) => l.textContent?.trim())
-      .filter((t) => t && !t.includes('Daily Dose'));
-
-    expect(linkTexts).toEqual([
-      'Hari Ini & Presensi',
-      'Kalender Kelas',
-      'Booking Kelas',
-      'Member & Paket',
-      'Kasir & Pengeluaran',
+    const utama = within(nav).getByRole('region', { name: 'Menu utama' });
+    expect(
+      within(utama)
+        .getAllByRole('link')
+        .map((l) => [l.textContent?.trim(), l.getAttribute('href')]),
+    ).toEqual([
+      ['Hari ini', '/workspace'],
+      ['Jadwal', '/workspace/classes'],
+      ['Member', '/customers'],
+      ['Pengeluaran', '/workspace/kas'],
     ]);
+    expect(MENU_FRONT_DESK).toEqual(['/workspace', '/workspace/classes', '/customers', '/workspace/kas']);
 
-    // Memverifikasi tautan href
-    const hrefs = links.map((l) => l.getAttribute('href')).filter((h) => h !== '/workspace' || linkTexts.includes('Hari Ini & Presensi'));
-    expect(hrefs).toContain('/workspace');
-    expect(hrefs).toContain('/workspace/classes');
-    expect(hrefs).toContain('/workspace/bookings');
-    expect(hrefs).toContain('/customers');
-    expect(hrefs).toContain('/workspace/kas');
-
-    // Menu lanjutan disembunyikan untuk staf front desk
-    expect(screen.queryByText('Alat & Sistem Lanjutan')).not.toBeInTheDocument();
-  });
-
-  it('menampilkan badge antrean pada 5 menu inti admin cabang bila ada', () => {
-    render(
-      <AppNavigation
-        mobileOpen={false}
-        queueCounts={{ reschedules: 3 }}
-      />,
+    // Halaman lain tidak hilang: Booking ada di "Lainnya" setelah dibuka.
+    const lainnya = within(nav).getByRole('button', { name: 'Lainnya' });
+    expect(lainnya).toHaveAttribute('aria-expanded', 'false');
+    expect(within(nav).queryByRole('link', { name: 'Booking' })).toBeNull();
+    lainnya.click();
+    expect(await within(nav).findByRole('link', { name: 'Booking' })).toHaveAttribute(
+      'href',
+      '/workspace/bookings',
     );
-    // Antrean perubahan jadwal muncul di menu Member & Booking
-    expect(screen.getByText('3')).toBeVisible();
   });
 
-  it('tetap menampilkan menu lengkap dan alat lanjutan untuk Super Owner / Manager', () => {
+  it('Lainnya terbuka sendiri bila halaman aktif ada di dalamnya', () => {
+    mockPathname = '/workspace/bookings';
+    render(<AppNavigation mobileOpen={false} />);
+    expect(screen.getByRole('link', { name: 'Booking' })).toHaveAttribute('aria-current', 'page');
+  });
+
+  it('badge keputusan menunggu tampil di menu Hari ini', () => {
+    render(<AppNavigation mobileOpen={false} queueCounts={{ tindakan: 3 }} />);
+    const hariIni = screen.getByRole('link', { name: /Hari ini/ });
+    expect(within(hariIni).getByText('3')).toBeVisible();
+  });
+
+  it('Super Owner: enam menu utama dan bagian Pengaturan', () => {
     mockSession = {
       id: 'session-owner',
       userId: 'user-owner',
       displayName: 'Super Owner Boss',
       roles: ['SUPER_OWNER'],
       capabilities: [
-        'dashboard:read',
         'class-slot:read',
-        'booking:read',
-        'automation:read',
-        'payment:review',
+        'customer:read',
+        'finance:reconcile',
+        'package-promotion:read',
+        'assignment:read',
         'master:read',
+        'automation:read',
       ],
       branches: [{ id: 'branch-1', name: 'All Branches', code: 'ALL' }],
     };
-
     render(<AppNavigation mobileOpen={false} />);
-    expect(screen.getByRole('heading', { name: 'Operasional Studio' })).toBeVisible();
-    expect(screen.getByRole('heading', { name: 'Pengaturan & Sistem' })).toBeVisible();
-    expect(screen.getByText('Alat & Sistem Lanjutan')).toBeVisible();
+    const utama = screen.getByRole('region', { name: 'Menu utama' });
+    expect(within(utama).getAllByRole('link').map((l) => l.textContent?.trim())).toEqual([
+      'Beranda',
+      'Jadwal',
+      'Member',
+      'Keuangan',
+      'Paket & Promo',
+      'Instruktur & Staf',
+    ]);
+    expect(screen.getByRole('button', { name: 'Pengaturan' })).toBeVisible();
   });
 });

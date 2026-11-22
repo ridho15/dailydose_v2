@@ -1,15 +1,15 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { browserDashboardClient } from '@/api-clients/dashboard-client';
+import { browserWorkQueueClient } from '@/api-clients/work-queue-client';
 import { useSessionContext } from '../session-context';
 
 export type QueueCounts = Record<string, number>;
 
 /**
- * Jumlah antrean kerja staf (pembayaran, reschedule, penyesuaian sesi, …) untuk badge navigasi.
- * Dipakai sekali di shell dan diteruskan ke sidebar serta bottom-nav mobile agar tidak ada
- * dua permintaan dashboard untuk data yang sama.
+ * Jumlah keputusan yang menunggu pengguna ini (kotak masuk "Perlu tindakan"), untuk badge menu
+ * Beranda. `tindakan` adalah totalnya; tiap jenis (TRANSFER, RESCHEDULE, …) juga tersedia.
+ * Dipakai sekali di shell dan diteruskan ke sidebar serta navigasi bawah ponsel.
  */
 export function useQueueCounts(enabled: boolean): QueueCounts {
   const context = useSessionContext();
@@ -18,18 +18,15 @@ export function useQueueCounts(enabled: boolean): QueueCounts {
   const [counts, setCounts] = useState<QueueCounts>({});
 
   useEffect(() => {
-    if (!enabled || !session) return;
+    if (!enabled || !session || !browserWorkQueueClient.tindakan) return;
     let active = true;
-    browserDashboardClient
-      .overview({ branchId: activeBranchId || undefined })
-      .then((overview) => {
+    browserWorkQueueClient
+      .tindakan({ branchId: activeBranchId || undefined })
+      .then((kotak) => {
         if (!active) return;
-        const counts: QueueCounts = Object.fromEntries(
-          overview.queues.map((item) => [item.key, item.count]),
-        );
-        // Badge halaman Antrean: semua pekerjaan yang menunggu, apa pun jenisnya.
-        counts.total = overview.queues.reduce((sum, item) => sum + item.count, 0);
-        setCounts(counts);
+        const hasil: QueueCounts = Object.fromEntries(kotak.ringkasan.map((r) => [r.jenis, r.jumlah]));
+        hasil.tindakan = kotak.ringkasan.reduce((sum, r) => sum + r.jumlah, 0);
+        setCounts(hasil);
       })
       .catch(() => {
         if (active) setCounts({});

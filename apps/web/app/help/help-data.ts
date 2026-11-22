@@ -1214,7 +1214,7 @@ export const HELP_SECTIONS_ADMIN: HelpSection[] = [
         number: 5,
         title: 'Tinjau Antrean Reschedule',
         description:
-          'Buka tab "Antrean Reschedule" (/workspace/antrean), periksa alasan pengajuan member (seperti darurat medis), lalu putuskan (Setujui / Tolak).',
+          'Buka Beranda, lihat kotak "Perlu tindakan", periksa alasan pengajuan member (seperti darurat medis), lalu klik Setujui atau Tolak di kartunya.',
       },
     ],
     successState: {

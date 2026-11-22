@@ -1,8 +1,6 @@
-import type { Metadata } from 'next';
-import { AntreanView } from './antrean-view';
+import { redirect } from 'next/navigation';
 
-export const metadata: Metadata = { title: 'Antrean yang tertinggal' };
-
-export default function AntreanPage() {
-  return <AntreanView />;
+/** Alamat lama: antrean kini menjadi kotak masuk "Perlu tindakan" di beranda. */
+export default function AlamatLama() {
+  redirect('/workspace#perlu-tindakan');
 }

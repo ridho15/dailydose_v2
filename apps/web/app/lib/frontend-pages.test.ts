@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { canMutatePage, canReadPage, frontendPages, pageForPath } from './frontend-pages';
+import {
+  canMutatePage,
+  canReadPage,
+  frontendPages,
+  menuStaf,
+  pageForPath,
+  peranMenu,
+  tabUntuk,
+} from './frontend-pages';
 import { pageIcons } from './page-icons';
 import { canAccessSessionPath } from '../session-context';
 import type { WebSession } from '@/api-clients/session-client';
@@ -87,5 +95,60 @@ describe('frontend page registry', () => {
       } as unknown as WebSession;
       expect([item.href, canAccessSessionPath(session, item.href)]).toEqual([item.href, true]);
     }
+  });
+});
+
+describe('menu staf per peran', () => {
+  // Salinan izin peran dari apps/api/src/identity/role-capabilities.ts yang menentukan halaman menu.
+  const IZIN = {
+    ADMIN: ['class-slot:read', 'customer:read', 'expense:create', 'booking:read', 'payment:review', 'ledger:read', 'ledger:adjust:read', 'package:read', 'attendance:manage', 'user:read', 'assignment:read'],
+    MANAGER: ['attendance:manage', 'class-slot:read', 'customer:read', 'expense:create', 'booking:read', 'payment:review', 'ledger:read', 'automation:read', 'instructor:hours:adjust', 'identity-verification:read', 'user:read', 'assignment:read'],
+    OWNER: ['finance:read', 'class-slot:read', 'booking:read', 'package:read', 'voucher:read', 'package-promotion:read', 'ledger:read', 'user:read', 'audit:read', 'automation:read', 'assignment:read', 'instructor-review:read'],
+    SUPER_OWNER: ['class-slot:read', 'customer:read', 'finance:reconcile', 'finance:read', 'package-promotion:read', 'assignment:read', 'master:read', 'user:admin', 'user:read', 'notification:manage', 'operations:read', 'voucher:read'],
+    FINANCE: ['finance:read', 'finance:reconcile', 'voucher:read', 'ledger:read', 'payment:review', 'automation:read', 'package:read', 'ledger:adjust:read'],
+  } as const;
+  const jumlah = { ADMIN: 4, MANAGER: 5, OWNER: 3, SUPER_OWNER: 6, FINANCE: 4 } as const;
+
+  for (const peran of Object.keys(IZIN) as (keyof typeof IZIN)[]) {
+    it(`${peran}: ${jumlah[peran]} menu utama dan sisa halaman di bagian terpisah`, () => {
+      const menu = menuStaf({ roles: [peran], capabilities: IZIN[peran] })!;
+      expect(menu.peran).toBe(peran);
+      expect(menu.utama).toHaveLength(jumlah[peran]);
+      const utama = new Set(menu.utama.map((m) => m.href));
+      // Tidak ada halaman yang dobel dan tidak ada halaman yang hilang dari menu.
+      for (const item of menu.lainnya) expect(utama.has(item.href)).toBe(false);
+      const terbaca = frontendPages.filter(
+        (p) =>
+          !p.hideFromNav &&
+          p.capabilities.length > 0 &&
+          !p.capabilities.includes('customer:self') &&
+          canReadPage([...IZIN[peran]], p),
+      );
+      for (const p of terbaca)
+        expect(utama.has(p.href) || menu.lainnya.some((l) => l.href === p.href)).toBe(true);
+    });
+  }
+
+  it('akun berperan ganda memakai peran tertinggi; instruktur dan member tidak memakai menu staf', () => {
+    expect(peranMenu(['ADMIN', 'OWNER'])).toBe('OWNER');
+    expect(peranMenu(['ADMIN', 'INSTRUCTOR'])).toBe('ADMIN');
+    expect(peranMenu(['INSTRUCTOR'])).toBeNull();
+    expect(menuStaf({ roles: ['CUSTOMER'], capabilities: ['customer:self'] })).toBeNull();
+    expect(menuStaf({ roles: ['SUPER_OWNER'], capabilities: IZIN.SUPER_OWNER })!.lainnyaLabel).toBe(
+      'Pengaturan',
+    );
+  });
+
+  it('halaman satu tema tampil sebagai tab, hanya yang boleh dibuka', () => {
+    expect(tabUntuk('/workspace/kas', ['finance:read', 'finance:reconcile']).map((t) => t.href)).toEqual([
+      '/finance',
+      '/workspace/kas',
+      '/workspace/branch-performance',
+    ]);
+    expect(tabUntuk('/workspace/kas', ['expense:create'])).toEqual([]);
+    expect(tabUntuk('/instructors/abc', ['assignment:read', 'user:read']).find((t) => t.aktif)?.href).toBe(
+      '/instructors',
+    );
+    expect(tabUntuk('/workspace/classes', ['class-slot:read'])).toEqual([]);
   });
 });

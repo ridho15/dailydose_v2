@@ -28,81 +28,53 @@ const tabs = () =>
     .getAllByRole('link')
     .map((link) => link.textContent);
 
-describe('MobileBottomNavigation (staff)', () => {
+describe('MobileBottomNavigation (staf: empat menu utama peran)', () => {
   beforeEach(() => {
     pathname = '/workspace';
     capabilities = [];
     roles = [];
   });
 
-  it('only shows tabs the account may open', () => {
-    capabilities = ['finance:reconcile', 'payment:review'];
+  it('Admin Cabang: Hari ini, Jadwal, Member, Pengeluaran, lalu tombol Menu', () => {
+    roles = ['ADMIN'];
+    capabilities = ['class-slot:read', 'customer:read', 'expense:create'];
     render(<MobileBottomNavigation customerOnly={false} />);
-    expect(tabs()).toEqual(['Beranda', 'Pembayaran', 'Keuangan']);
+    expect(tabs()).toEqual(['Hari ini', 'Jadwal', 'Member', 'Pengeluaran']);
     expect(screen.getByRole('button', { name: 'Buka semua menu navigasi' })).toBeVisible();
   });
 
-  it('keeps at most four tabs plus the menu, in priority order', () => {
+  it('Owner cabang: Beranda, Laporan, Jadwal', () => {
+    roles = ['OWNER'];
+    capabilities = ['finance:read', 'class-slot:read', 'booking:late-cancel:decide'];
+    render(<MobileBottomNavigation customerOnly={false} />);
+    expect(tabs()).toEqual(['Beranda', 'Laporan', 'Jadwal']);
+  });
+
+  it('Super Owner: hanya empat tab pertama dari enam menu utama', () => {
+    roles = ['SUPER_OWNER'];
     capabilities = [
-      'booking:read',
-      'payment:review',
       'class-slot:read',
+      'customer:read',
       'finance:reconcile',
-      'ledger:adjust:read',
+      'package-promotion:read',
+      'assignment:read',
     ];
     render(<MobileBottomNavigation customerOnly={false} />);
-    expect(tabs()).toEqual(['Beranda', 'Booking', 'Pembayaran', 'Kelas']);
+    expect(tabs()).toEqual(['Beranda', 'Jadwal', 'Member', 'Keuangan']);
   });
 
-  it('shows queue badges from the shared queue counts', () => {
-    capabilities = ['booking:read', 'payment:review'];
-    render(
-      <MobileBottomNavigation
-        customerOnly={false}
-        queueCounts={{ reschedules: 2, payments: 120 }}
-      />,
-    );
-    expect(screen.getByLabelText('2 antrean')).toHaveTextContent('2');
-    expect(screen.getByLabelText('120 antrean')).toHaveTextContent('99+');
+  it('badge Beranda berisi jumlah keputusan yang menunggu', () => {
+    roles = ['MANAGER'];
+    capabilities = ['attendance:manage', 'class-slot:read'];
+    render(<MobileBottomNavigation customerOnly={false} queueCounts={{ tindakan: 4 }} />);
+    expect(screen.getByLabelText('4 antrean')).toBeVisible();
   });
 
-  it('marks the menu when a queue lives in a page that is not a tab', () => {
-    capabilities = ['booking:read', 'payment:review', 'class-slot:read', 'ledger:adjust:read'];
-    render(<MobileBottomNavigation customerOnly={false} queueCounts={{ adjustments: 3 }} />);
-    expect(tabs()).toEqual(['Beranda', 'Booking', 'Pembayaran', 'Kelas']);
-    expect(screen.getByLabelText('Ada antrean baru di menu lain')).toBeInTheDocument();
-  });
-
-  it('does not mark the menu for queues the account cannot open', () => {
-    capabilities = ['booking:read'];
-    render(<MobileBottomNavigation customerOnly={false} queueCounts={{ adjustments: 3 }} />);
-    expect(screen.queryByLabelText('Ada antrean baru di menu lain')).not.toBeInTheDocument();
-  });
-});
-
-
-describe('MobileBottomNavigation (front desk / admin - Fase 5)', () => {
-  beforeEach(() => {
-    pathname = '/workspace';
-    capabilities = ['booking:read', 'class-slot:read', 'expense:create'];
-    roles = ['ADMIN'];
-  });
-
-  it('renders the 5 core studio tabs plus Menu button for admin', () => {
+  it('menu utama yang tidak boleh dibuka akun tidak tampil', () => {
+    roles = ['FINANCE'];
+    capabilities = ['finance:reconcile'];
     render(<MobileBottomNavigation customerOnly={false} />);
-    expect(tabs()).toEqual(['Hari Ini', 'Kalender', 'Booking', 'Member', 'Kasir']);
-    expect(screen.getByRole('button', { name: 'Buka semua menu navigasi' })).toBeVisible();
-  });
-
-  it('shows badge counters for front desk tabs', () => {
-    render(
-      <MobileBottomNavigation
-        customerOnly={false}
-        queueCounts={{ total: 5, reschedules: 2 }}
-      />,
-    );
-    expect(screen.getByLabelText('5 antrean')).toHaveTextContent('5');
-    expect(screen.getByLabelText('2 antrean')).toHaveTextContent('2');
+    expect(tabs()).toEqual(['Beranda', 'Keuangan']);
   });
 });
 
