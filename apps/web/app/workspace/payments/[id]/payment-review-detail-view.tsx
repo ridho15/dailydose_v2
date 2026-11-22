@@ -1,5 +1,6 @@
 'use client';
 
+import { orderStatusLabels } from '@/lib/order-presenters';
 import { ArrowLeft, CheckCircle2, Clock, Eye, Filter, RefreshCw, UploadCloud } from 'lucide-react';
 import { browserOrderClient, orderError, sha256Upload } from '@/api-clients/order-client';
 import { compressImageIfNeeded } from '@/lib/image-compression';
@@ -27,14 +28,8 @@ import { PaymentAmountCheck } from './payment-amount-check';
 import { ProofImageViewer } from './proof-image-viewer';
 import { KoreksiPembelian } from './koreksi-pembelian';
 
-const statusLabels: Record<string, string> = {
-  AWAITING_PAYMENT: 'Menunggu pembayaran',
-  PENDING: 'Menunggu pemeriksaan',
-  ACTION_REQUIRED: 'Perlu perbaikan',
-  APPROVED: 'Disetujui',
-  REJECTED: 'Ditolak',
-  EXPIRED: 'Kedaluwarsa',
-};
+// Label status pembayaran sama dengan yang dibaca member di halaman pesanannya.
+const statusLabels: Record<string, string> = orderStatusLabels;
 const reasonLabels = {
   PROOF_INVALID: 'Bukti tidak valid',
   AMOUNT_MISMATCH: 'Nominal tidak sesuai',

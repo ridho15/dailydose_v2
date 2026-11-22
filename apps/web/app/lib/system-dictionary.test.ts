@@ -151,6 +151,10 @@ describe('system-dictionary', () => {
       expect(formatOrderStatus('PAID')).toBe('Lunas');
       expect(formatOrderStatus('CANCELLED')).toBe('Pesanan Dibatalkan');
       expect(formatOrderStatus('EXPIRED')).toBe('Kedaluwarsa');
+      // Status pesanan API mengikuti label kontrak order-presenters (sama dengan halaman member).
+      expect(formatOrderStatus('PENDING')).toBe('Sedang diperiksa');
+      expect(formatOrderStatus('AWAITING_PAYMENT')).toBe('Menunggu pembayaran');
+      expect(formatOrderStatus('REJECTED')).toBe('Ditolak');
     });
   });
 

@@ -5,6 +5,8 @@
  * Sesuai spesifikasi 02-SPEC-DESAIN.md (Bagian 6 & 7).
  */
 
+import { orderStatusLabels } from './order-presenters';
+
 export interface VerificationStatusInfo {
   code: string;
   label: string;
@@ -60,17 +62,17 @@ const BOOKING_STATUS_DICTIONARY: Record<string, string> = {
   NO_SHOW: 'Tidak Hadir',
 };
 
+// Status pesanan API (AWAITING_PAYMENT, PENDING, ...) memakai label kontrak di
+// `order-presenters.ts`; kamus ini hanya untuk kode lama yang tidak ada di sana.
 const ORDER_STATUS_DICTIONARY: Record<string, string> = {
-  PENDING: 'Menunggu Pembayaran',
+  ...orderStatusLabels,
   UNPAID: 'Menunggu Pembayaran',
   WAITING_FOR_PAYMENT: 'Menunggu Pembayaran',
   WAITING_FOR_CONFIRMATION: 'Menunggu Verifikasi Pembayaran',
   PENDING_REVIEW: 'Menunggu Verifikasi Pembayaran',
   PAID: 'Lunas',
   COMPLETED: 'Selesai',
-  REJECTED: 'Pembayaran Ditolak',
   CANCELLED: 'Pesanan Dibatalkan',
-  EXPIRED: 'Kedaluwarsa',
 };
 
 const ANOMALY_DICTIONARY: Record<string, string> = {

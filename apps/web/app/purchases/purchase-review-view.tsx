@@ -1,5 +1,6 @@
 'use client';
 
+import { orderStatusLabels } from '@/lib/order-presenters';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CheckCircle2, Eye, RefreshCw, Search } from 'lucide-react';
 import {
@@ -25,14 +26,8 @@ import { statusLabel } from '../lib/status-labels';
 import { ADMIN_PAGE_SIZE, pageOffset } from '../lib/pagination';
 
 /** Opsi filter antrean; status lain (mis. PAID) ditampilkan lewat `statusLabel`. */
-const statusLabels: Record<string, string> = {
-  AWAITING_PAYMENT: 'Menunggu pembayaran',
-  PENDING: 'Menunggu pemeriksaan',
-  ACTION_REQUIRED: 'Perlu perbaikan',
-  APPROVED: 'Disetujui',
-  REJECTED: 'Ditolak',
-  EXPIRED: 'Kedaluwarsa',
-};
+// Label status pembayaran sama dengan yang dibaca member di halaman pesanannya.
+const statusLabels: Record<string, string> = orderStatusLabels;
 type Filters = PaymentReviewFilters & { status?: string };
 
 const emptySummary: ReviewSummary = {
