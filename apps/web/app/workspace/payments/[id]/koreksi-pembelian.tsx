@@ -138,7 +138,7 @@ export function KoreksiPembelian({ purchaseId, onSelesai }: { purchaseId: string
   };
 
   return (
-    <div className="space-y-3 border-t border-dd-line pt-4">
+    <div id="koreksi-pembelian" className="scroll-mt-24 space-y-3 border-t border-dd-line pt-4">
       <p className="m-0 text-sm font-semibold text-dd-ink">Koreksi pembelian (Super Owner)</p>
       {lunas ? (
         <div className="flex flex-wrap gap-2">

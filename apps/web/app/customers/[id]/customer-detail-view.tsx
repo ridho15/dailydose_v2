@@ -237,6 +237,14 @@ export function CustomerDetailView({ id }: { id: string }) {
     session?.globalCapabilities?.includes('customer:impersonate'),
   );
   const canSell = Boolean(sessionContext?.hasCapability('purchase:record'));
+  // Sama dengan detail paket: refund diproses Admin, Manager, Owner, atau Super Owner (PRD 5.17).
+  const bolehRefund = Boolean(
+    sessionContext?.session?.roles?.some((r) => ['ADMIN', 'MANAGER', 'OWNER', 'SUPER_OWNER'].includes(r)),
+  );
+  // Void dan pindah pembelian lunas hanya Super Owner (PRD 5.16).
+  const bolehKoreksi = Boolean(sessionContext?.session?.roles?.includes('SUPER_OWNER'));
+  const bisaRefundPaket = (cp: { status: string; remainingSessions: number }) =>
+    bolehRefund && cp.status === 'ACTIVE' && cp.remainingSessions > 0;
   const saleBranch = sessionContext?.activeBranch ?? null;
   const saleBranches = (session?.branches ?? []).map((item) => ({ id: item.id, name: item.name }));
   const [saleOpen, setSaleOpen] = useState(false);
@@ -944,6 +952,15 @@ export function CustomerDetailView({ id }: { id: string }) {
                                         Anggota Bersama ({memberCount})
                                       </Button>
                                     )}
+                                    {bisaRefundPaket(cp) && (
+                                      <ButtonLink
+                                        size="sm"
+                                        variant="secondary"
+                                        href={`/workspace/refunds/baru?paket=${encodeURIComponent(cp.id)}`}
+                                      >
+                                        Refund
+                                      </ButtonLink>
+                                    )}
                                     <ButtonLink size="sm" variant="secondary" href={`/ledger/${cp.id}`}>
                                       {sessionContext?.hasCapability('customer-package:manage')
                                         ? 'Kelola'
@@ -986,6 +1003,15 @@ export function CustomerDetailView({ id }: { id: string }) {
                                     >
                                       Anggota Bersama ({memberCount})
                                     </Button>
+                                  )}
+                                  {bisaRefundPaket(cp) && (
+                                    <ButtonLink
+                                      size="sm"
+                                      variant="secondary"
+                                      href={`/workspace/refunds/baru?paket=${encodeURIComponent(cp.id)}`}
+                                    >
+                                      Refund
+                                    </ButtonLink>
                                   )}
                                   <ButtonLink size="sm" variant="secondary" href={`/ledger/${cp.id}`}>
                                     {sessionContext?.hasCapability('customer-package:manage')
@@ -1128,14 +1154,27 @@ export function CustomerDetailView({ id }: { id: string }) {
                         id: 'proof',
                         header: 'Bukti Bayar',
                         cell: (p) =>
-                          p.paymentProofUrl ? (
-                            <ButtonLink
-                              variant="secondary"
-                              size="sm"
-                              href={`/workspace/payments/${p.id}`}
-                            >
-                              Lihat bukti
-                            </ButtonLink>
+                          p.paymentProofUrl || (bolehKoreksi && p.status === 'PAID') ? (
+                            <div className="flex flex-wrap gap-2">
+                              {p.paymentProofUrl && (
+                                <ButtonLink
+                                  variant="secondary"
+                                  size="sm"
+                                  href={`/workspace/payments/${p.id}`}
+                                >
+                                  Lihat bukti
+                                </ButtonLink>
+                              )}
+                              {bolehKoreksi && p.status === 'PAID' && (
+                                <ButtonLink
+                                  variant="secondary"
+                                  size="sm"
+                                  href={`/workspace/payments/${p.id}#koreksi-pembelian`}
+                                >
+                                  Void atau pindah
+                                </ButtonLink>
+                              )}
+                            </div>
                           ) : (
                             <span className="text-dd-muted">—</span>
                           ),

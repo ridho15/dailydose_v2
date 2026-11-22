@@ -189,6 +189,26 @@ describe('OwnerHome', () => {
     expect(
       await screen.findByText(/12 sesi terpakai belum punya modal per sesi dan dihitung Rp0/),
     ).toBeVisible();
+    // Tanpa izin mengubah Data Master: tidak ada tautan, hanya arahan.
+    expect(screen.queryByRole('link', { name: 'Atur modal per sesi' })).toBeNull();
+  });
+
+  it('Super Owner langsung dibawa ke tab Modal per Sesi dan Honor Instruktur', async () => {
+    caps.list = ['finance:read', 'master:manage'];
+    const r = ringkasan();
+    r.total.sesiTanpaModal = 3;
+    r.tarifBelumDipasang = 2;
+    render(
+      <OwnerHome now={NOW} client={client(r)} queueClient={queue} ownerReportClient={ownerReport} />,
+    );
+    expect(await screen.findByRole('link', { name: 'Atur modal per sesi' })).toHaveAttribute(
+      'href',
+      '/master?tab=modal',
+    );
+    expect(screen.getByRole('link', { name: 'Pasang tarif honor' })).toHaveAttribute(
+      'href',
+      '/master?tab=fees',
+    );
   });
 
   it('merinci per cabang dengan baris total dan menandai laba negatif', async () => {

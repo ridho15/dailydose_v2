@@ -405,7 +405,14 @@ export function Dashboard({
       {overview?.financial.instructorFeeMissing && (
         <Feedback kind="warning">
           Tarif honor instruktur belum diisi, sehingga biaya instruktur tampil Rp 0 dan laba sama
-          dengan omzet. Isi tarif honor di menu Master Data agar laba akurat.
+          dengan omzet.{' '}
+          {context?.hasCapability?.('master:manage') ? (
+            <Link href="/master?tab=fees" className="font-semibold text-dd-ink underline">
+              Isi tarif honor
+            </Link>
+          ) : (
+            'Minta Super Owner mengisinya di Data Master agar laba akurat.'
+          )}
         </Feedback>
       )}
       {overview?.financial.completeness === 'INCOMPLETE' && (

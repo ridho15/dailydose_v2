@@ -63,6 +63,31 @@ describe('CustomerDetailView konsistensi status', () => {
     expect(screen.getByText('Pelanggan belum memiliki paket aktif saat ini.')).toBeVisible();
   });
 
+  it('baris paket aktif punya tombol Refund, dan pembelian lunas punya Void atau pindah untuk Super Owner', async () => {
+    vi.spyOn(customerClient, 'detail').mockResolvedValue({
+      ...detail,
+      customerPackages: [
+        { id: 'p3', status: 'ACTIVE', remainingSessions: 5, usedSessions: 5, package: { name: 'Reformer 10' } },
+        { id: 'p4', status: 'ACTIVE', remainingSessions: 0, usedSessions: 10, package: { name: 'Habis' } },
+      ],
+      purchases: [
+        { id: 'buy-1', invoiceNumber: 'INV-1', status: 'PAID', payableAmountRpSnapshot: 1, paymentMethod: 'CASH' },
+      ],
+    } as never);
+    const user = userEvent.setup();
+    render(<CustomerDetailView id="c1" />);
+    const refund = await screen.findAllByRole('link', { name: 'Refund' });
+    // Hanya paket aktif yang masih punya sesi (tabel desktop dan kartu ponsel).
+    expect(new Set(refund.map((l) => l.getAttribute('href')))).toEqual(
+      new Set(['/workspace/refunds/baru?paket=p3']),
+    );
+    await user.click(screen.getByRole('button', { name: /Riwayat Order/ }));
+    expect((await screen.findAllByRole('link', { name: 'Void atau pindah' }))[0]).toHaveAttribute(
+      'href',
+      '/workspace/payments/buy-1#koreksi-pembelian',
+    );
+  });
+
   it('memberi label jelas pada status akun dan status verifikasi', async () => {
     render(<CustomerDetailView id="c1" />);
     expect(await screen.findByText(/Status Akun:\s*AKTIF/i)).toBeVisible();

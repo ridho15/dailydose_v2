@@ -167,6 +167,8 @@ export function OwnerHome({
     timeZone: 'Asia/Jakarta',
   }).format(new Date(now));
   const bisaLaporan = Boolean(context?.hasCapability?.('finance:reconcile'));
+  // Tautan langsung ke tab Data Master hanya untuk yang boleh mengubahnya (Rules 2).
+  const bisaMaster = Boolean(context?.hasCapability?.('master:manage'));
   const bisaJurnal = Boolean(
     context?.hasCapability?.('finance:read') || context?.hasCapability?.('expense:create'),
   );
@@ -239,14 +241,27 @@ export function OwnerHome({
               <Feedback kind="warning">
                 {ringkasan.total.sesiTanpaModal}{' '}
                 {pakaiSesiTerpakai(ringkasan) ? 'sesi terpakai' : 'sesi terjual'} belum punya modal per sesi dan
-                dihitung Rp0, jadi laba terlihat lebih besar. Atur di Master Data, tab Modal per
-                Sesi.
+                dihitung Rp0, jadi laba terlihat lebih besar.{' '}
+                {bisaMaster ? (
+                  <Link href="/master?tab=modal" className="font-semibold text-dd-ink underline">
+                    Atur modal per sesi
+                  </Link>
+                ) : (
+                  'Minta Super Owner mengaturnya di Data Master, tab Modal per Sesi.'
+                )}
               </Feedback>
             )}
             {ringkasan.tarifBelumDipasang > 0 && (
               <Feedback kind="warning">
                 {ringkasan.tarifBelumDipasang} kelas selesai belum punya tarif honor instruktur dan
-                dihitung dengan tarif bawaan. Pasang tarifnya di Master Data supaya payroll tepat.
+                dihitung dengan tarif bawaan.{' '}
+                {bisaMaster ? (
+                  <Link href="/master?tab=fees" className="font-semibold text-dd-ink underline">
+                    Pasang tarif honor
+                  </Link>
+                ) : (
+                  'Minta Super Owner memasangnya di Data Master supaya payroll tepat.'
+                )}
               </Feedback>
             )}
             <div className="grid gap-4 lg:grid-cols-[1.5fr_1fr]">

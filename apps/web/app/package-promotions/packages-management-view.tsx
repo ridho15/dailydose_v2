@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Copy, Pencil, Plus, Sparkles, Trash2 } from 'lucide-react';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { Badge, DataTable, Pagination, Panel, StatCard, TableActionMenu } from '../components/admin/admin-ui';
-import { AlertBanner, Drawer, useAppFeedback } from '../components/app-feedback';
+import { AlertBanner, Drawer, Modal, useAppFeedback } from '../components/app-feedback';
 import { Button } from '../components/actions';
 import { SearchInput, SelectInput, TextInput } from '../components/forms';
 import { Skeleton } from '../ui';
@@ -67,6 +67,7 @@ export function PackagesManagementView() {
   const [createOpen, setCreateOpen] = useState(false);
   const [createDirty, setCreateDirty] = useState(false);
   const [editingPackage, setEditingPackage] = useState<InternalPackageRecord | null>(null);
+  const [pricingPackage, setPricingPackage] = useState<InternalPackageRecord | null>(null);
   const [duplicateTemplate, setDuplicateTemplate] = useState<PackageFormValues | null>(null);
   const [lifecycle, setLifecycle] = useState<{ item: InternalPackageRecord; action: LifecycleAction } | null>(null);
   const [classTypes, setClassTypes] = useState<
@@ -497,7 +498,26 @@ export function PackagesManagementView() {
                 </div>
               ),
             },
-            { id: 'price', header: 'Harga normal', cell: (item) => formatRupiah(item.priceRp) },
+            {
+              id: 'price',
+              header: 'Harga normal',
+              cell: (item) => (
+                <div className="flex items-center gap-2" onClick={(event) => event.stopPropagation()}>
+                  <span>{formatRupiah(item.priceRp)}</span>
+                  {canManage && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      aria-label={`Ubah harga ${item.name}`}
+                      leadingIcon={<Pencil className="size-4" aria-hidden="true" />}
+                      onClick={() => setPricingPackage(item)}
+                    >
+                      Ubah
+                    </Button>
+                  )}
+                </div>
+              ),
+            },
             {
               id: 'period',
               header: 'Periode',
@@ -635,6 +655,16 @@ export function PackagesManagementView() {
                     className="flex items-center gap-1.5"
                     onClick={(event) => event.stopPropagation()}
                   >
+                    {canManage && (
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        aria-label={`Ubah harga ${item.name}`}
+                        onClick={() => setPricingPackage(item)}
+                      >
+                        Ubah harga
+                      </Button>
+                    )}
                     <Button
                       variant="secondary"
                       size="sm"
@@ -800,6 +830,7 @@ export function PackagesManagementView() {
           await load();
         }}
       />
+      <UbahHargaModal pkg={pricingPackage} onClose={() => setPricingPackage(null)} onSaved={load} />
       <EditPackageModal
         pkg={editingPackage}
         open={Boolean(editingPackage)}
@@ -1155,6 +1186,186 @@ function PackageCreateForm({
   );
 }
 
+/** Paket yang belum pernah dibeli dan belum berlaku boleh diubah harganya di tempat. */
+export function bisaUbahKomersialDiTempat(pkg: InternalPackageRecord, now = Date.now()) {
+  return (
+    (pkg._count?.purchases ?? 0) === 0 &&
+    (pkg._count?.customerPackages ?? 0) === 0 &&
+    new Date(pkg.effectiveFrom).getTime() > now
+  );
+}
+
+/**
+ * Menyimpan perubahan paket. Harga/sesi/masa berlaku paket yang sudah berlaku atau sudah dibeli
+ * dicatat sebagai revisi baru (mulai hari ini) supaya pembelian lama tidak berubah.
+ */
+export async function simpanPerubahanPaket(
+  pkg: InternalPackageRecord,
+  ubah: {
+    name: string;
+    sessionCount: number;
+    durationDays: number;
+    priceRp: number;
+    effectiveUntil: string | null;
+    maksTeman: number;
+    isShareable: boolean;
+    perpanjanganMasaAktif: boolean;
+    reason: string;
+  },
+) {
+  const diTempat = bisaUbahKomersialDiTempat(pkg);
+  const komersialBerubah =
+    ubah.sessionCount !== pkg.sessionCount ||
+    ubah.durationDays !== pkg.durationDays ||
+    ubah.priceRp !== pkg.priceRp;
+  if (komersialBerubah && !diTempat) {
+    await browserPackagePromotionClient.revisePackage(pkg.id, {
+      expectedVersion: pkg.version,
+      ...ubah,
+      effectiveFrom: new Date().toISOString().slice(0, 10),
+    });
+    return;
+  }
+  await browserPackagePromotionClient.updatePackage(pkg.id, {
+    expectedVersion: pkg.version,
+    name: ubah.name,
+    isShareable: ubah.isShareable,
+    effectiveUntil: ubah.effectiveUntil,
+    ...(diTempat
+      ? { sessionCount: ubah.sessionCount, durationDays: ubah.durationDays, priceRp: ubah.priceRp }
+      : {}),
+    maksTeman: ubah.maksTeman,
+    perpanjanganMasaAktif: ubah.perpanjanganMasaAktif,
+    reason: ubah.reason,
+  });
+}
+
+/** Alasan perubahan harga yang paling sering; tetap bisa ditulis sendiri. */
+export const ALASAN_UBAH_HARGA = [
+  'Penyesuaian harga berkala',
+  'Koreksi salah input harga',
+  'Menyamakan harga antarcabang',
+] as const;
+
+/**
+ * Ubah harga dari baris daftar paket: satu isian harga dan alasan (chip atau tulis sendiri).
+ * Isian lain paket tidak berubah. Alasan tetap wajib karena tercatat di audit (Rules 3.11).
+ */
+export function UbahHargaModal({
+  pkg,
+  onClose,
+  onSaved,
+}: {
+  pkg: InternalPackageRecord | null;
+  onClose(): void;
+  onSaved(): Promise<void>;
+}) {
+  const feedback = useAppFeedback();
+  const [harga, setHarga] = useState('');
+  const [alasan, setAlasan] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    setHarga(pkg ? String(pkg.priceRp) : '');
+    setAlasan('');
+    setError('');
+  }, [pkg]);
+
+  if (!pkg) return null;
+  const nilai = Number(harga.replace(/\D/g, ''));
+  const siap = nilai > 0 && nilai !== pkg.priceRp && alasan.trim().length >= 3;
+
+  const simpan = async () => {
+    if (!siap) return;
+    setBusy(true);
+    setError('');
+    try {
+      await simpanPerubahanPaket(pkg, {
+        name: pkg.name,
+        sessionCount: pkg.sessionCount,
+        durationDays: pkg.durationDays,
+        priceRp: nilai,
+        effectiveUntil: pkg.effectiveUntil ? pkg.effectiveUntil.slice(0, 10) : null,
+        maksTeman: jumlahTeman(pkg),
+        isShareable: Boolean(pkg.isShareable),
+        perpanjanganMasaAktif: Boolean(pkg.perpanjanganMasaAktif),
+        reason: alasan.trim(),
+      });
+      feedback.showToast({
+        tone: 'success',
+        title: 'Harga paket diperbarui',
+        message: `${pkg.name} kini ${formatRupiah(nilai)}.`,
+      });
+      onClose();
+      await onSaved();
+    } catch (cause) {
+      setError(await promotionFailure(cause, 'Harga belum tersimpan. Data mungkin berubah; muat ulang lalu coba lagi.'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Modal
+      open={Boolean(pkg)}
+      title={`Ubah harga ${pkg.name}`}
+      description={
+        bisaUbahKomersialDiTempat(pkg)
+          ? 'Paket belum berlaku, jadi harganya langsung diganti.'
+          : 'Harga baru berlaku mulai hari ini sebagai revisi paket. Member yang sudah membeli tidak terpengaruh.'
+      }
+      busy={busy}
+      onClose={onClose}
+      footer={
+        <div className="flex justify-end gap-2">
+          <Button variant="secondary" disabled={busy} onClick={onClose}>
+            Batal
+          </Button>
+          <Button loading={busy} disabled={!siap} onClick={() => void simpan()}>
+            Simpan harga
+          </Button>
+        </div>
+      }
+    >
+      <div className="grid gap-3">
+        {error && <AlertBanner tone="danger" title="Harga belum tersimpan" message={error} onDismiss={() => setError('')} />}
+        <TextInput
+          label="Harga normal (Rp)"
+          inputMode="numeric"
+          value={harga}
+          onChange={(event) => setHarga(event.target.value)}
+          description={`Sekarang ${formatRupiah(pkg.priceRp)}`}
+        />
+        <div className="flex flex-wrap gap-2" role="group" aria-label="Pilihan cepat alasan">
+          {ALASAN_UBAH_HARGA.map((teks) => (
+            <button
+              key={teks}
+              type="button"
+              aria-pressed={alasan === teks}
+              onClick={() => setAlasan(teks)}
+              className={`min-h-11 rounded-dd-md border px-3 text-left text-sm ${
+                alasan === teks
+                  ? 'border-dd-forest bg-dd-success-soft font-semibold text-dd-forest'
+                  : 'border-dd-border-interactive bg-white text-dd-ink hover:border-dd-forest'
+              }`}
+            >
+              {teks}
+            </button>
+          ))}
+        </div>
+        <TextInput
+          label="Alasan perubahan"
+          value={alasan}
+          minLength={3}
+          onChange={(event) => setAlasan(event.target.value)}
+          description="Tercatat di riwayat harga paket."
+        />
+      </div>
+    </Modal>
+  );
+}
+
 export function EditPackageModal({
   pkg,
   open,
@@ -1182,10 +1393,7 @@ export function EditPackageModal({
 
   if (!pkg) return null;
 
-  const canEditCommercialInPlace =
-    (pkg._count?.purchases ?? 0) === 0 &&
-    (pkg._count?.customerPackages ?? 0) === 0 &&
-    new Date(pkg.effectiveFrom).getTime() > Date.now();
+  const canEditCommercialInPlace = bisaUbahKomersialDiTempat(pkg);
 
   const confirmDiscard = () =>
     feedback.confirm({
@@ -1258,34 +1466,17 @@ export function EditPackageModal({
           setBusy(true);
           setError('');
           try {
-            if (commercialChanged && !canEditCommercialInPlace) {
-              await browserPackagePromotionClient.revisePackage(pkg.id, {
-                expectedVersion: pkg.version,
-                name,
-                sessionCount,
-                durationDays,
-                priceRp,
-                effectiveFrom: new Date().toISOString().slice(0, 10),
-                effectiveUntil,
-                maksTeman,
-                isShareable,
-                perpanjanganMasaAktif: perpanjangan,
-                reason,
-              });
-            } else {
-              await browserPackagePromotionClient.updatePackage(pkg.id, {
-                expectedVersion: pkg.version,
-                name,
-                isShareable,
-                effectiveUntil,
-                ...(canEditCommercialInPlace
-                  ? { sessionCount, durationDays, priceRp }
-                  : {}),
-                maksTeman,
-                perpanjanganMasaAktif: perpanjangan,
-                reason,
-              });
-            }
+            await simpanPerubahanPaket(pkg, {
+              name,
+              sessionCount,
+              durationDays,
+              priceRp,
+              effectiveUntil,
+              maksTeman,
+              isShareable,
+              perpanjanganMasaAktif: perpanjangan,
+              reason,
+            });
             feedback.showToast({
               tone: 'success',
               title: 'Paket diperbarui',
@@ -1424,8 +1615,14 @@ export function EditPackageModal({
           label="Alasan perubahan (Audit Log)"
           minLength={3}
           placeholder="Contoh: Pembaruan tarif sesi kuartal baru"
+          list="alasan-ubah-paket"
           required
         />
+        <datalist id="alasan-ubah-paket">
+          {ALASAN_UBAH_HARGA.map((teks) => (
+            <option key={teks} value={teks} />
+          ))}
+        </datalist>
       </form>
     </Drawer>
   );
