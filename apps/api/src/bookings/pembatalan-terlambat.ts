@@ -126,3 +126,80 @@ export async function jalankanPembatalanTerlambat(
   });
   return { resultingBalance, sessionsReturned: sesiKembali };
 }
+
+/**
+ * Penyetuju pengajuan pembatalan terlambat (PRD 5.6): Manager cabang, Owner pemilik cabang, dan
+ * Super Owner. Dipakai baik untuk pengajuan admin maupun pengajuan member sendiri.
+ */
+export const PENERIMA_PEMBATALAN_TERLAMBAT = ['MANAGER', 'OWNER', 'SUPER_OWNER'] as const;
+
+/** Notifikasi pengajuan membuka kotak masuk "Perlu tindakan" di beranda staf, bukan daftar umum. */
+export const HREF_KOTAK_MASUK_PEMBATALAN = '/workspace?tindakan=pembatalan';
+
+interface PenulisNotifikasi {
+  writeForUser(
+    tx: Prisma.TransactionClient,
+    input: {
+      userId: string;
+      branchId?: string;
+      eventKey: string;
+      category: 'APPROVAL';
+      tone: 'WARNING';
+      title: string;
+      message: string;
+      href?: string;
+    },
+  ): Promise<void>;
+}
+
+/**
+ * Mengirim notifikasi pengajuan pembatalan terlambat ke semua penyetuju yang berwenang di cabang
+ * booking. Manager dicari dari cabang utamanya, Owner dari `owner_cabang`, Super Owner semua.
+ * Kegagalan notifikasi tidak membatalkan pengajuan.
+ */
+export async function kirimNotifikasiPengajuanPembatalan(
+  writer: PenulisNotifikasi | undefined,
+  db: Prisma.TransactionClient,
+  input: { pengajuanId: string; bookingId: string },
+): Promise<void> {
+  if (!writer) return;
+  try {
+    const booking = await db.pemesananKelas.findUnique({
+      where: { id: input.bookingId },
+      select: {
+        bookingNumber: true,
+        user: { select: { displayName: true } },
+        classSlot: { select: { branchId: true } },
+      },
+    });
+    const branchId = booking?.classSlot.branchId;
+    if (!booking || !branchId) return;
+    const penerima = await db.user.findMany({
+      where: {
+        status: 'ACTIVE',
+        OR: [
+          { role: 'MANAGER', preferredBranchId: branchId },
+          { role: 'OWNER', ownedBranches: { some: { branchId } } },
+          { role: { in: ['SUPER_OWNER', 'SUPERADMIN'] } },
+        ],
+      },
+      select: { id: true },
+    });
+    for (const user of penerima) {
+      await writer
+        .writeForUser(db, {
+          userId: user.id,
+          branchId,
+          eventKey: `late_cancel.requested:${input.pengajuanId}`,
+          category: 'APPROVAL',
+          tone: 'WARNING',
+          title: 'Pengajuan pembatalan menunggu keputusan',
+          message: `${booking.user?.displayName || 'Member'} mengajukan pembatalan kurang dari 12 jam sebelum kelas (booking #${booking.bookingNumber}).`,
+          href: HREF_KOTAK_MASUK_PEMBATALAN,
+        })
+        .catch(() => {});
+    }
+  } catch {
+    // Notifikasi bersifat pelengkap; pengajuan tetap tersimpan dan tampil di kotak masuk.
+  }
+}
