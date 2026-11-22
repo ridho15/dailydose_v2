@@ -1,4 +1,6 @@
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { AppFeedbackProvider } from '../components/app-feedback';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { CustomerDashboard } from './customer-dashboard';
 
@@ -11,6 +13,88 @@ const session = vi.hoisted(() => ({
 vi.mock('../session-context', () => ({
   useSessionContext: () => ({ session }),
 }));
+
+
+const bookingTerdekat = (overrides: Record<string, unknown> = {}) => ({
+  id: 'booking-xyz-123',
+  classSlotId: 'slot-1',
+  customerPackageId: 'pkg-1',
+  status: 'BOOKED',
+  className: 'Reformer Flow Level 1',
+  branchName: 'Studio Senopati - Studio 1',
+  timezone: 'Asia/Jakarta',
+  startAt: '2026-07-29T02:00:00.000Z',
+  endAt: '2026-07-29T02:50:00.000Z',
+  ...overrides,
+});
+
+const paketAktif = () => ({
+  id: 'pkg-1',
+  packageName: 'Reformer 10 Sesi',
+  classTypeName: 'Reformer',
+  branchName: 'Daily Dose Jakarta',
+  expiryAt: '2026-12-31T00:00:00.000Z',
+  available: 8,
+});
+
+function stubDashboard(isi: Record<string, unknown>) {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        generatedAt: '2026-07-28T00:00:00.000Z',
+        upcomingBookings: [],
+        packages: [],
+        actionableOrders: [],
+        verification: { status: 'APPROVED' },
+        unreadNotifications: 0,
+        ...isi,
+      }),
+    }),
+  );
+}
+
+function klienBooking(overrides: Record<string, unknown> = {}) {
+  return {
+    list: vi.fn().mockResolvedValue({ items: [] }),
+    cancellationOptions: vi.fn().mockResolvedValue({
+      canCancel: true,
+      unavailableReason: null,
+      supportAction: null,
+      cutoffAt: '2026-07-28T14:00:00.000Z',
+    }),
+    cancel: vi.fn().mockResolvedValue(undefined),
+    rescheduleOptions: vi.fn().mockResolvedValue({
+      bookingId: 'booking-xyz-123',
+      bookingVersion: 1,
+      sourceClassSlotId: 'slot-1',
+      cutoffAt: new Date('2026-07-28T14:00:00.000Z'),
+      canRequest: true,
+      unavailableReason: null,
+      supportAction: null,
+      latestRequest: null,
+      targets: [
+        {
+          id: 'slot-baru',
+          startAt: new Date('2026-07-30T02:00:00.000Z'),
+          endAt: new Date('2026-07-30T02:50:00.000Z'),
+          timezone: 'Asia/Jakarta',
+          status: 'PUBLISHED',
+          availableCapacity: 3,
+          eligible: true,
+          classType: { id: 'c', name: 'Reformer' },
+          instructor: { id: 'i', displayName: 'Asrida' },
+        },
+      ],
+    }),
+    requestReschedule: vi.fn().mockResolvedValue({ id: 'r-1', status: 'APPROVED' }),
+    create: vi.fn().mockResolvedValue({ id: 'bk-teman', status: 'BOOKED' }),
+    statusPembatalanSaya: vi.fn().mockResolvedValue({ bisaMengajukan: true, pengajuan: null }),
+    ajukanPembatalanSaya: vi.fn().mockResolvedValue({ id: 'req-1', status: 'PENDING', reason: 'x' }),
+    ...overrides,
+  };
+}
 
 describe('customer dashboard (Tiket T-02)', () => {
   beforeEach(() => {
@@ -147,67 +231,130 @@ describe('customer dashboard (Tiket T-02)', () => {
     expect(screen.queryByRole('heading', { name: 'Foto selfie perlu diambil ulang' })).toBeNull();
   });
 
-  it('renders the QR at the top and the nearest booking with a cancel link (Tiket T-08)', async () => {
+  it('kartu booking terdekat memuat QR, Ganti jadwal, dan Batalkan dalam satu tempat', async () => {
     session.identityVerificationStatus = 'APPROVED';
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => ({
-          generatedAt: '2026-07-28T00:00:00.000Z',
-          upcomingBookings: [
-            {
-              id: 'booking-xyz-123',
-              status: 'BOOKED',
-              className: 'Reformer Flow Level 1',
-              branchName: 'Studio Senopati - Studio 1',
-              timezone: 'Asia/Jakarta',
-              startAt: '2026-07-29T02:00:00.000Z',
-              endAt: '2026-07-29T02:50:00.000Z',
-            },
-          ],
-          packages: [
-            {
-              id: 'pkg-1',
-              packageName: 'Reformer 10 Sesi',
-              classTypeName: 'Reformer',
-              branchName: 'Daily Dose Jakarta',
-              expiryAt: '2026-12-31T00:00:00.000Z',
-              available: 8,
-            },
-          ],
-          actionableOrders: [],
-          verification: { status: 'APPROVED', documents: [] },
-          unreadNotifications: 1,
-        }),
-      }),
+    stubDashboard({ upcomingBookings: [bookingTerdekat()], packages: [paketAktif()] });
+
+    render(
+      <AppFeedbackProvider>
+        <CustomerDashboard bookingClient={klienBooking() as never} muatQr={() => Promise.resolve('dd-pass:v1:x')} />
+      </AppFeedbackProvider>,
     );
 
-    render(<CustomerDashboard />);
-
-    // 1. Heading greeting
     expect(await screen.findByRole('heading', { name: 'Halo, Nadia' })).toBeVisible();
-
-    // 2. Kartu booking terdekat di paling atas
-    const nearestSection = screen.getByLabelText('Booking terdekat');
-    expect(within(nearestSection).getByText('Booking terdekat')).toBeVisible();
-    expect(
-      within(nearestSection).getByRole('heading', { name: 'Reformer Flow Level 1' }),
-    ).toBeVisible();
-    expect(within(nearestSection).getByText('Studio Senopati - Studio 1')).toBeVisible();
-
-    // 3. QR statis ada di paling atas beranda, bukan per booking.
-    expect(screen.getByRole('heading', { name: 'QR kehadiran saya' })).toBeVisible();
-    expect(screen.getByRole('link', { name: 'Perbesar' })).toHaveAttribute(
-      'href',
-      '/check-in-pass',
-    );
-    expect(
-      within(nearestSection).getByRole('link', { name: 'Batalkan booking ini' }),
-    ).toHaveAttribute('href', '/bookings/booking-xyz-123');
-
-    // 4. Tanpa kartu statistik pasif.
+    const kartu = screen.getByLabelText('Booking terdekat');
+    expect(within(kartu).getByRole('heading', { name: 'Reformer Flow Level 1' })).toBeVisible();
+    expect(within(kartu).getByText('Studio Senopati - Studio 1')).toBeVisible();
+    // QR check-in ada di kartu itu sendiri, dengan tombol Perbesar.
+    expect(within(kartu).getByRole('heading', { name: 'QR kehadiran saya' })).toBeVisible();
+    expect(within(kartu).getByRole('link', { name: 'Perbesar' })).toHaveAttribute('href', '/check-in-pass');
+    expect(within(kartu).getByRole('button', { name: 'Ganti jadwal' })).toBeVisible();
+    await waitFor(() => expect(within(kartu).getByRole('button', { name: 'Batalkan' })).toBeEnabled());
+    expect(within(kartu).queryByRole('button', { name: 'Ajukan pembatalan' })).toBeNull();
     expect(screen.queryByText('Notifikasi belum dibaca')).toBeNull();
+  });
+
+  it('kurang dari 12 jam: tombolnya Ajukan pembatalan, alasan dari pilihan, terkirim ke server', async () => {
+    const user = userEvent.setup();
+    session.identityVerificationStatus = 'APPROVED';
+    stubDashboard({ upcomingBookings: [bookingTerdekat()], packages: [paketAktif()] });
+    const client = klienBooking({
+      cancellationOptions: vi.fn().mockResolvedValue({
+        canCancel: false,
+        unavailableReason: 'CANCELLATION_CUTOFF_PASSED',
+        supportAction: 'CONTACT_STUDIO',
+        cutoffAt: '2026-07-28T14:00:00.000Z',
+      }),
+    });
+
+    render(
+      <AppFeedbackProvider>
+        <CustomerDashboard bookingClient={client as never} muatQr={() => Promise.resolve('dd-pass:v1:x')} />
+      </AppFeedbackProvider>,
+    );
+
+    const kartu = await screen.findByLabelText('Booking terdekat');
+    await user.click(await within(kartu).findByRole('button', { name: 'Ajukan pembatalan' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Ajukan pembatalan' });
+    const kirim = within(dialog).getByRole('button', { name: 'Kirim pengajuan' });
+    expect(kirim).toBeDisabled();
+    await user.click(within(dialog).getByRole('button', { name: 'Sakit atau kurang sehat' }));
+    await user.click(kirim);
+
+    await waitFor(() =>
+      expect(client.ajukanPembatalanSaya).toHaveBeenCalledWith('booking-xyz-123', 'SAKIT', undefined),
+    );
+  });
+
+  it('ganti jadwal: pilih kartu jam pengganti lalu Pindah, tiga langkah', async () => {
+    const user = userEvent.setup();
+    session.identityVerificationStatus = 'APPROVED';
+    stubDashboard({ upcomingBookings: [bookingTerdekat()], packages: [paketAktif()] });
+    const client = klienBooking();
+
+    render(
+      <AppFeedbackProvider>
+        <CustomerDashboard bookingClient={client as never} muatQr={() => Promise.resolve('dd-pass:v1:x')} />
+      </AppFeedbackProvider>,
+    );
+
+    await user.click(await screen.findByRole('button', { name: 'Ganti jadwal' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Ganti jadwal' });
+    await user.click(await within(dialog).findByRole('button', { name: /3 tempat tersisa/ }));
+    await user.click(within(dialog).getByRole('button', { name: 'Pindah ke jadwal ini' }));
+
+    await waitFor(() =>
+      expect(client.requestReschedule).toHaveBeenCalledWith(
+        expect.objectContaining({ bookingId: 'booking-xyz-123', targetClassSlotId: 'slot-baru' }),
+        expect.any(String),
+      ),
+    );
+  });
+
+  it('kursi teman dari kartu booking: isi nama lalu tambah, memakai paket booking itu', async () => {
+    const user = userEvent.setup();
+    session.identityVerificationStatus = 'APPROVED';
+    stubDashboard({ upcomingBookings: [bookingTerdekat({ bisaTambahTeman: true })], packages: [paketAktif()] });
+    const client = klienBooking();
+
+    render(
+      <AppFeedbackProvider>
+        <CustomerDashboard bookingClient={client as never} muatQr={() => Promise.resolve('dd-pass:v1:x')} />
+      </AppFeedbackProvider>,
+    );
+
+    await user.click(await screen.findByRole('button', { name: 'Kursi teman' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Tambah kursi teman' });
+    await user.type(within(dialog).getByLabelText('Nama teman'), 'Rani');
+    await user.click(within(dialog).getByRole('button', { name: 'Tambah kursi teman' }));
+
+    await waitFor(() =>
+      expect(client.create).toHaveBeenCalledWith(
+        { classSlotId: 'slot-1', customerPackageId: 'pkg-1', source: 'SELF', namaTeman: 'Rani' },
+        expect.any(String),
+      ),
+    );
+  });
+
+  it('saran Booking lagi membuka konfirmasi booking kelas yang sama minggu depan', async () => {
+    session.identityVerificationStatus = 'APPROVED';
+    stubDashboard({
+      packages: [paketAktif()],
+      bookingLagi: {
+        classSlotId: 'slot-minggu-depan',
+        className: 'Reformer Flow Level 1',
+        branchName: 'Senopati',
+        timezone: 'Asia/Jakarta',
+        startAt: '2026-08-05T02:00:00.000Z',
+        endAt: '2026-08-05T02:50:00.000Z',
+        instructorName: 'Asrida',
+      },
+    });
+    render(<CustomerDashboard bookingClient={klienBooking() as never} />);
+    expect(await screen.findByRole('link', { name: /Booking lagi Reformer Flow Level 1/ })).toHaveAttribute(
+      'href',
+      '/bookings/new?slot=slot-minggu-depan',
+    );
   });
 
   it('menampilkan kelas minggu ini di studio utama dan membuka lembar booking kelas itu', async () => {
@@ -363,7 +510,7 @@ describe('customer dashboard (Tiket T-02)', () => {
     });
   });
 
-  it('menaruh QR paling atas, lalu sisa sesi paket, tiga sesi terakhir, dan promo yang berlaku', async () => {
+  it('tanpa booking: sisa paket, tombol Perpanjang 30 hari bila hampir habis, tiga sesi terakhir, dan promo', async () => {
     session.identityVerificationStatus = 'APPROVED';
     (session as Record<string, unknown>).preferredBranch = {
       id: 'branch-gg',
@@ -382,7 +529,7 @@ describe('customer dashboard (Tiket T-02)', () => {
               packageName: 'Group 10 sesi',
               classTypeName: 'Group',
               branchName: 'Green Garden',
-              expiryAt: '2026-12-31T00:00:00.000Z',
+              expiryAt: '2026-11-05T16:59:59.000Z',
               available: 7,
             },
           ],
@@ -448,6 +595,7 @@ describe('customer dashboard (Tiket T-02)', () => {
           promo('lama', '2026-10-01T00:00:00Z', '2026-09-01T00:00:00Z'),
           promo('a', '2026-11-30T00:00:00Z'),
           { ...promo('tanpa', '2026-11-30T00:00:00Z'), promotion: null },
+          { ...promo('ext', '2026-11-30T00:00:00Z'), promotion: null, perpanjanganMasaAktif: true },
         ],
       }),
     };
@@ -466,12 +614,15 @@ describe('customer dashboard (Tiket T-02)', () => {
       />,
     );
 
-    const judul = (await screen.findAllByRole('heading', { level: 2 })).map((h) => h.textContent);
-    expect(judul[0]).toBe('QR kehadiran saya');
-    expect(judul[1]).toBe('Sisa paket saya');
-    expect(
-      within(screen.getByRole('region', { name: 'Sisa paket saya' })).getByText('7'),
-    ).toBeVisible();
+    const paketSaya = await screen.findByRole('region', { name: 'Sisa paket saya' });
+    expect(within(paketSaya).getByText('7')).toBeVisible();
+    // Berlaku 8 hari lagi: tombol perpanjang membawa paket ini sebagai target.
+    expect(await within(paketSaya).findByRole('link', { name: 'Perpanjang 30 hari' })).toHaveAttribute(
+      'href',
+      '/checkout?package=ext&branch=branch-gg&target=p',
+    );
+    // Tanpa booking mendatang, QR tidak ditampilkan (tidak ada kelas untuk check-in).
+    expect(screen.queryByRole('heading', { name: 'QR kehadiran saya' })).toBeNull();
 
     const terakhir = await screen.findByRole('region', { name: 'Sesi terakhir yang terpakai' });
     expect(within(terakhir).getAllByRole('listitem')).toHaveLength(3);

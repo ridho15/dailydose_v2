@@ -105,7 +105,7 @@ describe('Tiket T-14: Status kosong, memuat, dan error di semua layar data', () 
       expect(screen.queryByText('0')).toBeNull();
 
       // Memastikan elemen loading skeleton hadir
-      expect(screen.getByRole('status', { name: 'Menyiapkan dashboard' })).toBeInTheDocument();
+      expect(screen.getByRole('status', { name: 'Menyiapkan Beranda' })).toBeInTheDocument();
 
       // Selesaikan promise dengan struktur data lengkap agar tidak error saat re-render
       resolveFetch({

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { CalendarDays, ChevronRight, Info, Users } from 'lucide-react';
+import { CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Info, Users } from 'lucide-react';
 import {
   browserClassSlotClient,
   type ClassSlot,
@@ -37,6 +37,47 @@ export interface InstructorTodayViewProps {
   muatQr?: () => Promise<string>;
   /** Hanya untuk tes: status dan pengiriman foto selfie. */
   selfieClient?: Pick<typeof verificationClient, 'mine' | 'submit'>;
+  /** `minggu`: halaman Jadwal Saya, kelas milik instruktur seminggu penuh dengan kartu yang sama. */
+  mode?: 'hari' | 'minggu';
+  /** Hanya untuk tes: jam sekarang untuk jendela presensi. */
+  now?: () => number;
+}
+
+/** Jendela scan QR instruktur (PRD 5.15): 45 menit sebelum mulai sampai 10 menit setelah mulai. */
+export const PRESENSI_BUKA_MENIT = 45;
+export const PRESENSI_TUTUP_MENIT = 10;
+/** Selang muat ulang ringan selama jendela presensi terbuka, supaya status HADIR muncul sendiri. */
+export const SELANG_CEK_PRESENSI_MS = 30_000;
+
+export function dalamJendelaPresensi(startAt: Date, now: number) {
+  const mulai = startAt.getTime();
+  return now >= mulai - PRESENSI_BUKA_MENIT * 60_000 && now <= mulai + PRESENSI_TUTUP_MENIT * 60_000;
+}
+
+const HARI_MS = 86_400_000;
+
+/** "Senin, 23 Nov" dari kunci tanggal lokal; `denganHari` selalu memakai nama hari. */
+function labelTanggal(dateKey: string, timeZone: string, denganHari = false) {
+  const tanggal = zonedLocalDateTime(dateKey, '12:00', timeZone);
+  return new Intl.DateTimeFormat('id-ID', {
+    weekday: denganHari ? 'long' : 'short',
+    day: 'numeric',
+    month: 'short',
+    timeZone,
+  }).format(tanggal);
+}
+
+/** Senin pukul 00.00 pada minggu tanggal itu, sebagai kunci tanggal lokal (YYYY-MM-DD). */
+function seninDari(dateKey: string) {
+  const [y, m, d] = dateKey.split('-').map(Number) as [number, number, number];
+  const tanggal = new Date(Date.UTC(y, m - 1, d));
+  const geser = (tanggal.getUTCDay() + 6) % 7;
+  return new Date(tanggal.getTime() - geser * HARI_MS).toISOString().slice(0, 10);
+}
+
+function tambahHari(dateKey: string, hari: number) {
+  const [y, m, d] = dateKey.split('-').map(Number) as [number, number, number];
+  return new Date(Date.UTC(y, m - 1, d) + hari * HARI_MS).toISOString().slice(0, 10);
 }
 
 export function InstructorTodayView({
@@ -46,7 +87,10 @@ export function InstructorTodayView({
   initialDate,
   muatQr,
   selfieClient = verificationClient,
+  mode = 'hari',
+  now = Date.now,
 }: InstructorTodayViewProps) {
+  const mingguan = mode === 'minggu';
   const sessionContext = useSessionContext();
   const session = sessionContext?.session;
   // Instruktur bisa mengajar di beberapa cabang (mis. GG dan MK); semua cabangnya dimuat, dan nama
@@ -84,14 +128,18 @@ export function InstructorTodayView({
 
   const referenceDate = initialDate ?? new Date();
   const todayKey = localDateKey(referenceDate, timezone);
+  const [geserMinggu, setGeserMinggu] = useState(0);
+  const awalMinggu = tambahHari(seninDari(todayKey), geserMinggu * 7);
+  const awalRentang = mingguan ? awalMinggu : todayKey;
+  const akhirRentang = mingguan ? tambahHari(awalMinggu, 6) : todayKey;
 
-  // Load today's classes
-  const loadClasses = useCallback(async () => {
-    setLoading(true);
+  // Kelas hari ini (atau seminggu di Jadwal Saya). `tenang`: muat ulang tanpa skeleton saat memeriksa presensi.
+  const loadClasses = useCallback(async (tenang = false) => {
+    if (!tenang) setLoading(true);
     setError(null);
     try {
-      const from = zonedLocalDateTime(todayKey, '00:00', timezone);
-      const until = zonedLocalDateTime(todayKey, '23:59', timezone);
+      const from = zonedLocalDateTime(awalRentang, '00:00', timezone);
+      const until = zonedLocalDateTime(akhirRentang, '23:59', timezone);
       const result = await client.discover({
         branches: session?.branches?.map((b) => ({ id: b.id, timezone: b.timezone })),
         timezone,
@@ -101,12 +149,14 @@ export function InstructorTodayView({
       });
       setWorkspace(result);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Gagal memuat jadwal hari ini.');
-      setWorkspace(null);
+      if (!tenang) {
+        setError(err instanceof Error ? err.message : 'Gagal memuat jadwal.');
+        setWorkspace(null);
+      }
     } finally {
-      setLoading(false);
+      if (!tenang) setLoading(false);
     }
-  }, [client, session?.branches, timezone, todayKey]);
+  }, [client, session?.branches, timezone, awalRentang, akhirRentang]);
 
   // Load availability
   const idCabang = cabangSaya.map((b) => b.id).join(',');
@@ -139,8 +189,8 @@ export function InstructorTodayView({
 
   useEffect(() => {
     void loadClasses();
-    void loadAvailability();
-  }, [loadClasses, loadAvailability]);
+    if (!mingguan) void loadAvailability();
+  }, [loadClasses, loadAvailability, mingguan]);
 
   // Load attendees when selectedSlot changes
   useEffect(() => {
@@ -192,6 +242,28 @@ export function InstructorTodayView({
       })
       .sort((a, b) => a.startAt.getTime() - b.startAt.getTime());
   }, [session?.id, workspace?.slots]);
+
+  // Selama ada kelas hari ini yang jendela presensinya terbuka dan belum tercatat, muat ulang tiap
+  // 30 detik supaya HADIR dan banner "Presensi tercatat" muncul sendiri setelah staf memindai QR.
+  const menungguPresensi =
+    !mingguan &&
+    todaySlots.some((slot) => !slot.instructorAttendance?.checkedInAt && dalamJendelaPresensi(slot.startAt, now()));
+  useEffect(() => {
+    if (!menungguPresensi) return;
+    const timer = window.setInterval(() => void loadClasses(true), SELANG_CEK_PRESENSI_MS);
+    return () => window.clearInterval(timer);
+  }, [menungguPresensi, loadClasses]);
+
+  // Presensi terakhir hari ini; banner tetap tampil (tidak hilang sendiri) selama kelasnya belum selesai.
+  const presensiTerakhir = mingguan
+    ? null
+    : [...todaySlots]
+        .filter((slot) => slot.instructorAttendance?.checkedInAt && slot.endAt.getTime() > now())
+        .sort(
+          (a, b) =>
+            new Date(b.instructorAttendance!.checkedInAt!).getTime() -
+            new Date(a.instructorAttendance!.checkedInAt!).getTime(),
+        )[0] ?? null;
 
   // Name resolution helpers
   const getClassName = useCallback(
@@ -253,17 +325,68 @@ export function InstructorTodayView({
       aria-label="Beranda Instruktur"
     >
       {/* 1. Header: Halo [nama depan] + Tanggal dengan tahun & nama studio */}
-      <header className="space-y-1">
-        <h1 className="text-2xl sm:text-3xl font-extrabold text-dd-ink tracking-tight">
-          Halo, {firstName}
-        </h1>
-        <p className="text-sm font-medium text-dd-muted">
-          {formattedToday}
-          {cabangHariIni.length ? ` · ${cabangHariIni.join(', ')}` : ''}
-        </p>
-      </header>
+      {mingguan ? (
+        <header className="space-y-3">
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-dd-ink tracking-tight">Jadwal Saya</h1>
+          <div className="flex items-center gap-2" aria-label="Navigasi minggu">
+            <button
+              type="button"
+              aria-label="Minggu sebelumnya"
+              onClick={() => setGeserMinggu((n) => n - 1)}
+              className="grid size-12 shrink-0 place-items-center rounded-dd-md border border-dd-border-interactive bg-white text-dd-ink hover:border-dd-forest"
+            >
+              <ChevronLeft className="size-5" aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setGeserMinggu(0)}
+              className="min-h-12 shrink-0 rounded-dd-md border border-dd-border-interactive bg-white px-4 text-base font-semibold text-dd-ink hover:border-dd-forest"
+            >
+              Minggu ini
+            </button>
+            <button
+              type="button"
+              aria-label="Minggu berikutnya"
+              onClick={() => setGeserMinggu((n) => n + 1)}
+              className="grid size-12 shrink-0 place-items-center rounded-dd-md border border-dd-border-interactive bg-white text-dd-ink hover:border-dd-forest"
+            >
+              <ChevronRight className="size-5" aria-hidden="true" />
+            </button>
+          </div>
+          <p className="m-0 text-base font-medium text-dd-muted" aria-live="polite">
+            {labelTanggal(awalMinggu, timezone)} sampai {labelTanggal(akhirRentang, timezone)}
+          </p>
+        </header>
+      ) : (
+        <header className="space-y-1">
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-dd-ink tracking-tight">
+            Halo, {firstName}
+          </h1>
+          <p className="text-base font-medium text-dd-muted">
+            {formattedToday}
+            {cabangHariIni.length ? ` · ${cabangHariIni.join(', ')}` : ''}
+          </p>
+        </header>
+      )}
 
-      {perluSelfie && (
+      {presensiTerakhir && (
+        <section
+          role="status"
+          aria-label="Presensi tercatat"
+          className="flex items-start gap-3 rounded-dd-xl border border-dd-forest/40 bg-dd-success-soft p-4"
+        >
+          <CheckCircle2 className="mt-0.5 size-6 shrink-0 text-dd-forest" aria-hidden="true" />
+          <p className="m-0 text-base text-dd-ink">
+            <strong className="block text-lg text-dd-forest">
+              Presensi tercatat pukul {formatBranchTime(new Date(presensiTerakhir.instructorAttendance!.checkedInAt!), timezone)}
+            </strong>
+            {getClassName(presensiTerakhir.classTypeId, presensiTerakhir)}, mulai{' '}
+            {formatBranchTime(presensiTerakhir.startAt, timezone)}. Honor kelas ini ikut dihitung.
+          </p>
+        </section>
+      )}
+
+      {!mingguan && perluSelfie && (
         <section
           aria-labelledby="selfie-instruktur"
           className="space-y-3 rounded-dd-xl border border-dd-warning-line/60 bg-dd-warning-soft p-5"
@@ -282,13 +405,15 @@ export function InstructorTodayView({
       )}
 
       {/* 2. QR presensi milik instruktur, langsung di beranda: staf di meja check-in yang memindainya. */}
-      <QrKehadiran nama={session?.displayName ?? 'Instruktur'} peran="instruktur" muat={muatQr} />
+      {!mingguan && (
+        <QrKehadiran nama={session?.displayName ?? 'Instruktur'} peran="instruktur" muat={muatQr} />
+      )}
 
       {/* 3. Kelas saya hari ini */}
       <section className="space-y-4" aria-labelledby="today-classes-heading">
         <div className="flex items-center justify-between">
           <h2 id="today-classes-heading" className="text-lg font-bold text-dd-ink">
-            Kelas saya hari ini
+            {mingguan ? 'Kelas yang saya ajar' : 'Kelas saya hari ini'}
           </h2>
           {!loading && todaySlots.length > 0 && (
             <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-dd-forest/10 text-dd-forest">
@@ -315,9 +440,9 @@ export function InstructorTodayView({
         ) : todaySlots.length === 0 ? (
           <div className="rounded-2xl border border-dd-line/80 bg-white p-8 text-center space-y-4">
             <p className="text-base text-dd-ink font-medium">
-              Tidak ada kelas terjadwal untuk kamu hari ini.
+              {mingguan ? 'Tidak ada kelas yang kamu ajar minggu ini.' : 'Tidak ada kelas terjadwal untuk kamu hari ini.'}
             </p>
-            <div>
+            {!mingguan && <div>
               <ButtonLink
                 href="/workspace/classes"
                 variant="secondary"
@@ -326,7 +451,7 @@ export function InstructorTodayView({
                 <CalendarDays className="size-4" aria-hidden="true" />
                 <span>Buka jadwal mingguan</span>
               </ButtonLink>
-            </div>
+            </div>}
           </div>
         ) : (
           <div className="space-y-3" role="list" aria-label="Daftar kelas hari ini">
@@ -359,6 +484,11 @@ export function InstructorTodayView({
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div>
+                      {mingguan && (
+                        <span className="block text-base font-semibold text-dd-forest">
+                          {labelTanggal(localDateKey(slot.startAt, timezone), timezone, true)}
+                        </span>
+                      )}
                       {/* Jam 22 px sesuai spesifikasi 5.4 */}
                       <span className="text-[22px] font-bold text-dd-ink leading-tight tracking-tight block">
                         {timeDisplay}
@@ -436,8 +566,15 @@ export function InstructorTodayView({
                       </div>
                       <div className="min-w-0">
                         <strong className="block text-dd-ink truncate font-semibold">
-                          {attendee.customer?.displayName ?? 'Peserta'}
+                          {attendee.kursiTeman
+                            ? attendee.namaTeman || 'Teman'
+                            : (attendee.customer?.displayName ?? 'Peserta')}
                         </strong>
+                        {attendee.kursiTeman && (
+                          <span className="block text-sm font-semibold text-dd-forest">
+                            Teman dari {attendee.customer?.displayName ?? 'member'}
+                          </span>
+                        )}
                         <span className="text-xs text-dd-muted block">
                           {attended ? 'Sudah check-in' : 'Menunggu kedatangan'}
                         </span>
@@ -461,7 +598,7 @@ export function InstructorTodayView({
       </Modal>
 
       {/* 5. Kartu ketersediaan mengajar dengan ringkasan pengajuan dan tautan Atur */}
-      <section
+      {!mingguan && <section
         className="rounded-2xl border border-dd-line/80 bg-white p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
         aria-labelledby="availability-card-heading"
       >
@@ -481,7 +618,7 @@ export function InstructorTodayView({
             Atur
           </ButtonLink>
         </div>
-      </section>
+      </section>}
     </div>
   );
 }

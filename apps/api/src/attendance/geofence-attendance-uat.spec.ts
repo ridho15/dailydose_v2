@@ -29,7 +29,7 @@ describe('UAT & Non-Happy Path: Geofencing, Absensi Instruktur & Modal Manual', 
   };
 
   const NOW = new Date('2026-10-21T09:45:00.000Z');
-  // Slot starts at 10:00, ends at 11:00 (Check-in window opens at 09:30, closes at 11:00)
+  // Slot starts at 10:00, ends at 11:00 (Check-in window opens at 09:15, closes at 11:00)
   const slotData = {
     id: slotId,
     branchId,
@@ -166,12 +166,12 @@ describe('UAT & Non-Happy Path: Geofencing, Absensi Instruktur & Modal Manual', 
   // 2. NON-HAPPY PATH: TIME WINDOW, AUTHORIZATION & TOKEN INTEGRITY
   // =========================================================================
   describe('Skenario Keamanan Token & Hak Akses (Non-Happy Path)', () => {
-    it('[Non-Happy Path] Menolak jika scan dilakukan sebelum jendela H-30m dibuka (CHECK_IN_TOO_EARLY)', async () => {
+    it('[Non-Happy Path] Menolak jika scan dilakukan sebelum jendela H-45m dibuka (CHECK_IN_TOO_EARLY)', async () => {
       const { db, service } = setupService();
       db.instructorCheckInToken.findUnique.mockResolvedValue(tokenRecord());
 
-      // Kelas mulai 10:00, jendela buka 09:30. Instruktur scan pukul 09:15 (H-45m)
-      const tooEarly = new Date('2026-10-21T09:15:00.000Z');
+      // Kelas mulai 10:00, jendela buka 09:15. Instruktur scan pukul 09:14 (H-46m)
+      const tooEarly = new Date('2026-10-21T09:14:00.000Z');
 
       await expect(
         service.consumeInstructor(

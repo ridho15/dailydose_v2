@@ -1,6 +1,6 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppFeedbackProvider } from '../../components/app-feedback';
 import type { AvailabilityClient, AvailabilityWindow } from '@/api-clients/availability-client';
 import { AvailabilityView } from './availability-view';
@@ -47,6 +47,14 @@ const renderView = (client: AvailabilityClient) =>
       <AvailabilityView client={client} />
     </AppFeedbackProvider>,
   );
+
+// Data uji memakai 21 November 2026; hanya Date yang dibekukan sebelum tanggal itu supaya
+// jendela ketersediaan tetap "akan datang" kapan pun tes dijalankan.
+beforeAll(() => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date('2026-11-15T00:00:00.000Z'));
+});
+afterAll(() => vi.useRealTimers());
 
 describe('AvailabilityView', () => {
   beforeEach(() => {
@@ -111,6 +119,8 @@ describe('AvailabilityView', () => {
     const client = makeClient();
     renderView(client);
     await waitFor(() => expect(client.list).toHaveBeenCalled());
+    // Grid Pagi/Siang/Sore memuat minggunya sendiri; yang diuji di sini daftar dimuat ulang sekali lagi.
+    await waitFor(() => expect(client.list).toHaveBeenCalledTimes(2));
 
     await user.type(screen.getByLabelText('Tanggal'), '2026-12-01');
     await user.type(screen.getByLabelText('Mulai'), '08:00');
@@ -125,7 +135,7 @@ describe('AvailabilityView', () => {
       expect.objectContaining({ branchId: 'branch-1' }),
     );
     expect(await screen.findByText('Ketersediaan berhasil diajukan.')).toBeVisible();
-    expect(client.list).toHaveBeenCalledTimes(2);
+    expect(client.list).toHaveBeenCalledTimes(3);
   });
 
   it('surfaces the overlap conflict message from the API', async () => {

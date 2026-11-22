@@ -23,19 +23,19 @@ describe('PRIORITAS 8: Instructor Lifecycle & Operational Non-Happy Path Specs',
   const otherInstructorId = '00000000-0000-4000-8000-000000000051';
 
   // ---------------------------------------------------------------------------
-  // 1. Jendela Waktu Check-In Instruktur (H-30 Menit, Sedang Berjalan, Kadaluwarsa)
+  // 1. Jendela Waktu Check-In Instruktur (H-45 Menit, Sedang Berjalan, Kadaluwarsa)
   // ---------------------------------------------------------------------------
   describe('checkInWindowState: Validasi Jendela Waktu Check-in QR Tablet', () => {
     const startAt = new Date('2026-10-19T10:00:00.000Z');
     const endAt = new Date('2026-10-19T11:00:00.000Z');
 
-    it('mengembalikan TOO_EARLY jika dipanggil lebih awal dari H-30 menit (contoh H-35m)', () => {
-      const now = new Date('2026-10-19T09:25:00.000Z');
+    it('mengembalikan TOO_EARLY jika dipanggil lebih awal dari H-45 menit (contoh H-46m)', () => {
+      const now = new Date('2026-10-19T09:14:00.000Z');
       expect(checkInWindowState(startAt, endAt, now)).toBe('TOO_EARLY');
     });
 
-    it('mengembalikan OPEN tepat pada H-30 menit sebelum kelas dimulai', () => {
-      const now = new Date('2026-10-19T09:30:00.000Z');
+    it('mengembalikan OPEN tepat pada H-45 menit sebelum kelas dimulai', () => {
+      const now = new Date('2026-10-19T09:15:00.000Z');
       expect(checkInWindowState(startAt, endAt, now)).toBe('OPEN');
     });
 

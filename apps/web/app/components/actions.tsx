@@ -172,7 +172,7 @@ export function StickyActionBar({
 }) {
   return (
     <div
-      className={`sticky bottom-[calc(1rem+env(safe-area-inset-bottom))] z-20 grid gap-3 rounded-dd-xl border border-dd-line bg-white/95 p-4 shadow-dd-float backdrop-blur sm:static sm:flex sm:items-center sm:justify-between ${className}`}
+      className={`sticky bottom-[calc(var(--dd-nav-bawah,0px)+1rem+env(safe-area-inset-bottom))] z-20 grid gap-3 rounded-dd-xl border border-dd-line bg-white/95 p-4 shadow-dd-float backdrop-blur sm:static sm:flex sm:items-center sm:justify-between ${className}`}
     >
       {description && <div className="text-xs leading-5 text-dd-muted">{description}</div>}
       <div className="flex flex-col gap-3 sm:ml-auto sm:flex-row">{children}</div>

@@ -307,10 +307,44 @@ describe('BookingsService - Anti-Booking Kembar Duplicate Guard (Poin 8)', () =>
       });
     });
 
-    it('booking pertama member tidak ditandai sebagai kursi teman', async () => {
+    it('booking pertama tanpa nama teman tidak membuat kursi teman', async () => {
       const { service, tx } = createService(null, 0, 1);
-      await tambahLagi(service, staf, 'ADMIN_ASSISTED');
+      await service.create(
+        principal as any,
+        { classSlotId: slotId, customerPackageId, source: 'SELF' },
+        'idem-pertama-sendiri',
+        'corr',
+      );
       expect(tx.bookingTeman.create).not.toHaveBeenCalled();
+      expect(tx.pemesananKelas.create).toHaveBeenCalledTimes(1);
+    });
+
+    it('booking pertama dengan nama teman membuat kursi sendiri dan kursi teman sekaligus', async () => {
+      const { service, tx } = createService(null, 0, 1);
+      const result = await tambahLagi(service, principal, 'SELF');
+      expect(result.status).toBe(HttpStatus.CREATED);
+      expect(tx.pemesananKelas.create).toHaveBeenCalledTimes(2);
+      expect(tx.bookingTeman.create).toHaveBeenCalledTimes(1);
+      expect((tx.bookingTeman.create.mock.calls as any)[0][0].data).toMatchObject({ namaTeman: 'Rani' });
+      // Dua kursi terisi: penghitung kelas naik dua.
+      expect(tx.slotKelas.update).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ bookedCount: 2 }) }),
+      );
+    });
+
+    it('nama teman pada paket tanpa bawa teman ditolak, tidak diabaikan diam-diam', async () => {
+      const { service, tx } = createService(null, 0, 0);
+      await expect(tambahLagi(service, principal, 'SELF')).rejects.toMatchObject({
+        code: 'FRIEND_SEAT_NOT_ALLOWED',
+      });
+      expect(tx.bookingTeman.create).not.toHaveBeenCalled();
+    });
+
+    it('datang berdua ditolak bila kelas hanya tersisa satu kursi', async () => {
+      const { service } = createService(null, 7, 1);
+      await expect(tambahLagi(service, principal, 'SELF')).rejects.toMatchObject({
+        code: 'CLASS_CAPACITY_FULL',
+      });
     });
 
     it('member dengan paket shareable/family (isShareable: true) boleh booking kursi teman meski maksTeman=0', async () => {

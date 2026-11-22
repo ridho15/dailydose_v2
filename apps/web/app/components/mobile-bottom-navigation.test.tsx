@@ -79,43 +79,32 @@ describe('MobileBottomNavigation (staf: empat menu utama peran)', () => {
 });
 
 describe('MobileBottomNavigation (customer - Tiket T-03)', () => {
-  it('renders the 5 standardized customer tabs in correct order', () => {
+  it('renders three big customer tabs: Beranda, Jadwal, Paket Saya', () => {
     pathname = '/account';
     render(<MobileBottomNavigation customerOnly approved={false} />);
     const nav = screen.getByRole('navigation', { name: 'Navigasi Bawah Mobile' });
     const links = within(nav).getAllByRole('link');
 
-    expect(links).toHaveLength(5);
-    expect(links.map((l) => l.textContent?.trim())).toEqual([
-      'Beranda',
-      'Jadwal',
-      'Booking',
-      'Paket',
-      'Akun',
-    ]);
-
-    expect(links[0]?.getAttribute('href')).toBe('/account');
-    expect(links[1]?.getAttribute('href')).toBe('/classes');
-    expect(links[2]?.getAttribute('href')).toBe('/bookings');
-    expect(links[3]?.getAttribute('href')).toBe('/account/packages');
-    expect(links[4]?.getAttribute('href')).toBe('/account/profile');
+    expect(links.map((l) => l.textContent?.trim())).toEqual(['Beranda', 'Jadwal', 'Paket Saya']);
+    expect(links.map((l) => l.getAttribute('href'))).toEqual(['/account', '/classes', '/account/packages']);
+    // Label 14 px dan tinggi 72 px untuk member senior.
+    expect(links[0]?.className).toContain('text-sm');
+    expect(nav.querySelector('div.grid')?.className).toContain('h-[72px]');
   });
 
-  it('marks active tab with #396552 color and top indicator line', () => {
-    pathname = '/bookings';
+  it('keeps Beranda active for booking pages and Paket Saya for checkout, with token colors', () => {
+    pathname = '/bookings/abc';
+    const { unmount } = render(<MobileBottomNavigation customerOnly approved={true} />);
+    let links = within(screen.getByRole('navigation', { name: 'Navigasi Bawah Mobile' })).getAllByRole('link');
+    expect(links[0]).toHaveAttribute('aria-current', 'page');
+    expect(links[0]?.className).toContain('text-dd-forest');
+    expect(links[0]?.className).not.toMatch(/\[#/);
+    unmount();
+
+    pathname = '/checkout';
     render(<MobileBottomNavigation customerOnly approved={true} />);
-    const nav = screen.getByRole('navigation', { name: 'Navigasi Bawah Mobile' });
-    const links = within(nav).getAllByRole('link');
-    const bookingLink = links.find((l) => l.textContent?.includes('Booking'))!;
-    const berandaLink = links.find((l) => l.textContent?.includes('Beranda'))!;
-
-    expect(bookingLink).toHaveAttribute('aria-current', 'page');
-    expect(bookingLink.className).toContain('text-[#396552]');
-    expect(berandaLink).not.toHaveAttribute('aria-current');
-
-    // Check 68px height container
-    const grid = nav.querySelector('div.grid');
-    expect(grid?.className).toContain('h-[68px]');
+    links = within(screen.getByRole('navigation', { name: 'Navigasi Bawah Mobile' })).getAllByRole('link');
+    expect(links[2]).toHaveAttribute('aria-current', 'page');
   });
 });
 
@@ -153,7 +142,7 @@ describe('MobileBottomNavigation (instructor - Tiket T-10)', () => {
     expect(grid?.className).toContain('h-[68px]');
   });
 
-  it('marks active tab for instructor with #396552 color and indicator line', () => {
+  it('marks active tab for instructor with the ed-green token and indicator line', () => {
     pathname = '/workspace/payroll';
     render(<MobileBottomNavigation customerOnly={false} />);
     const nav = screen.getByRole('navigation', { name: 'Navigasi Bawah Instruktur' });
@@ -162,7 +151,7 @@ describe('MobileBottomNavigation (instructor - Tiket T-10)', () => {
     const hariIniLink = links.find((l) => l.textContent?.includes('Hari Ini'))!;
 
     expect(scanLink).toHaveAttribute('aria-current', 'page');
-    expect(scanLink.className).toContain('text-[#396552]');
+    expect(scanLink.className).toContain('text-ed-green');
     expect(hariIniLink).not.toHaveAttribute('aria-current');
   });
 });

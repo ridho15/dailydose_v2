@@ -9,6 +9,16 @@ const principal = {
   branchIds: ['00000000-0000-4000-8000-000000000002'],
 };
 
+// Data uji memakai tanggal 20-21 November 2026; jam dibekukan sebelum itu supaya ketersediaan
+// tersebut tetap "akan datang" kapan pun tes dijalankan.
+beforeAll(() => {
+  jest.useFakeTimers({
+    now: new Date('2026-11-15T00:00:00.000Z'),
+    doNotFake: ['nextTick', 'setImmediate', 'setTimeout', 'setInterval', 'clearTimeout', 'clearInterval', 'queueMicrotask'],
+  });
+});
+afterAll(() => jest.useRealTimers());
+
 describe('AvailabilityService boundary', () => {
   const db = {
     slotKelas: { findMany: jest.fn().mockResolvedValue([]) },

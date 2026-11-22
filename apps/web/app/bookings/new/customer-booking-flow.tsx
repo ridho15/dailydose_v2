@@ -30,6 +30,7 @@ import {
 import { AlertBanner, useAppFeedback } from '../../components/app-feedback';
 import { Button, ButtonLink } from '../../components/actions';
 import { EmptyState, Skeleton, StatusBadge } from '../../ui';
+import { tandaiBerandaSegar } from '@/lib/beranda-segar';
 
 const dateTime = (value: Date, timezone: string) =>
   new Intl.DateTimeFormat('id-ID', {
@@ -555,6 +556,7 @@ export function CustomerBookingFlow({ client = browserBookingClient }: { client?
               .then((result) => {
                 setBooking(result);
                 setStatus('ready');
+                tandaiBerandaSegar();
                 feedback.showToast({
                   tone: 'success',
                   title: 'Booking berhasil dikonfirmasi',

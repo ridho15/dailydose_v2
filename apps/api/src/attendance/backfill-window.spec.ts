@@ -4,15 +4,15 @@ describe('CheckInWindowState for Frontdesk Manual Backfill', () => {
   const startAt = new Date('2026-10-31T10:00:00.000Z');
   const endAt = new Date('2026-10-31T10:50:00.000Z');
 
-  it('rejects manual backfill before H-30 minutes (TOO_EARLY)', () => {
-    // 35 minutes before start
-    const early = new Date(startAt.getTime() - 35 * 60_000);
+  it('rejects manual backfill before H-45 minutes (TOO_EARLY)', () => {
+    // 46 minutes before start
+    const early = new Date(startAt.getTime() - 46 * 60_000);
     expect(checkInWindowState(startAt, endAt, early)).toBe('TOO_EARLY');
   });
 
-  it('allows manual backfill within H-30 minutes window before class starts (OPEN)', () => {
-    // 25 minutes before start
-    const within30m = new Date(startAt.getTime() - 25 * 60_000);
+  it('allows manual backfill within H-45 minutes window before class starts (OPEN)', () => {
+    // 40 minutes before start
+    const within30m = new Date(startAt.getTime() - 40 * 60_000);
     expect(checkInWindowState(startAt, endAt, within30m)).toBe('OPEN');
 
     // 10 minutes before start

@@ -60,4 +60,27 @@ describe('PublicExperience studio chooser', () => {
     expect(scroller!.contains(save)).toBe(false);
     expect(screen.queryByText(/Menjadi default untuk aktivitas baru/)).toBeNull();
   });
+
+  it('member yang sudah masuk tidak melihat tombol WhatsApp melayang (menutupi angka sisa sesi di HP)', async () => {
+    account.siteConfig.mockResolvedValue({
+      branches: studios.map((studio) => ({ ...studio, supportWhatsappE164: '+6281200000000' })),
+      fallbackWhatsappE164: '+6289500000000',
+    });
+    // Studio utama sudah dipilih, jadi dialog pemilih studio tidak menutupi tombol.
+    account.profile.mockResolvedValue({
+      displayName: 'Nadia',
+      preferredBranch: { id: 'branch-0', name: 'Daily Dose Green Garden' },
+      version: 1,
+    });
+    render(
+      <AppFeedbackProvider>
+        <PublicExperience>
+          <p>Jadwal</p>
+        </PublicExperience>
+      </AppFeedbackProvider>,
+    );
+    await screen.findByText('Jadwal');
+    await new Promise((selesai) => setTimeout(selesai, 0));
+    expect(screen.queryByRole('button', { name: /WhatsApp/ })).not.toBeInTheDocument();
+  });
 });

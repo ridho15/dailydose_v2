@@ -52,6 +52,8 @@ export function CheckoutView() {
   } | null>(null);
   const [voucherBusy, setVoucherBusy] = useState(false);
   const [targetId, setTargetId] = useState('');
+  /** Paket member yang akan diperpanjang, dikirim dari tombol "Perpanjang 30 hari" di Paket Saya. */
+  const requestedTargetId = params.get('target') || '';
 
   const effectiveBranchId = branchId?.trim() || options?.package.branchId || '';
 
@@ -67,7 +69,8 @@ export function CheckoutView() {
             setOptions(value);
             // Paket perpanjangan: bila hanya satu paket yang bisa diperpanjang, langsung terpilih.
             const eligible = (value.extension?.targets ?? []).filter((item) => item.extensionsLeft > 0);
-            setTargetId(eligible.length === 1 ? eligible[0]!.customerPackageId : '');
+            const diminta = eligible.find((item) => item.customerPackageId === requestedTargetId);
+            setTargetId(diminta ? diminta.customerPackageId : eligible.length === 1 ? eligible[0]!.customerPackageId : '');
 
             const requestedIsValid = value.package.classTypes.some(
               (item) => item.id === requestedClassTypeId,
@@ -89,7 +92,7 @@ export function CheckoutView() {
         setErrorCode(details.code);
       })
       .finally(() => setLoading(false));
-  }, [branchId, orderId, packageId, requestedClassTypeId]);
+  }, [branchId, orderId, packageId, requestedClassTypeId, requestedTargetId]);
 
   if (loading)
     return (
@@ -230,7 +233,6 @@ export function CheckoutView() {
 
   const extension = options.extension ?? null;
   const readyToSubmit = extension ? Boolean(targetId) : Boolean(selectedClassTypeId);
-  const selectedTarget = extension?.targets.find((item) => item.customerPackageId === targetId);
 
   return (
     <main className="space-y-6 pt-2" aria-labelledby="checkout-title">
@@ -290,25 +292,6 @@ export function CheckoutView() {
         />
       )}
 
-      <ol
-        aria-label="Tahapan checkout"
-        className="grid grid-cols-2 gap-2 rounded-none border border-ed-line bg-white p-2.5 sm:grid-cols-4"
-      >
-        {['Ringkasan', 'Pembayaran', 'Unggah bukti', 'Status'].map((label, index) => (
-          <li
-            key={label}
-            aria-current={index === 0 ? 'step' : undefined}
-            className={`flex items-center gap-2.5 rounded-none px-3 py-2 text-xs font-semibold sm:text-sm ${
-              index === 0 ? 'bg-ed-forest text-white' : 'text-ed-muted bg-ed-tint/30'
-            }`}
-          >
-            <span className="grid size-5 place-items-center rounded-none border border-current font-serif text-[11px]">
-              {index + 1}
-            </span>
-            <span className="tracking-tight">{label}</span>
-          </li>
-        ))}
-      </ol>
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1.15fr)_minmax(320px,.85fr)]">
         <section className="rounded-none border border-ed-line bg-white p-5 shadow-none sm:p-6">
@@ -539,14 +522,9 @@ export function CheckoutView() {
           trailingIcon={<ArrowRight className="size-4" aria-hidden="true" />}
           className="sm:min-w-80"
           onClick={async () => {
-            const confirmed = await feedback.confirm({
-              title: 'Buat pesanan ini?',
-              message: selectedTarget
-                ? `${options.package.name} untuk ${selectedTarget.packageName} di ${options.package.branchName} akan dibuat. Masa aktifnya bertambah ${extension?.days ?? 30} hari setelah pembayaran disetujui.`
-                : `${options.package.name} di ${options.package.branchName} akan dibuat. Setelah itu Anda memperoleh rekening dan nominal pembayaran.`,
-              confirmLabel: 'Buat pesanan',
-            });
-            if (!confirmed) return;
+            // Membuat pesanan tidak memindahkan uang, jadi tanpa dialog konfirmasi: tombol ini langsung
+            // membuka rekening, nominal, dan kolom unggah bukti di layar yang sama.
+            if (submitting) return;
             setSubmitting(true);
             setError('');
             try {
@@ -580,7 +558,7 @@ export function CheckoutView() {
             }
           }}
         >
-          Buat pesanan dan lanjutkan pembayaran
+          Buat pesanan
         </Button>
       </StickyActionBar>
     </main>

@@ -1661,7 +1661,7 @@ function bookingStatusLabel(status: string) {
   return (
     {
       BOOKED: 'Aktif',
-      RESCHEDULE_PENDING: 'Menunggu reschedule',
+      RESCHEDULE_PENDING: 'Menunggu persetujuan',
       CANCELLED: 'Dibatalkan',
       ATTENDED: 'Sudah hadir',
       NO_SHOW: 'Tidak hadir',

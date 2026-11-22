@@ -174,6 +174,18 @@ Aturan kerahasiaan per peran ada di [Rules.md](./Rules.md#2-kerahasiaan-data-keu
 15. Presensi instruktur lewat scan QR diterima mulai 45 menit sebelum kelas sampai 10 menit setelah
     kelas **mulai** (kelas 10.00 masih bisa scan 10.10). Scan setelah jam mulai tercatat sebagai anomali
     "Instruktur Check-in Terlambat" di Laporan Keuangan > Rekonsiliasi (5 November 2026).
+19. Ganti jadwal member yang diajukan sebelum batas H-12 **langsung disetujui** bila kelas tujuan
+    masih ada tempat; booking pindah saat itu juga dan tercatat di audit log
+    (`reschedule.auto_approved`). Kurang dari H-12 member tetap tidak bisa ganti jadwal sendiri
+    (22 November 2026).
+20. Member boleh **mengajukan sendiri** pembatalan kurang dari H-12 dari kartu bookingnya ("Ajukan
+    pembatalan"). Pengajuan memakai record yang sama dengan pengajuan staf (`session_adjust_request`,
+    kode `LATE_CANCELLATION`), server memeriksa booking itu milik member, dan Manager, Owner, atau
+    Super Owner memutuskannya di kotak masuk staf. Booking tetap terjadwal sampai diputus
+    (22 November 2026).
+21. QR kehadiran member dibuka **45 menit sebelum kelas** sampai kelas selesai, sama di semua jalur
+    (QR tetap, pass per booking, catat manual). Instruktur tetap 45 menit sebelum sampai 10 menit
+    setelah kelas mulai (22 November 2026).
 
 ## 6. Perlu konfirmasi (asumsi saat membangun)
 

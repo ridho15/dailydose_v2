@@ -6,49 +6,26 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import QRCode from 'qrcode';
 import {
   bookingFailure,
-  bookingProblem,
   browserBookingClient,
   type BookingClient,
-  type BookingProblem,
   type CustomerBookingRecord,
   type CustomerRescheduleOptions,
 } from '@/api-clients/booking-client';
 import { AlertBanner } from '../../components/app-feedback';
+import { AksiBooking } from '../../components/customer/aksi-booking';
+import { tandaiBerandaSegar } from '@/lib/beranda-segar';
 import { Button, ButtonLink } from '../../components/actions';
-import { SearchSelect, SelectInput } from '../../components/forms';
 import { useSessionContext } from '../../session-context';
 import { isCustomerOnlySession } from '@/lib/session-audience';
 import { PageHeader, Skeleton } from '../../ui';
 
 const statusLabels: Record<string, string> = {
   BOOKED: 'Terjadwal',
-  RESCHEDULE_PENDING: 'Perubahan jadwal diproses',
+  RESCHEDULE_PENDING: 'Menunggu persetujuan',
   CANCELLED: 'Dibatalkan',
   ATTENDED: 'Hadir',
   NO_SHOW: 'Tidak hadir',
 };
-
-const reasonLabels = {
-  PERSONAL_UNAVAILABLE: 'Saya tidak dapat hadir pada jadwal semula',
-  CUSTOMER_SCHEDULE_CONFLICT: 'Jadwal saya berbenturan',
-  WRONG_CLASS_SELECTED: 'Saya memilih jadwal yang keliru',
-} as const;
-
-const dateTime = (value: Date, timezone: string) =>
-  value.toLocaleString('id-ID', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    timeZone: timezone,
-  });
-
-const newIntentKey = () =>
-  typeof crypto !== 'undefined' && 'randomUUID' in crypto
-    ? crypto.randomUUID()
-    : `reschedule-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
 export function BookingDetailView({
   id,
@@ -66,16 +43,7 @@ export function BookingDetailView({
   const [booking, setBooking] = useState<CustomerBookingRecord | null>(null);
   const [loading, setLoading] = useState(true);
   const [detailError, setDetailError] = useState('');
-  const [rescheduleUnavailable, setRescheduleUnavailable] = useState<BookingProblem | null>(null);
-  const [rescheduleLoading, setRescheduleLoading] = useState(false);
-  const [mutationError, setMutationError] = useState('');
   const [options, setOptions] = useState<CustomerRescheduleOptions | null>(null);
-  const [targetId, setTargetId] = useState('');
-  const [reasonCode, setReasonCode] = useState<keyof typeof reasonLabels>('PERSONAL_UNAVAILABLE');
-  const [showForm, setShowForm] = useState(false);
-  const [confirming, setConfirming] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-  const [rescheduleMessage, setRescheduleMessage] = useState('');
   const [qrPayload, setQrPayload] = useState<string | null>(null);
   const [qrPassUrl, setQrPassUrl] = useState<string | null>(null);
   const [qrLoading, setQrLoading] = useState(false);
@@ -86,10 +54,6 @@ export function BookingDetailView({
     unavailableReason: string | null;
     cutoffAt: string;
   } | null>(null);
-  const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
-  const [cancelSubmitting, setCancelSubmitting] = useState(false);
-  const [cancelError, setCancelError] = useState('');
-  const [cancelMessage, setCancelMessage] = useState('');
   const canvasRef = useRef<HTMLCanvasElement>(null);
   // Batas mandiri dihitung dari cutoff yang dikirim API (mengikuti pengaturan cutoff), bukan angka tetap.
   const cutoffRef = cancelOptions?.cutoffAt ?? options?.cutoffAt ?? null;
@@ -98,77 +62,17 @@ export function BookingDetailView({
       ? Math.round((booking.classSlot.startAt.getTime() - new Date(cutoffRef).getTime()) / 3600e3)
       : null;
   const batasLabel = jamBatas && jamBatas > 0 ? `${jamBatas} jam sebelum kelas dimulai` : 'batas waktu yang ditentukan studio';
-  const intentKey = useRef(newIntentKey());
 
-  const handleCancelBooking = async () => {
-    if (!booking) return;
-    setCancelSubmitting(true);
-    setCancelError('');
-    try {
-      if (client.cancel) {
-        await client.cancel(booking.id);
-      } else {
-        const response = await fetch(`/api/v1/bookings/${encodeURIComponent(booking.id)}/cancel`, {
-          method: 'POST',
-          credentials: 'include',
-          headers: { 'content-type': 'application/json', 'idempotency-key': newIntentKey() },
-          body: JSON.stringify({
-            reasonCode: 'CUSTOMER_SCHEDULE_CONFLICT',
-            reason: 'Dibatalkan mandiri oleh pelanggan',
-          }),
-        });
-        if (!response.ok) throw await response.json();
-      }
-      setCancelDialogOpen(false);
-      setCancelMessage('Booking berhasil dibatalkan. Kuota sesi paket Anda telah dikembalikan secara utuh.');
-      await load();
-    } catch (cause: any) {
-      const code = cause?.error?.code ?? cause?.code ?? cause?.data?.error?.code;
-      if (code === 'ATTENDANCE_RECORDED') {
-        setCancelError('Kehadiran kelas sudah tercatat atau sesi telah berjalan. Booking tidak dapat dibatalkan.');
-      } else if (code === 'CLASS_IN_PROGRESS') {
-        setCancelError('Kelas sedang atau sudah selesai berlangsung. Booking tidak dapat dibatalkan.');
-      } else if (code === 'CANCELLATION_CUTOFF_PASSED') {
-        setCancelError(`Batas waktu pembatalan mandiri (${batasLabel}) telah terlewati. Hubungi admin studio jika terdapat kondisi darurat medis.`);
-      } else if (code === 'BOOKING_ALREADY_CANCELLED') {
-        setCancelError('Booking ini sudah dibatalkan sebelumnya.');
-      } else if (code === 'RESOURCE_NOT_FOUND') {
-        setCancelError('Data booking tidak ditemukan atau sudah tidak aktif.');
-      } else {
-        const friendly = await bookingFailure(cause);
-        setCancelError(
-          friendly && !friendly.includes('OFFLINE_OR_REQUEST_FAILED')
-            ? friendly
-            : 'Gagal membatalkan booking. Silakan hubungi admin studio.',
-        );
-      }
-    } finally {
-      setCancelSubmitting(false);
-    }
-  };
-
+  // Pilihan ganti jadwal dimuat di dialog Ganti jadwal; di sini hanya untuk status permintaan terakhir.
   const loadRescheduleOptions = useCallback(async () => {
     if (!canLoadReschedule) {
       setOptions(null);
-      setRescheduleUnavailable(null);
       return;
     }
-    setRescheduleLoading(true);
-    setRescheduleUnavailable(null);
     try {
-      const optionResult = await client.rescheduleOptions(id);
-      setOptions(optionResult);
-      setTargetId(
-        optionResult.targets.find((t) => t.eligible !== false)?.id ??
-          optionResult.targets[0]?.id ??
-          '',
-      );
-    } catch (cause) {
+      setOptions(await client.rescheduleOptions(id));
+    } catch {
       setOptions(null);
-      setTargetId('');
-      setRescheduleUnavailable(await bookingProblem(cause));
-    } finally {
-      setRescheduleLoading(false);
     }
   }, [canLoadReschedule, client, id]);
 
@@ -247,7 +151,6 @@ export function BookingDetailView({
   const load = useCallback(async () => {
     setLoading(true);
     setDetailError('');
-    setMutationError('');
     try {
       const bookingResult = await client.detail(id);
       setBooking(bookingResult);
@@ -256,7 +159,6 @@ export function BookingDetailView({
       setBooking(null);
       setOptions(null);
       setCancelOptions(null);
-      setRescheduleUnavailable(null);
       setDetailError(await bookingFailure(cause));
     } finally {
       setLoading(false);
@@ -410,7 +312,7 @@ export function BookingDetailView({
               </h2>
               <p className="mt-1 text-xs leading-relaxed text-ed-muted sm:text-sm">
                 Tunjukkan kode QR ini ke meja resepsionis untuk mencatat kehadiran Anda.
-                QR aktif mulai 30 menit sebelum sesi kelas dimulai.
+                QR aktif mulai 45 menit sebelum sesi kelas dimulai.
               </p>
               <div className="mt-4 flex flex-wrap gap-2 text-xs text-ed-muted">
                 <span className="rounded-none bg-white px-2.5 py-1 border border-ed-line font-mono font-medium">
@@ -444,38 +346,6 @@ export function BookingDetailView({
           </div>
         </section>
       )}
-      {rescheduleUnavailable && (
-        <section className="space-y-3" aria-label="Ketersediaan perubahan jadwal">
-          <AlertBanner
-            tone={rescheduleUnavailable.code === 'RESCHEDULE_CUTOFF_PASSED' ? 'warning' : 'info'}
-            title={
-              rescheduleUnavailable.code === 'RESCHEDULE_CUTOFF_PASSED'
-                ? 'Batas reschedule telah lewat'
-                : 'Perubahan jadwal sedang tidak tersedia'
-            }
-            message={
-              rescheduleUnavailable.code === 'RESCHEDULE_CUTOFF_PASSED'
-                ? `Batas perubahan jadwal mandiri (${batasLabel}) telah berakhir. Kursi kelas Anda saat ini tetap aman. Silakan hubungi admin studio untuk asistensi darurat.`
-                : 'Booking Anda tetap aktif. Coba kembali atau hubungi studio jika Anda memerlukan bantuan untuk mengganti jadwal.'
-            }
-          />
-          <div className="flex flex-wrap gap-3">
-            {rescheduleUnavailable.code !== 'RESCHEDULE_CUTOFF_PASSED' && (
-              <Button
-                variant="secondary"
-                loading={rescheduleLoading}
-                loadingLabel="Memuat pilihan jadwal…"
-                onClick={() => void loadRescheduleOptions()}
-              >
-                Coba lagi
-              </Button>
-            )}
-            <ButtonLink href="/contact" variant="secondary">
-              Hubungi studio
-            </ButtonLink>
-          </div>
-        </section>
-      )}
       {options?.latestRequest && (
         <AlertBanner
           tone={
@@ -487,10 +357,10 @@ export function BookingDetailView({
           }
           title={
             options.latestRequest.status === 'APPROVED'
-              ? 'Reschedule disetujui'
+              ? 'Jadwal sudah dipindah'
               : options.latestRequest.status === 'REJECTED'
-                ? 'Reschedule ditolak'
-                : 'Reschedule sedang ditinjau'
+                ? 'Ganti jadwal ditolak'
+                : 'Menunggu persetujuan'
           }
           message={
             options.latestRequest.status === 'PENDING'
@@ -501,226 +371,32 @@ export function BookingDetailView({
           }
         />
       )}
-      {options?.supportAction === 'CONTACT_STUDIO' && (
-        <div className="space-y-3">
-          <AlertBanner
-            tone="warning"
-            title="Batas reschedule telah lewat"
-            message={`Batas perubahan jadwal mandiri ditutup pada ${dateTime(options.cutoffAt, booking.classSlot?.timezone ?? 'Asia/Jakarta')}. Kursi Anda pada jadwal ini tetap aman. Hubungi studio untuk bantuan atau adjustment manual.`}
-          />
-          <ButtonLink href="/contact" variant="secondary">
-            Hubungi studio
-          </ButtonLink>
-        </div>
-      )}
-      {cancelMessage && (
-        <AlertBanner
-          tone="success"
-          title="Booking berhasil dibatalkan"
-          message={cancelMessage}
-          onDismiss={() => setCancelMessage('')}
-        />
-      )}
-      {rescheduleMessage && (
-        <AlertBanner
-          tone="success"
-          title="Permintaan berhasil dikirim"
-          message={rescheduleMessage}
-          onDismiss={() => setRescheduleMessage('')}
-        />
-      )}
       {booking.status === 'BOOKED' && !booking.attendance && (
-        <section className="rounded-none border border-ed-line bg-white p-5 shadow-none sm:p-6">
-          <h2 className="font-serif text-lg font-normal tracking-tight text-ed-ink">Perubahan atau Pembatalan Booking</h2>
-          <p className="mt-2 text-sm leading-relaxed text-ed-muted">
-            Perubahan jadwal (reschedule) dan pembatalan mandiri dapat dilakukan paling lambat {batasLabel}.
-          </p>
-          <div className="mt-4 flex flex-wrap gap-3">
-            {options?.canRequest && !showForm && (
-              <Button
-                onClick={() => {
-                  setMutationError('');
-                  setShowForm(true);
-                  setCancelDialogOpen(false);
-                }}
-              >
-                Ajukan reschedule
-              </Button>
-            )}
-            {!showForm && !cancelDialogOpen && cancelOptions?.canCancel !== false && (
-              <Button
-                variant="danger"
-                onClick={() => {
-                  setCancelError('');
-                  setCancelDialogOpen(true);
-                }}
-              >
-                Batalkan booking
-              </Button>
-            )}
-          </div>
-          {cancelOptions?.canCancel === false && options?.supportAction !== 'CONTACT_STUDIO' && (
-            <p className="mt-4 text-sm leading-relaxed text-ed-muted" role="note">
-              {cancelOptions.unavailableReason === 'CANCELLATION_CUTOFF_PASSED'
-                ? `Batas pembatalan mandiri ditutup pada ${dateTime(new Date(cancelOptions.cutoffAt), booking.classSlot?.timezone ?? 'Asia/Jakarta')}. Hubungi studio bila Anda tidak dapat hadir.`
-                : 'Booking ini tidak dapat dibatalkan sendiri lagi. Hubungi studio bila Anda memerlukan bantuan.'}
-            </p>
-          )}
-
-          {cancelDialogOpen && (
-            <div className="mt-5 space-y-3 rounded-none border border-rose-200 bg-rose-50/70 p-4">
-              <h3 className="text-sm font-semibold text-rose-800">
-                Konfirmasi Pembatalan Booking
-              </h3>
-              <p className="text-xs leading-relaxed text-rose-800/90 sm:text-sm">
-                Apakah Anda yakin ingin membatalkan booking kelas ini? Kuota sesi paket Anda akan otomatis dikembalikan secara utuh.
-              </p>
-              {cancelError && (
-                <p className="text-xs font-semibold text-rose-800 bg-rose-100 p-2.5 rounded-none border border-rose-300">
-                  {cancelError}
-                </p>
-              )}
-              <div className="flex flex-wrap gap-3 pt-1">
-                <Button
-                  variant="danger"
-                  loading={cancelSubmitting}
-                  loadingLabel="Membatalkan…"
-                  onClick={() => void handleCancelBooking()}
-                >
-                  Ya, Batalkan
-                </Button>
-                <Button
-                  variant="secondary"
-                  disabled={cancelSubmitting}
-                  onClick={() => setCancelDialogOpen(false)}
-                >
-                  Kembali
-                </Button>
-              </div>
-            </div>
-          )}
-        </section>
-      )}
-      {showForm && options?.canRequest && (
-        <form
-          className="space-y-5 rounded-none border border-ed-line bg-white p-5 shadow-none sm:p-6"
-          aria-label="Pengajuan reschedule"
-          onSubmit={(event) => {
-            event.preventDefault();
-            if (!targetId) return;
-            if (!confirming) {
-              setConfirming(true);
-              return;
-            }
-            setSubmitting(true);
-            setMutationError('');
-            void client
-              .requestReschedule(
-                {
-                  bookingId: booking.id,
-                  targetClassSlotId: targetId,
-                  reasonCode,
-                  expectedBookingVersion: options.bookingVersion,
-                },
-                intentKey.current,
-              )
-              .then(async () => {
-                intentKey.current = newIntentKey();
-                setRescheduleMessage(
-                  'Tim studio akan meninjau jadwal tujuan. Anda akan menerima notifikasi setelah keputusan dibuat.',
-                );
-                setShowForm(false);
-                setConfirming(false);
-                await load();
-              })
-              .catch(async (cause) => {
-                setMutationError(await bookingFailure(cause));
-                setConfirming(false);
-              })
-              .finally(() => setSubmitting(false));
-          }}
+        <section
+          aria-labelledby="ubah-booking"
+          className="space-y-3 rounded-dd-xl border border-dd-line bg-white p-5 sm:p-6"
         >
-          <div>
-            <h2 className="font-serif text-lg font-normal tracking-tight text-ed-ink">Pilih jadwal pengganti</h2>
-            <p className="mt-1 text-sm text-ed-muted">
-              Hanya jadwal yang masih memenuhi syarat ditampilkan.
-            </p>
-          </div>
-          {options.targets.length ? (
-            <>
-              <SearchSelect
-                label="Jadwal tujuan"
-                value={targetId}
-                options={options.targets.map((target) => ({
-                  id: target.id,
-                  label: dateTime(target.startAt, target.timezone),
-                  disabled: target.eligible === false,
-                  description:
-                    target.eligible === false
-                      ? target.ineligibilityReason === 'SCHEDULE_CONFLICT'
-                        ? 'Jadwal bertabrakan dengan kelas Anda'
-                        : target.ineligibilityReason === 'DUPLICATE_BOOKING'
-                          ? 'Anda sudah terdaftar di kelas ini'
-                          : 'Kelas sudah penuh'
-                      : `${target.availableCapacity} tempat tersedia`,
-                }))}
-                onChange={(value) => {
-                  setTargetId(value);
-                  setConfirming(false);
-                }}
-              />
-              <SelectInput
-                label="Alasan"
-                value={reasonCode}
-                onChange={(event) => {
-                  setReasonCode(event.target.value as keyof typeof reasonLabels);
-                  setConfirming(false);
-                }}
-              >
-                {Object.entries(reasonLabels).map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
-              </SelectInput>
-              {confirming && (
-                <AlertBanner
-                  tone="warning"
-                  title="Konfirmasi perubahan jadwal"
-                  message="Setelah dikirim, jadwal asal tetap berlaku sampai permintaan disetujui oleh studio."
-                />
-              )}
-              {mutationError && (
-                <AlertBanner
-                  tone="danger"
-                  title="Permintaan belum dapat diproses"
-                  message={mutationError}
-                />
-              )}
-              <div className="flex flex-wrap gap-3">
-                <Button type="submit" loading={submitting} loadingLabel="Mengirim…">
-                  {confirming ? 'Kirim permintaan' : 'Tinjau permintaan'}
-                </Button>
-                <Button
-                  variant="secondary"
-                  onClick={() => {
-                    setShowForm(false);
-                    setConfirming(false);
-                    setMutationError('');
-                  }}
-                >
-                  Batal
-                </Button>
-              </div>
-            </>
-          ) : (
-            <AlertBanner
-              tone="warning"
-              title="Belum ada jadwal pengganti"
-              message="Tidak ada kelas dengan cabang dan jenis yang sama yang masih memiliki tempat."
-            />
-          )}
-        </form>
+          <h2 id="ubah-booking" className="m-0 text-xl font-semibold text-dd-ink">
+            Ubah atau batalkan
+          </h2>
+          <p className="m-0 text-base text-dd-muted">
+            Ganti jadwal dan pembatalan langsung bisa sampai {batasLabel}. Setelah itu, ajukan pembatalan dan Manager studio yang memutuskan.
+          </p>
+          <AksiBooking
+            booking={{
+              id: booking.id,
+              classSlotId: booking.classSlot?.id ?? '',
+              customerPackageId: booking.customerPackageId ?? null,
+              className: booking.classSlot?.classType?.name ?? 'Kelas',
+              timezone: booking.classSlot?.timezone ?? 'Asia/Jakarta',
+            }}
+            client={client as BookingClient}
+            onBerubah={() => {
+              tandaiBerandaSegar();
+              void load();
+            }}
+          />
+        </section>
       )}
     </main>
   );

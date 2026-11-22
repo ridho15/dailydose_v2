@@ -139,9 +139,12 @@ export function PublicExperience({ children }: { children: ReactNode }) {
 
   const preferred = profile?.preferredBranch ?? session?.preferredBranch ?? null;
   const mandatory = customerOnly && state === 'idle' && !preferred;
+  // Member yang sudah masuk memakai ikon Bantuan di bilah atas; tombol melayang menutupi angka
+  // sisa sesi dan tombol di HP, jadi hanya tampil untuk pengunjung situs publik.
   const showFab =
+    !customerOnly &&
     !hiddenPathPrefixes.some((prefix) => pathname.startsWith(prefix)) &&
-    (visiblePaths.has(pathname) || customerOnly);
+    visiblePaths.has(pathname);
   const supportAvailable = useMemo(
     () =>
       Boolean(
@@ -305,9 +308,9 @@ export function PublicExperience({ children }: { children: ReactNode }) {
                         target="_blank"
                         rel="noopener noreferrer"
                         onClick={() => tutupWa(false)}
-                        className="flex min-h-12 items-center gap-3 rounded-dd-md border border-ed-line px-3 py-2 no-underline transition-colors hover:border-[#1f8f5f] hover:bg-ed-tint focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ed-forest"
+                        className="flex min-h-12 items-center gap-3 rounded-dd-md border border-ed-line px-3 py-2 no-underline transition-colors hover:border-dd-whatsapp hover:bg-ed-tint focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ed-forest"
                       >
-                        <MessageCircle className="size-5 shrink-0 text-[#1f8f5f]" aria-hidden="true" />
+                        <MessageCircle className="size-5 shrink-0 text-dd-whatsapp" aria-hidden="true" />
                         <span className="min-w-0 flex-1">
                           <span className="block font-semibold text-ed-ink">{namaPendek(studio)}</span>
                           {area && <span className="block text-sm text-ed-muted">{area}</span>}
@@ -331,7 +334,7 @@ export function PublicExperience({ children }: { children: ReactNode }) {
             aria-expanded={waOpen}
             aria-controls="wa-cabang"
             onClick={() => (waOpen ? tutupWa() : setWaOpen(true))}
-            className={`public-whatsapp-fab fixed right-3 z-40 grid size-14 min-h-14 w-14 place-items-center rounded-full border border-white/30 bg-[#1f8f5f] p-0 text-white  transition hover:-translate-y-1 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-ed-green/25 motion-reduce:transform-none sm:right-6 ${
+            className={`public-whatsapp-fab fixed right-3 z-40 grid size-14 min-h-14 w-14 place-items-center rounded-full border border-white/30 bg-dd-whatsapp p-0 text-white  transition hover:-translate-y-1 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-ed-green/25 motion-reduce:transform-none sm:right-6 ${
               pathname === '/checkout'
               ? 'bottom-[calc(5.5rem+env(safe-area-inset-bottom))] sm:bottom-6'
               : 'bottom-[calc(4.75rem+env(safe-area-inset-bottom))] sm:bottom-6'

@@ -185,7 +185,10 @@ export function ApplicationShell({ children }: { children: React.ReactNode }) {
   if (customerOnly) {
     const approved = session?.identityVerificationStatus === 'APPROVED';
     return (
-      <div className="min-h-dvh bg-dd-canvas text-dd-ink" data-customer-shell>
+      <div
+        className="min-h-dvh bg-dd-canvas text-dd-ink [--dd-nav-bawah:68px] lg:[--dd-nav-bawah:0px]"
+        data-customer-shell
+      >
         <a className="skip-link" href="#main-content">
           Langsung ke konten utama
         </a>
@@ -248,12 +251,12 @@ export function ApplicationShell({ children }: { children: React.ReactNode }) {
                     >
                       {item.label}
                       {showOrderBadge && (
-                        <span className="rounded-full bg-dd-brass px-1.5 py-0.5 text-[10px] font-bold text-white leading-none">
+                        <span className="rounded-full bg-dd-brass px-1.5 py-0.5 text-xs font-bold text-white leading-none">
                           {customerBadges.actionableOrdersCount}
                         </span>
                       )}
                       {showBookingBadge && (
-                        <span className="rounded-full bg-dd-success px-1.5 py-0.5 text-[10px] font-bold text-white leading-none">
+                        <span className="rounded-full bg-dd-success px-1.5 py-0.5 text-xs font-bold text-white leading-none">
                           {customerBadges.upcomingBookingsCount}
                         </span>
                       )}
@@ -276,7 +279,7 @@ export function ApplicationShell({ children }: { children: React.ReactNode }) {
               <Link
                 href="/contact"
                 aria-label="Bantuan customer"
-                className="hidden size-10 place-items-center rounded-dd-md border border-dd-line bg-white text-dd-muted no-underline sm:grid"
+                className="grid size-11 place-items-center rounded-dd-md border border-dd-line bg-white text-dd-muted no-underline"
               >
                 <CircleHelp className="size-[18px]" />
               </Link>
@@ -406,7 +409,10 @@ export function ApplicationShell({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="min-h-dvh bg-dd-canvas text-dd-ink lg:flex" data-admin-shell>
+    <div
+      className="min-h-dvh bg-dd-canvas text-dd-ink [--dd-nav-bawah:68px] lg:flex lg:[--dd-nav-bawah:0px]"
+      data-admin-shell
+    >
       <a className="skip-link" href="#main-content">
         Langsung ke konten utama
       </a>

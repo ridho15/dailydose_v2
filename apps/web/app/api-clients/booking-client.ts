@@ -143,6 +143,13 @@ export interface PengajuanPembatalan {
   createdAt: string;
 }
 
+export type KodeAlasanPembatalan = 'SAKIT' | 'PEKERJAAN' | 'KELUARGA' | 'LAINNYA';
+
+export interface StatusPembatalanSaya {
+  bisaMengajukan: boolean;
+  pengajuan: { id: string; status: 'PENDING' | 'APPROVED' | 'REJECTED'; diajukanPada: string } | null;
+}
+
 export interface Reschedule {
   id: string;
   bookingId: string;
@@ -584,6 +591,14 @@ export interface BookingClient {
     options?: { isMedical?: boolean; releaseSeat?: boolean },
   ): Promise<PengajuanPembatalan>;
   pembatalanTertunda?(classSlotId: string): Promise<PengajuanPembatalan[]>;
+  /** Member: status pengajuan pembatalan kurang dari H-12 untuk booking miliknya. */
+  statusPembatalanSaya?(bookingId: string): Promise<StatusPembatalanSaya>;
+  /** Member: mengajukan pembatalan kurang dari H-12; diputus Manager/Owner/Super Owner. */
+  ajukanPembatalanSaya?(
+    bookingId: string,
+    kodeAlasan: KodeAlasanPembatalan,
+    lainnya?: string,
+  ): Promise<{ id: string; status: 'PENDING'; reason: string }>;
   putuskanPembatalan?(
     requestId: string,
     keputusan: 'approve' | 'reject',
@@ -1001,6 +1016,19 @@ export const browserBookingClient: BookingClient = {
       },
     );
   },
+  statusPembatalanSaya(bookingId) {
+    return apiFetch<StatusPembatalanSaya>(
+      `/me/bookings/${encodeURIComponent(bookingId)}/late-cancellation`,
+      { label: 'Memeriksa pengajuan pembatalan…' },
+    );
+  },
+  ajukanPembatalanSaya(bookingId, kodeAlasan, lainnya) {
+    return apiFetch(`/me/bookings/${encodeURIComponent(bookingId)}/late-cancellation`, {
+      method: 'POST',
+      body: JSON.stringify({ kodeAlasan, lainnya }),
+      label: 'Mengirim pengajuan pembatalan…',
+    });
+  },
   async pembatalanTertunda(classSlotId) {
     const hasil = await apiFetch<PengajuanPembatalan[]>(
       `/bookings/late-cancellations?${new URLSearchParams({ classSlotId })}`,
@@ -1231,14 +1259,14 @@ const messages: Record<string, string> = {
   FORBIDDEN: 'Anda tidak memiliki izin untuk tindakan ini.',
   VALIDATION_ERROR: 'Data booking belum valid.',
   OFFLINE_OR_REQUEST_FAILED: 'Layanan tidak dapat dijangkau. Periksa koneksi lalu coba lagi.',
-  RESCHEDULE_CUTOFF_PASSED: 'Batas pengajuan reschedule H-12 sudah terlewati.',
+  RESCHEDULE_CUTOFF_PASSED: 'Batas ganti jadwal (12 jam sebelum kelas) sudah lewat. Tekan Ajukan pembatalan bila Anda tidak bisa hadir.',
   PENDING_RESCHEDULE_EXISTS: 'Booking ini sudah memiliki reschedule yang sedang ditinjau.',
   TARGET_CLASS_FULL: 'Kelas tujuan sudah penuh.',
   TARGET_CLASS_INELIGIBLE: 'Kelas tujuan tidak lagi memenuhi syarat.',
   RESCHEDULE_ALREADY_DECIDED: 'Reschedule ini sudah diputuskan.',
   SELF_APPROVAL_FORBIDDEN: 'Permintaan reschedule tidak boleh disetujui oleh pemohon yang sama.',
   STALE_VERSION: 'Data berubah sejak terakhir dimuat. Muat ulang sebelum melanjutkan.',
-  CHECK_IN_TOO_EARLY: 'QR belum aktif. Check-in dibuka 30 menit sebelum kelas.',
+  CHECK_IN_TOO_EARLY: 'QR belum aktif. Check-in dibuka 45 menit sebelum kelas.',
   CHECK_IN_WINDOW_CLOSED: 'QR sudah kedaluwarsa karena jadwal kelas telah selesai.',
   BOOKING_SESSION_ALREADY_SETTLED:
     'Kelas sudah selesai atau sesi paket sudah dipotong. Koreksi lewat Penyesuaian Sesi agar saldo tidak selisih.',
@@ -1252,6 +1280,10 @@ const messages: Record<string, string> = {
   DUPLICATE_BOOKING: 'Anda sudah memiliki booking aktif untuk kelas ini.',
   CANCELLATION_CUTOFF_PASSED:
     'Kelas mulai kurang dari 12 jam lagi, jadi pembatalan perlu disetujui Manager atau Owner. Ajukan pembatalan; sesi dikembalikan bila disetujui.',
+  SELF_CANCELLATION_AVAILABLE: 'Kelas ini masih bisa dibatalkan langsung. Tekan Batalkan booking.',
+  LATE_CANCELLATION_ALREADY_PENDING: 'Pengajuan pembatalan untuk booking ini sudah terkirim dan menunggu keputusan.',
+  CLASS_ALREADY_STARTED: 'Kelas sudah dimulai, pembatalan tidak bisa diajukan lagi.',
+  FRIEND_SEAT_NOT_ALLOWED: 'Paket ini tidak termasuk kursi teman. Booking untuk diri Anda saja, atau pakai paket bawa teman.',
   ATTENDANCE_RECORDED: 'Kehadiran sudah tercatat, booking tidak dapat dibatalkan.',
   INVALID_TOKEN: 'QR tidak dikenali. Minta staf studio menampilkan QR presensi terbaru.',
   TOKEN_ALREADY_USED: 'QR ini sudah dipakai atau sudah diganti. Minta staf studio menampilkan QR terbaru.',

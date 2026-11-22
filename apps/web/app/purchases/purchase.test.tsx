@@ -217,7 +217,7 @@ describe('purchase submission workspace', () => {
       'class-1',
       expect.any(String),
     );
-    expect(await screen.findByText(/Status pembelian: Menunggu verifikasi/)).toBeVisible();
+    expect(await screen.findByText(/Status pembelian: Sedang diperiksa/)).toBeVisible();
     expect((await axe(view.container)).violations).toHaveLength(0);
   });
 

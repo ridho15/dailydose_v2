@@ -24,9 +24,10 @@ export class DashboardController {
 export class CustomerDashboardController {
   constructor(private readonly dashboard: DashboardService) {}
 
+  /** `?segar=1` setelah member booking/batal/pindah jadwal: lewati cache 20 detik agar angkanya baru. */
   @SelfService()
   @Get('dashboard')
-  overview(@Req() request: AuthenticatedRequest) {
-    return this.dashboard.customerOverview(request.principal);
+  overview(@Req() request: AuthenticatedRequest, @Query('segar') segar?: string) {
+    return this.dashboard.customerOverview(request.principal, { forceRefresh: segar === '1' });
   }
 }

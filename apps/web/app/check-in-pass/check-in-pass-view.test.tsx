@@ -44,7 +44,7 @@ describe('check-in pass (Tiket T-08 / Spesifikasi 5.8)', () => {
 
     // 1. Dark canvas background #0d5132
     const mainEl = container.querySelector('main');
-    expect(mainEl).toHaveClass('bg-[#0d5132]');
+    expect(mainEl).toHaveClass('bg-dd-forest');
 
     // 2. Satu baris instruksi pemindaian
     expect(
@@ -72,12 +72,12 @@ describe('check-in pass (Tiket T-08 / Spesifikasi 5.8)', () => {
 
     // 5. Keterangan masa berlaku kode
     expect(
-      screen.getByText('Kode berlaku mulai 30 menit sebelum sesi dimulai hingga kelas selesai.'),
+      screen.getByText('Kode berlaku mulai 45 menit sebelum sesi dimulai hingga kelas selesai.'),
     ).toBeVisible();
 
     // 6. Tombol Simpan ke galeri
     const downloadBtn = await screen.findByRole('button', { name: 'Simpan ke galeri' });
-    expect(downloadBtn).toHaveClass('min-h-[44px]', 'bg-[#396552]', 'text-white');
+    expect(downloadBtn).toHaveClass('min-h-[44px]', 'bg-ed-green', 'text-white');
 
     await userEvent.click(downloadBtn);
     expect(click).toHaveBeenCalledTimes(1);
@@ -146,7 +146,7 @@ describe('check-in pass (Tiket T-08 / Spesifikasi 5.8)', () => {
       );
     });
 
-    it('menandai QR aktif saat jendela 30 menit terbuka dan selesai setelah kelas berakhir', async () => {
+    it('menandai QR aktif saat jendela 45 menit terbuka dan selesai setelah kelas berakhir', async () => {
       window.history.replaceState({}, '', '/check-in-pass?bookingId=bk-1');
       vi.stubGlobal(
         'fetch',
@@ -205,14 +205,14 @@ describe('check-in pass (Tiket T-08 / Spesifikasi 5.8)', () => {
     });
   });
 
-  it('passWindow mengikuti aturan 30 menit sebelum mulai hingga kelas selesai', () => {
+  it('passWindow mengikuti aturan 45 menit sebelum mulai hingga kelas selesai (sama dengan server)', () => {
     const base = new Date('2026-10-29T10:00:00.000Z');
     const info = {
       startAt: base.toISOString(),
       endAt: new Date(base.getTime() + 3_600_000).toISOString(),
     };
-    expect(passWindow(info, base.getTime() - 31 * 60_000)).toBe('TOO_EARLY');
-    expect(passWindow(info, base.getTime() - 30 * 60_000)).toBe('OPEN');
+    expect(passWindow(info, base.getTime() - 46 * 60_000)).toBe('TOO_EARLY');
+    expect(passWindow(info, base.getTime() - 45 * 60_000)).toBe('OPEN');
     expect(passWindow(info, base.getTime() + 59 * 60_000)).toBe('OPEN');
     expect(passWindow(info, base.getTime() + 60 * 60_000)).toBe('ENDED');
     expect(passWindow({ startAt: '', endAt: '' }, 0)).toBeNull();

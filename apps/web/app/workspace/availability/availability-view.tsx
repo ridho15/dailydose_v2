@@ -16,6 +16,7 @@ import { Button } from '../../components/actions';
 import { Feedback, StatusBadge } from '../../ui';
 import { Modal, useAppFeedback } from '../../components/app-feedback';
 import { Pencil, Trash2 } from 'lucide-react';
+import { GridKetersediaan } from './grid-ketersediaan';
 
 const statusLabels: Record<string, string> = {
   ACTIVE: 'Aktif',
@@ -186,9 +187,11 @@ export function AvailabilityView({
         description={`Ajukan dan lihat jam Anda tersedia mengajar di ${branch.name}. Admin menggunakan ini untuk menjadwalkan kelas.`}
       />
 
+      {canCreate && <GridKetersediaan client={client} branch={branch} onTersimpan={() => void load()} />}
+
       {canCreate && (
         <div className="rounded-2xl border border-dd-line/80 bg-white p-5">
-          <h2 className="text-lg font-semibold text-dd-ink">Ajukan ketersediaan baru</h2>
+          <h2 className="text-lg font-semibold text-dd-ink">Jam lain (di luar Pagi, Siang, Sore)</h2>
           <form
             className="mt-4 grid gap-4 sm:grid-cols-3"
             aria-label="Form ketersediaan mengajar"
