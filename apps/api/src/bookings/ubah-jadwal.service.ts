@@ -384,7 +384,34 @@ export class ReschedulesService {
         });
         if (scheduleConflict) throw new ApiProblem('SCHEDULE_CONFLICT', HttpStatus.CONFLICT);
 
-        // Buat record UbahJadwal berstatus PENDING
+        // Keputusan pemilik 22 November 2026: pengajuan member yang masuk sebelum batas H-12 langsung
+        // disetujui bila kelas tujuan masih ada tempat. Pengajuan setelah batas sudah ditolak di atas.
+        // Kunci kedua slot (urut id) sebelum menghitung kursi agar dua member tidak mengisi kursi terakhir.
+        const [lockA, lockB] = [booking.classSlotId, targetSlot.id].sort();
+        if (typeof tx.$queryRaw === 'function')
+          await tx.$queryRaw`SELECT id FROM slot_kelas WHERE id IN (${lockA}, ${lockB}) ORDER BY id FOR UPDATE`;
+        const terisiTujuan =
+          typeof tx.pemesananKelas.count === 'function'
+            ? await tx.pemesananKelas.count({
+                where: { classSlotId: targetSlot.id, status: { in: ['BOOKED', 'ATTENDED', 'NO_SHOW'] } },
+              })
+            : terisi(targetSlot);
+        if (terisiTujuan >= targetSlot.capacity)
+          throw new ApiProblem('CLASS_CAPACITY_FULL', HttpStatus.CONFLICT);
+
+        await tx.pemesananKelas.update({
+          where: { id: booking.id },
+          data: { classSlotId: targetSlot.id },
+        });
+        await tx.slotKelas.update({
+          where: { id: booking.classSlotId },
+          data: { bookedCount: { decrement: 1 } },
+        });
+        await tx.slotKelas.update({
+          where: { id: targetSlot.id },
+          data: { bookedCount: terisiTujuan + 1 },
+        });
+
         const reschedule = await tx.ubahJadwal.create({
           data: {
             id: randomUUID(),
@@ -392,7 +419,7 @@ export class ReschedulesService {
             sourceSlotId: booking.classSlotId,
             targetSlotId: targetSlot.id,
             requestedById: principal.userId,
-            status: 'PENDING',
+            status: 'APPROVED',
             reason: input.reasonCode,
           },
           include: {
@@ -406,46 +433,45 @@ export class ReschedulesService {
           actorId: principal.userId,
           branchId: targetSlot.branchId,
           correlationId: _correlationId,
-          action: 'reschedule.requested',
+          action: 'reschedule.auto_approved',
           objectType: 'Reschedule',
           objectId: reschedule.id,
           targetUserId: principal.userId,
           reason: input.reasonCode,
-          afterMasked: { bookingId: booking.id, sourceSlotId: reschedule.sourceSlotId, targetSlotId: reschedule.targetSlotId },
+          beforeMasked: { bookingId: booking.id, sourceSlotId: reschedule.sourceSlotId },
+          afterMasked: {
+            status: 'APPROVED',
+            targetSlotId: reschedule.targetSlotId,
+            aturan: `diajukan sebelum batas H-${policy.cutoffHours}`,
+          },
         });
 
         if (this.notificationWriter) {
-          const branchId = targetSlot.branchId || reschedule.sourceSlot?.branchId;
-          const memberName = reschedule.booking.user?.displayName || 'Member';
-          const sourceName = reschedule.sourceSlot?.classType?.name ?? 'Kelas Asal';
-          const targetName = reschedule.targetSlot?.classType?.name ?? 'Kelas Baru';
+          const targetName = reschedule.targetSlot?.classType?.name ?? 'Kelas';
           const timeStr = new Intl.DateTimeFormat('id-ID', {
             dateStyle: 'medium',
             timeStyle: 'short',
             timeZone: reschedule.targetSlot?.branch?.timezone || 'Asia/Jakarta',
           }).format(targetSlot.startAt);
-
-          if (branchId) {
-            void this.notificationWriter
-              .writeForUsersInBranch(tx, {
-                branchId,
-                roles: ['ADMIN', 'MANAGER'],
-                eventKey: `reschedule.requested:${reschedule.id}`,
-                category: 'APPROVAL',
-                tone: 'WARNING',
-                title: 'Permohonan Reschedule Baru',
-                message: `${memberName} mengajukan reschedule kelas "${sourceName}" ke "${targetName}" (${timeStr}). Menunggu persetujuan.`,
-                href: '/workspace/bookings?tab=reschedules',
-              })
-              .catch(() => {});
-          }
+          void this.notificationWriter
+            .writeForUser(tx, {
+              userId: principal.userId,
+              branchId: targetSlot.branchId,
+              eventKey: `reschedule.approved:${reschedule.id}`,
+              category: 'SCHEDULE',
+              tone: 'SUCCESS',
+              title: 'Jadwal sudah dipindah',
+              message: `Booking Anda pindah ke "${targetName}" pada ${timeStr}. Sesi paket tidak berubah.`,
+              href: '/account',
+            })
+            .catch(() => {});
         }
 
         return {
           status: HttpStatus.CREATED,
           body: {
             id: reschedule.id,
-            status: 'PENDING',
+            status: 'APPROVED',
             bookingId: booking.id,
             sourceClassSlotId: reschedule.sourceSlotId,
             targetClassSlotId: reschedule.targetSlotId,

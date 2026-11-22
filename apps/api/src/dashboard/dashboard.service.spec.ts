@@ -41,32 +41,64 @@ function database() {
 describe('DashboardService', () => {
   beforeEach(() => jest.clearAllMocks());
 
-  it('calculates dynamic customer verification status in customerOverview', async () => {
+  it('verification status follows the selfie rule used everywhere (selfie = verified)', async () => {
     const db = database();
     const service = new DashboardService(db as never);
+    const customer = principal({ roles: [{ role: 'CUSTOMER', branchId: null }] });
 
-    // 1. Tanpa dokumen -> ACTION_REQUIRED
     db.profilPengguna.findUnique.mockResolvedValueOnce(null);
-    const resNoDocs = await service.customerOverview(principal({ roles: [{ role: 'CUSTOMER', branchId: null }] }));
-    expect(resNoDocs.verification.status).toBe('ACTION_REQUIRED');
+    expect((await service.customerOverview(customer)).verification.status).toBe('ACTION_REQUIRED');
 
-    // 2. Ada dokumen KTP/selfie tapi belum approved -> PENDING
+    // KTP tanpa selfie tidak lagi dianggap "menunggu": tidak ada antrean persetujuan selfie.
+    db.profilPengguna.findUnique.mockResolvedValueOnce({ userId: 'user-1', ktpUrl: 'ktp.jpg', notes: null });
+    expect((await service.customerOverview(customer)).verification.status).toBe('ACTION_REQUIRED');
+
+    db.profilPengguna.findUnique.mockResolvedValueOnce({ userId: 'user-1', selfieUrl: 'selfie.jpg', notes: null });
+    expect((await service.customerOverview(customer)).verification.status).toBe('APPROVED');
+
     db.profilPengguna.findUnique.mockResolvedValueOnce({
       userId: 'user-1',
-      ktpUrl: 'https://storage/ktp.jpg',
-      notes: null,
+      selfieUrl: null,
+      notes: 'KYC_REJECTED: FOTO_BURAM',
     });
-    const resPending = await service.customerOverview(principal({ roles: [{ role: 'CUSTOMER', branchId: null }] }));
-    expect(resPending.verification.status).toBe('PENDING');
+    const ditolak = await service.customerOverview(customer);
+    expect(ditolak.verification).toMatchObject({ status: 'REJECTED', rejectionReason: 'FOTO_BURAM' });
+  });
 
-    // 3. KYC_APPROVED -> APPROVED
-    db.profilPengguna.findUnique.mockResolvedValueOnce({
-      userId: 'user-1',
-      ktpUrl: 'https://storage/ktp.jpg',
-      notes: 'VERIFIED_OK KYC_APPROVED',
-    });
-    const resApproved = await service.customerOverview(principal({ roles: [{ role: 'CUSTOMER', branchId: null }] }));
-    expect(resApproved.verification.status).toBe('APPROVED');
+  it('home remaining sessions use the ledger formula (balance minus booked) and a real branch name', async () => {
+    const db = database();
+    const service = new DashboardService(db as never);
+    const validUntil = new Date(Date.now() + 20 * 86_400_000);
+    db.paketPelanggan = { findMany: jest.fn().mockResolvedValue([
+      {
+        id: 'cp-1',
+        remainingSessions: 8,
+        validUntil,
+        package: { name: 'Reformer 8x', isMultiBranch: false, classType: { name: 'Reformer' } },
+        purchase: { branch: { name: 'Senopati' } },
+      },
+      {
+        id: 'cp-2',
+        remainingSessions: 1,
+        validUntil,
+        package: { name: 'Mat 10x', isMultiBranch: true, classType: null },
+        purchase: null,
+      },
+    ]) } as never;
+    // Panggilan pertama: booking mendatang; kedua: booking yang menahan sesi (tertahanPerPaket).
+    db.pemesananKelas = { ...db.pemesananKelas, findMany: jest.fn()
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        { id: 'b-1', status: 'BOOKED', customerPackageId: 'cp-1' },
+        { id: 'b-2', status: 'BOOKED', customerPackageId: 'cp-1' },
+        { id: 'b-3', status: 'BOOKED', customerPackageId: 'cp-2' },
+      ]) };
+    const hasil = await service.customerOverview(principal({ roles: [{ role: 'CUSTOMER', branchId: null }] }));
+    expect(hasil.packages).toEqual([
+      expect.objectContaining({ id: 'cp-1', available: 6, reserved: 2, branchName: 'Senopati' }),
+      expect.objectContaining({ id: 'cp-2', available: 0, reserved: 1, branchName: 'Semua cabang' }),
+    ]);
+    expect(JSON.stringify(hasil)).not.toContain('All Branches');
   });
 
   it('rejects customer-only sessions', async () => {

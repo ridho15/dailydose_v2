@@ -55,6 +55,11 @@ Aturan teknis yang menyertainya:
    `BOOKING_CANCELLATION_CUTOFF_HOURS=12` dan `RESCHEDULE_CUTOFF_HOURS=12`.
    Scan QR instruktur diterima sampai 10 menit setelah kelas mulai (`TOLERANSI_INSTRUKTUR_MENIT`);
    yang terlambat masuk laporan anomali.
+   Keputusan 22 November 2026: ganti jadwal member sebelum H-12 langsung disetujui bila kelas tujuan
+   masih ada tempat (`ubah-jadwal.service.ts`, audit `reschedule.auto_approved`); member boleh
+   mengajukan sendiri pembatalan kurang dari H-12 (`pembatalan-terlambat-member.service.ts`, record
+   `session_adjust_request` LATE_CANCELLATION, diputus Manager/Owner/Super Owner); QR member dibuka
+   45 menit sebelum kelas di semua jalur (`SCAN_OPENS_MINUTES_BEFORE`).
 6. Satu member satu kursi per kelas, kecuali paket "bawa teman" (1 kursi teman, memakai 1 sesi).
    Presensi member dan instruktur dilakukan dengan staf memindai QR.
 7. Kapasitas kelas dari Data Master > Kuota & Kapasitas berlaku untuk kelas baru dan kelas mendatang.

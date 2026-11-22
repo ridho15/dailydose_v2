@@ -9,7 +9,7 @@ import { IdempotencyService } from '../foundation/idempotency.service';
 import type { SessionPrincipal } from '../identity/identity.service';
 import { PolicyService } from '../identity/policy.service';
 import { ApiProblem, ENTITY_ID_REGEX } from '../identity/security';
-import { TOLERANSI_INSTRUKTUR_MENIT } from './check-in-pass';
+import { SCAN_OPENS_MINUTES_BEFORE, TOLERANSI_INSTRUKTUR_MENIT } from './check-in-pass';
 
 const UUID = ENTITY_ID_REGEX;
 const RAW_TOKEN = /^[A-Za-z0-9_-]{43}$/u;
@@ -27,15 +27,16 @@ export function deriveCheckInToken(rowId: string): string {
 
 export type CheckInWindowState = 'TOO_EARLY' | 'OPEN' | 'EXPIRED';
 
+/** Sama dengan QR statis: dibuka 45 menit sebelum kelas (keputusan pemilik 22 November 2026). */
 export function checkInWindowState(startAt: Date, endAt: Date, now: Date): CheckInWindowState {
-  const opensAt = new Date(startAt.getTime() - 30 * 60_000);
+  const opensAt = new Date(startAt.getTime() - SCAN_OPENS_MINUTES_BEFORE * 60_000);
   if (now < opensAt) return 'TOO_EARLY';
   return now < endAt ? 'OPEN' : 'EXPIRED';
 }
 
-/** Check-in instruktur: dibuka 30 menit sebelum mulai, ditutup 10 menit setelah mulai. */
+/** Check-in instruktur: dibuka 45 menit sebelum mulai, ditutup 10 menit setelah mulai (PRD §5.15). */
 export function checkInWindowInstruktur(startAt: Date, now: Date): CheckInWindowState {
-  if (now < new Date(startAt.getTime() - 30 * 60_000)) return 'TOO_EARLY';
+  if (now < new Date(startAt.getTime() - SCAN_OPENS_MINUTES_BEFORE * 60_000)) return 'TOO_EARLY';
   return now.getTime() <= startAt.getTime() + TOLERANSI_INSTRUKTUR_MENIT * 60_000 ? 'OPEN' : 'EXPIRED';
 }
 

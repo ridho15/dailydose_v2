@@ -13,6 +13,9 @@ import {
   summarizeInstructorFees,
 } from '../packages/instructor-fee-calculator';
 import { verificationStatusWhere } from '../identity/manajemen-pelanggan.service';
+import { alasanPenolakanSelfie, statusSelfie } from '../identity/verifikasi-selfie';
+import { tertahanPerPaket } from '../packages/sesi-terpesan';
+import { bookingLagiUntuk } from './booking-lagi';
 
 /**
  * Satu definisi "booking" untuk seluruh angka dashboard (total, tren, per cabang): pemesanan yang
@@ -168,6 +171,7 @@ export class DashboardService {
               classType: { select: { name: true } },
             },
           },
+          purchase: { select: { branch: { select: { name: true } } } },
         },
         orderBy: { validUntil: 'asc' },
         take: 6,
@@ -198,14 +202,18 @@ export class DashboardService {
         : Promise.resolve(0),
     ]);
 
-    const isApproved = Boolean(profile?.notes?.includes('KYC_APPROVED'));
-    const hasDocs = Boolean(profile?.ktpUrl || profile?.selfieUrl);
-    const verificationStatus = isApproved ? 'APPROVED' : hasDocs ? 'PENDING' : 'ACTION_REQUIRED';
+    // Sama dengan aturan selfie di seluruh aplikasi: punya selfie berarti terverifikasi.
+    const verificationStatus = statusSelfie(profile);
+    // Sisa yang bisa dipakai = saldo dikurangi sesi yang sudah dibooking (rumus Paket Saya), supaya
+    // angka di Beranda langsung turun setelah booking walau sesinya baru dipotong saat hadir.
+    const tertahan = await tertahanPerPaket(this.db, packages.map((item) => item.id));
+    const bookingLagi = await bookingLagiUntuk(this.db, principal.userId, now);
 
     const result = {
       generatedAt: now,
       upcomingBookings: upcomingBookings.map((booking) => ({
         id: booking.id,
+        classSlotId: booking.classSlotId,
         status: booking.status,
         className: booking.classSlot.classType.name,
         branchName: booking.classSlot.branch.name,
@@ -216,11 +224,15 @@ export class DashboardService {
       packages: packages.map((item) => ({
         id: item.id,
         packageName: item.package.name,
-        classTypeName: item.package.classType?.name ?? 'General',
-        branchName: 'All Branches',
+        classTypeName: item.package.classType?.name ?? 'Pilates',
+        branchName: (item.package as { isMultiBranch?: boolean | null }).isMultiBranch
+          ? 'Semua cabang'
+          : (item.purchase?.branch?.name ?? 'Semua cabang'),
         expiryAt: item.validUntil,
-        available: item.remainingSessions,
+        available: Math.max(0, item.remainingSessions - (tertahan.get(item.id) ?? 0)),
+        reserved: tertahan.get(item.id) ?? 0,
       })),
+      bookingLagi,
       actionableOrders: actionableOrders.map((order) => ({
         id: order.id,
         packageName: order.package.name,
@@ -231,6 +243,7 @@ export class DashboardService {
       })),
       verification: {
         status: verificationStatus,
+        rejectionReason: alasanPenolakanSelfie(profile?.notes),
         documents: [],
       },
       unreadNotifications: unreadNotifications ?? 0,

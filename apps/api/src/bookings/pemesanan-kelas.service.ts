@@ -1088,6 +1088,42 @@ export class BookingsService {
             },
           });
 
+        // Nama teman diisi saat booking pertama: member datang berdua. Kursinya sendiri dan kursi
+        // teman dibuat bersamaan, bukan diam-diam membuang nama temannya.
+        const namaTemanBaru = input.namaTeman?.trim().slice(0, 128) ?? '';
+        let kursiTemanTambahan = 0;
+        if (!kursiTeman && namaTemanBaru) {
+          const bawaTemanMaks =
+            (await maksTemanPaket(tx, [customerPackage.packageId])).get(customerPackage.packageId) ?? 0;
+          const maks = customerPackage.package?.isShareable && bawaTemanMaks < 1 ? 1 : bawaTemanMaks;
+          if (maks < 1) throw new ApiProblem('FRIEND_SEAT_NOT_ALLOWED', HttpStatus.CONFLICT);
+          // Kursi teman yang sudah ada (mis. kursi member sendiri dibatalkan lalu dipesan lagi) tidak
+          // digandakan: nama itu milik teman yang sudah terdaftar.
+          const temanSudah = sudahDiKelas > 0 ? await jumlahKursiTeman(tx, customerUserId, slot.id) : 0;
+          if (temanSudah < maks) {
+            if (effectiveBooked + 2 > currentSlot.capacity)
+              throw new ApiProblem('CLASS_CAPACITY_FULL', HttpStatus.CONFLICT);
+            if (customerPackage.remainingSessions - activeBookingsCount < 2)
+              throw new ApiProblem('INSUFFICIENT_AVAILABLE_SESSIONS', HttpStatus.CONFLICT);
+            const teman = await tx.pemesananKelas.create({
+              data: {
+                id: randomUUID(),
+                bookingNumber: `${bookingNumber}-T`,
+                classSlotId: slot.id,
+                branchId: slot.branchId,
+                userId: customerUserId,
+                customerPackageId: customerPackage.id,
+                status: 'BOOKED',
+                source: input.source,
+              },
+            });
+            await tx.bookingTeman.create({
+              data: { bookingId: teman.id, packageId: customerPackage.packageId, namaTeman: namaTemanBaru },
+            });
+            kursiTemanTambahan = 1;
+          }
+        }
+
         // Catatan: Sesi TIDAK dipotong saat booking (Rule #1).
         // Pemotongan sesi ke SessionLedger & PaketPelanggan dieksekusi saat kelas COMPLETED dan customer hadir.
 
@@ -1097,7 +1133,7 @@ export class BookingsService {
         await tx.slotKelas.update({
           where: { id: slot.id },
           data: {
-            bookedCount: effectiveBooked + 1,
+            bookedCount: effectiveBooked + 1 + kursiTemanTambahan,
             ...(shouldAutoConfirm ? { status: 'CONFIRMED' } : {}),
           },
         });
