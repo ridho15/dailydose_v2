@@ -42,6 +42,15 @@ export const JUDUL_JENIS: Record<JenisTindakan, string> = {
   PENYESUAIAN: 'Penyesuaian sesi',
 };
 
+/** Label pendek untuk ubin ringkas di beranda Owner. */
+export const LABEL_UBIN: Record<JenisTindakan, string> = {
+  TRANSFER: 'Transfer',
+  PENJUALAN_LANGSUNG: 'Tunai/kartu',
+  PEMBATALAN: 'Batal < 12 jam',
+  RESCHEDULE: 'Ganti jadwal',
+  PENYESUAIAN: 'Penyesuaian sesi',
+};
+
 /** Nilai `?tindakan=` dari tautan notifikasi. */
 const PARAM_JENIS: Record<string, JenisTindakan> = {
   transfer: 'TRANSFER',
@@ -104,6 +113,20 @@ function rincianItem(item: ItemTindakan): string {
   return bagian.join(' · ');
 }
 
+/** Akibat menyetujui satu item, ditampilkan sebelum tombol Setujui. */
+function pesanSetujui(item: ItemTindakan): string {
+  switch (item.jenis) {
+    case 'PENJUALAN_LANGSUNG':
+      return `${item.nama} · ${rincianItem(item)}. Dicatat oleh ${item.pencatat ?? 'staf'}. Pastikan uangnya sudah Anda terima; paket langsung aktif.`;
+    case 'RESCHEDULE':
+      return `Booking ${item.nama} dipindah: ${rincianItem(item)}.`;
+    case 'PEMBATALAN':
+      return `Booking ${item.nama} dibatalkan dan kursinya terbuka. ${item.sesi ? `${item.sesi} sesi kembali ke paket.` : 'Sesi member tetap utuh.'} Alasan: ${item.alasan ?? '-'}`;
+    default:
+      return `${item.nama} · ${rincianItem(item)}. Alasan: ${item.alasan ?? '-'}`;
+  }
+}
+
 /**
  * Kotak masuk "Perlu tindakan" di beranda staf. Hanya berisi keputusan yang boleh diambil pengguna
  * ini (server menyaring dari izin memutus dan pemisahan tugas), dengan Setujui/Tolak langsung di
@@ -117,6 +140,7 @@ export function ActionInbox({
   ledgerClient = browserLedgerClient,
   now = Date.now(),
   emptyMessage = 'Tidak ada yang perlu Anda putuskan saat ini.',
+  tampilan = 'daftar',
 }: {
   branchId?: string;
   queueClient?: WorkQueueClient;
@@ -125,6 +149,11 @@ export function ActionInbox({
   ledgerClient?: LedgerClient;
   now?: number;
   emptyMessage?: string;
+  /**
+   * `daftar`: semua kartu dengan Setujui/Tolak (meja depan). `ringkas`: satu ubin per jenis; klik
+   * ubin membuka mode periksa satu per satu yang lanjut otomatis ke item berikutnya (beranda Owner).
+   */
+  tampilan?: 'daftar' | 'ringkas';
 }) {
   // Tanpa penyedia umpan balik (tes komponen induk) kotak masuk tidak dirender: keputusan uang
   // wajib lewat dialog konfirmasi.
@@ -147,6 +176,12 @@ export function ActionInbox({
   const [catatan, setCatatan] = useState('');
   const tunda = useDelayedAction(10_000);
   const fokusRef = useRef<HTMLElement | null>(null);
+  // Mode periksa berurutan (tampilan ringkas).
+  const [periksa, setPeriksa] = useState<JenisTindakan | null>(null);
+  const [dilewati, setDilewati] = useState<Set<string>>(new Set());
+  // Transfer yang sudah diputuskan tetapi masih dalam jeda 10 detik: dilompati di mode periksa.
+  const [ditunda, setDitunda] = useState<Set<string>>(new Set());
+  const idTertunda = useRef<string | null>(null);
 
   const muat = useCallback(async () => {
     if (!queueClient.tindakan || !optionalFeedback) return;
@@ -212,23 +247,21 @@ export function ActionInbox({
 
   const versiPembelian = async (id: string) => (await purchaseClient.detail(id)).purchase.version;
 
-  const setujui = async (item: ItemTindakan) => {
+  const setujui = async (item: ItemTindakan, langsung = false) => {
     if (item.jenis === 'TRANSFER') {
       setBuktiId(item.id);
       return;
     }
-    const pesan: Record<Exclude<JenisTindakan, 'TRANSFER'>, string> = {
-      PENJUALAN_LANGSUNG: `${item.nama} · ${rincianItem(item)}. Dicatat oleh ${item.pencatat ?? 'staf'}. Pastikan uangnya sudah Anda terima; paket langsung aktif.`,
-      RESCHEDULE: `Booking ${item.nama} dipindah: ${rincianItem(item)}.`,
-      PEMBATALAN: `Booking ${item.nama} dibatalkan dan kursinya terbuka. ${item.sesi ? `${item.sesi} sesi kembali ke paket.` : 'Sesi member tetap utuh.'} Alasan: ${item.alasan ?? '-'}`,
-      PENYESUAIAN: `${item.nama} · ${rincianItem(item)}. Alasan: ${item.alasan ?? '-'}`,
-    };
-    const yakin = await feedback.confirm({
-      tone: item.jenis === 'PEMBATALAN' ? 'danger' : 'warning',
-      title: `Setujui ${JUDUL_JENIS[item.jenis].toLowerCase()}?`,
-      message: pesan[item.jenis],
-      confirmLabel: 'Setujui',
-    });
+    const pesan = { [item.jenis]: pesanSetujui(item) } as Record<Exclude<JenisTindakan, 'TRANSFER'>, string>;
+    // Di mode periksa, layar periksa itu sendiri sudah menampilkan pesan ini di atas tombol Setujui.
+    const yakin =
+      langsung ||
+      (await feedback.confirm({
+        tone: item.jenis === 'PEMBATALAN' ? 'danger' : 'warning',
+        title: `Setujui ${JUDUL_JENIS[item.jenis].toLowerCase()}?`,
+        message: pesan[item.jenis],
+        confirmLabel: 'Setujui',
+      }));
     if (!yakin) return;
     const kunci = crypto.randomUUID();
     if (item.jenis === 'PENJUALAN_LANGSUNG')
@@ -269,13 +302,13 @@ export function ActionInbox({
       );
   };
 
-  const mulaiTolak = async (item: ItemTindakan) => {
+  const mulaiTolak = async (item: ItemTindakan, langsung = false) => {
     if (item.jenis === 'TRANSFER') {
       setBuktiId(item.id);
       return;
     }
     if (item.jenis === 'PEMBATALAN') {
-      const yakin = await feedback.confirm({
+      const yakin = langsung || await feedback.confirm({
         tone: 'warning',
         title: `Tolak pembatalan ${item.nama}?`,
         message: 'Booking tetap terjadwal dan sesi tidak berubah. Member diberi tahu.',
@@ -334,6 +367,10 @@ export function ActionInbox({
     const item = data?.items.find((i) => i.id === k.purchase.id);
     setBuktiId(null);
     if (!item) return;
+    // Mode periksa: keputusan sebelumnya langsung dikirim supaya yang berikutnya bisa ditunda.
+    if (periksa && tunda.pending) tunda.flush();
+    idTertunda.current = item.id;
+    setDitunda((d) => new Set(d).add(item.id));
     const label =
       k.keputusan === 'approve' ? `Setujui pembayaran ${item.nama}` : `Tolak pembayaran ${item.nama}`;
     const terjadwal = tunda.schedule(label, () =>
@@ -365,6 +402,43 @@ export function ActionInbox({
     }
   };
 
+  const grupPeriksa = periksa ? kelompok.find((k) => k.jenis === periksa) : undefined;
+  const itemPeriksa = grupPeriksa?.items.find((i) => !dilewati.has(i.id) && !ditunda.has(i.id));
+  const sisaPeriksa = grupPeriksa
+    ? grupPeriksa.jumlah - grupPeriksa.items.filter((i) => ditunda.has(i.id)).length
+    : 0;
+  const mulaiPeriksa = (jenis: JenisTindakan) => {
+    setDilewati(new Set());
+    setPeriksa(jenis);
+  };
+  const selesaiPeriksa = () => {
+    setPeriksa(null);
+    setBuktiId(null);
+  };
+
+  // Mode periksa: muat halaman berikutnya bila item yang termuat habis; selesai bila semua sudah.
+  useEffect(() => {
+    if (!periksa || !data || itemPeriksa) return;
+    const cursor = lanjutan[periksa];
+    if (grupPeriksa && cursor !== null && grupPeriksa.items.length < grupPeriksa.jumlah) {
+      void muatLagi(periksa, cursor);
+      return;
+    }
+    setPeriksa(null);
+    setBuktiId(null);
+    feedback.showToast({
+      tone: 'success',
+      title: dilewati.size ? `Selesai. ${dilewati.size} item dilewati dan masih menunggu.` : 'Semua sudah diperiksa',
+      durationMs: 6000,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [periksa, data, itemPeriksa?.id]);
+
+  // Transfer di mode periksa dibuka langsung di penampil bukti.
+  useEffect(() => {
+    if (periksa === 'TRANSFER' && itemPeriksa) setBuktiId(itemPeriksa.id);
+  }, [periksa, itemPeriksa?.id]);
+
   const alasan = tolak ? (ALASAN_TOLAK[tolak.jenis] ?? []) : [];
   const perluCatatan = alasan.find((a) => a.kode === kode)?.perluCatatan ?? false;
   const total = kelompok.reduce((s, k) => s + k.jumlah, 0);
@@ -375,7 +449,8 @@ export function ActionInbox({
     <section aria-labelledby="perlu-tindakan-judul" id="perlu-tindakan" className="space-y-3">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h2 id="perlu-tindakan-judul" className="m-0 text-xl font-semibold text-dd-ink">
-          Perlu tindakan{total > 0 ? ` (${total})` : ''}
+          {tampilan === 'ringkas' ? 'Perlu keputusan' : 'Perlu tindakan'}
+          {total > 0 ? ` (${total})` : ''}
         </h2>
       </div>
       {tunda.pending && (
@@ -386,7 +461,20 @@ export function ActionInbox({
           <span className="min-w-0 flex-1 text-[15px] text-dd-ink">
             <strong>{tunda.pending.label}</strong> dikirim dalam {tunda.pending.secondsLeft} detik.
           </span>
-          <Button variant="secondary" size="sm" onClick={() => tunda.cancel()}>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => {
+              tunda.cancel();
+              const id = idTertunda.current;
+              if (id)
+                setDitunda((d) => {
+                  const next = new Set(d);
+                  next.delete(id);
+                  return next;
+                });
+            }}
+          >
             Batalkan
           </Button>
           <Button size="sm" onClick={() => tunda.flush()}>
@@ -420,7 +508,28 @@ export function ActionInbox({
           {emptyMessage}
         </p>
       )}
-      {kelompok.map((k) => {
+      {tampilan === 'ringkas' && total > 0 && (
+        <ul className="m-0 grid list-none grid-cols-2 gap-3 p-0 lg:grid-cols-4" aria-label="Keputusan per jenis">
+          {kelompok.map((k) => (
+            <li key={k.jenis}>
+              <button
+                type="button"
+                onClick={() => mulaiPeriksa(k.jenis)}
+                className="flex h-full min-h-11 w-full flex-col items-start gap-1 rounded-dd-lg border border-dd-line bg-white p-3 text-left transition hover:border-dd-forest focus-visible:outline focus-visible:outline-2 focus-visible:outline-dd-forest sm:p-4"
+                aria-label={`Periksa ${k.jumlah} ${LABEL_UBIN[k.jenis].toLowerCase()}`}
+              >
+                <span className="text-[28px] font-semibold leading-none tabular-nums text-dd-ink">{k.jumlah}</span>
+                <span className="text-[15px] font-semibold text-dd-ink">{LABEL_UBIN[k.jenis]}</span>
+                {k.items[0] && (
+                  <span className="text-sm text-dd-muted">Terlama {lamaMenunggu(k.items[0].masukPada, now)}</span>
+                )}
+                <span className="mt-1 hidden text-sm font-semibold text-dd-forest sm:inline">Periksa satu per satu</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {tampilan === 'daftar' && kelompok.map((k) => {
         const cursor = lanjutan[k.jenis];
         const masihAda = cursor !== null && k.items.length < k.jumlah;
         return (
@@ -478,7 +587,7 @@ export function ActionInbox({
         );
       })}
       {data && data.pengingat.length > 0 && (
-        <ul className="m-0 flex list-none flex-wrap gap-2 p-0" aria-label="Perlu diperhatikan">
+        <ul className="m-0 mt-3 flex list-none flex-wrap gap-2 p-0" aria-label="Perlu diperhatikan">
           {data.pengingat.map((p) => (
             <li key={p.key}>
               <Link
@@ -497,9 +606,64 @@ export function ActionInbox({
       <TransferProofViewer
         purchaseId={buktiId}
         client={purchaseClient}
-        onClose={() => setBuktiId(null)}
+        onClose={periksa ? selesaiPeriksa : () => setBuktiId(null)}
         onDecide={keputusanTransfer}
+        posisi={periksa === 'TRANSFER' ? `sisa ${sisaPeriksa}` : undefined}
+        onLewati={
+          periksa === 'TRANSFER' && itemPeriksa
+            ? () => {
+                const id = itemPeriksa.id;
+                setBuktiId(null);
+                setDilewati((d) => new Set(d).add(id));
+              }
+            : undefined
+        }
       />
+
+      {periksa && periksa !== 'TRANSFER' && itemPeriksa && (
+        <Modal
+          open={!tolak}
+          title={`${JUDUL_JENIS[periksa]} (sisa ${sisaPeriksa})`}
+          busy={sibukId !== null}
+          onClose={selesaiPeriksa}
+          footer={
+            <div className="flex flex-wrap justify-end gap-2">
+              <Button
+                variant="ghost"
+                disabled={sibukId !== null}
+                onClick={() => setDilewati((d) => new Set(d).add(itemPeriksa.id))}
+              >
+                Lewati
+              </Button>
+              <Button
+                variant="secondary"
+                disabled={sibukId !== null}
+                onClick={() => void mulaiTolak(itemPeriksa, true)}
+              >
+                Tolak
+              </Button>
+              <Button loading={sibukId === itemPeriksa.id} onClick={() => void setujui(itemPeriksa, true)}>
+                Setujui
+              </Button>
+            </div>
+          }
+        >
+          <div className="grid gap-2">
+            <p className="m-0 text-[19px] font-semibold text-dd-ink">{itemPeriksa.nama}</p>
+            <p className="m-0 text-[15px] text-dd-muted">{rincianItem(itemPeriksa)}</p>
+            {itemPeriksa.alasan && itemPeriksa.jenis !== 'RESCHEDULE' && (
+              <p className="m-0 text-[15px] text-dd-ink">Alasan: {itemPeriksa.alasan}</p>
+            )}
+            <p className="m-0 text-sm text-dd-muted">
+              Menunggu {lamaMenunggu(itemPeriksa.masukPada, now)}
+              {itemPeriksa.pencatat ? ` · diajukan ${itemPeriksa.pencatat}` : ''}
+            </p>
+            <p className="m-0 mt-2 rounded-dd-md bg-dd-surface-muted p-3 text-[15px] text-dd-ink">
+              Bila disetujui: {pesanSetujui(itemPeriksa)}
+            </p>
+          </div>
+        </Modal>
+      )}
 
       <Modal
         open={tolak !== null}

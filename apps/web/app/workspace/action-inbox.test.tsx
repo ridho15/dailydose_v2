@@ -60,7 +60,7 @@ const purchase = {
   paymentProof: { id: 'proof-1', scanStatus: 'CLEAN', mimeType: 'image/png' },
 };
 
-function setup(items: ItemTindakan[]) {
+function setup(items: ItemTindakan[], tampilan: 'daftar' | 'ringkas' = 'daftar') {
   const queueClient: WorkQueueClient = {
     tertinggal: vi.fn(),
     tindakan: vi.fn().mockResolvedValue(kotak(items)),
@@ -85,6 +85,7 @@ function setup(items: ItemTindakan[]) {
         purchaseClient={purchaseClient as never}
         bookingClient={bookingClient as never}
         ledgerClient={ledgerClient as never}
+        tampilan={tampilan}
       />
     </AppFeedbackProvider>,
   );
@@ -265,3 +266,67 @@ describe('ActionInbox', () => {
     expect(screen.queryByText('Tidak ada yang perlu Anda putuskan saat ini.')).toBeNull();
   });
 });
+
+describe('ActionInbox ringkas (beranda Owner)', () => {
+  it('menampilkan satu ubin per jenis, bukan daftar kartu', async () => {
+    setup(
+      [
+        item({ id: 'p-1', nama: 'Rina' }),
+        item({ id: 'p-2', nama: 'Budi' }),
+        item({ id: 'c-1', jenis: 'PEMBATALAN', nama: 'Sari' }),
+      ],
+      'ringkas',
+    );
+    expect(await screen.findByRole('heading', { name: 'Perlu keputusan (3)' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Periksa 2 transfer' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Periksa 1 batal < 12 jam' })).toBeVisible();
+    expect(screen.queryByText('Rina')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Periksa bukti' })).toBeNull();
+  });
+
+  it('transfer satu per satu: setelah memutuskan, bukti berikutnya terbuka otomatis', async () => {
+    const user = userEvent.setup();
+    const c = setup([item({ id: 'p-1', nama: 'Rina' }), item({ id: 'p-2', nama: 'Budi' })], 'ringkas');
+    c.purchaseClient.detail.mockImplementation(async (id: string) => ({
+      purchase: { ...purchase, id, customer: { displayName: id === 'p-1' ? 'Rina' : 'Budi' } },
+    }));
+    await user.click(await screen.findByRole('button', { name: 'Periksa 2 transfer' }));
+
+    const pertama = await screen.findByRole('dialog', { name: 'Bukti transfer Rina (sisa 2)' });
+    fireEvent.load(await within(pertama).findByRole('img', { name: 'Bukti transfer Rina' }));
+    await user.click(within(pertama).getByRole('button', { name: 'Setujui dan aktifkan paket' }));
+
+    const kedua = await screen.findByRole('dialog', { name: 'Bukti transfer Budi (sisa 1)' });
+    fireEvent.load(await within(kedua).findByRole('img', { name: 'Bukti transfer Budi' }));
+    await user.click(within(kedua).getByRole('button', { name: 'Setujui dan aktifkan paket' }));
+
+    // Keputusan pertama langsung dikirim saat yang kedua diputuskan; yang kedua masih bisa dibatalkan.
+    await waitFor(() => expect(c.purchaseClient.approve).toHaveBeenCalledWith('p-1', 4, expect.any(String)));
+    expect(c.purchaseClient.approve).not.toHaveBeenCalledWith('p-2', 4, expect.any(String));
+    expect(await screen.findByText(/Setujui pembayaran Budi/)).toBeVisible();
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: /Bukti transfer/ })).toBeNull());
+    expect(await screen.findByText('Semua sudah diperiksa')).toBeVisible();
+  });
+
+  it('jenis lain: layar periksa menunjukkan akibatnya, Setujui tanpa dialog kedua, Lewati pindah ke berikutnya', async () => {
+    const user = userEvent.setup();
+    const c = setup(
+      [
+        item({ id: 'c-1', jenis: 'PEMBATALAN', nama: 'Sari', alasan: 'Sakit', sesi: 1 }),
+        item({ id: 'c-2', jenis: 'PEMBATALAN', nama: 'Dewi', alasan: 'Kerja' }),
+      ],
+      'ringkas',
+    );
+    await user.click(await screen.findByRole('button', { name: 'Periksa 2 batal < 12 jam' }));
+    const layar = await screen.findByRole('dialog', { name: 'Pembatalan kurang dari 12 jam (sisa 2)' });
+    expect(within(layar).getByText('Sari')).toBeVisible();
+    expect(within(layar).getByText(/Bila disetujui: .*1 sesi kembali ke paket/)).toBeVisible();
+    await user.click(within(layar).getByRole('button', { name: 'Lewati' }));
+    const berikut = await screen.findByRole('dialog', { name: 'Pembatalan kurang dari 12 jam (sisa 2)' });
+    expect(within(berikut).getByText('Dewi')).toBeVisible();
+    await user.click(within(berikut).getByRole('button', { name: 'Setujui' }));
+    await waitFor(() => expect(c.bookingClient.putuskanPembatalan).toHaveBeenCalledWith('c-2', 'approve', 1));
+    expect(await screen.findByText('Selesai. 1 item dilewati dan masih menunggu.')).toBeVisible();
+  });
+});
+

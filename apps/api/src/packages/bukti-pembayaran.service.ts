@@ -7,6 +7,7 @@ import { AuditService } from '../foundation/audit.service';
 import type { SessionPrincipal } from '../identity/identity.service';
 import { ApiProblem, newId } from '../identity/security';
 import { NotificationWriterService } from '../notifications/notification-writer.service';
+import { AutoBuktiService } from './auto-bukti.service';
 import { PackageAccessService } from './package-access.service';
 import { ConfigGatedObjectStorageProvider, type ObjectStorageProvider } from './proof-providers';
 import {
@@ -32,6 +33,7 @@ export class PaymentProofService {
     private readonly auditService: AuditService,
     @Optional() private readonly storage?: ConfigGatedObjectStorageProvider,
     @Optional() private readonly notificationWriter?: NotificationWriterService,
+    @Optional() private readonly autoBukti?: AutoBuktiService,
   ) {}
 
   async issue(principal: SessionPrincipal, input: any, correlationId: string) {
@@ -134,6 +136,7 @@ export class PaymentProofService {
           uploadedAt: new Date(),
         },
       });
+      this.autoBukti?.jadwalkan(purchase.id, id);
 
       if (this.notificationWriter) {
         // Notifikasi ke staf cabang (ADMIN, MANAGER, FINANCE)
@@ -252,6 +255,7 @@ export class PaymentProofService {
         uploadedAt: new Date(),
       },
     });
+    this.autoBukti?.jadwalkan(current.id, nextId);
 
     if (this.notificationWriter) {
       void this.notificationWriter

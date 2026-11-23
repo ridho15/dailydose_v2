@@ -10,7 +10,7 @@ import { buildPhoneSearchVariants } from '../identity/manajemen-pelanggan.servic
 import { NotificationWriterService } from '../notifications/notification-writer.service';
 import { EmailNotificationService } from '../email/email-notification.service';
 import { ConfigGatedObjectStorageProvider } from './proof-providers';
-import { escapeXml, jalurBuktiLokal, jenisBukti } from './bukti-aman';
+import { escapeXml, idBuktiBerlaku, jalurBuktiLokal, jenisBukti } from './bukti-aman';
 import { berlakuSampai } from '../foundation/masa-berlaku';
 import { lepasKuotaVoucher } from './voucher.service';
 import { rapikanPesananKedaluwarsa } from './payment-expiration-worker';
@@ -509,7 +509,7 @@ export class PaymentReviewService {
 
     if (this.storage) {
       const hasil = kirim(
-        await this.storage.readPrivateObject(`payment-proofs/${proof.id}`).catch(() => null),
+        await this.storage.readPrivateObject(`payment-proofs/${idBuktiBerlaku(proof)}`).catch(() => null),
       );
       if (hasil) return hasil;
     }
@@ -652,7 +652,8 @@ export class PaymentReviewService {
               status: nextStatus,
               paidAt: decision === 'APPROVED' ? decidedAt : undefined,
               verifiedAt: decidedAt,
-              verifiedById: principal.userId,
+              // Persetujuan otomatis sistem tidak punya akun pengguna.
+              verifiedById: principal.userId || null,
               rejectionReason: decision === 'REJECTED' ? (input.note || input.reasonCode || 'REJECTED') : null,
             },
           });
@@ -699,7 +700,7 @@ export class PaymentReviewService {
                   balanceAfter: purchase.package.sessionCount,
                   referenceId: purchase.id,
                   notes: `Saldo awal pembelian paket #${purchase.invoiceNumber}`,
-                  createdById: principal.userId,
+                  createdById: principal.userId || null,
                 },
               });
             }
@@ -726,7 +727,7 @@ export class PaymentReviewService {
                     status: 'CANCELLED',
                     cancelledAt: decidedAt,
                     cancellationReason: 'Pembayaran ditolak',
-                    cancelledById: principal.userId,
+                    cancelledById: principal.userId || null,
                   },
                 });
                 for (const b of aktif)

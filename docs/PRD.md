@@ -166,6 +166,12 @@ Aturan kerahasiaan per peran ada di [Rules.md](./Rules.md#2-kerahasiaan-data-keu
     unik) ÷ total sesi × sisa sesi. Diproses Admin, Manager, Owner, atau Super Owner di cabang pembelian,
     wajib bank, nomor dan nama rekening, alasan, dan bukti transfer; paket dinolkan; surat konfirmasi bisa
     dicetak (12 November 2026).
+22. Persetujuan otomatis transfer dari foto bukti (23 November 2026, keputusan pemilik setelah
+    diberi tahu risikonya: foto bisa diedit). Disetujui otomatis hanya bila semua terpenuhi: transfer bank
+    dengan nominal unik; foto (bukan PDF) belum pernah dipakai pesanan lain; teks foto (OCR lokal) memuat
+    nominal unik persis; waktu transfer di foto paling lama 1 jam sebelum bukti diunggah dan tidak
+    sebelum pesanan dibuat. Selain itu bukti tetap diperiksa staf. Tercatat di audit log
+    (`payment.auto_approved_from_proof`). Matikan dengan `AUTO_APPROVE_BUKTI=false`.
 18. Paket perpanjangan masa aktif (16 November 2026): paket 0 sesi (ditandai "Perpanjangan masa
     aktif" di Data Master > Paket, harga diisi di sana, mis. Rp150.000) menambah 30 hari pada masa
     berlaku 1 paket member yang dipilih. Maksimal 3 kali per paket; pembelian ke-4 ditolak. Hanya untuk

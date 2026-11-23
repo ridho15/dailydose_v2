@@ -10,6 +10,7 @@ import { ApiProblem, ENTITY_ID_REGEX } from '../identity/security';
 import { PackageAccessService } from './package-access.service';
 import { PackagePricingService } from './kalkulasi-harga-paket.service';
 import { alamatBukti, bolehTerimaBukti, buktiDitolak, idUnggahan, pastikanPemilik, teksPendek } from './bukti-aman';
+import { AutoBuktiService } from './auto-bukti.service';
 import { ConfigGatedObjectStorageProvider } from './proof-providers';
 import { masaJualPaket, sedangDijual } from './masa-jual';
 import {
@@ -57,6 +58,7 @@ export class CustomerOrderService {
     private readonly config: RuntimeConfigService,
     private readonly auditService: AuditService,
     @Optional() private readonly storage?: ConfigGatedObjectStorageProvider,
+    @Optional() private readonly autoBukti?: AutoBuktiService,
   ) {}
 
   private orderView(order: any, _revealAccount = false, extension: unknown = null) {
@@ -364,7 +366,7 @@ export class CustomerOrderService {
     if (!input.packageId || !input.branchId)
       throw new ApiProblem('VALIDATION_ERROR', HttpStatus.BAD_REQUEST);
 
-    return this.idempotency.execute(
+    const hasil = await this.idempotency.execute(
       {
         scope: `order-create:${principal.userId}:${input.packageId}`,
         key,
@@ -514,6 +516,10 @@ export class CustomerOrderService {
         };
       },
     );
+    // Bukti yang ikut saat pesanan dibuat: cek otomatis setelah transaksi tersimpan.
+    const dibuat = (hasil as { body?: { id?: string } })?.body;
+    if (input.paymentProofId && dibuat?.id) this.autoBukti?.jadwalkan(dibuat.id, String(input.paymentProofId));
+    return hasil;
   }
 
   async listOrders(
@@ -694,6 +700,7 @@ export class CustomerOrderService {
         uploadedAt: new Date(),
       },
     });
+    this.autoBukti?.jadwalkan(order.id, proofId);
     this.auditService.record({
       action: 'PAYMENT_PROOF_ATTACHED',
       resourceType: 'Purchase',

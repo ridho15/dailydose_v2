@@ -1272,6 +1272,23 @@ model ModalPaketTerjual {
   @@map("modal_paket_terjual")
 }
 
+/// Sidik jari (SHA-256) berkas bukti transfer dan hasil cek otomatisnya. Dipakai menolak
+/// persetujuan otomatis bila foto yang sama pernah dipakai pesanan lain.
+/// Tanpa relasi Prisma; tabel lama tidak berubah.
+model BuktiSidik {
+  proofId     String   @id @db.Char(36)
+  purchaseId  String   @db.Char(36)
+  sha256      String   @db.Char(64)
+  /// COCOK, NOMINAL_TIDAK_DITEMUKAN, WAKTU_TIDAK_TERBACA, WAKTU_DI_LUAR_JENDELA, FOTO_DIPAKAI_ULANG, BUKAN_GAMBAR, GAGAL_BACA
+  hasil       String   @db.VarChar(32)
+  waktuBukti  DateTime?
+  createdAt   DateTime @default(now())
+
+  @@index([sha256])
+  @@index([purchaseId])
+  @@map("bukti_sidik")
+}
+
 /// Kapasitas kelas per cabang dan tipe kelas dari Data Master (Kuota & Kapasitas). Bila ada,
 /// dipakai untuk kelas baru dan kelas mendatang menggantikan kapasitas bawaan tipe kelas.
 /// Tanpa relasi Prisma; tabel lama tidak berubah.
