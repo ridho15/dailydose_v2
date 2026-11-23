@@ -16,6 +16,7 @@ import {
 } from './proof-providers';
 import { PackageAccessService } from './package-access.service';
 import { PackageCatalogService } from './katalog-paket.service';
+import { AutoBuktiService } from './auto-bukti.service';
 import { MaksTemanMassalService } from './maks-teman-massal.service';
 import { PaymentAccountService } from './rekening-pembayaran.service';
 import { PaymentReviewService } from './verifikasi-pembayaran.service';
@@ -72,6 +73,7 @@ import { RefundPaketController } from './refund-paket.controller';
     MaksTemanMassalService,
     PaymentAccountService,
     PaymentReviewService,
+    AutoBuktiService,
     PaymentProofService,
     ConfigGatedObjectStorageProvider,
     ConfigGatedMalwareScanProvider,

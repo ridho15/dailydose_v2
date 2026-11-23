@@ -386,6 +386,25 @@ CREATE TABLE `perpanjangan_paket` (
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 ```
 
+`bukti_sidik` (persetujuan otomatis transfer dari foto bukti, November 2026). Menyimpan sidik SHA-256 foto bukti
+supaya foto yang sama tidak bisa dipakai untuk dua pesanan. **Tanpa tabel ini persetujuan otomatis tidak berjalan**
+(semua bukti tetap diperiksa staf seperti biasa). Fitur bisa dimatikan dengan env `AUTO_APPROVE_BUKTI=false`.
+
+```sql
+CREATE TABLE `bukti_sidik` (
+    `proofId` CHAR(36) NOT NULL,
+    `purchaseId` CHAR(36) NOT NULL,
+    `sha256` CHAR(64) NOT NULL,
+    `hasil` VARCHAR(32) NOT NULL,
+    `waktuBukti` DATETIME(3) NULL,
+    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+
+    INDEX `bukti_sidik_sha256_idx`(`sha256`),
+    INDEX `bukti_sidik_purchaseId_idx`(`purchaseId`),
+    PRIMARY KEY (`proofId`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+```
+
 ## Akun HR Group (SSO)
 
 Tombol "Masuk dengan Akun HR Group" di halaman masuk dan credential bridge untuk migrasi member lama. Kontraknya

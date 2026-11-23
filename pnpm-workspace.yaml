@@ -9,6 +9,7 @@ allowBuilds:
   esbuild: true
   prisma: true
   sharp: true
+  tesseract.js: false
   unrs-resolver: true
 confirmModulesPurge: false
 overrides:

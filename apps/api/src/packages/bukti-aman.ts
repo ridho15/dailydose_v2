@@ -15,6 +15,16 @@ import type { ObjectStorageProvider } from './proof-providers';
  */
 
 export const alamatBukti = (id: string) => `/uploads/payment-proofs/${id}`;
+
+/**
+ * Id unggahan berkas bukti yang berlaku. Saat bukti diganti, baris `bukti_pembayaran` tetap memakai
+ * id pertama tetapi `fileUrl` menunjuk unggahan terbaru; berkas dibaca dari `fileUrl`.
+ */
+export function idBuktiBerlaku(proof: { id: string; fileUrl: string }): string {
+  const awalan = '/uploads/payment-proofs/';
+  const id = proof.fileUrl.startsWith(awalan) ? proof.fileUrl.slice(awalan.length) : '';
+  return ENTITY_ID_REGEX.test(id) ? id : proof.id;
+}
 const kunciPenanda = (id: string) => `payment-proofs/${id}.pemilik`;
 
 /** Status pesanan yang masih boleh menerima atau mengganti bukti. */
