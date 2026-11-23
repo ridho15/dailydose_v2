@@ -285,9 +285,10 @@ describe('OwnerHome', () => {
         <OwnerHome now={NOW} client={client()} queueClient={q} ownerReportClient={ownerReport} />
       </AppFeedbackProvider>,
     );
-    const kotak = await screen.findByRole('region', { name: 'Perlu tindakan (1)' });
-    expect(within(kotak).getByText('Rina')).toBeVisible();
-    expect(within(kotak).getByText('Alasan: Sakit mendadak pagi ini')).toBeVisible();
+    // Beranda Owner memakai tampilan ringkas: satu ubin per jenis, detail dibuka saat diperiksa.
+    const kotak = await screen.findByRole('region', { name: 'Perlu keputusan (1)' });
+    expect(within(kotak).getByRole('button', { name: 'Periksa 1 batal < 12 jam' })).toBeVisible();
+    expect(within(kotak).queryByText('Rina')).toBeNull();
     const keuangan = screen.getByRole('heading', { name: /^Keuangan/ });
     expect(kotak.compareDocumentPosition(keuangan) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });

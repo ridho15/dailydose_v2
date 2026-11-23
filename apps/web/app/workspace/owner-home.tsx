@@ -180,15 +180,14 @@ export function OwnerHome({
         <h1 className="m-0 mt-1 text-[28px] font-semibold tracking-[-0.02em] sm:text-[32px]">
           Halo, {namaDepan}
         </h1>
-        <p className="m-0 mt-1 text-[17px] text-dd-muted">
-          Yang perlu Anda putuskan lebih dulu, lalu angka keuangan bulan yang Anda pilih.
-        </p>
       </header>
 
       <ActionInbox
         branchId={context?.activeBranchId || undefined}
         queueClient={queueClient}
         now={now}
+        tampilan="ringkas"
+        emptyMessage="Tidak ada keputusan yang menunggu."
       />
 
       <AwalBulanCards client={client} now={now} />
@@ -264,64 +263,65 @@ export function OwnerHome({
                 )}
               </Feedback>
             )}
-            <div className="grid gap-4 lg:grid-cols-[1.5fr_1fr]">
-              <div
-                className={`flex flex-col justify-between rounded-dd-xl p-6 text-white ${
-                  ringkasan.total.profitRp < 0 ? 'bg-dd-danger' : 'bg-dd-forest'
-                }`}
-              >
-                <div>
-                  <p className="m-0 text-[15px] font-medium text-white/85">Laba sebelum pajak</p>
-                  <p className="m-0 mt-2 text-[40px] font-semibold leading-none tracking-[-0.02em] tabular-nums sm:text-[48px]">
-                    {rp(ringkasan.total.profitRp)}
-                  </p>
-                </div>
-                <p className="m-0 mt-6 text-[15px] text-white/85">
-                  {pakaiSesiTerpakai(ringkasan)
-                    ? 'Omzet dikurangi modal sesi yang terpakai dan pengeluaran cabang bulan ini.'
-                    : 'Omzet dikurangi modal paket terjual dan pengeluaran cabang bulan ini.'}
+            {/* Laba ditulis sebagai rumus supaya asal angkanya terbaca dalam satu baris. */}
+            <div
+              className={`grid gap-6 rounded-dd-xl p-6 text-white lg:grid-cols-[1fr_1.4fr] lg:items-center ${
+                ringkasan.total.profitRp < 0 ? 'bg-dd-danger' : 'bg-dd-forest'
+              }`}
+            >
+              <div>
+                <p className="m-0 text-[15px] font-medium text-white/85">Laba sebelum pajak</p>
+                <p className="m-0 mt-2 text-[40px] font-semibold leading-none tracking-[-0.02em] tabular-nums sm:text-[48px]">
+                  {rp(ringkasan.total.profitRp)}
                 </p>
               </div>
-              <div className="grid gap-3">
+              <dl className="m-0 grid gap-3 sm:grid-cols-3">
+                {[
+                  {
+                    tanda: '',
+                    label: 'Omzet',
+                    nilai: ringkasan.total.omsetRp,
+                    catatan: (() => {
+                      const capaian = capaianTarget(ringkasan.total.omsetRp, ringkasan.total.targetRp);
+                      const transaksi = `${ringkasan.total.transaksi} pembayaran lunas`;
+                      return capaian === null ? transaksi : `${transaksi} · ${capaian}% dari target`;
+                    })(),
+                  },
+                  { tanda: '−', label: labelModal(ringkasan), nilai: ringkasan.total.modalSesiRp ?? 0, catatan: catatanModal(ringkasan) },
+                  { tanda: '−', label: 'Pengeluaran', nilai: ringkasan.total.pengeluaranRp, catatan: 'Biaya cabang bulan ini' },
+                ].map((b) => (
+                  <div key={b.label} className="rounded-dd-lg bg-white/10 p-3">
+                    <p className="m-0 text-sm font-medium text-white/85">
+                      {b.tanda && <span aria-hidden="true">{b.tanda} </span>}
+                      {b.label}
+                    </p>
+                    <p className="m-0 mt-1 text-[19px] font-semibold tabular-nums">{rp(b.nilai)}</p>
+                    <p className="m-0 mt-1 text-[13px] leading-snug text-white/80">{b.catatan}</p>
+                  </div>
+                ))}
+              </dl>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <KartuAngka
+                label="Payroll instruktur (dibayar)"
+                nilai={ringkasan.total.payrollRp}
+                catatan={`${
+                  ringkasan.kasPayroll?.berlaku
+                    ? 'Dibayar dari kas payroll simpanan · tidak mengurangi laba'
+                    : 'Tidak mengurangi laba'
+                } · ${ringkasan.total.kelasSelesai} kelas selesai${
+                  ringkasan.total.koreksiPayrollRp
+                    ? ` · termasuk koreksi jam ${rp(ringkasan.total.koreksiPayrollRp)}`
+                    : ''
+                }`}
+              />
+              {ringkasan.kasPayroll?.berlaku && (
                 <KartuAngka
-                  label="Omzet"
-                  nilai={ringkasan.total.omsetRp}
-                  catatan={(() => {
-                    const capaian = capaianTarget(
-                      ringkasan.total.omsetRp,
-                      ringkasan.total.targetRp,
-                    );
-                    const transaksi = `${ringkasan.total.transaksi} pembayaran lunas`;
-                    return capaian === null ? transaksi : `${transaksi} · ${capaian}% dari target`;
-                  })()}
+                  label="Kas payroll simpanan"
+                  nilai={ringkasan.kasPayroll.total.saldoAkhirRp}
+                  catatan={catatanKasPayroll(ringkasan.kasPayroll)}
                 />
-                <KartuAngka
-                  label={labelModal(ringkasan)}
-                  nilai={ringkasan.total.modalSesiRp ?? 0}
-                  catatan={catatanModal(ringkasan)}
-                />
-                <KartuAngka
-                  label="Payroll instruktur (dibayar)"
-                  nilai={ringkasan.total.payrollRp}
-                  catatan={`${
-                    ringkasan.kasPayroll?.berlaku
-                      ? 'Dibayar dari kas payroll simpanan · tidak mengurangi laba'
-                      : 'Tidak mengurangi laba'
-                  } · ${ringkasan.total.kelasSelesai} kelas selesai${
-                    ringkasan.total.koreksiPayrollRp
-                      ? ` · termasuk koreksi jam ${rp(ringkasan.total.koreksiPayrollRp)}`
-                      : ''
-                  }`}
-                />
-                <KartuAngka label="Pengeluaran" nilai={ringkasan.total.pengeluaranRp} />
-                {ringkasan.kasPayroll?.berlaku && (
-                  <KartuAngka
-                    label="Kas payroll simpanan"
-                    nilai={ringkasan.kasPayroll.total.saldoAkhirRp}
-                    catatan={catatanKasPayroll(ringkasan.kasPayroll)}
-                  />
-                )}
-              </div>
+              )}
             </div>
 
             <section aria-labelledby="per-cabang-title" className="space-y-2">

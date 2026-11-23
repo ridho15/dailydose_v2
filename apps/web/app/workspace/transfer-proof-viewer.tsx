@@ -47,11 +47,17 @@ export function TransferProofViewer({
   client,
   onClose,
   onDecide,
+  posisi,
+  onLewati,
 }: {
   purchaseId: string | null;
   client: PurchaseReviewClient;
   onClose(): void;
   onDecide(keputusan: KeputusanTransfer): void;
+  /** Mode periksa berurutan: mis. "sisa 9", tampil di judul. */
+  posisi?: string;
+  /** Mode periksa berurutan: lewati transfer ini dan buka berikutnya. */
+  onLewati?(): void;
 }) {
   const [purchase, setPurchase] = useState<PaymentReviewItem | null>(null);
   const [url, setUrl] = useState<string | null>(null);
@@ -111,7 +117,7 @@ export function TransferProofViewer({
   return (
     <Modal
       open={Boolean(purchaseId)}
-      title={purchase ? `Bukti transfer ${purchase.customer.displayName}` : 'Bukti transfer'}
+      title={`${purchase ? `Bukti transfer ${purchase.customer.displayName}` : 'Bukti transfer'}${posisi ? ` (${posisi})` : ''}`}
       description={
         purchase
           ? `${purchase.packageNameSnapshot} · ${purchase.branch.name} · ${rp(nominal)}`
@@ -146,6 +152,11 @@ export function TransferProofViewer({
               </>
             ) : (
               <>
+                {onLewati && (
+                  <Button variant="ghost" onClick={onLewati}>
+                    Lewati
+                  </Button>
+                )}
                 <Button variant="secondary" onClick={() => setMenolak(true)}>
                   Tolak
                 </Button>
