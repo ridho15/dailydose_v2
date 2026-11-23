@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, within, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ApiError } from '../lib/api-client';
 import {
@@ -148,6 +148,82 @@ describe('Tahap 3 - Penugasan Instruktur & Owner Cabang QA', () => {
       expect(
         screen.getByText(/Tanggal akhir tidak boleh mendahului tanggal mulai/),
       ).toBeInTheDocument();
+    });
+
+    it('shows inline error in EndAssignmentDialog when reason is whitespace or backend returns 422', async () => {
+      const error422 = new ApiError('Permintaan tidak dapat diproses.', 422, {
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'Permintaan tidak dapat diproses.',
+          details: [{ field: 'reason', issue: 'REQUIRED' }],
+        },
+      });
+
+      const sampleItem = {
+        id: 'assignment-1',
+        userId: 'user-1',
+        branchId: 'branch-1',
+        assignmentType: 'INSTRUCTOR' as const,
+        activeFrom: '2026-08-01',
+        activeUntil: null,
+        status: 'ACTIVE' as const,
+        user: { id: 'user-1', displayName: 'Coach Alpha', phoneMasked: null },
+        branch: { id: 'branch-1', code: 'B1', name: 'Cabang Satu' },
+        version: 1,
+      };
+
+      const fakeClient = makeMockAssignmentClient({
+        list: vi.fn().mockResolvedValue({
+          items: [sampleItem],
+          summary: { total: 1, active: 1, ended: 0 },
+          page: { nextCursor: null, hasMore: false },
+        }),
+        end: vi.fn().mockRejectedValue(error422),
+      });
+
+      render(
+        <AssignmentsView
+          client={fakeClient}
+          branchOptions={branches}
+          activeBranchId="branch-1"
+          access={{ canRead: true, canManage: true }}
+        />,
+      );
+
+      // Open End Assignment dialog
+      const endButtons = await screen.findAllByRole('button', { name: 'Akhiri' });
+      await userEvent.click(endButtons[0]);
+
+      const dialog = await screen.findByRole('dialog', { name: 'Akhiri penugasan' });
+      const form = within(dialog);
+
+      // Fill datetime
+      fireEvent.change(form.getByLabelText(/Efektif berakhir/), {
+        target: { value: '2026-11-23T15:00' },
+      });
+
+      // Case A: Fill with only whitespace -> Client validation catches it
+      fireEvent.change(form.getByLabelText(/Alasan/), {
+        target: { value: '   ' },
+      });
+      await userEvent.click(form.getByRole('button', { name: 'Akhiri penugasan' }));
+
+      expect(
+        await screen.findByText(/Alasan pengakhiran penugasan wajib diisi minimal 3 karakter/),
+      ).toBeInTheDocument();
+      expect(fakeClient.end).not.toHaveBeenCalled();
+
+      // Case B: Fill valid-looking string but backend returns 422 details
+      fireEvent.change(form.getByLabelText(/Alasan/), {
+        target: { value: 'Penonaktifan staf' },
+      });
+      await userEvent.click(form.getByRole('button', { name: 'Akhiri penugasan' }));
+
+      // Verifies inline error is displayed inside dialog and main table is still intact
+      expect(
+        await screen.findByText(/Alasan wajib diisi \(minimal 3 karakter tanpa spasi kosong\)\./),
+      ).toBeInTheDocument();
+      expect(fakeClient.end).toHaveBeenCalled();
     });
   });
 });

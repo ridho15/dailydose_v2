@@ -202,10 +202,29 @@ export function assignmentFailure(error: unknown): AssignmentFailure {
 
 export function assignmentFailureDetail(error: unknown): string | undefined {
   const parsed = parseApiError(error);
+
+  if (Array.isArray(parsed.details) && parsed.details.length > 0) {
+    const reasonIssue = (parsed.details as Array<{ field?: string; issue?: string }>).find(
+      (d) => d && d.field === 'reason',
+    );
+    if (reasonIssue) {
+      if (reasonIssue.issue === 'REQUIRED') {
+        return 'Alasan wajib diisi (minimal 3 karakter tanpa spasi kosong).';
+      }
+      if (reasonIssue.issue === 'TOO_SHORT') {
+        return 'Alasan terlalu pendek (minimal 3 karakter).';
+      }
+      if (reasonIssue.issue === 'TOO_LONG') {
+        return 'Alasan melebihi batas maksimum 500 karakter.';
+      }
+    }
+  }
+
   if (!parsed.message) return undefined;
   if (
     parsed.message.startsWith('Assignment request failed') ||
-    parsed.message.startsWith('Request failed')
+    parsed.message.startsWith('Request failed') ||
+    parsed.message === 'Permintaan tidak dapat diproses.'
   ) {
     return undefined;
   }

@@ -603,6 +603,15 @@ function EndAssignmentDialog({
 }) {
   const [busy, setBusy] = useState(false);
   const [dirty, setDirty] = useState(false);
+  const [dialogError, setDialogError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!item) {
+      setDialogError(null);
+      setDirty(false);
+    }
+  }, [item]);
+
   const confirmDiscard = () =>
     feedback?.confirm({
       tone: 'warning',
@@ -613,6 +622,7 @@ function EndAssignmentDialog({
   const cancel = async () => {
     if (!dirty || (await confirmDiscard())) {
       setDirty(false);
+      setDialogError(null);
       onClose();
     }
   };
@@ -627,6 +637,7 @@ function EndAssignmentDialog({
       onDirtyClose={confirmDiscard}
       onClose={() => {
         setDirty(false);
+        setDialogError(null);
         onClose();
       }}
       footer={
@@ -643,11 +654,22 @@ function EndAssignmentDialog({
       <form
         id="assignment-end-form"
         className="grid gap-4"
-        onChange={() => setDirty(true)}
+        onChange={() => {
+          setDirty(true);
+          setDialogError(null);
+        }}
         onSubmit={async (event) => {
           event.preventDefault();
           if (!item) return;
           const data = new FormData(event.currentTarget);
+          const rawReason = String(data.get('reason') ?? '');
+          const trimmedReason = rawReason.trim();
+
+          if (trimmedReason.length < 3) {
+            setDialogError('Alasan pengakhiran penugasan wajib diisi minimal 3 karakter (tidak boleh hanya spasi).');
+            return;
+          }
+
           const confirmed =
             (await feedback?.confirm({
               tone: 'danger',
@@ -657,24 +679,39 @@ function EndAssignmentDialog({
             })) ?? true;
           if (!confirmed) return;
           setBusy(true);
+          setDialogError(null);
           try {
             await client.end(
               item.id,
               String(data.get('effectiveAt')),
               item.version,
-              String(data.get('reason')),
+              trimmedReason,
             );
             setDirty(false);
+            setDialogError(null);
             await onEnded();
           } catch (error) {
-            onFailure(error);
+            const detail = assignmentFailureDetail(error);
+            setDialogError(detail ?? 'Gagal mengakhiri penugasan. Periksa kembali alasan dan periode tindakan.');
           } finally {
             setBusy(false);
           }
         }}
       >
+        {dialogError && (
+          <div className="rounded-dd-md border border-dd-danger/30 bg-dd-danger/10 p-3 text-sm text-dd-danger font-medium" role="alert">
+            {dialogError}
+          </div>
+        )}
         <TextInput label="Efektif berakhir" name="effectiveAt" type="datetime-local" required />
-        <Textarea label="Alasan" name="reason" minLength={3} maxLength={500} required />
+        <Textarea 
+          label="Alasan" 
+          name="reason" 
+          minLength={3} 
+          maxLength={500} 
+          required 
+          placeholder="Tuliskan alasan pengakhiran penugasan secara jelas..."
+        />
       </form>
     </DestructiveDialog>
   );
