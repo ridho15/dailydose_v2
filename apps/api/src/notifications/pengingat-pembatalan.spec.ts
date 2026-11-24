@@ -1,4 +1,7 @@
 import { BATAS_TUNGGU_PEMBATALAN_JAM, ReminderScheduleService } from './reminder-schedule.service';
+// Pembersihan pengajuan usang diuji di tutup-pembatalan-usang.spec.ts; di sini kueri daftarnya.
+jest.mock('../bookings/tutup-pembatalan-usang', () => ({ tutupPembatalanUsang: jest.fn(async () => 0) }));
+
 
 const now = new Date('2026-11-24T03:00:00Z');
 const hariLalu = (n: number) => new Date(now.getTime() - n * 86_400_000);

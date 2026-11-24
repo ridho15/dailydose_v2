@@ -12,6 +12,7 @@ import {
   KODE_PEMBATALAN_TERLAMBAT,
   jalankanPembatalanTerlambat,
   kirimNotifikasiPengajuanPembatalan,
+  prosesBookingSetelahDitolak,
   sesiTerpotong,
 } from './pembatalan-terlambat';
 import {
@@ -21,6 +22,7 @@ import {
   simpanBuktiPengajuan,
   type BerkasUnggahan,
 } from './bukti-pengajuan';
+import { tutupPembatalanUsang } from './tutup-pembatalan-usang';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
 const KODE_SETUJU = 'LATE_CANCELLATION_APPROVED';
@@ -181,6 +183,8 @@ export class PembatalanTerlambatService {
     classSlotId: string,
     halaman?: { branchId?: string; cursor?: string; limit?: string | number },
   ): Promise<PengajuanPembatalan[] | HalamanPengajuan> {
+    // Pengajuan yang booking/kelasnya sudah dibatalkan ditutup dulu supaya tidak tertahan di antrean.
+    await tutupPembatalanUsang(this.db);
     if (!classSlotId) return this.tertundaSemua(principal, halaman ?? {});
     this.policy.requireAnyCapability(principal.capabilities, [
       'booking:read',
@@ -361,6 +365,8 @@ export class PembatalanTerlambatService {
           keputusan === 'approve'
             ? await jalankanPembatalanTerlambat(tx, row, principal.userId, now)
             : { resultingBalance: null, sessionsReturned: 0 };
+        const statusBooking =
+          keputusan === 'reject' ? await prosesBookingSetelahDitolak(tx, row.bookingId, principal.userId, now) : null;
 
         if (this.notificationWriter && row.booking?.userId) {
           const approved = keputusan === 'approve';
@@ -386,6 +392,8 @@ export class PembatalanTerlambatService {
           bookingId: row.bookingId,
           sessionsReturned: hasil.sessionsReturned,
           resultingBalance: hasil.resultingBalance,
+          /** Diisi bila kelas sudah berakhir saat ditolak: booking langsung Hadir atau Tidak hadir. */
+          bookingStatus: statusBooking,
         };
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },

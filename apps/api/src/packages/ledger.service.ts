@@ -1,10 +1,12 @@
 import { akhirHariWib, statusPaketEfektif } from '../foundation/masa-berlaku';
+import { tutupPembatalanUsang } from '../bookings/tutup-pembatalan-usang';
 import { tanggalWib } from './instructor-fee-calculator';
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { cabangPaket } from '../bookings/cabang-paket';
 import {
   KODE_PEMBATALAN_TERLAMBAT,
   jalankanPembatalanTerlambat,
+  prosesBookingSetelahDitolak,
 } from '../bookings/pembatalan-terlambat';
 import { AdjustRequestStatus, Prisma, SessionMutationType } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service';
@@ -647,6 +649,8 @@ export class LedgerService {
     const limit = Math.min(100, Math.max(1, Number(filters.pageSize ?? filters.limit) || PAGE_SIZE));
     const pageNumber = filters.page && Number(filters.page) > 0 ? Number(filters.page) : undefined;
     const q = filters.q?.trim();
+    // Tab Penyesuaian Sesi juga menampilkan pengajuan batal; yang sudah usang ditutup lebih dulu.
+    await tutupPembatalanUsang(this.db);
     const from = filters.from ? new Date(filters.from) : undefined;
     const until = filters.until ? new Date(filters.until) : undefined;
     if ((from && Number.isNaN(from.getTime())) || (until && Number.isNaN(until.getTime())))
@@ -1044,6 +1048,9 @@ export class LedgerService {
           // Pembatalan H-24 dari timetable: booking dibatalkan dan sesinya dikembalikan bila terpotong.
           resultingBalance = (await jalankanPembatalanTerlambat(tx, row, principal.userId, now))
             .resultingBalance;
+        } else if (row.reasonCode === KODE_PEMBATALAN_TERLAMBAT) {
+          // Ditolak: kelas yang sudah berakhir langsung diproses Hadir/Tidak hadir (sama dengan kotak masuk).
+          await prosesBookingSetelahDitolak(tx, row.bookingId, principal.userId, now);
         } else if (decision === 'approve') {
           const pkg = await tx.paketPelanggan.findUniqueOrThrow({
             where: { id: row.customerPackageId },

@@ -1,5 +1,8 @@
 import { PolicyService } from '../identity/policy.service';
 import { PembatalanTerlambatService } from './pembatalan-terlambat.service';
+// Pembersihan pengajuan usang diuji di tutup-pembatalan-usang.spec.ts; di sini kueri daftarnya.
+jest.mock('./tutup-pembatalan-usang', () => ({ tutupPembatalanUsang: jest.fn(async () => 0) }));
+
 
 const MK = '00000000-0000-4000-8000-0000000000a2';
 const BOOKING = '00000000-0000-4000-8000-0000000000b1';
@@ -36,7 +39,7 @@ function setup(status = 'ATTENDED', bookingNumber = 'BKG-V1-00000001') {
         classSlotId: 'slot-1',
         customerPackageId: 'pkg-1',
         attendance: status === 'ATTENDED' ? { id: 'att-1' } : null,
-        classSlot: { branchId: MK, startAt: besok },
+        classSlot: { branchId: MK, startAt: besok, endAt: new Date(besok.getTime() + 3_600_000), status: 'CONFIRMED' },
       })),
       update: jest.fn(),
     },

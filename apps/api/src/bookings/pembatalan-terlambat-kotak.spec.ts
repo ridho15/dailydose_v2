@@ -4,6 +4,9 @@ import {
   kirimNotifikasiPengajuanPembatalan,
 } from './pembatalan-terlambat';
 import { PembatalanTerlambatService } from './pembatalan-terlambat.service';
+// Pembersihan pengajuan usang diuji di tutup-pembatalan-usang.spec.ts; di sini kueri daftarnya.
+jest.mock('./tutup-pembatalan-usang', () => ({ tutupPembatalanUsang: jest.fn(async () => 0) }));
+
 
 const GG = '00000000-0000-4000-8000-0000000000a1';
 const MK = '00000000-0000-4000-8000-0000000000a2';

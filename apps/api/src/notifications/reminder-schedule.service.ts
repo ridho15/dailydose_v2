@@ -3,6 +3,7 @@ import { PrismaService } from '../database/prisma.service';
 import { WhatsAppGatewayService } from './whatsapp-gateway.service';
 import { NotificationTemplateService } from './notification-template.service';
 import { KODE_PEMBATALAN_TERLAMBAT } from '../bookings/pembatalan-terlambat';
+import { tutupPembatalanUsang } from '../bookings/tutup-pembatalan-usang';
 
 export interface ReminderBatchSummary {
   evaluatedAt: Date;
@@ -349,6 +350,7 @@ export class ReminderScheduleService {
    * menunggu lebih dari 24 jam, paling sering sekali sehari per orang.
    */
   async runPengingatPembatalan(now = new Date()): Promise<number> {
+    await tutupPembatalanUsang(this.db, now);
     const batas = new Date(now.getTime() - BATAS_TUNGGU_PEMBATALAN_JAM * 3_600_000);
     const menunggu = await this.db.sessionAdjustRequest.findMany({
       where: { status: 'PENDING', reasonCode: KODE_PEMBATALAN_TERLAMBAT, createdAt: { lte: batas } },

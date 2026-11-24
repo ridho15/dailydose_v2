@@ -203,3 +203,71 @@ export async function kirimNotifikasiPengajuanPembatalan(
     // Notifikasi bersifat pelengkap; pengajuan tetap tersimpan dan tampil di kotak masuk.
   }
 }
+
+/**
+ * Pengajuan batal yang DITOLAK untuk kelas yang sudah berakhir: booking langsung diproses seperti
+ * kelas selesai, Hadir bila ada presensi, Tidak hadir bila tidak, dan sesinya dipotong sekali
+ * (audit 24 November 2026: sebelumnya booking kembali "Booking Aktif" walau kelasnya sudah lewat).
+ * Izin medis sudah membatalkan booking sejak diajukan; penolakan berarti pembatalannya tidak
+ * diterima, jadi diproses sama. Kelas yang belum berakhir tidak disentuh: booking tetap seperti semula.
+ */
+export async function prosesBookingSetelahDitolak(
+  tx: Prisma.TransactionClient,
+  bookingId: string | null,
+  actorId: string,
+  now: Date,
+): Promise<'ATTENDED' | 'NO_SHOW' | null> {
+  if (!bookingId) return null;
+  const booking = await tx.pemesananKelas.findUnique({
+    where: { id: bookingId },
+    include: {
+      attendance: { select: { id: true } },
+      classSlot: {
+        select: { endAt: true, status: true, classType: { select: { name: true } }, branch: { select: { name: true } } },
+      },
+    },
+  });
+  if (!booking?.classSlot || booking.classSlot.status === 'CANCELLED') return null;
+  if (booking.classSlot.endAt.getTime() > now.getTime()) return null;
+  // Booking hasil migrasi V1 sudah diperhitungkan V1 (lihat penyelesaian kelas).
+  if (booking.bookingNumber?.startsWith('BKG-V1-')) return null;
+
+  const hadir = booking.status === 'ATTENDED' || Boolean(booking.attendance);
+  const statusBaru = hadir ? 'ATTENDED' : 'NO_SHOW';
+  if (booking.status !== statusBaru)
+    await tx.pemesananKelas.update({ where: { id: booking.id }, data: { status: statusBaru } });
+
+  const sudahDipotong = await tx.sessionLedger.findFirst({
+    where: { referenceId: booking.id, type: SessionMutationType.ATTEND },
+    select: { id: true },
+  });
+  if (!sudahDipotong && booking.customerPackageId) {
+    const paket = await tx.paketPelanggan.findUnique({ where: { id: booking.customerPackageId } });
+    if (paket) {
+      const sisa = Math.max(0, paket.remainingSessions - 1);
+      const kelas = `${booking.classSlot.classType?.name ?? 'Kelas'} di ${booking.classSlot.branch?.name ?? 'studio'}`;
+      await tx.sessionLedger.create({
+        data: {
+          customerPackageId: paket.id,
+          type: SessionMutationType.ATTEND,
+          amount: -1,
+          balanceAfter: sisa,
+          referenceId: booking.id,
+          notes: hadir
+            ? `Pembatalan ditolak, kelas sudah berlangsung: ${kelas}`
+            : `Sesi hangus (NO SHOW): pembatalan terlambat ditolak, kelas ${kelas} sudah berlangsung`,
+          createdById: actorId || null,
+        },
+      });
+      await tx.paketPelanggan.update({
+        where: { id: paket.id },
+        data: {
+          usedSessions: { increment: 1 },
+          remainingSessions: paket.remainingSessions > 0 ? { decrement: 1 } : { set: 0 },
+          status: sisa <= 0 ? 'DEPLETED' : paket.status,
+        },
+      });
+    }
+  }
+  return statusBaru;
+}

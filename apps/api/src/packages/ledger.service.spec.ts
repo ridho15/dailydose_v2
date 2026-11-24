@@ -1,6 +1,9 @@
 import { MEMEGANG_SESI } from './sesi-terpesan';
 import { LedgerService } from './ledger.service';
 import { PolicyService } from '../identity/policy.service';
+// Pembersihan pengajuan usang diuji di tutup-pembatalan-usang.spec.ts; di sini kueri daftarnya.
+jest.mock('../bookings/tutup-pembatalan-usang', () => ({ tutupPembatalanUsang: jest.fn(async () => 0) }));
+
 
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const branchA = id(1);

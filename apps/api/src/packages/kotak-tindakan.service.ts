@@ -8,6 +8,7 @@ import { PolicyService } from '../identity/policy.service';
 import { ApiProblem } from '../identity/security';
 import { AntreanTertinggalService } from './antrean-tertinggal.service';
 import { tutupUbahJadwalUsang } from '../bookings/tutup-ubah-jadwal-usang';
+import { tutupPembatalanUsang } from '../bookings/tutup-pembatalan-usang';
 import { alamatBuktiPengajuan } from '../bookings/bukti-pengajuan';
 import { PRIVATE_FILE_STORAGE, type PrivateFileStorage } from '../identity/private-file-storage';
 
@@ -397,6 +398,7 @@ export class KotakTindakanService {
 
     // PEMBATALAN dan PENYESUAIAN memakai tabel session_adjust_request yang sama.
     const pembatalan = jenis === 'PEMBATALAN';
+    if (pembatalan) await tutupPembatalanUsang(this.db);
     const where: Prisma.SessionAdjustRequestWhereInput = {
       status: 'PENDING',
       ...(pembatalan
