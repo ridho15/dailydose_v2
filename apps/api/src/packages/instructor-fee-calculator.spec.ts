@@ -186,3 +186,104 @@ describe('summarizeInstructorFees: presensi milik instruktur lain', () => {
     expect(hasil).toMatchObject({ totalFeeRp: 0, unverifiedClassCount: 1, unverifiedFeeRp: 200_000 });
   });
 });
+
+describe('Rekonsiliasi Kasus Instruktur Yoan & Lulu (Kelas 3 & 4 Nov 2026)', () => {
+  const pik2 = 'a1000000-0000-4000-8000-000000000005';
+  const privateGroupType = 'c1000000-0000-4000-8000-000000000004';
+  const yoan = { id: '10000000-0000-4000-8000-000000005174', displayName: 'Yoan' };
+  const lulu = { id: '10000000-0000-4000-8000-000000004033', displayName: 'Lulu' };
+
+  // Kelas Yoan: 3 Nov 19:00-20:00 WIB (12:00-13:00 UTC)
+  const yoanSlot = (attendance = false): FeeableSlot => ({
+    startAt: new Date('2026-11-03T12:00:00Z'),
+    endAt: new Date('2026-11-03T13:00:00Z'),
+    branchId: pik2,
+    classTypeId: privateGroupType,
+    instructor: yoan,
+    classType: { name: 'Private Group' },
+    instructorAttendance: attendance ? { id: 'att-yoan', instructorId: yoan.id } : null,
+  });
+
+  // Kelas Lulu: 4 Nov 08:00-08:50 WIB & 09:00-09:50 WIB (masing-masing dihitung minimum 1 jam)
+  const luluSlot1: FeeableSlot = {
+    startAt: new Date('2026-11-04T01:00:00Z'),
+    endAt: new Date('2026-11-04T01:50:00Z'),
+    branchId: pik2,
+    classTypeId: privateGroupType,
+    instructor: lulu,
+    classType: { name: 'Private Group' },
+    instructorAttendance: { id: 'att-lulu-1', instructorId: lulu.id },
+  };
+  const luluSlot2: FeeableSlot = {
+    startAt: new Date('2026-11-04T02:00:00Z'),
+    endAt: new Date('2026-11-04T02:50:00Z'),
+    branchId: pik2,
+    classTypeId: privateGroupType,
+    instructor: lulu,
+    classType: { name: 'Private Group' },
+    instructorAttendance: { id: 'att-lulu-2', instructorId: lulu.id },
+  };
+
+  it('sebelum ada konfigurasi tarif: keduanya memakai tarif bawaan Rp 150.000', () => {
+    const summary = summarizeInstructorFees([yoanSlot(false), luluSlot1, luluSlot2], []);
+    const yoanSummary = summary.find((s) => s.instructorId === yoan.id);
+    const luluSummary = summary.find((s) => s.instructorId === lulu.id);
+
+    // Yoan belum presensi: masuk unverifiedFeeRp dengan tarif bawaan Rp 150.000
+    expect(yoanSummary).toMatchObject({
+      instructorName: 'Yoan',
+      totalFeeRp: 0,
+      unverifiedFeeRp: 150_000,
+      unverifiedClassCount: 1,
+    });
+
+    // Lulu sudah presensi: 2 kelas x 1 jam (minimal 1 jam) x Rp 150.000 = Rp 300.000
+    expect(luluSummary).toMatchObject({
+      instructorName: 'Lulu',
+      totalFeeRp: 300_000,
+      verifiedFeeRp: 300_000,
+      unconfiguredFeeClassCount: 2,
+    });
+  });
+
+  it('setelah dipasang tarif khusus Rp 175.000 dan presensi divalidasi: honor terhitung sesuai tarif master', () => {
+    const configuredFees: InstructorFeeRow[] = [
+      {
+        instructorId: yoan.id,
+        branchId: pik2,
+        classTypeId: privateGroupType,
+        effectiveDate: new Date('2026-11-01T00:00:00Z'),
+        feePerJamRp: 175_000,
+      },
+      {
+        instructorId: lulu.id,
+        branchId: pik2,
+        classTypeId: privateGroupType,
+        effectiveDate: new Date('2026-11-01T00:00:00Z'),
+        feePerJamRp: 175_000,
+      },
+    ];
+
+    // Presensi Yoan divalidasi
+    const summary = summarizeInstructorFees([yoanSlot(true), luluSlot1, luluSlot2], configuredFees);
+    const yoanSummary = summary.find((s) => s.instructorId === yoan.id);
+    const luluSummary = summary.find((s) => s.instructorId === lulu.id);
+
+    // Yoan: 1 jam x Rp 175.000 = Rp 175.000 (verified)
+    expect(yoanSummary).toMatchObject({
+      instructorName: 'Yoan',
+      totalFeeRp: 175_000,
+      verifiedFeeRp: 175_000,
+      unverifiedFeeRp: 0,
+      unconfiguredFeeClassCount: 0,
+    });
+
+    // Lulu: 2 jam x Rp 175.000 = Rp 350.000 (verified)
+    expect(luluSummary).toMatchObject({
+      instructorName: 'Lulu',
+      totalFeeRp: 350_000,
+      verifiedFeeRp: 350_000,
+      unconfiguredFeeClassCount: 0,
+    });
+  });
+});

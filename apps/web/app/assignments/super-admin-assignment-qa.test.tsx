@@ -192,7 +192,7 @@ describe('Tahap 3 - Penugasan Instruktur & Owner Cabang QA', () => {
 
       // Open End Assignment dialog
       const endButtons = await screen.findAllByRole('button', { name: 'Akhiri' });
-      await userEvent.click(endButtons[0]);
+      await userEvent.click(endButtons[0]!);
 
       const dialog = await screen.findByRole('dialog', { name: 'Akhiri penugasan' });
       const form = within(dialog);

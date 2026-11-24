@@ -31,6 +31,7 @@ vi.mock('@/api-clients/notification-client', () => ({
     markRead: (...args: unknown[]) => mockMarkRead(...args),
     markAllRead: (...args: unknown[]) => mockMarkAllRead(...args),
   },
+  getNotificationActionLabel: vi.fn(() => 'Lihat detail'),
 }));
 
 // Import component after mock
