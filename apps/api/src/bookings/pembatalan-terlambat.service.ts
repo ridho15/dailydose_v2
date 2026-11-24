@@ -23,6 +23,8 @@ import {
   type BerkasUnggahan,
 } from './bukti-pengajuan';
 import { tutupPembatalanUsang } from './tutup-pembatalan-usang';
+import { akhirHariWib, awalHariWib } from '../foundation/masa-berlaku';
+import { variasiHurufCari } from '../identity/manajemen-pelanggan.service';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
 const KODE_SETUJU = 'LATE_CANCELLATION_APPROVED';
@@ -41,6 +43,21 @@ export interface PengajuanPembatalan {
   /** Alamat bukti pendukung (GET /session-adjustments/:id/evidence); null bila tanpa bukti. */
   buktiUrl?: string | null;
 }
+
+export interface FilterPengajuan {
+  branchId?: string;
+  cursor?: string;
+  limit?: string | number;
+  /** Tanggal kelas YYYY-MM-DD (WIB), inklusif. */
+  dari?: string;
+  sampai?: string;
+  /** 'medis' hanya [IZIN MEDIS]; 'biasa' selain itu. */
+  jenis?: string;
+  /** Cari di alasan atau nama member. */
+  q?: string;
+}
+
+const PENANDA_MEDIS = '[IZIN MEDIS]';
 
 export interface HalamanPengajuan {
   items: (PengajuanPembatalan & {
@@ -176,12 +193,12 @@ export class PembatalanTerlambatService {
   async tertunda(
     principal: SessionPrincipal,
     classSlotId: '',
-    halaman: { branchId?: string; cursor?: string; limit?: string | number },
+    halaman: FilterPengajuan,
   ): Promise<HalamanPengajuan>;
   async tertunda(
     principal: SessionPrincipal,
     classSlotId: string,
-    halaman?: { branchId?: string; cursor?: string; limit?: string | number },
+    halaman?: FilterPengajuan,
   ): Promise<PengajuanPembatalan[] | HalamanPengajuan> {
     // Pengajuan yang booking/kelasnya sudah dibatalkan ditutup dulu supaya tidak tertahan di antrean.
     await tutupPembatalanUsang(this.db);
@@ -218,13 +235,25 @@ export class PembatalanTerlambatService {
 
   private async tertundaSemua(
     principal: SessionPrincipal,
-    input: { branchId?: string; cursor?: string; limit?: string | number },
+    input: FilterPengajuan,
   ): Promise<HalamanPengajuan> {
     this.policy.requireAnyCapability(principal.capabilities, [
       CAP_PUTUS_PEMBATALAN,
       'ledger:adjust:decide',
     ]);
     const limit = Math.min(50, Math.max(1, Number(input.limit) || 20));
+    // Filter daftar (audit 24 November 2026): tanggal kelas (WIB), jenis alasan, dan teks bebas.
+    const dari = input.dari ? awalHariWib(input.dari) : null;
+    const sampai = input.sampai ? akhirHariWib(input.sampai) : null;
+    if ((input.dari && !dari) || (input.sampai && !sampai))
+      throw new ApiProblem('VALIDATION_ERROR', HttpStatus.UNPROCESSABLE_ENTITY, false, [
+        { field: input.dari && !dari ? 'dari' : 'sampai', issue: 'INVALID_DATE' },
+      ]);
+    if (input.jenis && input.jenis !== 'medis' && input.jenis !== 'biasa')
+      throw new ApiProblem('VALIDATION_ERROR', HttpStatus.UNPROCESSABLE_ENTITY, false, [
+        { field: 'jenis', issue: 'INVALID' },
+      ]);
+    const q = typeof input.q === 'string' ? input.q.trim().slice(0, 100) : '';
     // Cabang yang boleh diputus: gabungan kedua kapabilitas penyetuju.
     const cakupan = [CAP_PUTUS_PEMBATALAN, 'ledger:adjust:decide']
       .filter((cap) => principal.capabilities.includes(cap))
@@ -251,7 +280,34 @@ export class PembatalanTerlambatService {
       where: {
         reasonCode: KODE_PEMBATALAN_TERLAMBAT,
         status: 'PENDING',
-        ...(cabang ? { booking: { is: { classSlot: { branchId: cabang } } } } : {}),
+        ...(cabang || dari || sampai
+          ? {
+              booking: {
+                is: {
+                  classSlot: {
+                    ...(cabang ? { branchId: cabang } : {}),
+                    ...(dari || sampai
+                      ? { startAt: { ...(dari ? { gte: dari } : {}), ...(sampai ? { lte: sampai } : {}) } }
+                      : {}),
+                  },
+                },
+              },
+            }
+          : {}),
+        ...(input.jenis === 'medis' ? { reason: { startsWith: PENANDA_MEDIS } } : {}),
+        ...(input.jenis === 'biasa' ? { NOT: { reason: { startsWith: PENANDA_MEDIS } } } : {}),
+        ...(q
+          ? {
+              AND: [
+                {
+                  OR: [
+                    ...variasiHurufCari(q).map((v) => ({ reason: { contains: v } })),
+                    ...variasiHurufCari(q).map((v) => ({ customerPackage: { is: { user: { displayName: { contains: v } } } } })),
+                  ],
+                },
+              ],
+            }
+          : {}),
         ...(kursor
           ? {
               OR: [

@@ -159,3 +159,28 @@ describe('Notifikasi pengajuan pembatalan', () => {
     ).resolves.toBeUndefined();
   });
 });
+
+describe('filter daftar pengajuan (tanggal kelas WIB, jenis alasan, teks)', () => {
+  it('menerjemahkan filter ke kueri: tanggal kelas WIB inklusif, izin medis, dan cari alasan/nama', async () => {
+    const { db, service } = setup();
+    await service.tertunda(manager, '', { dari: '2026-11-05', sampai: '2026-11-19', jenis: 'medis', q: 'noriko' });
+    const where = (db.sessionAdjustRequest.findMany.mock.lastCall as unknown as [{ where: any }])[0].where;
+    expect(where.booking.is.classSlot.startAt).toEqual({
+      gte: new Date('2026-11-04T17:00:00.000Z'),
+      lte: new Date('2026-11-19T16:59:59.000Z'),
+    });
+    expect(where.reason).toEqual({ startsWith: '[IZIN MEDIS]' });
+    const cari = JSON.stringify(where.AND);
+    expect(cari).toContain('Noriko');
+    expect(cari).toContain('displayName');
+  });
+
+  it('jenis biasa mengecualikan izin medis; tanggal atau jenis tidak sah ditolak 422', async () => {
+    const { db, service } = setup();
+    await service.tertunda(manager, '', { jenis: 'biasa' });
+    const where = (db.sessionAdjustRequest.findMany.mock.lastCall as unknown as [{ where: any }])[0].where;
+    expect(where.NOT).toEqual({ reason: { startsWith: '[IZIN MEDIS]' } });
+    await expect(service.tertunda(manager, '', { dari: '2026-13-40' })).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+    await expect(service.tertunda(manager, '', { jenis: 'apa' })).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+  });
+});

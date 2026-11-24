@@ -529,6 +529,14 @@ export function ActionInbox({
           ))}
         </ul>
       )}
+      {tampilan === 'ringkas' && kelompok.some((k) => k.jenis === 'PEMBATALAN' && k.jumlah > 0) && (
+        <Link
+          href="/workspace/pembatalan"
+          className="inline-flex min-h-11 items-center text-[15px] font-semibold text-dd-forest underline"
+        >
+          Lihat semua pengajuan batal dalam daftar, dengan filter dan keputusan massal
+        </Link>
+      )}
       {tampilan === 'daftar' && kelompok.map((k) => {
         const cursor = lanjutan[k.jenis];
         const masihAda = cursor !== null && k.items.length < k.jumlah;
@@ -539,9 +547,19 @@ export function ActionInbox({
             ref={k.jenis === fokus ? (el) => void (fokusRef.current = el) : undefined}
             className="space-y-2"
           >
-            <h3 id={`tindakan-${k.jenis}`} className="m-0 text-[15px] font-semibold text-dd-muted">
-              {JUDUL_JENIS[k.jenis]} ({k.jumlah})
-            </h3>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 id={`tindakan-${k.jenis}`} className="m-0 text-[15px] font-semibold text-dd-muted">
+                {JUDUL_JENIS[k.jenis]} ({k.jumlah})
+              </h3>
+              {k.jenis === 'PEMBATALAN' && (
+                <Link
+                  href="/workspace/pembatalan"
+                  className="inline-flex min-h-11 items-center text-[15px] font-semibold text-dd-forest underline"
+                >
+                  Daftar lengkap, filter, dan putuskan massal
+                </Link>
+              )}
+            </div>
             <ul className="m-0 grid list-none gap-2 p-0">
               {k.items.map((item) => (
                 <li

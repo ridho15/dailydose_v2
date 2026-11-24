@@ -46,10 +46,14 @@ export class BookingsController {
     @Query('branchId') branchId?: string,
     @Query('cursor') cursor?: string,
     @Query('limit') limit?: string,
+    @Query('dari') dari?: string,
+    @Query('sampai') sampai?: string,
+    @Query('jenis') jenis?: string,
+    @Query('q') q?: string,
   ) {
     return classSlotId
       ? this.pembatalan.tertunda(request.principal, classSlotId)
-      : this.pembatalan.tertunda(request.principal, '', { branchId, cursor, limit });
+      : this.pembatalan.tertunda(request.principal, '', { branchId, cursor, limit, dari, sampai, jenis, q });
   }
 
   @Post('late-cancellations/:requestId/:decision')

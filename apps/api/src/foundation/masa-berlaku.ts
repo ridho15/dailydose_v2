@@ -17,6 +17,12 @@ export function berlakuSampai(aktifPada: Date, hari: number): Date {
  * Akhir hari (23.59.59 WIB) untuk tanggal `YYYY-MM-DD`. Dipakai saat staf memilih tanggal berakhir
  * paket, supaya tanggal yang tampil di semua halaman (WIB) sama dengan tanggal yang dipilih.
  */
+/** Awal hari (00:00 WIB) untuk tanggal YYYY-MM-DD; null bila tanggal tidak sah. */
+export function awalHariWib(tanggal: string): Date | null {
+  const akhir = akhirHariWib(tanggal);
+  return akhir ? new Date(akhir.getTime() + 1000 - HARI_MS) : null;
+}
+
 export function akhirHariWib(tanggal: string): Date | null {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(tanggal)) return null;
   const awalUtc = Date.parse(`${tanggal}T00:00:00.000Z`);
