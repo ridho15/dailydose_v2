@@ -1,8 +1,10 @@
-import { HttpStatus, Injectable, Optional } from '@nestjs/common';
+import { HttpStatus, Inject, Injectable, Optional } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service';
 import type { SessionPrincipal } from '../identity/identity.service';
 import { PolicyService } from '../identity/policy.service';
+import { PRIVATE_FILE_STORAGE, type PrivateFileStorage } from '../identity/private-file-storage';
 import { ApiProblem } from '../identity/security';
 import { NotificationWriterService } from '../notifications/notification-writer.service';
 import {
@@ -12,6 +14,13 @@ import {
   kirimNotifikasiPengajuanPembatalan,
   sesiTerpotong,
 } from './pembatalan-terlambat';
+import {
+  alamatBuktiPengajuan,
+  buktiWajibAda,
+  periksaBuktiPengajuan,
+  simpanBuktiPengajuan,
+  type BerkasUnggahan,
+} from './bukti-pengajuan';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
 const KODE_SETUJU = 'LATE_CANCELLATION_APPROVED';
@@ -27,6 +36,8 @@ export interface PengajuanPembatalan {
   requestedById: string;
   requestedByName: string | null;
   createdAt: string;
+  /** Alamat bukti pendukung (GET /session-adjustments/:id/evidence); null bila tanpa bukti. */
+  buktiUrl?: string | null;
 }
 
 export interface HalamanPengajuan {
@@ -56,6 +67,7 @@ export class PembatalanTerlambatService {
     private readonly db: PrismaService,
     private readonly policy: PolicyService,
     @Optional() private readonly notificationWriter?: NotificationWriterService,
+    @Optional() @Inject(PRIVATE_FILE_STORAGE) private readonly storage?: PrivateFileStorage,
   ) {}
 
   private bolehDiCabang(principal: SessionPrincipal, capability: string, branchId: string) {
@@ -69,12 +81,18 @@ export class PembatalanTerlambatService {
     principal: SessionPrincipal,
     bookingId: string,
     input: { reason?: unknown; isMedical?: boolean; releaseSeat?: boolean },
+    berkas?: BerkasUnggahan,
     now = new Date(),
   ): Promise<PengajuanPembatalan> {
     this.policy.requireCapability(principal.capabilities, 'booking:cancel:assisted');
     if (!UUID.test(bookingId)) throw new ApiProblem('RESOURCE_NOT_FOUND', HttpStatus.NOT_FOUND);
     const reason = typeof input?.reason === 'string' ? input.reason.trim() : '';
     if (reason.length < 10 || reason.length > 200) throw alasanTidakValid();
+    // Admin wajib melampirkan bukti (tangkapan layar chat member, surat dokter, dan sejenisnya).
+    const bukti = periksaBuktiPengajuan(berkas);
+    if (!bukti) throw buktiWajibAda();
+    const id = randomUUID();
+    const hapusBukti = await simpanBuktiPengajuan(this.storage, id, bukti);
 
     const dibuat = await this.db.$transaction(
       async (tx) => {
@@ -122,6 +140,7 @@ export class PembatalanTerlambatService {
 
         return tx.sessionAdjustRequest.create({
           data: {
+            id,
             customerPackageId: booking.customerPackageId,
             bookingId,
             requestedById: principal.userId,
@@ -133,7 +152,10 @@ export class PembatalanTerlambatService {
         });
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
-    );
+    ).catch(async (error: unknown) => {
+      await hapusBukti();
+      throw error;
+    });
 
     await kirimNotifikasiPengajuanPembatalan(this.notificationWriter, this.db, {
       pengajuanId: dibuat.id,
@@ -186,7 +208,8 @@ export class PembatalanTerlambatService {
       include: { requestedBy: { select: { displayName: true } } },
       orderBy: { createdAt: 'asc' },
     });
-    return rows.map((row) => this.tampilan(row));
+    const bukti = await Promise.all(rows.map((row) => alamatBuktiPengajuan(this.storage, row.id)));
+    return rows.map((row, i) => ({ ...this.tampilan(row), buktiUrl: bukti[i] ?? null }));
   }
 
   private async tertundaSemua(
@@ -257,9 +280,11 @@ export class PembatalanTerlambatService {
     const dipakai = lebih ? rows.slice(0, limit) : rows;
     const akhir = dipakai.at(-1);
     const superOwner = principal.roles.some((r) => r.role === 'SUPER_OWNER');
+    const bukti = await Promise.all(dipakai.map((row) => alamatBuktiPengajuan(this.storage, row.id)));
     return {
-      items: dipakai.map((row) => ({
+      items: dipakai.map((row, i) => ({
         ...this.tampilan(row),
+        buktiUrl: bukti[i] ?? null,
         customerName: row.booking?.user?.displayName ?? null,
         className: row.booking?.classSlot.classType?.name ?? null,
         classStartAt: row.booking?.classSlot.startAt.toISOString() ?? null,

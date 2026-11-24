@@ -648,7 +648,7 @@ export function CustomerDetailView({ id }: { id: string }) {
                   <span className="text-[13px] font-bold text-dd-muted block">Tanggal Lahir</span>
                   <p className="mt-1 font-semibold text-dd-ink">
                     {customer.profile?.birthDate
-                      ? new Date(customer.profile.birthDate).toLocaleDateString('id-ID', {
+                      ? new Date(customer.profile.birthDate).toLocaleDateString('id-ID', { timeZone: 'Asia/Jakarta',
                           day: 'numeric',
                           month: 'short',
                           year: 'numeric',
@@ -768,7 +768,7 @@ export function CustomerDetailView({ id }: { id: string }) {
               </div>
               <p className="text-xs text-dd-muted">
                 {customer.stoppedAt
-                  ? `Pelanggan ditandai berhenti sejak ${new Date(customer.stoppedAt).toLocaleDateString('id-ID')}. Pesan reminder otomatis WhatsApp dinonaktifkan.`
+                  ? `Pelanggan ditandai berhenti sejak ${new Date(customer.stoppedAt).toLocaleDateString('id-ID', { timeZone: 'Asia/Jakarta' })}. Pesan reminder otomatis WhatsApp dinonaktifkan.`
                   : 'Pelanggan aktif dalam antrean reminder berkala normal.'}
               </p>
               {canWrite && (
@@ -922,7 +922,7 @@ export function CustomerDetailView({ id }: { id: string }) {
                               header: 'Masa Berlaku',
                               cell: (cp) =>
                                 cp.expiryAt
-                                  ? `s.d. ${new Date(cp.expiryAt).toLocaleDateString('id-ID')}`
+                                  ? `s.d. ${new Date(cp.expiryAt).toLocaleDateString('id-ID', { timeZone: 'Asia/Jakarta' })}`
                                   : 'Permanen',
                             },
                             {
@@ -991,7 +991,7 @@ export function CustomerDetailView({ id }: { id: string }) {
                                   Sisa {cp.remainingSessions} dari{' '}
                                   {Math.max((cp as any).totalSessions ?? cp.sessionCountSnapshot ?? cp.package?.sessionCount ?? 0, cp.remainingSessions + (cp.usedSessions ?? 0))} sesi ·{' '}
                                   {cp.expiryAt
-                                    ? `s.d. ${new Date(cp.expiryAt).toLocaleDateString('id-ID')}`
+                                    ? `s.d. ${new Date(cp.expiryAt).toLocaleDateString('id-ID', { timeZone: 'Asia/Jakarta' })}`
                                     : 'Permanen'}
                                 </p>
                                 <div className="flex flex-wrap items-center gap-2 pt-1">
@@ -1063,7 +1063,7 @@ export function CustomerDetailView({ id }: { id: string }) {
                                 header: 'Masa Berlaku',
                                 cell: (cp) =>
                                   cp.expiryAt
-                                    ? `s.d. ${new Date(cp.expiryAt).toLocaleDateString('id-ID')}`
+                                    ? `s.d. ${new Date(cp.expiryAt).toLocaleDateString('id-ID', { timeZone: 'Asia/Jakarta' })}`
                                     : 'Permanen',
                               },
                               {
@@ -1116,7 +1116,7 @@ export function CustomerDetailView({ id }: { id: string }) {
                               {p.invoiceNumber ?? p.id.slice(0, 8)}
                             </strong>
                             <span className="text-xs text-dd-muted">
-                              {new Date(p.submittedAt).toLocaleDateString('id-ID')}
+                              {new Date(p.submittedAt).toLocaleDateString('id-ID', { timeZone: 'Asia/Jakarta' })}
                             </span>
                           </>
                         ),
@@ -1232,7 +1232,7 @@ export function CustomerDetailView({ id }: { id: string }) {
                         header: 'Waktu Kelas',
                         cell: (b) =>
                           b.startAt
-                            ? `${new Date(b.startAt).toLocaleDateString('id-ID')} (${new Date(b.startAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })})`
+                            ? `${new Date(b.startAt).toLocaleDateString('id-ID', { timeZone: 'Asia/Jakarta' })} (${new Date(b.startAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })})`
                             : '—',
                       },
                       {
@@ -1272,7 +1272,7 @@ export function CustomerDetailView({ id }: { id: string }) {
                         </div>
                         <p className="text-sm text-dd-muted">
                           {b.bookingNumber ?? b.id.slice(0, 8)} ·{' '}
-                          {b.startAt ? new Date(b.startAt).toLocaleDateString('id-ID') : '—'} ·{' '}
+                          {b.startAt ? new Date(b.startAt).toLocaleDateString('id-ID', { timeZone: 'Asia/Jakarta' }) : '—'} ·{' '}
                           {statusLabel(b.attendanceStatus ?? 'MENUNGGU')}
                         </p>
                       </div>

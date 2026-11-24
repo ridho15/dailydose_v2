@@ -11,6 +11,7 @@ import {
 import { Button } from '../components/actions';
 import { Modal, useAppFeedback } from '../components/app-feedback';
 import { Textarea } from '../components/forms';
+import { masalahBukti, PilihBukti } from '../components/pilih-bukti';
 import { useSessionContext } from '../session-context';
 import { Feedback, StatusBadge } from '../ui';
 
@@ -67,6 +68,7 @@ export function BatalkanPeserta({
   const [mode, setMode] = useState<Mode | null>(null);
   const [alasan, setAlasan] = useState('');
   const [isMedical, setIsMedical] = useState(false);
+  const [bukti, setBukti] = useState<File | null>(null);
   const [sibuk, setSibuk] = useState(false);
   const [galat, setGalat] = useState('');
   const nama = booking.customer?.displayName ?? 'member';
@@ -113,6 +115,16 @@ export function BatalkanPeserta({
     return (
       <div className="flex flex-wrap items-center gap-2">
         <StatusBadge tone="warning">Menunggu persetujuan batal</StatusBadge>
+        {pengajuan.buktiUrl && (
+          <a
+            href={pengajuan.buktiUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex min-h-11 items-center px-1 text-sm font-semibold text-dd-forest underline"
+          >
+            Lihat bukti
+          </a>
+        )}
         {bolehPutus && (!milikSendiri || superOwner) && (
           <>
             <Button
@@ -145,6 +157,7 @@ export function BatalkanPeserta({
     setGalat('');
     setAlasan('');
     setIsMedical(false);
+    setBukti(null);
     let langsung = booking.status === 'BOOKED';
     if (langsung && client.cancellationOptions) {
       try {
@@ -167,9 +180,10 @@ export function BatalkanPeserta({
         await client.ajukanPembatalanTerlambat!(booking.id, alasan.trim(), {
           isMedical: true,
           releaseSeat: true,
+          bukti,
         });
       } else {
-        await client.ajukanPembatalanTerlambat!(booking.id, alasan.trim());
+        await client.ajukanPembatalanTerlambat!(booking.id, alasan.trim(), { bukti });
       }
       setMode(null);
       feedback.showToast({
@@ -234,7 +248,10 @@ export function BatalkanPeserta({
             <Button
               variant="danger"
               loading={sibuk}
-              disabled={alasan.trim().length < MIN_ALASAN}
+              disabled={
+                alasan.trim().length < MIN_ALASAN ||
+                (mode === 'pengajuan' && (!bukti || masalahBukti(bukti) !== null))
+              }
               onClick={() => void kirim()}
             >
               {mode === 'langsung'
@@ -324,6 +341,14 @@ export function BatalkanPeserta({
             description={`Minimal ${MIN_ALASAN} huruf; tercatat di riwayat booking.`}
             className="min-h-20"
           />
+          {mode === 'pengajuan' && (
+            <PilihBukti
+              wajib
+              berkas={bukti}
+              onChange={setBukti}
+              petunjuk={isMedical ? 'Foto surat dokter' : 'Tangkapan layar chat member yang meminta batal'}
+            />
+          )}
           {galat && <Feedback kind="error">{galat}</Feedback>}
         </div>
       </Modal>

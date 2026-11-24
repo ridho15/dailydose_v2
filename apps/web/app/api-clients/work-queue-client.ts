@@ -46,6 +46,8 @@ export interface ItemTindakan {
   kelas?: { nama: string; mulai: string } | null;
   kelasTujuan?: { nama: string; mulai: string } | null;
   buktiAda?: boolean;
+  /** Pembatalan < 12 jam: bukti pendukung bila dilampirkan. */
+  buktiUrl?: string | null;
 }
 
 export interface KotakTindakan {

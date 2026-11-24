@@ -108,6 +108,9 @@ export function classCompletionControlHash(
   return createHash('sha256').update(JSON.stringify(projection)).digest('hex');
 }
 
+
+/** Jeda bagi staf untuk mencatat presensi susulan sebelum kelas tanpa presensi diselesaikan otomatis. */
+export const JEDA_TANPA_PRESENSI_JAM = 24;
 @Injectable()
 export class ClassSlotService {
   private readonly logger = new Logger(ClassSlotService.name);
@@ -1417,6 +1420,7 @@ export class ClassSlotService {
       },
       select: {
         id: true,
+        endAt: true,
         bookings: { select: { status: true, bookingNumber: true, attendance: { select: { id: true } } } },
       },
       orderBy: { endAt: 'desc' },
@@ -1424,10 +1428,13 @@ export class ClassSlotService {
       take: 3000,
     });
     // Aturan pengaman: kelas yang punya peserta tetapi tidak ada satu pun yang tercatat hadir tidak
-    // diselesaikan otomatis. Besar kemungkinan presensinya belum dicatat; menyelesaikannya akan
-    // menghanguskan sesi semua pesertanya. Kelas itu tetap muncul di peringatan "belum diselesaikan"
-    // sampai staf memeriksa kehadiran lalu menyelesaikannya.
+    // langsung diselesaikan: mungkin presensinya belum dicatat, dan menyelesaikannya menghanguskan
+    // sesi semua pesertanya. Staf punya waktu JEDA_TANPA_PRESENSI_JAM untuk scan susulan; setelah itu
+    // kelas diselesaikan dan pesertanya tercatat tidak hadir (keputusan pemilik 24 November 2026,
+    // sebelumnya kelas semua no-show menunggu diselesaikan manual sampai berhari-hari).
+    const batasTanpaPresensi = now.getTime() - JEDA_TANPA_PRESENSI_JAM * 3_600_000;
     const kelas = kandidat.filter((k) => {
+      if (k.endAt && k.endAt.getTime() <= batasTanpaPresensi) return true;
       const aktif = k.bookings.filter(
         (b) => ['BOOKED', 'ATTENDED'].includes(b.status) && !b.bookingNumber?.startsWith('BKG-V1-'),
       );
@@ -1435,7 +1442,9 @@ export class ClassSlotService {
     });
     const dilewati = kandidat.length - kelas.length;
     if (dilewati > 0)
-      this.logger.warn(`${dilewati} kelas dilewati penjadwal karena tidak ada presensi peserta; perlu diselesaikan manual.`);
+      this.logger.warn(
+        `${dilewati} kelas belum diselesaikan karena belum ada presensi peserta; diselesaikan otomatis ${JEDA_TANPA_PRESENSI_JAM} jam setelah kelas berakhir.`,
+      );
     const sistem = {
       sessionId: 'penjadwal',
       userId: '',

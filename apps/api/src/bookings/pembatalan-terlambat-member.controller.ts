@@ -1,4 +1,6 @@
-import { Body, Controller, Get, Param, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Req, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { MAKS_BUKTI_PENGAJUAN_BYTE } from './bukti-pengajuan';
 import { AuthGuard, type AuthenticatedRequest } from '../identity/auth.guard';
 import { PembatalanTerlambatMemberService } from './pembatalan-terlambat-member.service';
 
@@ -13,12 +15,15 @@ export class PembatalanTerlambatMemberController {
     return this.pengajuan.status(request.principal, id);
   }
 
+  /** JSON biasa atau multipart dengan berkas `evidence` (tidak wajib bagi member). */
   @Post(':id/late-cancellation')
+  @UseInterceptors(FileInterceptor('evidence', { limits: { fileSize: MAKS_BUKTI_PENGAJUAN_BYTE, files: 1 } }))
   ajukan(
     @Req() request: AuthenticatedRequest,
     @Param('id') id: string,
     @Body() body: { kodeAlasan?: string; lainnya?: string },
+    @UploadedFile() evidence?: { buffer?: Buffer; size?: number },
   ) {
-    return this.pengajuan.ajukan(request.principal, id, body ?? {});
+    return this.pengajuan.ajukan(request.principal, id, body ?? {}, evidence);
   }
 }

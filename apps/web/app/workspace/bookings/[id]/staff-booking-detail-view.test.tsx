@@ -97,11 +97,12 @@ describe('StaffBookingDetailView pembatalan', () => {
     await user.click(await screen.findByRole('button', { name: 'Batalkan booking' }));
     const dialog = await screen.findByRole('dialog', { name: 'Ajukan pembatalan Pelanggan Uji?' });
     await user.type(within(dialog).getByLabelText(/Alasan/), 'Member sakit, kabar lewat WA');
+    const bukti = new File(['x'], 'chat.png', { type: 'image/png' });
+    await user.upload(within(dialog).getByLabelText(/Bukti pendukung, wajib/), bukti);
     await user.click(within(dialog).getByRole('button', { name: 'Kirim pengajuan' }));
-    expect(client.ajukanPembatalanTerlambat).toHaveBeenCalledWith(
-      'booking-1',
-      'Member sakit, kabar lewat WA',
-    );
+    expect(client.ajukanPembatalanTerlambat).toHaveBeenCalledWith('booking-1', 'Member sakit, kabar lewat WA', {
+      bukti,
+    });
     expect(client.cancelAsStaff).not.toHaveBeenCalled();
   });
 });

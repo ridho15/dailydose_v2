@@ -12,6 +12,7 @@ import {
 } from '@/api-clients/booking-client';
 import { Button } from '../actions';
 import { Modal, useAppFeedback } from '../app-feedback';
+import { masalahBukti, PilihBukti } from '../pilih-bukti';
 
 export type BookingUntukAksi = {
   id: string;
@@ -408,15 +409,17 @@ function GantiJadwal({
 function AjukanPembatalan({ open, booking, client, sibuk, setSibuk, galat, setGalat, onTutup, onSelesai }: LangkahProps & { onSelesai(): void }) {
   const [kode, setKode] = useState<KodeAlasanPembatalan | null>(null);
   const [lainnya, setLainnya] = useState('');
+  const [bukti, setBukti] = useState<File | null>(null);
 
   useEffect(() => {
     if (open) {
       setKode(null);
       setLainnya('');
+      setBukti(null);
     }
   }, [open]);
 
-  const siap = kode !== null && (kode !== 'LAINNYA' || lainnya.trim().length >= 3);
+  const siap = kode !== null && (kode !== 'LAINNYA' || lainnya.trim().length >= 3) && masalahBukti(bukti) === null;
 
   return (
     <Modal
@@ -438,7 +441,7 @@ function AjukanPembatalan({ open, booking, client, sibuk, setSibuk, galat, setGa
             setSibuk(true);
             setGalat('');
             try {
-              await client.ajukanPembatalanSaya(booking.id, kode, kode === 'LAINNYA' ? lainnya.trim() : undefined);
+              await client.ajukanPembatalanSaya(booking.id, kode, kode === 'LAINNYA' ? lainnya.trim() : undefined, bukti);
               onSelesai();
             } catch (cause) {
               setGalat(await bookingFailure(cause));
@@ -481,6 +484,12 @@ function AjukanPembatalan({ open, booking, client, sibuk, setSibuk, galat, setGa
             />
           </label>
         )}
+        <PilihBukti
+          wajib={false}
+          berkas={bukti}
+          onChange={setBukti}
+          petunjuk="Mis. foto surat dokter. Membantu Manager memutuskan lebih cepat."
+        />
       </div>
     </Modal>
   );

@@ -1,5 +1,5 @@
 import { PolicyService } from '../identity/policy.service';
-import { ClassSlotService } from './slot-kelas.service';
+import { ClassSlotService, JEDA_TANPA_PRESENSI_JAM } from './slot-kelas.service';
 
 const branchId = '00000000-0000-4000-8000-000000000002';
 const slotId = '00000000-0000-4000-8000-000000000010';
@@ -165,6 +165,25 @@ describe('menyelesaikan kelas', () => {
       const { hasil, selesai } = await jalankan([{ status: 'CANCELLED', bookingNumber: 'BK-1', attendance: null }]);
       expect(selesai).toHaveBeenCalledTimes(1);
       expect(hasil).toMatchObject({ dilewati: 0 });
+    });
+
+    it('tanpa presensi: 24 jam setelah kelas berakhir tetap diselesaikan (peserta dicatat tidak hadir)', async () => {
+      const tanpaPresensi = [{ status: 'BOOKED', bookingNumber: 'BK-1', attendance: null }];
+      const coba = async (jamLalu: number) => {
+        const { svc } = build([], new Date(Date.now() - 3_600_000));
+        (svc as any).db = {
+          slotKelas: {
+            findMany: async () => [{ id: slotId, endAt: new Date(Date.now() - jamLalu * 3_600_000), bookings: tanpaPresensi }],
+          },
+        };
+        const selesai = jest.spyOn(svc, 'complete').mockResolvedValue({} as never);
+        jest.spyOn((svc as any).logger, 'warn').mockImplementation(() => undefined);
+        await svc.selesaikanOtomatis(new Date());
+        return selesai;
+      };
+      expect(JEDA_TANPA_PRESENSI_JAM).toBe(24);
+      expect(await coba(23)).not.toHaveBeenCalled();
+      expect(await coba(25)).toHaveBeenCalledTimes(1);
     });
 
     it('booking V1 tidak dihitung sebagai peserta aktif', async () => {

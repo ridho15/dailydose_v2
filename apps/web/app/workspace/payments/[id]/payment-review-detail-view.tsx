@@ -80,13 +80,13 @@ export function safePaymentReturnTo(value?: string) {
 function formatDateTime(val?: Date | string | null): string {
   if (!val) return 'Belum terjadi';
   const d = val instanceof Date ? val : new Date(val);
-  return isNaN(d.getTime()) ? 'Tidak valid' : d.toLocaleString('id-ID');
+  return isNaN(d.getTime()) ? 'Tidak valid' : d.toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' });
 }
 
 function formatDate(val?: Date | string | null): string {
   if (!val) return '-';
   const d = val instanceof Date ? val : new Date(val);
-  return isNaN(d.getTime()) ? '-' : d.toLocaleDateString('id-ID');
+  return isNaN(d.getTime()) ? '-' : d.toLocaleDateString('id-ID', { timeZone: 'Asia/Jakarta' });
 }
 
 const ageLabel = (submittedAt?: Date | string | null) => {

@@ -27,7 +27,7 @@ const MAKS_ALASAN = 500;
 const MAKS_BUKTI_BYTE = 8_000_000;
 
 type Jenis = { ext: string; mime: string };
-const JENIS: Jenis[] = [
+export const JENIS_BUKTI: Jenis[] = [
   { ext: 'jpg', mime: 'image/jpeg' },
   { ext: 'png', mime: 'image/png' },
   { ext: 'webp', mime: 'image/webp' },
@@ -37,19 +37,19 @@ const JENIS: Jenis[] = [
 /** Jenis berkas dari byte awalnya, bukan dari nama atau tipe yang diaku peramban. */
 export function kenaliBukti(buffer: Buffer): Jenis | null {
   if (buffer.length < 12) return null;
-  if (buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) return JENIS[0]!;
+  if (buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) return JENIS_BUKTI[0]!;
   if (buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])))
-    return JENIS[1]!;
+    return JENIS_BUKTI[1]!;
   if (
     buffer.subarray(0, 4).toString('ascii') === 'RIFF' &&
     buffer.subarray(8, 12).toString('ascii') === 'WEBP'
   )
-    return JENIS[2]!;
-  if (buffer.subarray(0, 5).toString('ascii') === '%PDF-') return JENIS[3]!;
+    return JENIS_BUKTI[2]!;
+  if (buffer.subarray(0, 5).toString('ascii') === '%PDF-') return JENIS_BUKTI[3]!;
   return null;
 }
 
-const kunciBukti = (id: string, ext: string) => `adjustment-evidence/${id}.${ext}`;
+export const kunciBukti = (id: string, ext: string) => `adjustment-evidence/${id}.${ext}`;
 
 @Injectable()
 export class PenyesuaianBuktiService {
@@ -141,7 +141,7 @@ export class PenyesuaianBuktiService {
     await this.ledger.getAdjustment(principal, id);
     const tidakAda = () => new ApiProblem('RESOURCE_NOT_FOUND', HttpStatus.NOT_FOUND);
     if (!this.storage) throw tidakAda();
-    for (const jenis of JENIS) {
+    for (const jenis of JENIS_BUKTI) {
       const kunci = kunciBukti(id, jenis.ext);
       if (await this.storage.exists(kunci).catch(() => false)) {
         return { mimeType: jenis.mime, stream: await this.storage.read(kunci) };

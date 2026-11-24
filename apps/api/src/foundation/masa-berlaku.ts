@@ -23,3 +23,8 @@ export function akhirHariWib(tanggal: string): Date | null {
   if (!Number.isFinite(awalUtc) || new Date(awalUtc).toISOString().slice(0, 10) !== tanggal) return null;
   return new Date(awalUtc + HARI_MS - WIB_MS - 1000);
 }
+
+/** Status paket untuk tampilan: ACTIVE yang sudah lewat tanggal berakhir ditampilkan EXPIRED. */
+export function statusPaketEfektif(status: string, validUntil: Date, now = new Date()) {
+  return status === 'ACTIVE' && validUntil.getTime() <= now.getTime() ? 'EXPIRED' : status;
+}

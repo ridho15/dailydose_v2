@@ -1,4 +1,4 @@
-import { akhirHariWib } from '../foundation/masa-berlaku';
+import { akhirHariWib, statusPaketEfektif } from '../foundation/masa-berlaku';
 import { tanggalWib } from './instructor-fee-calculator';
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { cabangPaket } from '../bookings/cabang-paket';
@@ -39,10 +39,7 @@ export const MAX_ADJUSTMENT_SESSIONS = 50;
 export const MAX_SHARED_MEMBERS = 4;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-/** Status paket untuk tampilan: ACTIVE yang sudah lewat tanggal berakhir ditampilkan EXPIRED. */
-export function statusPaketEfektif(status: string, validUntil: Date, now = new Date()) {
-  return status === 'ACTIVE' && validUntil.getTime() <= now.getTime() ? 'EXPIRED' : status;
-}
+export { statusPaketEfektif };
 
 const PAGE_SIZE = 20;
 

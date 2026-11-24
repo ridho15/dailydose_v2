@@ -6,6 +6,7 @@ import { verificationStatusWhere } from '../identity/manajemen-pelanggan.service
 import { ApiProblem } from '../identity/security';
 import { antreanBukti } from './antrean-bukti';
 import { RetentionService } from './retention.service';
+import { tutupUbahJadwalUsang } from '../bookings/tutup-ubah-jadwal-usang';
 
 /**
  * Satu daftar pekerjaan yang tertinggal, diurutkan dari yang paling merugikan bila dibiarkan.
@@ -253,6 +254,7 @@ export class AntreanTertinggalService {
   }
 
   private async ubahJadwal(cabang: unknown, now: Date): Promise<ItemAntrean | null> {
+    await tutupUbahJadwalUsang(this.db, now);
     const permohonan: { requestedAt: Date; reason: string | null }[] =
       await this.db.ubahJadwal.findMany({
         where: {

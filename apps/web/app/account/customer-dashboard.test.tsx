@@ -282,7 +282,8 @@ describe('customer dashboard (Tiket T-02)', () => {
     await user.click(kirim);
 
     await waitFor(() =>
-      expect(client.ajukanPembatalanSaya).toHaveBeenCalledWith('booking-xyz-123', 'SAKIT', undefined),
+      // Bukti tidak wajib bagi member: tanpa berkas tetap terkirim.
+      expect(client.ajukanPembatalanSaya).toHaveBeenCalledWith('booking-xyz-123', 'SAKIT', undefined, null),
     );
   });
 

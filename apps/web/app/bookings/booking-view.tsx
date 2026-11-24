@@ -1055,7 +1055,7 @@ export function BookingView({
                 id: item.id,
                 label: `${ownerPrefix}${item.packageName ?? item.name ?? 'Paket Aktif'} · ${item.available} sesi tersedia`,
                 description: item.classTypeName
-                  ? `${item.classTypeName} · Berlaku s/d ${new Intl.DateTimeFormat('id-ID', { dateStyle: 'medium' }).format(item.expiryAt)}`
+                  ? `${item.classTypeName} · Berlaku s/d ${new Intl.DateTimeFormat('id-ID', { dateStyle: 'medium', timeZone: 'Asia/Jakarta' }).format(item.expiryAt)}`
                   : `${item.reserved ?? 0} sesi direservasi`,
               };
             })}

@@ -5,6 +5,8 @@ const MK = '00000000-0000-4000-8000-0000000000a2';
 const BOOKING = '00000000-0000-4000-8000-0000000000b1';
 const REQ = '00000000-0000-4000-8000-0000000000c1';
 const now = new Date('2026-10-29T10:00:00Z');
+/** Tangkapan layar chat member (PNG) yang dilampirkan admin. */
+const BUKTI = { buffer: Buffer.from('89504e470d0a1a0a0000000d49484452', 'hex') };
 const besok = new Date('2026-10-30T02:00:00Z');
 
 const admin = {
@@ -66,7 +68,8 @@ function setup(status = 'ATTENDED', bookingNumber = 'BKG-V1-00000001') {
     auditLog: { create: jest.fn() },
   };
   const db = { $transaction: jest.fn(async (fn: (t: typeof tx) => unknown) => fn(tx)) };
-  return { tx, service: new PembatalanTerlambatService(db as never, new PolicyService()) };
+  const storage = { put: jest.fn(async () => ({})), delete: jest.fn(async () => undefined), exists: jest.fn(async () => false) };
+  return { tx, storage, service: new PembatalanTerlambatService(db as never, new PolicyService(), undefined, storage as never) };
 }
 
 describe('PembatalanTerlambatService', () => {
@@ -75,7 +78,7 @@ describe('PembatalanTerlambatService', () => {
     const hasil = await service.ajukan(
       admin,
       BOOKING,
-      { reason: 'Member sakit, ada surat dokter' },
+      { reason: 'Member sakit, ada surat dokter' }, BUKTI,
       now,
     );
     expect(hasil).toMatchObject({
@@ -94,7 +97,7 @@ describe('PembatalanTerlambatService', () => {
     const hasil = await service.ajukan(
       admin,
       BOOKING,
-      { reason: 'Member berhalangan mendadak' },
+      { reason: 'Member berhalangan mendadak' }, BUKTI,
       now,
     );
     expect(hasil.sessionCount).toBe(0);
@@ -102,7 +105,7 @@ describe('PembatalanTerlambatService', () => {
 
   it('menolak alasan pendek, kelas yang sudah dimulai, dan pengajuan ganda', async () => {
     const { tx, service } = setup('BOOKED');
-    await expect(service.ajukan(admin, BOOKING, { reason: 'sakit' }, now)).rejects.toMatchObject({
+    await expect(service.ajukan(admin, BOOKING, { reason: 'sakit' }, BUKTI, now)).rejects.toMatchObject({
       code: 'VALIDATION_ERROR',
     });
     await expect(
@@ -110,12 +113,13 @@ describe('PembatalanTerlambatService', () => {
         admin,
         BOOKING,
         { reason: 'Member berhalangan mendadak' },
+        BUKTI,
         new Date('2026-10-30T03:00:00Z'),
       ),
     ).rejects.toMatchObject({ code: 'CLASS_ALREADY_STARTED' });
     tx.sessionAdjustRequest.findFirst.mockResolvedValueOnce({ id: 'lama' } as never);
     await expect(
-      service.ajukan(admin, BOOKING, { reason: 'Member berhalangan mendadak' }, now),
+      service.ajukan(admin, BOOKING, { reason: 'Member berhalangan mendadak' }, BUKTI, now),
     ).rejects.toMatchObject({ code: 'LATE_CANCELLATION_ALREADY_PENDING' });
   });
 
@@ -191,7 +195,7 @@ describe('PembatalanTerlambatService', () => {
     const hasilAjukan = await service.ajukan(
       admin,
       BOOKING,
-      { reason: 'Member dirawat di RS, ada surat dokter', isMedical: true },
+      { reason: 'Member dirawat di RS, ada surat dokter', isMedical: true }, BUKTI,
       now,
     );
     expect(hasilAjukan).toMatchObject({
@@ -232,7 +236,40 @@ describe('PembatalanTerlambatService', () => {
 
   it('booking V2 yang sudah check-in tetapi kelasnya belum selesai: tidak ada sesi yang dikembalikan', async () => {
     const { service } = setup('ATTENDED', 'BKG-20261102-0001');
-    const hasil = await service.ajukan(admin, BOOKING, { reason: 'Member harus pulang mendadak, keluarga sakit' }, now);
+    const hasil = await service.ajukan(admin, BOOKING, { reason: 'Member harus pulang mendadak, keluarga sakit' }, BUKTI, now);
     expect(hasil).toMatchObject({ sessionCount: 0 });
+  });
+
+  describe('bukti pendukung (wajib untuk admin)', () => {
+    it('tanpa bukti ditolak 422 sebelum apa pun disimpan', async () => {
+      const { tx, storage, service } = setup('BOOKED');
+      await expect(
+        service.ajukan(admin, BOOKING, { reason: 'Member berhalangan mendadak' }, undefined, now),
+      ).rejects.toMatchObject({ code: 'EVIDENCE_REQUIRED' });
+      expect(storage.put).not.toHaveBeenCalled();
+      expect(tx.sessionAdjustRequest.create).not.toHaveBeenCalled();
+    });
+
+    it('berkas selain gambar atau PDF ditolak', async () => {
+      const { service } = setup('BOOKED');
+      await expect(
+        service.ajukan(admin, BOOKING, { reason: 'Member berhalangan mendadak' }, { buffer: Buffer.from('bukan gambar sama sekali') }, now),
+      ).rejects.toMatchObject({ code: 'UPLOAD_REJECTED' });
+    });
+
+    it('bukti disimpan dengan id pengajuan; dihapus lagi bila pengajuan gagal dibuat', async () => {
+      const { tx, storage, service } = setup('BOOKED');
+      await service.ajukan(admin, BOOKING, { reason: 'Member berhalangan mendadak' }, BUKTI, now);
+      const idPengajuan = (tx.sessionAdjustRequest.create.mock.calls[0] as any[])[0].data.id;
+      expect(idPengajuan).toMatch(/^[0-9a-f-]{36}$/);
+      expect(storage.put).toHaveBeenCalledWith({ key: `adjustment-evidence/${idPengajuan}.png`, content: BUKTI.buffer });
+
+      const gagal = setup('BOOKED');
+      gagal.tx.sessionAdjustRequest.create.mockRejectedValueOnce(new Error('db'));
+      await expect(
+        gagal.service.ajukan(admin, BOOKING, { reason: 'Member berhalangan mendadak' }, BUKTI, now),
+      ).rejects.toThrow('db');
+      expect(gagal.storage.delete).toHaveBeenCalledTimes(1);
+    });
   });
 });

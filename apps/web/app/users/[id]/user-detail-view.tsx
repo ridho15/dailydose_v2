@@ -301,10 +301,10 @@ export function UserDetailView({
               <DetailItem label="Kontak" value={maskPhone(user.phoneE164)} />
               <DetailItem label="Status" value={statusLabels[user.status]} />
               <DetailItem label="Revisi data" value={`v${user.version}`} />
-              <DetailItem label="Dibuat" value={new Date(user.createdAt).toLocaleString('id-ID')} />
+              <DetailItem label="Dibuat" value={new Date(user.createdAt).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' })} />
               <DetailItem
                 label="Diperbarui"
-                value={new Date(user.updatedAt).toLocaleString('id-ID')}
+                value={new Date(user.updatedAt).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' })}
               />
             </dl>
           </Panel>
@@ -383,7 +383,7 @@ export function UserDetailView({
                           </strong>
                           <p className="mt-1 text-xs text-dd-muted">
                             {item.branchName ?? 'Cabang'} · {item.classTypeName ?? 'Tipe kelas'} ·
-                            berakhir {new Date(item.expiryAt).toLocaleDateString('id-ID')}
+                            berakhir {new Date(item.expiryAt).toLocaleDateString('id-ID', { timeZone: 'Asia/Jakarta' })}
                           </p>
                         </div>
                         <Badge tone={item.status === 'ACTIVE' ? 'success' : 'neutral'}>
@@ -543,7 +543,7 @@ export function UserDetailView({
                 <li key={item.id} className="border-l-2 border-dd-brass pl-4">
                   <strong className="block text-sm text-dd-ink">{auditActionLabel(item.action)}</strong>
                   <span className="mt-1 block text-xs text-dd-muted">
-                    {new Date(item.occurredAt).toLocaleString('id-ID')}
+                    {new Date(item.occurredAt).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' })}
                   </span>
                   <small className="mt-1 block break-all text-xs text-dd-muted">
                     Referensi: {item.correlationId}

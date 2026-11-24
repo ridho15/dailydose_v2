@@ -12,6 +12,7 @@ import { IdentityService, type SessionPrincipal } from './identity.service';
 import { PolicyService } from './policy.service';
 import { PRIVATE_FILE_STORAGE, type PrivateFileStorage } from './private-file-storage';
 import { ApiProblem, newId } from './security';
+import { statusPaketEfektif } from '../foundation/masa-berlaku';
 
 type CustomerStatus = 'PENDING_ACTIVATION' | 'ACTIVE' | 'INACTIVE';
 type VerificationStatus = 'PENDING' | 'ACTION_REQUIRED' | 'APPROVED' | 'REJECTED';
@@ -362,7 +363,7 @@ export class CustomerManagementService {
       })),
       customerPackages: customer.customerPackages.map((cp) => ({
         id: cp.id,
-        status: cp.status,
+        status: statusPaketEfektif(cp.status, cp.validUntil),
         sessionCountSnapshot: cp.totalSessions,
         remainingSessions: cp.remainingSessions,
         usedSessions: cp.usedSessions,

@@ -141,6 +141,15 @@ export interface PengajuanPembatalan {
   requestedById: string;
   requestedByName: string | null;
   createdAt: string;
+  /** Bukti pendukung (gambar/PDF) bila dilampirkan; dibuka lewat apiFetch karena butuh sesi. */
+  buktiUrl?: string | null;
+}
+
+/** Isi multipart pengajuan pembatalan; kolom kosong tidak dikirim. */
+function formPengajuan(isi: Record<string, string | File | undefined>) {
+  const form = new FormData();
+  for (const [kunci, nilai] of Object.entries(isi)) if (nilai !== undefined && nilai !== '') form.set(kunci, nilai);
+  return form;
 }
 
 export type KodeAlasanPembatalan = 'SAKIT' | 'PEKERJAAN' | 'KELUARGA' | 'LAINNYA';
@@ -588,7 +597,7 @@ export interface BookingClient {
   ajukanPembatalanTerlambat?(
     bookingId: string,
     reason: string,
-    options?: { isMedical?: boolean; releaseSeat?: boolean },
+    options?: { isMedical?: boolean; releaseSeat?: boolean; bukti?: File | null },
   ): Promise<PengajuanPembatalan>;
   pembatalanTertunda?(classSlotId: string): Promise<PengajuanPembatalan[]>;
   /** Member: status pengajuan pembatalan kurang dari H-12 untuk booking miliknya. */
@@ -598,6 +607,7 @@ export interface BookingClient {
     bookingId: string,
     kodeAlasan: KodeAlasanPembatalan,
     lainnya?: string,
+    bukti?: File | null,
   ): Promise<{ id: string; status: 'PENDING'; reason: string }>;
   putuskanPembatalan?(
     requestId: string,
@@ -1007,10 +1017,12 @@ export const browserBookingClient: BookingClient = {
       `/bookings/${encodeURIComponent(bookingId)}/late-cancellation`,
       {
         method: 'POST',
-        body: JSON.stringify({
+        // Multipart karena bukti pendukung wajib dilampirkan staf.
+        body: formPengajuan({
           reason,
-          isMedical: options?.isMedical,
-          releaseSeat: options?.releaseSeat,
+          isMedical: options?.isMedical ? 'true' : undefined,
+          releaseSeat: options?.releaseSeat ? 'true' : undefined,
+          evidence: options?.bukti ?? undefined,
         }),
         label: options?.isMedical ? 'Mengirim izin medis…' : 'Mengirim pengajuan pembatalan…',
       },
@@ -1022,10 +1034,10 @@ export const browserBookingClient: BookingClient = {
       { label: 'Memeriksa pengajuan pembatalan…' },
     );
   },
-  ajukanPembatalanSaya(bookingId, kodeAlasan, lainnya) {
+  ajukanPembatalanSaya(bookingId, kodeAlasan, lainnya, bukti) {
     return apiFetch(`/me/bookings/${encodeURIComponent(bookingId)}/late-cancellation`, {
       method: 'POST',
-      body: JSON.stringify({ kodeAlasan, lainnya }),
+      body: formPengajuan({ kodeAlasan, lainnya, evidence: bukti ?? undefined }),
       label: 'Mengirim pengajuan pembatalan…',
     });
   },

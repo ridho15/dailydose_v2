@@ -53,9 +53,11 @@ describe('Pengajuan pembatalan kurang dari H-12 oleh member sendiri', () => {
     const { service, tx, audit } = siapkan();
     const hasil = await service.ajukan(member(), bookingId, { kodeAlasan: 'SAKIT' });
 
-    expect(hasil).toMatchObject({ id: 'req-1', status: 'PENDING', reason: 'Sakit atau kurang sehat' });
+    expect(hasil).toMatchObject({ status: 'PENDING', reason: 'Sakit atau kurang sehat', adaBukti: false });
+    // Id dibuat sebelum transaksi supaya bukti (bila ada) tersimpan dengan id pengajuan yang sama.
     expect(tx.sessionAdjustRequest.create).toHaveBeenCalledWith({
       data: {
+        id: hasil.id,
         customerPackageId: 'cp-1',
         bookingId,
         requestedById: memberId,

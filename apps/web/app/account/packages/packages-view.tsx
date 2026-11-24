@@ -41,7 +41,7 @@ const CEK_ULANG_MS = 60_000;
 type OrderClient = Pick<typeof browserOrderClient, 'list'>;
 
 const tanggal = (value: Date | string) =>
-  new Date(value).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
+  new Date(value).toLocaleDateString('id-ID', { timeZone: 'Asia/Jakarta', day: 'numeric', month: 'short', year: 'numeric' });
 
 /** "baru saja", "25 menit lalu", "4 jam lalu", "2 hari lalu". */
 export function sejak(value: Date | string, now = Date.now()) {

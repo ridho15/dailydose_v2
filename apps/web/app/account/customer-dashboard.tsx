@@ -368,7 +368,7 @@ export function CustomerDashboard({
                       <strong className="block text-lg text-dd-ink">{item.packageName}</strong>
                       <span className="block text-base text-dd-muted">
                         {item.branchName} · berlaku sampai{' '}
-                        {new Date(item.expiryAt).toLocaleDateString('id-ID', {
+                        {new Date(item.expiryAt).toLocaleDateString('id-ID', { timeZone: 'Asia/Jakarta',
                           day: 'numeric',
                           month: 'short',
                           year: 'numeric',
@@ -655,7 +655,7 @@ function PromoHot({ items, now }: { items: readonly PublicPackage[]; now: number
                 </span>
                 <span className="mt-1 block text-xs text-dd-muted">
                   Berlaku sampai{' '}
-                  {new Date(promoInfo.activeUntil).toLocaleDateString('id-ID', {
+                  {new Date(promoInfo.activeUntil).toLocaleDateString('id-ID', { timeZone: 'Asia/Jakarta',
                     day: 'numeric',
                     month: 'short',
                   })}

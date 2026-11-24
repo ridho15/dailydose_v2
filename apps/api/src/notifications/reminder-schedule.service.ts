@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import { WhatsAppGatewayService } from './whatsapp-gateway.service';
 import { NotificationTemplateService } from './notification-template.service';
+import { KODE_PEMBATALAN_TERLAMBAT } from '../bookings/pembatalan-terlambat';
 
 export interface ReminderBatchSummary {
   evaluatedAt: Date;
@@ -12,7 +13,11 @@ export interface ReminderBatchSummary {
   customerH1Sent: number;
   customerExpiredRenewSent: number;
   stoppedCustomersProtected: number;
+  pengingatPembatalanSent: number;
 }
+
+/** Pengajuan batal < 12 jam yang belum diputus lebih lama dari ini diingatkan ke pemutusnya. */
+export const BATAS_TUNGGU_PEMBATALAN_JAM = 24;
 
 @Injectable()
 export class ReminderScheduleService {
@@ -37,6 +42,7 @@ export class ReminderScheduleService {
       customerH1Sent: 0,
       customerExpiredRenewSent: 0,
       stoppedCustomersProtected: 0,
+      pengingatPembatalanSent: 0,
     };
 
     // 1. Jalankan Pengingat Customer Menjelang Expired (H-7, H-3, H-1) & Expired Renewal
@@ -52,6 +58,9 @@ export class ReminderScheduleService {
 
     // 3. Jalankan Rekap Owner (Setiap 3 Hari)
     summary.ownerRecapsSent = await this.runOwnerRecap(now);
+
+    // 4. Pengajuan batal < 12 jam yang menunggu keputusan lebih dari 24 jam (sekali sehari)
+    summary.pengingatPembatalanSent = await this.runPengingatPembatalan(now);
 
     return summary;
   }
@@ -307,7 +316,10 @@ export class ReminderScheduleService {
       expiringPackages.slice(0, 15).forEach((cp, idx) => {
         const phone = cp.user?.phone || '-';
         const name = cp.user?.displayName || 'Customer';
-        const expStr = new Intl.DateTimeFormat('id-ID', { dateStyle: 'short' }).format(cp.validUntil);
+        const expStr = new Intl.DateTimeFormat('id-ID', {
+          dateStyle: 'short',
+          timeZone: branch.timezone || 'Asia/Jakarta',
+        }).format(cp.validUntil);
         lines.push(`${idx + 1}. *${name}* (${phone}) | Sisa: *${cp.remainingSessions} Sesi* | Exp: ${expStr}`);
       });
 
@@ -329,6 +341,61 @@ export class ReminderScheduleService {
     }
 
     return sentCount;
+  }
+
+  /**
+   * Pengajuan batal kurang dari 12 jam bisa menunggu berminggu-minggu tanpa ada yang tahu (audit
+   * 24 November 2026). Manager cabang dan Owner/Super Owner menerima daftar pengajuan yang sudah
+   * menunggu lebih dari 24 jam, paling sering sekali sehari per orang.
+   */
+  async runPengingatPembatalan(now = new Date()): Promise<number> {
+    const batas = new Date(now.getTime() - BATAS_TUNGGU_PEMBATALAN_JAM * 3_600_000);
+    const menunggu = await this.db.sessionAdjustRequest.findMany({
+      where: { status: 'PENDING', reasonCode: KODE_PEMBATALAN_TERLAMBAT, createdAt: { lte: batas } },
+      select: {
+        createdAt: true,
+        customerPackage: { select: { user: { select: { displayName: true } } } },
+        booking: { select: { classSlot: { select: { branchId: true, startAt: true } } } },
+      },
+      orderBy: { createdAt: 'asc' },
+      take: 200,
+    });
+    if (!menunggu.length) return 0;
+
+    const pemutus = await this.db.user.findMany({
+      where: { role: { in: ['MANAGER', 'OWNER', 'SUPER_OWNER'] }, phone: { not: null }, stoppedAt: null },
+      select: { id: true, role: true, phone: true, preferredBranchId: true },
+    });
+    const hari = (d: Date) => Math.max(1, Math.floor((now.getTime() - d.getTime()) / 86_400_000));
+    let terkirim = 0;
+    for (const orang of pemutus) {
+      // Manager hanya cabangnya; Owner dan Super Owner semua cabang.
+      const miliknya = menunggu.filter(
+        (m) => orang.role !== 'MANAGER' || m.booking?.classSlot?.branchId === orang.preferredBranchId,
+      );
+      if (!miliknya.length || !orang.phone) continue;
+      const baris = miliknya.slice(0, 10).map((m, i) => {
+        const nama = m.customerPackage?.user?.displayName ?? 'Member';
+        return `${i + 1}. ${nama}, menunggu ${hari(m.createdAt)} hari`;
+      });
+      const lebih = miliknya.length > 10 ? [`dan ${miliknya.length - 10} lainnya`] : [];
+      const res = await this.whatsapp.sendMessage({
+        to: orang.phone,
+        text: [
+          `*Pengajuan batal < 12 jam menunggu keputusan: ${miliknya.length}*`,
+          ...baris,
+          ...lebih,
+          'Putuskan di menu Perlu tindakan. Sesi member tertahan sampai diputuskan.',
+        ].join('\n'),
+        recipientType: orang.role as any,
+        reminderType: 'PENGINGAT_PEMBATALAN_TERLAMBAT',
+        dedupWindowMs: 23 * 3_600_000,
+        sentAt: now,
+        payload: { jumlah: miliknya.length },
+      });
+      if (res.status === 'SENT') terkirim++;
+    }
+    return terkirim;
   }
 
   /**

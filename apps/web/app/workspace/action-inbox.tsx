@@ -554,6 +554,16 @@ export function ActionInbox({
                     {item.alasan && item.jenis !== 'RESCHEDULE' && (
                       <p className="m-0 mt-0.5 text-[15px] text-dd-ink">Alasan: {item.alasan}</p>
                     )}
+                    {item.buktiUrl && (
+                      <a
+                        href={item.buktiUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex min-h-11 items-center text-[15px] font-semibold text-dd-forest underline"
+                      >
+                        Lihat bukti pendukung
+                      </a>
+                    )}
                     <p className="m-0 mt-0.5 text-sm text-dd-muted">
                       Menunggu {lamaMenunggu(item.masukPada, now)}
                       {item.pencatat ? ` · diajukan ${item.pencatat}` : ''}
@@ -655,6 +665,16 @@ export function ActionInbox({
             <p className="m-0 text-[15px] text-dd-muted">{rincianItem(itemPeriksa)}</p>
             {itemPeriksa.alasan && itemPeriksa.jenis !== 'RESCHEDULE' && (
               <p className="m-0 text-[15px] text-dd-ink">Alasan: {itemPeriksa.alasan}</p>
+            )}
+            {itemPeriksa.buktiUrl && (
+              <a
+                href={itemPeriksa.buktiUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex min-h-11 items-center text-[15px] font-semibold text-dd-forest underline"
+              >
+                Lihat bukti pendukung
+              </a>
             )}
             <p className="m-0 text-sm text-dd-muted">
               Menunggu {lamaMenunggu(itemPeriksa.masukPada, now)}

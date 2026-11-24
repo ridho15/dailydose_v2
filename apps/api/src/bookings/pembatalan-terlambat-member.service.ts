@@ -1,10 +1,12 @@
-import { HttpStatus, Injectable, Optional } from '@nestjs/common';
+import { HttpStatus, Inject, Injectable, Optional } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import { RuntimeConfigService } from '../configuration/runtime-config.service';
 import { PrismaService } from '../database/prisma.service';
 import { AuditService } from '../foundation/audit.service';
 import type { SessionPrincipal } from '../identity/identity.service';
 import { PolicyService } from '../identity/policy.service';
+import { PRIVATE_FILE_STORAGE, type PrivateFileStorage } from '../identity/private-file-storage';
 import { ApiProblem, ENTITY_ID_REGEX } from '../identity/security';
 import { NotificationWriterService } from '../notifications/notification-writer.service';
 import {
@@ -13,6 +15,7 @@ import {
   sesiTerpotong,
 } from './pembatalan-terlambat';
 import { isCancellationEntitled } from './pemesanan-kelas.service';
+import { periksaBuktiPengajuan, simpanBuktiPengajuan, type BerkasUnggahan } from './bukti-pengajuan';
 
 /**
  * Pengajuan pembatalan terlambat oleh member sendiri (keputusan pemilik 22 November 2026).
@@ -56,6 +59,7 @@ export class PembatalanTerlambatMemberService {
     private readonly config: RuntimeConfigService,
     @Optional() private readonly audit?: AuditService,
     @Optional() private readonly notificationWriter?: NotificationWriterService,
+    @Optional() @Inject(PRIVATE_FILE_STORAGE) private readonly storage?: PrivateFileStorage,
   ) {}
 
   private batasJam() {
@@ -99,12 +103,17 @@ export class PembatalanTerlambatMemberService {
     principal: SessionPrincipal,
     bookingId: string,
     input: { kodeAlasan?: unknown; lainnya?: unknown },
+    berkas?: BerkasUnggahan,
     now = new Date(),
   ) {
     this.policy.requireCapability(principal.capabilities, 'booking:self:cancel');
     if (!UUID.test(bookingId)) throw new ApiProblem('RESOURCE_NOT_FOUND', HttpStatus.NOT_FOUND);
     const reason = teksAlasanMember(input?.kodeAlasan, input?.lainnya);
     const batas = this.batasJam();
+    // Bukti tidak wajib bagi member; bila dilampirkan, disimpan bersama pengajuannya.
+    const bukti = periksaBuktiPengajuan(berkas);
+    const id = randomUUID();
+    const hapusBukti = bukti ? await simpanBuktiPengajuan(this.storage, id, bukti) : async () => undefined;
 
     const dibuat = await this.db.$transaction(
       async (tx) => {
@@ -131,6 +140,7 @@ export class PembatalanTerlambatMemberService {
 
         const pengajuan = await tx.sessionAdjustRequest.create({
           data: {
+            id,
             customerPackageId: booking.customerPackageId,
             bookingId,
             requestedById: principal.userId,
@@ -153,7 +163,10 @@ export class PembatalanTerlambatMemberService {
         return { pengajuan, booking };
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
-    );
+    ).catch(async (error: unknown) => {
+      await hapusBukti();
+      throw error;
+    });
 
     // Penerima sama dengan kotak masuk pembatalan staf: Manager, Owner cabang, dan Super Owner.
     await kirimNotifikasiPengajuanPembatalan(this.notificationWriter, this.db, {
@@ -166,6 +179,7 @@ export class PembatalanTerlambatMemberService {
       status: 'PENDING' as const,
       bookingId,
       reason,
+      adaBukti: Boolean(bukti),
       diajukanPada: dibuat.pengajuan.createdAt.toISOString(),
     };
   }

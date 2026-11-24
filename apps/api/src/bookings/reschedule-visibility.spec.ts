@@ -46,7 +46,7 @@ describe('reschedule list: branch scope and contact visibility', () => {
   it('only asks for requests touching the staff branches', async () => {
     const { db, service } = setup([]);
     await service.list(staff() as never, {});
-    expect(db.ubahJadwal.findMany.mock.calls[0]![0].where.AND).toEqual([
+    expect(db.ubahJadwal.findMany.mock.lastCall![0].where.AND).toEqual([
       { OR: [{ sourceSlot: { branchId: { in: [branchA] } } }, { targetSlot: { branchId: { in: [branchA] } } }] },
     ]);
   });
@@ -54,7 +54,7 @@ describe('reschedule list: branch scope and contact visibility', () => {
   it('does not restrict cross-branch staff', async () => {
     const { db, service } = setup([]);
     await service.list(staff({ capabilities: ['reschedule:read', 'branch:all'], branchIds: [] }) as never, {});
-    expect(db.ubahJadwal.findMany.mock.calls[0]![0].where.AND).toEqual([]);
+    expect(db.ubahJadwal.findMany.mock.lastCall![0].where.AND).toEqual([]);
   });
 
   it('shows contact for a customer booked in the staff branch, masks one who only targets it', async () => {

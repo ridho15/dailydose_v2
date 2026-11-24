@@ -8,8 +8,12 @@ import {
   Query,
   Req,
   Res,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { MAKS_BUKTI_PENGAJUAN_BYTE } from './bukti-pengajuan';
 import type { Response } from 'express';
 import { SelfService } from '../identity/route-access';
 import { AuthGuard, type AuthenticatedRequest } from '../identity/auth.guard';
@@ -58,13 +62,23 @@ export class BookingsController {
     return this.pembatalan.putuskan(request.principal, requestId, decision, body ?? {});
   }
 
+  /** Multipart: `reason`, `isMedical`, `releaseSeat`, dan berkas `evidence` (wajib untuk staf). */
   @Post(':id/late-cancellation')
+  @UseInterceptors(FileInterceptor('evidence', { limits: { fileSize: MAKS_BUKTI_PENGAJUAN_BYTE, files: 1 } }))
   ajukanPembatalan(
     @Req() request: AuthenticatedRequest,
     @Param('id') id: string,
-    @Body() body: { reason?: string; isMedical?: boolean; releaseSeat?: boolean },
+    @Body() body: { reason?: string; isMedical?: boolean | string; releaseSeat?: boolean | string },
+    @UploadedFile() evidence?: { buffer?: Buffer; size?: number },
   ) {
-    return this.pembatalan.ajukan(request.principal, id, body ?? {});
+    // Multipart mengirim boolean sebagai teks: "false" tidak boleh terbaca sebagai benar.
+    const ya = (v: unknown) => v === true || v === 'true';
+    return this.pembatalan.ajukan(
+      request.principal,
+      id,
+      { reason: body?.reason, isMedical: ya(body?.isMedical), releaseSeat: ya(body?.releaseSeat) },
+      evidence,
+    );
   }
 
   @SelfService()

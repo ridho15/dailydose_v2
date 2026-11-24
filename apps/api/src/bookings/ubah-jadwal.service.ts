@@ -12,6 +12,7 @@ import { ApiProblem, ENTITY_ID_REGEX } from '../identity/security';
 import { HITUNG_TERISI, terisi } from '../classes/terisi';
 import { paketBerlakuDi } from './cabang-paket';
 import { NotificationWriterService } from '../notifications/notification-writer.service';
+import { tutupUbahJadwalUsang } from './tutup-ubah-jadwal-usang';
 
 export type RescheduleRequestReasonCode =
   | 'CUSTOMER_SCHEDULE_CONFLICT'
@@ -222,6 +223,7 @@ export class ReschedulesService {
 
     // Staf hanya melihat permintaan yang menyentuh cabangnya (asal atau tujuan); lintas cabang melihat semuanya.
     const staffScope = customer ? 'ALL' : staffBranchScope(principal);
+    await tutupUbahJadwalUsang(this.db);
     const items = await this.db.ubahJadwal.findMany({
       where: {
         ...(customer ? { requestedById: principal.userId } : {}),

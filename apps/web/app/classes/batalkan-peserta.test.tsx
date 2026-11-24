@@ -32,6 +32,8 @@ const klien = () => ({
   putuskanPembatalan: vi.fn().mockResolvedValue({ status: 'APPROVED', sessionsReturned: 1 }),
 });
 
+
+const BUKTI = new File(['x'], 'chat-member.png', { type: 'image/png' });
 describe('BatalkanPeserta', () => {
   it('di bawah H-24 (atau booking terkunci Hadir) mengirim pengajuan, bukan membatalkan langsung', async () => {
     const client = klien();
@@ -49,11 +51,13 @@ describe('BatalkanPeserta', () => {
     const dialog = await screen.findByRole('dialog', { name: 'Ajukan pembatalan Theresia?' });
     expect(dialog).toHaveTextContent(/disetujui Manager atau Owner/);
     await user.type(within(dialog).getByLabelText(/Alasan/), 'Sakit, minta batal lewat WA');
+    // Admin wajib melampirkan bukti: tombol terkunci sampai berkas dipilih.
+    expect(within(dialog).getByRole('button', { name: 'Kirim pengajuan' })).toBeDisabled();
+    await user.upload(within(dialog).getByLabelText(/Bukti pendukung, wajib/), BUKTI);
     await user.click(within(dialog).getByRole('button', { name: 'Kirim pengajuan' }));
-    expect(client.ajukanPembatalanTerlambat).toHaveBeenCalledWith(
-      'b1',
-      'Sakit, minta batal lewat WA',
-    );
+    expect(client.ajukanPembatalanTerlambat).toHaveBeenCalledWith('b1', 'Sakit, minta batal lewat WA', {
+      bukti: BUKTI,
+    });
     expect(client.cancelAsStaff).not.toHaveBeenCalled();
     expect(onBerubah).toHaveBeenCalled();
   });
@@ -171,13 +175,14 @@ describe('BatalkanPeserta', () => {
     expect(within(dialog).getByLabelText(/Alasan/)).toHaveValue('Member sakit dengan surat dokter resmi');
 
     // Klik tombol submit izin medis & buka kursi
+    await user.upload(within(dialog).getByLabelText(/Bukti pendukung, wajib/), BUKTI);
     const submitBtn = within(dialog).getByRole('button', { name: 'Ajukan Izin Medis & Buka Kursi' });
     await user.click(submitBtn);
 
     expect(client.ajukanPembatalanTerlambat).toHaveBeenCalledWith(
       'b1',
       'Member sakit dengan surat dokter resmi',
-      { isMedical: true, releaseSeat: true },
+      { isMedical: true, releaseSeat: true, bukti: BUKTI },
     );
     expect(onBerubah).toHaveBeenCalled();
   });

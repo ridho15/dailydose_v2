@@ -1,4 +1,4 @@
-import { HttpStatus, Injectable } from '@nestjs/common';
+import { HttpStatus, Inject, Injectable, Optional } from '@nestjs/common';
 import { Prisma, PurchaseStatus } from '@prisma/client';
 import { KODE_PEMBATALAN_TERLAMBAT } from '../bookings/pembatalan-terlambat';
 import { JENDELA_PERPANJANGAN_HARI } from './perpanjangan-masa-aktif';
@@ -7,6 +7,9 @@ import type { SessionPrincipal } from '../identity/identity.service';
 import { PolicyService } from '../identity/policy.service';
 import { ApiProblem } from '../identity/security';
 import { AntreanTertinggalService } from './antrean-tertinggal.service';
+import { tutupUbahJadwalUsang } from '../bookings/tutup-ubah-jadwal-usang';
+import { alamatBuktiPengajuan } from '../bookings/bukti-pengajuan';
+import { PRIVATE_FILE_STORAGE, type PrivateFileStorage } from '../identity/private-file-storage';
 
 /**
  * Kotak masuk "Perlu tindakan": satu daftar keputusan yang menunggu, per peran.
@@ -70,6 +73,8 @@ export interface ItemTindakan {
   kelasTujuan?: { nama: string; mulai: string } | null;
   /** Transfer: ada bukti yang bisa dibuka. */
   buktiAda?: boolean;
+  /** Pembatalan < 12 jam: alamat bukti pendukung bila dilampirkan. */
+  buktiUrl?: string | null;
 }
 
 export interface KotakTindakan {
@@ -116,6 +121,7 @@ export class KotakTindakanService {
     private readonly db: PrismaService,
     private readonly policy: PolicyService,
     private readonly antrean: AntreanTertinggalService,
+    @Optional() @Inject(PRIVATE_FILE_STORAGE) private readonly storage?: PrivateFileStorage,
   ) {}
 
   private superOwner(principal: SessionPrincipal) {
@@ -338,6 +344,7 @@ export class KotakTindakanService {
     }
 
     if (jenis === 'RESCHEDULE') {
+      await tutupUbahJadwalUsang(this.db);
       const where: Prisma.UbahJadwalWhereInput = {
         status: 'PENDING',
         ...(cabang ? { sourceSlot: { branchId: cabang } } : {}),
@@ -441,10 +448,13 @@ export class KotakTindakanService {
       }),
     ]);
     const { dipakai, nextCursor } = halaman(rows, (r) => r.createdAt);
+    const bukti = pembatalan
+      ? await Promise.all(dipakai.map((r) => alamatBuktiPengajuan(this.storage, r.id)))
+      : [];
     return {
       jumlah,
       nextCursor,
-      items: dipakai.map((r) => {
+      items: dipakai.map((r, i) => {
         const slot = r.booking?.classSlot;
         const pembelian = r.customerPackage?.purchase;
         return {
@@ -462,6 +472,7 @@ export class KotakTindakanService {
           sesi: r.sessionCount,
           pencatat: r.requestedBy?.displayName ?? null,
           kelas: slot ? { nama: slot.classType?.name ?? 'Kelas', mulai: slot.startAt.toISOString() } : null,
+          ...(pembatalan ? { buktiUrl: bukti[i] ?? null } : {}),
         };
       }),
     };
