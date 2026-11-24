@@ -8,6 +8,7 @@ import {
   Query,
   Req,
   Res,
+  StreamableFile,
   UploadedFile,
   UseGuards,
   UseInterceptors,
@@ -25,6 +26,7 @@ import {
 } from './pemesanan-kelas.service';
 import { ReschedulesService } from './ubah-jadwal.service';
 import { PembatalanTerlambatService } from './pembatalan-terlambat.service';
+import { PindahJamService } from './pindah-jam.service';
 
 @Controller('bookings')
 @UseGuards(AuthGuard)
@@ -33,6 +35,7 @@ export class BookingsController {
     private readonly bookings: BookingsService,
     private readonly reschedules: ReschedulesService,
     private readonly pembatalan: PembatalanTerlambatService,
+    private readonly pindahJam: PindahJamService,
   ) {}
 
   /**
@@ -64,6 +67,41 @@ export class BookingsController {
     @Body() body: { expectedVersion?: number; note?: string },
   ) {
     return this.pembatalan.putuskan(request.principal, requestId, decision, body ?? {});
+  }
+
+  /** Staf: slot lain di hari yang sama yang bisa dipakai paket booking ini (fitur pindah jam). */
+  @Get(':id/same-day-slots')
+  slotHariSama(@Req() request: AuthenticatedRequest, @Param('id') id: string) {
+    return this.pindahJam.pilihan(request.principal, id);
+  }
+
+  /** Staf: pindah jam di hari yang sama tanpa memotong sesi. Multipart: targetClassSlotId, reason, evidence (wajib). */
+  @Post(':id/move-same-day')
+  @UseInterceptors(FileInterceptor('evidence', { limits: { fileSize: MAKS_BUKTI_PENGAJUAN_BYTE, files: 1 } }))
+  pindahJamHariSama(
+    @Req() request: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Body() body: { targetClassSlotId?: string; reason?: string },
+    @UploadedFile() evidence?: { buffer?: Buffer; size?: number },
+  ) {
+    return this.pindahJam.pindah(request.principal, id, body ?? {}, evidence);
+  }
+
+  @Get('moves/:id/evidence')
+  async buktiPindahJam(
+    @Req() request: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const file = await this.pindahJam.bukti(request.principal, id);
+    response.set({
+      'Cache-Control': 'private, no-store, max-age=0',
+      'Content-Type': file.mimeType,
+      'Content-Disposition': 'inline; filename="bukti-pindah-jam"',
+      'Referrer-Policy': 'no-referrer',
+      'X-Content-Type-Options': 'nosniff',
+    });
+    return new StreamableFile(file.stream);
   }
 
   /** Multipart: `reason`, `isMedical`, `releaseSeat`, dan berkas `evidence` (wajib untuk staf). */

@@ -9,6 +9,7 @@ import { UlasanInstrukturService } from './ulasan-instruktur.service';
 import { PembatalanTerlambatService } from './pembatalan-terlambat.service';
 import { PembatalanTerlambatMemberController } from './pembatalan-terlambat-member.controller';
 import { PembatalanTerlambatMemberService } from './pembatalan-terlambat-member.service';
+import { PindahJamService } from './pindah-jam.service';
 
 @Module({
   imports: [IdentityModule],
@@ -24,6 +25,7 @@ import { PembatalanTerlambatMemberService } from './pembatalan-terlambat-member.
     UlasanInstrukturService,
     PembatalanTerlambatService,
     PembatalanTerlambatMemberService,
+    PindahJamService,
   ],
 })
 export class BookingsModule {}

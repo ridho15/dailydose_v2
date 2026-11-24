@@ -12,6 +12,7 @@ import {
   type PengajuanPembatalan,
 } from '@/api-clients/booking-client';
 import { BatalkanPeserta } from '../../../classes/batalkan-peserta';
+import { PindahJam } from '../../../classes/pindah-jam';
 import { AlertBanner } from '../../../components/app-feedback';
 import { useSearchParams } from 'next/navigation';
 import { Button } from '../../../components/actions';
@@ -188,6 +189,13 @@ export function StaffBookingDetailView({
                   onBerubah={() => void load()}
                 />
               )}
+            {booking.status === 'BOOKED' && !pengajuan && context?.hasCapability('booking:cancel:assisted') && (
+              <PindahJam
+                bookingId={booking.id}
+                nama={booking.customer?.displayName ?? 'member'}
+                onBerubah={() => void load()}
+              />
+            )}
           </div>
         }
       />
