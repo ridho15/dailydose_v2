@@ -12,6 +12,7 @@ import {
 } from '@/api-clients/adjustment-evidence-client';
 import { Button } from '../../components/actions';
 import { Feedback } from '../../ui';
+import { useSessionContext } from '../../session-context';
 
 export const MIN_ALASAN = 20;
 const MAKS_PERUBAHAN = 50;
@@ -53,6 +54,10 @@ export function PenyesuaianForm({
   const [jumlah, setJumlah] = useState(awal?.sesi && awal.sesi !== 0 ? awal.sesi : 1);
   const [alasan, setAlasan] = useState('');
   const [bukti, setBukti] = useState<File | null>(null);
+  // Keputusan Owner tanpa bukti dari member (audit 24 November 2026); server memeriksa perannya.
+  const [disetujuiOwner, setDisetujuiOwner] = useState(false);
+  const sesi = useSessionContext()?.session;
+  const owner = Boolean(sesi?.roles?.some((r) => r === 'OWNER' || r === 'SUPER_OWNER'));
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState('');
   const [message, setMessage] = useState('');
@@ -131,7 +136,7 @@ export function PenyesuaianForm({
     jumlah === 0 && 'jumlah sesi tidak boleh 0',
     kurangiBerlebih && 'pengurangan melebihi sisa sesi',
     panjangAlasan < MIN_ALASAN && `alasan kurang ${MIN_ALASAN - panjangAlasan} karakter`,
-    !bukti && 'pilih berkas bukti',
+    !bukti && !(owner && disetujuiOwner) && 'pilih berkas bukti',
   ].filter((item): item is string => Boolean(item));
   const siap = kendala.length === 0;
 
@@ -143,7 +148,7 @@ export function PenyesuaianForm({
     });
 
   const kirim = async () => {
-    if (!dipilih || !bukti) return;
+    if (!dipilih || (!bukti && !(owner && disetujuiOwner))) return;
     setBusy(true);
     setFailure('');
     setMessage('');
@@ -154,12 +159,14 @@ export function PenyesuaianForm({
         reason: alasan.trim(),
         bookingId,
         evidence: bukti,
+        ...(owner && disetujuiOwner && !bukti ? { disetujuiOwner: true } : {}),
       });
       setMessage(
         `${jumlah > 0 ? '+' : ''}${jumlah} sesi untuk ${member?.displayName}. Sisa sekarang ${hasil.resultingBalance} sesi.`,
       );
       setAlasan('');
       setBukti(null);
+      setDisetujuiOwner(false);
       if (inputBukti.current) inputBukti.current.value = '';
       setMember(null);
       setQuery('');
@@ -341,7 +348,25 @@ export function PenyesuaianForm({
         </div>
 
         <div>
-          <p className="m-0 mb-2 text-[15px] font-bold text-dd-ink">Bukti pendukung, wajib</p>
+          <p className="m-0 mb-2 text-[15px] font-bold text-dd-ink">
+            Bukti pendukung, {owner && disetujuiOwner ? 'tidak wajib' : 'wajib'}
+          </p>
+          {owner && (
+            <label className="mb-3 flex min-h-11 cursor-pointer items-start gap-2.5 text-[15px] text-dd-ink">
+              <input
+                type="checkbox"
+                checked={disetujuiOwner}
+                onChange={(e) => setDisetujuiOwner(e.target.checked)}
+                className="mt-1 size-4 rounded border-dd-border-interactive text-dd-forest"
+              />
+              <span>
+                <span className="font-semibold">Disetujui Owner, tanpa lampiran</span>
+                <span className="block text-sm text-dd-muted">
+                  Untuk keputusan Anda sendiri tanpa bukti dari member. Tercatat atas nama Anda di riwayat.
+                </span>
+              </span>
+            </label>
+          )}
           <div className="flex flex-col items-center gap-3 rounded-dd-sm border border-dashed border-dd-border-interactive p-6 text-center">
             <Upload className="size-6 text-dd-muted" aria-hidden="true" />
             <p className="m-0 text-[15px] text-dd-ink">

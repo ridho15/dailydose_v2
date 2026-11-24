@@ -23,6 +23,8 @@ import { LedgerService } from './ledger.service';
  */
 
 export const MIN_ALASAN_PENYESUAIAN = 20;
+/** Awalan catatan penyesuaian yang diputus Owner tanpa bukti dari member. */
+export const PENANDA_DISETUJUI_OWNER = '[DISETUJUI OWNER]';
 const MAKS_ALASAN = 500;
 const MAKS_BUKTI_BYTE = 8_000_000;
 
@@ -68,10 +70,17 @@ export class PenyesuaianBuktiService {
       quantity?: number | string;
       reason?: string;
       bookingId?: string;
+      /** "true": keputusan Owner/Super Owner tanpa bukti dari member (audit 24 November 2026). */
+      ownerApproved?: string | boolean;
     },
     bukti: { buffer?: Buffer; size?: number } | undefined,
   ) {
     this.policy.requireCapability(principal.capabilities, 'ledger:adjust:decide');
+    const tanpaBuktiOwner = body.ownerApproved === true || body.ownerApproved === 'true';
+    if (tanpaBuktiOwner && !principal.roles.some((r) => r.role === 'OWNER' || r.role === 'SUPER_OWNER'))
+      throw new ApiProblem('OWNER_APPROVAL_REQUIRED', HttpStatus.FORBIDDEN, false, [
+        { field: 'ownerApproved', issue: 'OWNER_ONLY' },
+      ]);
 
     const alasan = (body.reason ?? '').trim();
     if (alasan.length < MIN_ALASAN_PENYESUAIAN || alasan.length > MAKS_ALASAN) {
@@ -82,6 +91,8 @@ export class PenyesuaianBuktiService {
         },
       ]);
     }
+    const adaBerkas = Boolean(bukti?.buffer && bukti.buffer.length > 0);
+    if (!adaBerkas && tanpaBuktiOwner) return this.sesuaikanTanpaBukti(principal, body, alasan);
     if (!bukti?.buffer || bukti.buffer.length === 0) {
       throw new ApiProblem('VALIDATION_ERROR', HttpStatus.UNPROCESSABLE_ENTITY, false, [
         { field: 'evidence', issue: 'REQUIRED' },
@@ -130,6 +141,37 @@ export class PenyesuaianBuktiService {
     });
 
     return { ...hasil, evidenceUrl: `/api/v1/session-adjustments/${id}/evidence` };
+  }
+
+  /**
+   * Penyesuaian atas keputusan Owner/Super Owner tanpa lampiran: catatannya ditandai
+   * "[DISETUJUI OWNER]" dan tercatat di audit log dengan nama pemutusnya, sebagai pengganti bukti.
+   */
+  private async sesuaikanTanpaBukti(
+    principal: SessionPrincipal,
+    body: { customerPackageId?: string; quantity?: number | string; bookingId?: string },
+    alasan: string,
+  ) {
+    const quantity = typeof body.quantity === 'string' ? Number(body.quantity) : body.quantity;
+    const id = randomUUID();
+    const catatan = `${PENANDA_DISETUJUI_OWNER} ${alasan}`.slice(0, 500);
+    const hasil = await this.ledger.directAdjustment(principal, {
+      id,
+      customerPackageId: body.customerPackageId,
+      quantity,
+      bookingId: body.bookingId || undefined,
+      reasonCode: body.bookingId ? 'ATTENDANCE_CORRECTION' : 'PACKAGE_COMPENSATION',
+      note: catatan,
+    });
+    await this.audit?.catat(null, {
+      actorId: principal.userId,
+      action: 'SESSION_ADJUSTMENT_OWNER_APPROVED_WITHOUT_EVIDENCE',
+      objectType: 'SessionAdjustRequest',
+      objectId: id,
+      reason: alasan,
+      afterMasked: { ownerApproved: true },
+    });
+    return { ...hasil, evidenceUrl: null };
   }
 
   /** Membuka bukti penyesuaian; hanya untuk yang boleh membaca penyesuaian di cabang paket itu. */

@@ -554,6 +554,11 @@ export function ActionInbox({
                     {item.alasan && item.jenis !== 'RESCHEDULE' && (
                       <p className="m-0 mt-0.5 text-[15px] text-dd-ink">Alasan: {item.alasan}</p>
                     )}
+                    {item.jenis === 'PEMBATALAN' && item.alasan?.startsWith('[IZIN MEDIS]') && !item.buktiUrl && (
+                      <p className="m-0 text-[15px] font-semibold text-dd-danger">
+                        Izin medis tanpa bukti. Minta surat dokter dulu sebelum menyetujui.
+                      </p>
+                    )}
                     {item.buktiUrl && (
                       <a
                         href={item.buktiUrl}
@@ -665,6 +670,11 @@ export function ActionInbox({
             <p className="m-0 text-[15px] text-dd-muted">{rincianItem(itemPeriksa)}</p>
             {itemPeriksa.alasan && itemPeriksa.jenis !== 'RESCHEDULE' && (
               <p className="m-0 text-[15px] text-dd-ink">Alasan: {itemPeriksa.alasan}</p>
+            )}
+            {itemPeriksa.jenis === 'PEMBATALAN' && itemPeriksa.alasan?.startsWith('[IZIN MEDIS]') && !itemPeriksa.buktiUrl && (
+              <p className="m-0 text-[15px] font-semibold text-dd-danger">
+                Izin medis tanpa bukti. Minta surat dokter dulu sebelum menyetujui.
+              </p>
             )}
             {itemPeriksa.buktiUrl && (
               <a

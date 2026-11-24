@@ -16,8 +16,10 @@ export interface AdjustmentEvidenceClient {
     quantity: number;
     reason: string;
     bookingId?: string;
-    evidence: File;
-  }): Promise<{ resultingBalance: number; evidenceUrl: string }>;
+    /** Wajib, kecuali `disetujuiOwner` (hanya Owner/Super Owner, dicek ulang server). */
+    evidence: File | null;
+    disetujuiOwner?: boolean;
+  }): Promise<{ resultingBalance: number; evidenceUrl: string | null }>;
   terakhir(): Promise<Adjustment[]>;
 }
 
@@ -46,7 +48,8 @@ export const browserAdjustmentEvidenceClient: AdjustmentEvidenceClient = {
     form.set('quantity', String(input.quantity));
     form.set('reason', input.reason);
     if (input.bookingId) form.set('bookingId', input.bookingId);
-    form.set('evidence', input.evidence);
+    if (input.evidence) form.set('evidence', input.evidence);
+    if (input.disetujuiOwner) form.set('ownerApproved', 'true');
     return apiFetch('/session-adjustments/with-evidence', {
       method: 'POST',
       body: form,

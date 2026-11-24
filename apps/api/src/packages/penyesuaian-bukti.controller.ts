@@ -27,7 +27,7 @@ export class PenyesuaianBuktiController {
   sesuaikan(
     @Req() req: AuthenticatedRequest,
     @Body()
-    body: { customerPackageId?: string; quantity?: string; reason?: string; bookingId?: string },
+    body: { customerPackageId?: string; quantity?: string; reason?: string; bookingId?: string; ownerApproved?: string },
     @UploadedFile() evidence?: { buffer?: Buffer; size?: number },
   ) {
     return this.penyesuaian.sesuaikan(req.principal, body, evidence);

@@ -142,3 +142,28 @@ describe('PenyesuaianBuktiService.bukti', () => {
     expect(storage.read).toHaveBeenCalledWith('adjustment-evidence/adj-1.pdf');
   });
 });
+
+describe('Disetujui Owner tanpa lampiran', () => {
+  const owner = { ...manajer, roles: [{ role: 'OWNER', branchId: 'b' }] as never };
+
+  it('Owner boleh tanpa berkas: catatan ditandai [DISETUJUI OWNER], tidak ada yang disimpan, tercatat di audit', async () => {
+    const { service, ledger, storage, audit } = setup();
+    const hasil = await service.sesuaikan(owner, { ...isian, ownerApproved: 'true' }, undefined);
+    expect(hasil.evidenceUrl).toBeNull();
+    expect(storage.put).not.toHaveBeenCalled();
+    expect((ledger.directAdjustment.mock.calls[0] as any[])[1].note).toMatch(/^\[DISETUJUI OWNER\] Kelas 14 Okt/);
+    expect(audit.catat).toHaveBeenCalledWith(
+      null,
+      expect.objectContaining({ action: 'SESSION_ADJUSTMENT_OWNER_APPROVED_WITHOUT_EVIDENCE', actorId: 'u-1' }),
+    );
+  });
+
+  it('Manager tidak bisa memakai opsi ini; tanpa opsi, berkas tetap wajib', async () => {
+    const { service, ledger } = setup();
+    await expect(service.sesuaikan(manajer, { ...isian, ownerApproved: 'true' }, undefined)).rejects.toMatchObject({
+      code: 'OWNER_APPROVAL_REQUIRED',
+    });
+    await expect(service.sesuaikan(owner, isian, undefined)).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+    expect(ledger.directAdjustment).not.toHaveBeenCalled();
+  });
+});

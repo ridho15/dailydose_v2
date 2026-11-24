@@ -78,3 +78,52 @@ describe('Periksa transfer satu per satu: lebih dari 5 item', () => {
     expect(await screen.findByRole('dialog', { name: /Bukti transfer Member 6 / })).toBeVisible();
   });
 });
+
+describe('Pembatalan izin medis tanpa bukti', () => {
+  it('penyetuju diberi peringatan; yang ada buktinya mendapat tautan Lihat bukti pendukung', async () => {
+    const pembatalan = (id: string, alasan: string, buktiUrl: string | null): ItemTindakan => ({
+      id,
+      jenis: 'PEMBATALAN',
+      version: 1,
+      masukPada: '2026-11-22T00:00:00.000Z',
+      branchId: 'untar',
+      branchName: 'Untar',
+      nama: id,
+      rincian: 'Reformer',
+      alasan,
+      buktiUrl,
+    });
+    const items = [
+      pembatalan('Noriko', '[IZIN MEDIS] Member sakit dengan surat dokter resmi', null),
+      pembatalan('Nana', '[IZIN MEDIS] Member sakit dengan surat dokter resmi', '/api/v1/session-adjustments/r-2/evidence'),
+    ];
+    const queueClient = {
+      tertinggal: vi.fn(),
+      tindakan: vi.fn(async () => ({
+        dibuatPada: '',
+        ringkasan: [{ jenis: 'PEMBATALAN', jumlah: 2 }],
+        items,
+        nextCursor: null,
+        pengingat: [],
+        gagal: [],
+      })),
+    } as never;
+    render(
+      <AppFeedbackProvider>
+        <ActionInbox
+          branchId="untar"
+          now={Date.parse('2026-11-22T03:00:00Z')}
+          queueClient={queueClient}
+          purchaseClient={{} as never}
+          bookingClient={{} as never}
+          ledgerClient={{} as never}
+        />
+      </AppFeedbackProvider>,
+    );
+    expect(await screen.findAllByText(/Izin medis tanpa bukti/)).toHaveLength(1);
+    expect(screen.getByRole('link', { name: 'Lihat bukti pendukung' })).toHaveAttribute(
+      'href',
+      '/api/v1/session-adjustments/r-2/evidence',
+    );
+  });
+});

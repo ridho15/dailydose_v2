@@ -115,6 +115,9 @@ export function BatalkanPeserta({
     return (
       <div className="flex flex-wrap items-center gap-2">
         <StatusBadge tone="warning">Menunggu persetujuan batal</StatusBadge>
+        {!pengajuan.buktiUrl && pengajuan.reason.startsWith('[IZIN MEDIS]') && (
+          <StatusBadge tone="danger">Izin medis tanpa bukti</StatusBadge>
+        )}
         {pengajuan.buktiUrl && (
           <a
             href={pengajuan.buktiUrl}
