@@ -16,6 +16,7 @@ import { lepasKuotaVoucher } from './voucher.service';
 import { rapikanPesananKedaluwarsa } from './payment-expiration-worker';
 import { adalahPaketPerpanjangan, perpanjanganPembelian, terapkanPerpanjangan } from './perpanjangan-masa-aktif';
 import { catatModalPaket } from './modal-sesi.service';
+import { AKSI_AUTO_LEWAT, AKSI_AUTO_SETUJU } from './ocr-bukti';
 
 @Injectable()
 export class PaymentReviewService {
@@ -367,10 +368,12 @@ export class PaymentReviewService {
     const activationSummary = this.activationSummary(customerPackage);
     const bookingItems = customerPackage?.bookings ?? [];
     const recorders = await this.recorderNames([item.recordedById]);
+    const cekOtomatis = await this.cekOtomatisTerakhir(purchase.id);
 
     return {
       purchase: {
         ...item,
+        cekOtomatis,
         recordedBy: item.recordedById
           ? { id: item.recordedById, displayName: recorders.get(item.recordedById) ?? 'Staf' }
           : null,
@@ -443,6 +446,25 @@ export class PaymentReviewService {
           nextCursor: null,
         },
       },
+    };
+  }
+
+  /** Hasil cek otomatis foto bukti terakhir (audit log), supaya staf tahu kenapa belum disetujui sistem. */
+  private async cekOtomatisTerakhir(purchaseId: string) {
+    const log = await this.db.auditLog
+      .findFirst({
+        where: { objectType: 'Purchase', objectId: purchaseId, action: { in: [AKSI_AUTO_SETUJU, AKSI_AUTO_LEWAT] } },
+        orderBy: { createdAt: 'desc' },
+        select: { action: true, detail: true, createdAt: true },
+      })
+      .catch(() => null);
+    if (!log) return null;
+    const detail = (log.detail ?? {}) as { hasil?: string; terbaca?: { nominal?: number[]; waktu?: string[] } };
+    return {
+      hasil: log.action === AKSI_AUTO_SETUJU ? 'COCOK' : (detail.hasil ?? 'TIDAK_DIKETAHUI'),
+      diperiksaPada: log.createdAt,
+      nominalTerbaca: detail.terbaca?.nominal ?? [],
+      waktuTerbaca: detail.terbaca?.waktu ?? [],
     };
   }
 

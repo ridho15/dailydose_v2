@@ -607,6 +607,8 @@ export const EXTENSION_ERROR_LABELS: Record<string, string> = {
     'Paket yang dipilih tidak ditemukan atau bukan milik member ini. Muat ulang halaman lalu pilih paket lagi.',
   PACKAGE_EXTENSION_TARGET_EXPIRED:
     'Paket yang dipilih sudah tidak aktif (masa berlaku habis atau sesi habis), jadi tidak bisa diperpanjang. Beli paket baru untuk melanjutkan latihan.',
+  PACKAGE_EXTENSION_TOO_EARLY:
+    'Paket perpanjangan baru bisa dibeli 14 hari sebelum masa berlaku paket berakhir.',
   PACKAGE_EXTENSION_LIMIT_REACHED:
     'Paket ini sudah diperpanjang 3 kali, batas maksimal. Beli paket baru untuk melanjutkan latihan.',
   PACKAGE_EXTENSION_PENDING_LIMIT:

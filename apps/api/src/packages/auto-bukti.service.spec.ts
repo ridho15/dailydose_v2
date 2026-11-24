@@ -80,25 +80,57 @@ describe('AutoBuktiService', () => {
   });
 
   it('bukan transfer bank, tanpa kode unik, sudah diputus, atau bukan bukti terbaru: tidak diproses', async () => {
-    for (const pembelian of [
-      { paymentMethod: 'CASH' },
-      { uniqueCode: null },
-      { status: 'PAID' },
-      { paymentProof: { id: 'x', fileUrl: '/uploads/payment-proofs/00000000-0000-4000-8000-0000000000c9', uploadedAt: new Date() } },
-    ]) {
-      const { service, review, storage } = setup({ pembelian });
+    for (const [pembelian, alasan] of [
+      [{ paymentMethod: 'CASH' }, 'BUKAN_TRANSFER_BANK'],
+      [{ uniqueCode: null }, 'TANPA_KODE_UNIK'],
+      [{ status: 'PAID' }, null],
+      [{ paymentProof: { id: 'x', fileUrl: '/uploads/payment-proofs/00000000-0000-4000-8000-0000000000c9', uploadedAt: new Date() } }, null],
+    ] as const) {
+      const { service, review, storage, db } = setup({ pembelian });
       expect(await service.periksa('pur-1', ID)).toBe('TIDAK_BERLAKU');
       expect(storage.readPrivateObject).not.toHaveBeenCalled();
       expect(review.decide).not.toHaveBeenCalled();
+      // Alasan dilewati tercatat supaya staf tahu; sudah diputus atau bukti lama tidak dicatat.
+      if (alasan)
+        expect(db.auditLog.create).toHaveBeenCalledWith({
+          data: expect.objectContaining({ action: AKSI_AUTO_LEWAT, detail: { proofId: ID, hasil: alasan } }),
+        });
+      else expect(db.auditLog.create).not.toHaveBeenCalled();
     }
   });
 
+  it('nominal tidak cocok: angka dan waktu yang terbaca ikut dicatat untuk penjelasan', async () => {
+    const { service, db } = setup({ teks: '23/11/2026 10:15 WIB\nRp 1.500.000' });
+    await service.periksa('pur-1', ID);
+    expect(db.auditLog.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        detail: expect.objectContaining({
+          hasil: 'NOMINAL_TIDAK_DITEMUKAN',
+          nominalDicari: 1_500_123,
+          terbaca: { nominal: [2026, 1_500_000], waktu: ['2026-11-23T03:15:00.000Z'] },
+        }),
+      }),
+    });
+  });
+
+  it('persetujuan gagal di tengah jalan: galat tercatat di audit, bukan hilang di log server', async () => {
+    const { service, db, review } = setup();
+    review.decide.mockRejectedValueOnce(new Error('Deadlock'));
+    await expect(service.periksa('pur-1', ID)).rejects.toThrow('Deadlock');
+    expect(db.auditLog.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ detail: expect.objectContaining({ hasil: 'GALAT_SISTEM', pesan: 'Deadlock' }) }),
+    });
+  });
+
   it('tabel bukti_sidik belum dibuat: tidak menyetujui otomatis (foto dipakai ulang tak bisa dicek)', async () => {
-    const { service, review, storage } = setup();
+    const { service, review, storage, db } = setup();
     const spy = jest.spyOn(tabelOpsional, 'tabelOpsionalAda').mockResolvedValue(false);
     expect(await service.periksa('pur-1', ID)).toBe('TIDAK_BERLAKU');
     expect(storage.readPrivateObject).not.toHaveBeenCalled();
     expect(review.decide).not.toHaveBeenCalled();
+    expect(db.auditLog.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ detail: { proofId: ID, hasil: 'TABEL_BUKTI_SIDIK_BELUM_ADA' } }),
+    });
     spy.mockRestore();
   });
 

@@ -39,6 +39,9 @@ const formatDate = (value: Date, withTime = false) =>
     timeZone: 'Asia/Jakarta',
   }).format(value);
 
+/** Tanggal WIB (`YYYY-MM-DD`) dari waktu ms; masa berlaku paket berakhir 23.59 WIB. */
+const tanggalWibIso = (ms: number) => new Date(ms + 7 * 3_600_000).toISOString().slice(0, 10);
+
 export function CustomerSessionDetailView({ id }: { id: string }) {
   const searchParams = useSearchParams();
   const router = useTrackedRouter();
@@ -133,7 +136,8 @@ export function CustomerSessionDetailView({ id }: { id: string }) {
       };
       if (action === 'extend') {
         if (extendMode === 'date' && targetDate) {
-          payload.newValidUntil = new Date(`${targetDate}T23:59:59.999Z`).toISOString();
+          // Tanggal saja: server menyimpannya sebagai akhir hari WIB (sebelumnya 23.59 UTC = 06.59 WIB besoknya).
+          payload.newValidUntil = targetDate;
         } else {
           payload.days = Number(days);
         }
@@ -263,7 +267,7 @@ export function CustomerSessionDetailView({ id }: { id: string }) {
                 data-testid="btn-open-extend-dialog"
                 onClick={() => {
                   const base = Math.max(new Date(balance.expiryAt).getTime(), Date.now());
-                  const defaultNext = new Date(base + 30 * 86400000).toISOString().slice(0, 10);
+                  const defaultNext = tanggalWibIso(base + 30 * 86400000);
                   setTargetDate(defaultNext);
                   setDays('30');
                   setExtendMode('date');
@@ -650,7 +654,7 @@ export function CustomerSessionDetailView({ id }: { id: string }) {
                     type="button"
                     onClick={() => {
                       const base = Math.max(new Date(history.balance.expiryAt).getTime(), Date.now());
-                      const next = new Date(base + d * 86400000).toISOString().slice(0, 10);
+                      const next = tanggalWibIso(base + d * 86400000);
                       setTargetDate(next);
                       setDays(String(d));
                       setExtendMode('date');

@@ -53,7 +53,7 @@ export interface KotakTindakan {
   ringkasan: { jenis: JenisTindakan; jumlah: number }[];
   items: ItemTindakan[];
   nextCursor: string | null;
-  pengingat: { key: 'renewal' | 'kuota'; jumlah: number; href: string }[];
+  pengingat: { key: 'renewal' | 'kuota' | 'perpanjangan'; jumlah: number; href: string }[];
   gagal: JenisTindakan[];
 }
 

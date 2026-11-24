@@ -1,3 +1,5 @@
+import { akhirHariWib } from '../foundation/masa-berlaku';
+import { tanggalWib } from './instructor-fee-calculator';
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { cabangPaket } from '../bookings/cabang-paket';
 import {
@@ -11,7 +13,7 @@ import { AuditService } from '../foundation/audit.service';
 import type { SessionPrincipal } from '../identity/identity.service';
 import { PolicyService } from '../identity/policy.service';
 import { ApiProblem, ENTITY_ID_REGEX } from '../identity/security';
-import { buildPhoneSearchVariants, normalizePhone } from '../identity/manajemen-pelanggan.service';
+import { buildPhoneSearchVariants, normalizePhone, variasiHurufCari } from '../identity/manajemen-pelanggan.service';
 import {
   bookingMenahanSesi,
   MEMEGANG_SESI,
@@ -37,7 +39,21 @@ export const MAX_ADJUSTMENT_SESSIONS = 50;
 export const MAX_SHARED_MEMBERS = 4;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+/** Status paket untuk tampilan: ACTIVE yang sudah lewat tanggal berakhir ditampilkan EXPIRED. */
+export function statusPaketEfektif(status: string, validUntil: Date, now = new Date()) {
+  return status === 'ACTIVE' && validUntil.getTime() <= now.getTime() ? 'EXPIRED' : status;
+}
+
 const PAGE_SIZE = 20;
+
+/** Awalan catatan riwayat sesi untuk perubahan masa berlaku (lihat manageCustomerPackage dan terapkanPerpanjangan). */
+const AWALAN_MASA_BERLAKU = [
+  'Perpanjang masa berlaku',
+  'Ubah masa berlaku',
+  'Paket dibekukan',
+  'Paket dibuka kembali',
+  'Perpanjangan masa aktif berbayar',
+];
 const SOON_DAYS = 14;
 
 const packageInclude = {
@@ -160,6 +176,8 @@ export class LedgerService {
       search?: string;
       status?: string;
       customerUserId?: string;
+      /** Hanya paket aktif yang masih ada sesinya dan berakhir dalam N hari (pengingat perpanjangan). */
+      expiringWithinDays?: number;
     },
   ) {
     const isCustomer = principal.roles.some((r) => r.role === 'CUSTOMER');
@@ -193,10 +211,10 @@ export class LedgerService {
           ? [
               {
                 OR: [
-                  { user: { displayName: { contains: search } } },
+                  ...variasiHurufCari(search).map((v) => ({ user: { displayName: { contains: v } } })),
                   { user: { email: { contains: search } } },
                   ...buildPhoneSearchVariants(search).map((v) => ({ user: { phone: { contains: v } } })),
-                  { package: { name: { contains: search } } },
+                  ...variasiHurufCari(search).map((v) => ({ package: { name: { contains: v } } })),
                 ],
               },
             ]
@@ -209,16 +227,33 @@ export class LedgerService {
           .map((s) => s.trim())
           .filter(Boolean)
       : [];
+    // Status mengikuti tanggal berakhir: paket ACTIVE yang sudah lewat masa berlaku dihitung Berakhir,
+    // walau penjadwal belum sempat mengubah kolom status-nya.
+    const sekarang = new Date();
+    const syaratStatus = (token: string): Prisma.PaketPelangganWhereInput =>
+      token === 'ACTIVE'
+        ? { status: 'ACTIVE', validUntil: { gt: sekarang } }
+        : token === 'EXPIRED'
+          ? { OR: [{ status: 'EXPIRED' }, { status: 'ACTIVE', validUntil: { lte: sekarang } }] }
+          : { status: token as never };
     const statusWhere: Prisma.PaketPelangganWhereInput | undefined =
       statusTokens.length > 0 && !statusTokens.includes('ALL')
         ? statusTokens.length === 1
-          ? { status: statusTokens[0] as never }
-          : { status: { in: statusTokens as never[] } }
+          ? syaratStatus(statusTokens[0]!)
+          : { OR: statusTokens.map(syaratStatus) }
         : undefined;
 
-    const where: Prisma.PaketPelangganWhereInput = statusWhere
-      ? { AND: [base, statusWhere] }
-      : base;
+    const hari = Number(filters.expiringWithinDays);
+    const berakhirSegera: Prisma.PaketPelangganWhereInput | undefined =
+      Number.isInteger(hari) && hari > 0 && hari <= 60
+        ? {
+            status: 'ACTIVE',
+            remainingSessions: { gt: 0 },
+            validUntil: { gt: sekarang, lte: new Date(sekarang.getTime() + hari * 86_400_000) },
+          }
+        : undefined;
+    const syarat = [base, statusWhere, berakhirSegera].filter(Boolean) as Prisma.PaketPelangganWhereInput[];
+    const where: Prisma.PaketPelangganWhereInput = syarat.length > 1 ? { AND: syarat } : base;
 
     const limit = filters.pageSize ? Math.min(Number(filters.pageSize), 100) : PAGE_SIZE;
     const pageNumber = filters.page && Number(filters.page) > 0 ? Number(filters.page) : undefined;
@@ -227,7 +262,7 @@ export class LedgerService {
       this.db.paketPelanggan.findMany({
         where,
         include: packageInclude,
-        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        orderBy: berakhirSegera ? [{ validUntil: 'asc' }, { id: 'asc' }] : [{ createdAt: 'desc' }, { id: 'desc' }],
         take: pageNumber ? limit : limit + 1,
         ...(pageNumber ? { skip: (pageNumber - 1) * limit } : (filters.cursor ? { cursor: { id: filters.cursor }, skip: 1 } : {})),
       }),
@@ -346,7 +381,7 @@ export class LedgerService {
     return {
       id: row.id,
       branchId: isMulti ? 'global' : (row.purchase?.branchId ?? 'global'),
-      status: row.status,
+      status: statusPaketEfektif(row.status, row.validUntil),
       activationDate: row.validFrom.toISOString(),
       expiryAt: row.validUntil.toISOString(),
       ledgerBalance,
@@ -631,7 +666,7 @@ export class LedgerService {
               {
                 OR: [
                   { reasonCode: { contains: q } },
-                  { customerPackage: { is: { user: { displayName: { contains: q } } } } },
+                  ...variasiHurufCari(q).map((v) => ({ customerPackage: { is: { user: { displayName: { contains: v } } } } })),
                   { customerPackage: { is: { user: { email: { contains: q } } } } },
                   { customerPackage: { is: { package: { name: { contains: q } } } } },
                 ],
@@ -1079,6 +1114,81 @@ export class LedgerService {
   // Tidak mengubah saldo sesi; tiap aksi meninggalkan entri buku sesi berjumlah 0 sebagai jejak.
   // ---------------------------------------------------------------------------
 
+  /**
+   * Log terpusat perubahan masa berlaku paket: perpanjang/ubah tanggal, bekukan, buka kembali, dan
+   * perpanjangan masa aktif berbayar. Sumbernya riwayat sesi (amount 0) yang sudah ditulis tiap aksi.
+   */
+  async riwayatMasaBerlaku(
+    principal: SessionPrincipal,
+    filters: { branchId?: string; q?: string; cursor?: string; limit?: string | number },
+  ) {
+    const scope = this.packageScopeWhere(principal, 'ledger:read', filters.branchId);
+    const limit = Math.min(100, Math.max(1, Number(filters.limit) || PAGE_SIZE));
+    const q = filters.q?.trim();
+    const where: Prisma.SessionLedgerWhereInput = {
+      type: SessionMutationType.ADJUST_MANUAL,
+      amount: 0,
+      OR: AWALAN_MASA_BERLAKU.map((awalan) => ({ notes: { startsWith: awalan } })),
+      customerPackage: {
+        is: {
+          AND: [
+            scope,
+            ...(q
+              ? [
+                  {
+                    OR: [
+                      ...variasiHurufCari(q).map((v) => ({ user: { displayName: { contains: v } } })),
+                      ...variasiHurufCari(q).map((v) => ({ package: { name: { contains: v } } })),
+                    ],
+                  },
+                ]
+              : []),
+          ],
+        },
+      },
+    };
+    const rows = await this.db.sessionLedger.findMany({
+      where,
+      include: {
+        createdBy: { select: { displayName: true } },
+        customerPackage: {
+          select: {
+            id: true,
+            validUntil: true,
+            user: { select: { id: true, displayName: true } },
+            package: { select: { name: true } },
+          },
+        },
+      },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: limit + 1,
+      ...(filters.cursor ? { cursor: { id: filters.cursor }, skip: 1 } : {}),
+    });
+    const hasMore = rows.length > limit;
+    const items = (hasMore ? rows.slice(0, limit) : rows).map((r) => {
+      const catatan = r.notes ?? '';
+      const jenis = catatan.startsWith('Paket dibekukan')
+        ? 'FREEZE'
+        : catatan.startsWith('Paket dibuka kembali')
+          ? 'UNFREEZE'
+          : catatan.startsWith('Perpanjangan masa aktif berbayar')
+            ? 'PERPANJANGAN_BERBAYAR'
+            : 'PERPANJANG';
+      return {
+        id: r.id,
+        jenis,
+        catatan,
+        waktu: r.createdAt.toISOString(),
+        oleh: r.createdBy?.displayName ?? null,
+        customerPackageId: r.customerPackage.id,
+        customer: r.customerPackage.user,
+        packageName: r.customerPackage.package?.name ?? 'Paket',
+        berlakuSampai: r.customerPackage.validUntil.toISOString(),
+      };
+    });
+    return { items, page: { hasMore, nextCursor: hasMore ? items.at(-1)!.id : null } };
+  }
+
   async manageCustomerPackage(
     principal: SessionPrincipal,
     id: string,
@@ -1095,7 +1205,8 @@ export class LedgerService {
     let targetExpiryDate: Date | undefined;
     if (action === 'extend') {
       if (body?.newValidUntil) {
-        targetExpiryDate = new Date(body.newValidUntil);
+        // Tanggal saja (YYYY-MM-DD) = akhir hari WIB tanggal itu, sama dengan masa berlaku paket lain.
+        targetExpiryDate = akhirHariWib(body.newValidUntil) ?? new Date(body.newValidUntil);
         if (isNaN(targetExpiryDate.getTime()))
           throw problem('VALIDATION_ERROR', HttpStatus.UNPROCESSABLE_ENTITY, 'newValidUntil');
       } else if (body?.days !== undefined) {
@@ -1138,12 +1249,12 @@ export class LedgerService {
             const diffDays = Math.round((finalValidUntil.getTime() - pkg.validUntil.getTime()) / DAY);
             const newStatus = finalValidUntil > now ? 'ACTIVE' : 'EXPIRED';
             data = { validUntil: finalValidUntil, status: newStatus };
-            note = `Ubah masa berlaku ke ${finalValidUntil.toISOString().slice(0, 10)} (${diffDays >= 0 ? '+' : ''}${diffDays} hari)`;
+            note = `Ubah masa berlaku ke ${tanggalWib(finalValidUntil)} (${diffDays >= 0 ? '+' : ''}${diffDays} hari)`;
           } else {
             addedDays = body.days!;
             finalValidUntil = new Date(from + addedDays * DAY);
             data = { validUntil: finalValidUntil, status: 'ACTIVE' };
-            note = `Perpanjang masa berlaku ${addedDays} hari (hingga ${finalValidUntil.toISOString().slice(0, 10)})`;
+            note = `Perpanjang masa berlaku ${addedDays} hari (hingga ${tanggalWib(finalValidUntil)})`;
           }
         } else if (action === 'freeze') {
           if (pkg.status !== 'ACTIVE' || pkg.validUntil <= now)
@@ -1591,7 +1702,7 @@ export class LedgerService {
         ).length,
       },
       remainingSessions: pkg.remainingSessions,
-      status: pkg.status,
+      status: statusPaketEfektif(pkg.status, pkg.validUntil),
       members: (pkg.sharedMembers ?? []).map((m) => {
         const userBookings = allPackageBookings.filter((b) => b.userId === m.userId);
         return {

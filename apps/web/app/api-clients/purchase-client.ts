@@ -220,6 +220,15 @@ export interface PaymentReviewItem {
   recordedBy?: { id: string; displayName: string } | null;
   recordNote?: string | null;
   paymentMethod?: string | null;
+  /** Hasil cek otomatis foto bukti terakhir; null bila belum pernah dicek. */
+  cekOtomatis?: CekOtomatisBukti | null;
+}
+
+export interface CekOtomatisBukti {
+  hasil: string;
+  diperiksaPada: string;
+  nominalTerbaca: number[];
+  waktuTerbaca: string[];
 }
 
 export interface PaymentReviewSummary {

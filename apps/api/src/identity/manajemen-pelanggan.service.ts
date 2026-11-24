@@ -16,6 +16,17 @@ import { ApiProblem, newId } from './security';
 type CustomerStatus = 'PENDING_ACTIVATION' | 'ACTIVE' | 'INACTIVE';
 type VerificationStatus = 'PENDING' | 'ACTION_REQUIRED' | 'APPROVED' | 'REJECTED';
 
+/**
+ * Variasi huruf untuk pencarian nama: bila kolom nama di database membedakan huruf besar/kecil
+ * (data migrasi), "saras" tetap menemukan "Saras Putri" atau "SARAS PUTRI".
+ */
+export function variasiHurufCari(query: string): string[] {
+  const q = query.trim();
+  if (!q) return [];
+  const judul = q.toLowerCase().replace(/(^|\s)\S/g, (h) => h.toUpperCase());
+  return [...new Set([q, q.toLowerCase(), q.toUpperCase(), judul])];
+}
+
 export function buildPhoneSearchVariants(query: string): string[] {
   const trimmed = query.trim();
   const digits = trimmed.replace(/\D/g, '');
@@ -126,7 +137,7 @@ export class CustomerManagementService {
     const searchClause: Prisma.UserWhereInput | undefined = q
       ? {
           OR: [
-            { displayName: { contains: q } },
+            ...variasiHurufCari(q).map((v) => ({ displayName: { contains: v } })),
             { email: { contains: q } },
             ...phoneVariants.map((v) => ({ phone: { contains: v } })),
           ],

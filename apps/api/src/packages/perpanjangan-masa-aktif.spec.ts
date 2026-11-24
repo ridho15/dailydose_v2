@@ -264,7 +264,14 @@ describe('persetujuan pembayaran paket perpanjangan', () => {
     const hasil: any = await approve(service);
     expect(paket.validUntil.getTime()).toBe(awal + 30 * HARI);
     expect(tx.paketPelanggan.create).not.toHaveBeenCalled();
-    expect(tx.sessionLedger.create).not.toHaveBeenCalled();
+    // Satu catatan riwayat tanpa perubahan sesi (amount 0), untuk log masa berlaku terpusat.
+    expect(tx.sessionLedger.create).toHaveBeenCalledTimes(1);
+    expect(tx.sessionLedger.create.mock.calls[0][0].data).toMatchObject({
+      type: 'ADJUST_MANUAL',
+      amount: 0,
+      customerPackageId: targetId,
+      notes: expect.stringMatching(/^Perpanjangan masa aktif berbayar \+30 hari/),
+    });
     expect(tx.pembelian.update.mock.calls[0][0].data.status).toBe('PAID');
     expect(hasil.body.extension).toMatchObject({ targetCustomerPackageId: targetId, days: 30 });
   });
@@ -342,3 +349,15 @@ describe('penjualan di meja paket perpanjangan', () => {
     expect(fake.catatan[0]).toMatchObject({ targetCustomerPackageId: targetId, userId: memberId, hari: 30, createdById: id(100) });
   });
 });
+
+describe('jendela 14 hari paket perpanjangan', () => {
+  const { dalamJendelaPerpanjangan, JENDELA_PERPANJANGAN_HARI } = jest.requireActual('./perpanjangan-masa-aktif');
+  const now = new Date('2026-11-24T03:00:00Z');
+  it('boleh dibeli bila paket berakhir dalam 14 hari, belum boleh bila lebih dari itu', () => {
+    expect(JENDELA_PERPANJANGAN_HARI).toBe(14);
+    expect(dalamJendelaPerpanjangan({ validUntil: new Date(now.getTime() + 13 * 86_400_000) }, now)).toBe(true);
+    expect(dalamJendelaPerpanjangan({ validUntil: new Date(now.getTime() + 14 * 86_400_000) }, now)).toBe(true);
+    expect(dalamJendelaPerpanjangan({ validUntil: new Date(now.getTime() + 15 * 86_400_000) }, now)).toBe(false);
+  });
+});
+

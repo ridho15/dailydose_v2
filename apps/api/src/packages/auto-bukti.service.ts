@@ -5,7 +5,14 @@ import { PrismaService } from '../database/prisma.service';
 import { bacaOpsional, tabelOpsionalAda } from '../foundation/tabel-opsional';
 import type { SessionPrincipal } from '../identity/identity.service';
 import { idBuktiBerlaku, jenisBukti } from './bukti-aman';
-import { cocokkanBukti, type HasilCekBukti } from './ocr-bukti';
+import {
+  AKSI_AUTO_LEWAT,
+  AKSI_AUTO_SETUJU,
+  bacaNominal,
+  bacaWaktu,
+  cocokkanBukti,
+  type HasilCekBukti,
+} from './ocr-bukti';
 import { ConfigGatedObjectStorageProvider } from './proof-providers';
 import { PaymentReviewService } from './verifikasi-pembayaran.service';
 
@@ -18,8 +25,7 @@ export const PELAKU_SISTEM: SessionPrincipal = {
   branchIds: [],
 };
 
-export const AKSI_AUTO_SETUJU = 'payment.auto_approved_from_proof';
-export const AKSI_AUTO_LEWAT = 'payment.auto_check_skipped';
+export { AKSI_AUTO_LEWAT, AKSI_AUTO_SETUJU };
 
 /** Pembacaan teks gambar; dipisah supaya tes tidak menjalankan OCR sungguhan. */
 export type PembacaTeks = (gambar: Buffer) => Promise<string>;
@@ -87,19 +93,46 @@ export class AutoBuktiService {
         paymentProof: { select: { id: true, fileUrl: true, uploadedAt: true } },
       },
     });
-    if (
-      !purchase ||
-      purchase.paymentMethod !== 'BANK_TRANSFER' ||
-      purchase.uniqueCode == null ||
-      !['PENDING', 'WAITING_VERIFICATION'].includes(purchase.status) ||
-      !purchase.paymentProof ||
-      idBuktiBerlaku(purchase.paymentProof) !== proofId
-    )
+    if (!purchase || !purchase.paymentProof) return 'TIDAK_BERLAKU';
+    // Alasan dilewati dicatat di audit supaya staf (dan pengembang) tahu kenapa tidak disetujui otomatis.
+    const lewat = async (alasan: string) => {
+      await this.audit(AKSI_AUTO_LEWAT, purchase, { proofId, hasil: alasan });
       return 'TIDAK_BERLAKU';
+    };
+    // Bukti lama yang sudah diganti: tidak dicatat, hasil bukti terbaru yang berlaku.
+    if (idBuktiBerlaku(purchase.paymentProof) !== proofId) return 'TIDAK_BERLAKU';
+    if (!['PENDING', 'WAITING_VERIFICATION'].includes(purchase.status)) return 'TIDAK_BERLAKU';
+    if (purchase.paymentMethod !== 'BANK_TRANSFER') return lewat('BUKAN_TRANSFER_BANK');
+    if (purchase.uniqueCode == null) return lewat('TANPA_KODE_UNIK');
     // Tanpa tabel sidik, foto dipakai ulang tidak bisa dideteksi: jangan setujui otomatis.
-    if (!this.storage || !(await tabelOpsionalAda(this.db, 'bukti_sidik'))) return 'TIDAK_BERLAKU';
+    if (!this.storage) return lewat('PENYIMPANAN_TIDAK_SIAP');
+    if (!(await tabelOpsionalAda(this.db, 'bukti_sidik'))) return lewat('TABEL_BUKTI_SIDIK_BELUM_ADA');
 
-    const bytes = await this.storage.readPrivateObject(`payment-proofs/${proofId}`);
+    try {
+      return await this.periksaFoto(purchase, proofId, sekarang);
+    } catch (error) {
+      await this.audit(AKSI_AUTO_LEWAT, purchase, {
+        proofId,
+        hasil: 'GALAT_SISTEM',
+        pesan: (error as Error).message?.slice(0, 300) ?? 'tidak diketahui',
+      });
+      throw error;
+    }
+  }
+
+  private async periksaFoto(
+    purchase: {
+      id: string;
+      branchId: string;
+      totalAmountRp: number;
+      createdAt: Date;
+      paymentProof: { uploadedAt: Date | null } | null;
+    },
+    proofId: string,
+    sekarang: Date,
+  ): Promise<string> {
+    const purchaseId = purchase.id;
+    const bytes = await this.storage!.readPrivateObject(`payment-proofs/${proofId}`);
     const sha256 = createHash('sha256').update(bytes).digest('hex');
     const catat = (hasil: string, waktuBukti: Date | null = null) =>
       bacaOpsional(
@@ -119,17 +152,23 @@ export class AutoBuktiService {
     });
     let hasil: string;
     let waktuBukti: Date | null = null;
+    // Angka dan waktu yang terbaca OCR, untuk menjelaskan kenapa tidak cocok.
+    let terbaca: { nominal: number[]; waktu: string[] } | null = null;
     if (dipakaiLain) hasil = 'FOTO_DIPAKAI_ULANG';
     else if (!(jenisBukti(bytes) ?? '').startsWith('image/')) hasil = 'BUKAN_GAMBAR';
     else {
       const teks = await this.bacaTeks(bytes).catch(() => null);
       if (teks === null) hasil = 'GAGAL_BACA';
       else {
+        terbaca = {
+          nominal: bacaNominal(teks).slice(0, 10),
+          waktu: bacaWaktu(teks).slice(0, 5).map((w) => w.toISOString()),
+        };
         const cek: HasilCekBukti = cocokkanBukti({
           teks,
           totalRp: purchase.totalAmountRp,
           dibuatPada: purchase.createdAt,
-          diunggahPada: purchase.paymentProof.uploadedAt ?? sekarang,
+          diunggahPada: purchase.paymentProof?.uploadedAt ?? sekarang,
         });
         hasil = cek.cocok ? 'COCOK' : cek.alasan;
         if (cek.cocok) waktuBukti = cek.waktu;
@@ -138,7 +177,12 @@ export class AutoBuktiService {
     await catat(hasil, waktuBukti);
 
     if (hasil !== 'COCOK') {
-      await this.audit(AKSI_AUTO_LEWAT, purchase, { proofId, hasil });
+      await this.audit(AKSI_AUTO_LEWAT, purchase, {
+        proofId,
+        hasil,
+        nominalDicari: purchase.totalAmountRp,
+        ...(terbaca ? { terbaca } : {}),
+      });
       return hasil;
     }
     await this.review.decide(

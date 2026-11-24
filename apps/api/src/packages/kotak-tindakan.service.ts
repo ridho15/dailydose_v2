@@ -1,6 +1,7 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { Prisma, PurchaseStatus } from '@prisma/client';
 import { KODE_PEMBATALAN_TERLAMBAT } from '../bookings/pembatalan-terlambat';
+import { JENDELA_PERPANJANGAN_HARI } from './perpanjangan-masa-aktif';
 import { PrismaService } from '../database/prisma.service';
 import type { SessionPrincipal } from '../identity/identity.service';
 import { PolicyService } from '../identity/policy.service';
@@ -77,7 +78,7 @@ export interface KotakTindakan {
   items: ItemTindakan[];
   nextCursor: string | null;
   /** Hal yang perlu diperhatikan tetapi bukan keputusan (dari antrean tertinggal). */
-  pengingat: { key: 'renewal' | 'kuota'; jumlah: number; href: string }[];
+  pengingat: { key: 'renewal' | 'kuota' | 'perpanjangan'; jumlah: number; href: string }[];
   gagal: JenisTindakan[];
 }
 
@@ -217,9 +218,37 @@ export class KotakTindakanService {
       } catch {
         pengingat = [];
       }
+      const perpanjangan = await this.hitungPerluPerpanjangan(principal, input.branchId, now).catch(() => 0);
+      if (perpanjangan > 0)
+        pengingat.push({ key: 'perpanjangan', jumlah: perpanjangan, href: '/workspace/perpanjangan' });
     }
 
     return { dibuatPada: now.toISOString(), ringkasan, items, nextCursor, pengingat, gagal };
+  }
+
+  /**
+   * Paket member yang masih ada sesinya dan berakhir dalam JENDELA_PERPANJANGAN_HARI: pengingat untuk
+   * staf yang boleh mencatat penjualan (menawarkan paket perpanjangan).
+   */
+  private async hitungPerluPerpanjangan(principal: SessionPrincipal, branchId: string | undefined, now: Date) {
+    if (!principal.capabilities.includes('purchase:record')) return 0;
+    const semua = principal.capabilities.includes('branch:all') || this.superOwner(principal);
+    const cabang = branchId ? [branchId] : semua ? null : principal.branchIds;
+    return this.db.paketPelanggan.count({
+      where: {
+        status: 'ACTIVE',
+        remainingSessions: { gt: 0 },
+        validUntil: { gt: now, lte: new Date(now.getTime() + JENDELA_PERPANJANGAN_HARI * 86_400_000) },
+        ...(cabang
+          ? {
+              OR: [
+                { purchase: { is: { branchId: { in: cabang } } } },
+                { package: { is: { branchId: { in: cabang } } } },
+              ],
+            }
+          : {}),
+      },
+    });
   }
 
   private async muat(

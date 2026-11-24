@@ -596,7 +596,9 @@ export function ActionInbox({
               >
                 {p.key === 'renewal'
                   ? `${p.jumlah} member paketnya habis dan belum renew`
-                  : `${p.jumlah} kelas di bawah kuota minimum`}
+                  : p.key === 'perpanjangan'
+                    ? `${p.jumlah} member masih punya sesi, paketnya berakhir dalam 14 hari`
+                    : `${p.jumlah} kelas di bawah kuota minimum`}
               </Link>
             </li>
           ))}

@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { CheckCircle2, XCircle } from 'lucide-react';
 import {
   purchaseFailure,
+  type CekOtomatisBukti,
   type PaymentReviewItem,
   type PurchaseReviewClient,
 } from '@/api-clients/purchase-client';
@@ -36,6 +37,40 @@ export interface KeputusanTransfer {
 }
 
 const rp = (n: number) => `Rp ${n.toLocaleString('id-ID')}`;
+
+/** Penjelasan hasil cek otomatis untuk staf: kenapa sistem tidak menyetujui sendiri. */
+export const ALASAN_CEK_OTOMATIS: Record<string, string> = {
+  NOMINAL_TIDAK_DITEMUKAN: 'Nominal unik tidak terbaca di foto bukti.',
+  WAKTU_TIDAK_TERBACA: 'Tanggal dan jam transfer tidak terbaca di foto bukti.',
+  WAKTU_DI_LUAR_JENDELA: 'Waktu transfer di foto lebih dari 1 jam sebelum bukti diunggah, atau sebelum pesanan dibuat.',
+  FOTO_DIPAKAI_ULANG: 'Foto yang sama pernah dipakai untuk pesanan lain.',
+  BUKAN_GAMBAR: 'Bukti berupa PDF; sistem hanya membaca foto.',
+  GAGAL_BACA: 'Foto tidak bisa dibaca sistem (OCR gagal).',
+  TANPA_KODE_UNIK: 'Pesanan ini tidak punya kode unik.',
+  BUKAN_TRANSFER_BANK: 'Metode bayarnya bukan transfer bank.',
+  TABEL_BUKTI_SIDIK_BELUM_ADA: 'Fitur belum aktif di server: tabel bukti_sidik belum dibuat.',
+  PENYIMPANAN_TIDAK_SIAP: 'Fitur belum aktif di server: penyimpanan berkas belum terhubung.',
+  GALAT_SISTEM: 'Cek otomatis gagal karena galat sistem.',
+};
+
+const jamWib = (iso: string) =>
+  new Intl.DateTimeFormat('id-ID', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Jakarta' }).format(
+    new Date(iso),
+  );
+
+export function PenjelasanCekOtomatis({ cek }: { cek: CekOtomatisBukti }) {
+  if (cek.hasil === 'COCOK') return null;
+  const terbaca = [
+    cek.nominalTerbaca.length ? `angka ${cek.nominalTerbaca.map((n) => n.toLocaleString('id-ID')).join(', ')}` : '',
+    cek.waktuTerbaca.length ? `waktu ${cek.waktuTerbaca.map(jamWib).join(', ')}` : '',
+  ].filter(Boolean);
+  return (
+    <Feedback kind="warning">
+      Belum disetujui otomatis: {ALASAN_CEK_OTOMATIS[cek.hasil] ?? cek.hasil}
+      {terbaca.length > 0 && ` Terbaca di foto: ${terbaca.join('; ')}.`} Periksa manual lalu putuskan.
+    </Feedback>
+  );
+}
 
 /**
  * Langkah kedua persetujuan transfer: bukti dibuka layar penuh, lalu Setujui atau Tolak di tempat.
@@ -182,6 +217,7 @@ export function TransferProofViewer({
           {String(purchase.paymentUniqueCode).padStart(3, '0')}) dengan mutasi rekening.
         </p>
       )}
+      {purchase?.cekOtomatis && <PenjelasanCekOtomatis cek={purchase.cekOtomatis} />}
       {purchase && !purchase.paymentProof && purchase.paymentMethod === 'QRIS' && (
         <Feedback kind="info">
           QRIS ini dicatat staf di meja tanpa gambar bukti. Cocokkan nominalnya dengan riwayat QRIS

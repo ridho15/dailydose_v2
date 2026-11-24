@@ -80,6 +80,10 @@ export function bacaWaktu(teks: string): Date[] {
   return hasil;
 }
 
+/** Aksi audit log hasil cek otomatis foto bukti. */
+export const AKSI_AUTO_SETUJU = 'payment.auto_approved_from_proof';
+export const AKSI_AUTO_LEWAT = 'payment.auto_check_skipped';
+
 export const JENDELA_BUKTI_MENIT = 60;
 /** Jam di HP pengirim dan server bisa berbeda beberapa menit. */
 const TOLERANSI_JAM_MENIT = 5;

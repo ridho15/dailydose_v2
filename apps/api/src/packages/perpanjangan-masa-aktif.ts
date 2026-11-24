@@ -18,6 +18,11 @@ import { ApiProblem, ENTITY_ID_REGEX } from '../identity/security';
  */
 export const HARI_PERPANJANGAN = 30;
 export const MAKS_PERPANJANGAN = 3;
+/**
+ * Paket perpanjangan baru bisa dibeli bila paket target tinggal sekian hari lagi sebelum berakhir
+ * dan masih ada sesinya (keputusan pemilik 24 November 2026).
+ */
+export const JENDELA_PERPANJANGAN_HARI = 14;
 const HARI_MS = 86_400_000;
 
 type Db = any;
@@ -107,6 +112,11 @@ export function cekSesiPaketPerpanjangan(perpanjangan: boolean, sessionCount: nu
     ]);
 }
 
+/** Paket aktif yang masa berlakunya tinggal paling lama JENDELA_PERPANJANGAN_HARI. */
+export function dalamJendelaPerpanjangan(cp: Pick<PaketTarget, 'validUntil'>, now: Date) {
+  return cp.validUntil.getTime() - now.getTime() <= JENDELA_PERPANJANGAN_HARI * HARI_MS;
+}
+
 export function paketMasihAktif(cp: Pick<PaketTarget, 'status' | 'validUntil' | 'remainingSessions'>, now: Date) {
   return cp.status === 'ACTIVE' && cp.validUntil.getTime() > now.getTime() && cp.remainingSessions > 0;
 }
@@ -155,7 +165,12 @@ async function hitungPerpanjangan(
 export async function pilihanTargetPerpanjangan(db: Db, userId: string, now = new Date()) {
   const paket: Array<PaketTarget & { totalSessions: number; package: { name: string } | null }> =
     await db.paketPelanggan.findMany({
-      where: { userId, status: 'ACTIVE', validUntil: { gt: now }, remainingSessions: { gt: 0 } },
+      where: {
+        userId,
+        status: 'ACTIVE',
+        validUntil: { gt: now, lte: new Date(now.getTime() + JENDELA_PERPANJANGAN_HARI * HARI_MS) },
+        remainingSessions: { gt: 0 },
+      },
       include: { package: { select: { name: true } } },
       orderBy: [{ validUntil: 'asc' }, { id: 'asc' }],
       take: 50,
@@ -199,6 +214,9 @@ export async function periksaTargetPerpanjangan(
     throw new ApiProblem('PACKAGE_EXTENSION_TARGET_NOT_FOUND', HttpStatus.NOT_FOUND);
   if (!paketMasihAktif(cp, now))
     throw new ApiProblem('PACKAGE_EXTENSION_TARGET_EXPIRED', HttpStatus.CONFLICT);
+  // Saat pesanan dibuat saja; persetujuan pembayaran yang datang belakangan tidak dicek ulang.
+  if (!dalamJendelaPerpanjangan(cp, now))
+    throw new ApiProblem('PACKAGE_EXTENSION_TOO_EARLY', HttpStatus.CONFLICT);
   const { terpakai, menunggu } = (await hitungPerpanjangan(tx, [cp.id])).get(cp.id)!;
   if (terpakai >= MAKS_PERPANJANGAN)
     throw new ApiProblem('PACKAGE_EXTENSION_LIMIT_REACHED', HttpStatus.CONFLICT);
@@ -259,6 +277,19 @@ export async function terapkanPerpanjangan(
   });
   if (klaim.count === 0) return (await tx.perpanjanganPaket.findUnique({ where: { purchaseId } })) ?? catatan;
   await tx.paketPelanggan.update({ where: { id: cp.id }, data: { validUntil: validUntilAfter } });
+  // Riwayat sesi paket: supaya perpanjangan berbayar ikut tampil di log masa berlaku terpusat.
+  if (typeof tx.sessionLedger?.create === 'function')
+    await tx.sessionLedger.create({
+      data: {
+        customerPackageId: cp.id,
+        type: 'ADJUST_MANUAL',
+        amount: 0,
+        balanceAfter: cp.remainingSessions,
+        referenceId: purchaseId,
+        notes: `Perpanjangan masa aktif berbayar +${catatan.hari} hari (hingga ${new Date(validUntilAfter.getTime() + 7 * 3_600_000).toISOString().slice(0, 10)})`,
+        createdById: null,
+      },
+    });
   return { ...catatan, appliedAt: now, validUntilBefore: cp.validUntil, validUntilAfter };
 }
 

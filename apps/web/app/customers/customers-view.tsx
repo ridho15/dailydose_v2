@@ -98,6 +98,12 @@ export function CustomersView() {
   const [submitting, setSubmitting] = useState(false);
   const [refreshIndex, setRefreshIndex] = useState(0);
 
+  // Tautan dari halaman lain membawa `?q=` (mis. nama member): dipakai sebagai pencarian awal.
+  useEffect(() => {
+    const awal = new URLSearchParams(window.location.search).get('q')?.trim();
+    if (awal) setQ(awal);
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     async function execute() {

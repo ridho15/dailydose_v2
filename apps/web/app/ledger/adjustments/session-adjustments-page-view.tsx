@@ -5,6 +5,7 @@ import { useTrackedRouter } from '../../components/app-loading';
 import { LedgerView } from '../ledger-view';
 import { useSessionContext } from '../../session-context';
 import { PenyesuaianForm } from './penyesuaian-form';
+import { RiwayatMasaBerlaku } from './riwayat-masa-berlaku';
 
 export function SessionAdjustmentsPageView() {
   const params = useSearchParams();
@@ -67,7 +68,13 @@ export function SessionAdjustmentsPageView() {
       }}
     />
   );
-  if (!bisaLangsung) return daftar;
+  if (!bisaLangsung)
+    return (
+      <div className="space-y-8">
+        {daftar}
+        <RiwayatMasaBerlaku />
+      </div>
+    );
   return (
     <div className="space-y-8">
       <header>
@@ -87,6 +94,7 @@ export function SessionAdjustmentsPageView() {
         }}
       />
       {daftar}
+      <RiwayatMasaBerlaku />
     </div>
   );
 }

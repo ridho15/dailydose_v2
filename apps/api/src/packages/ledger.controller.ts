@@ -27,6 +27,7 @@ export class LedgerController {
     @Query('search') search?: string,
     @Query('status') status?: string,
     @Query('customerUserId') customerUserId?: string,
+    @Query('expiringWithinDays') expiringWithinDays?: string,
   ) {
     return this.ledger.listCustomerPackages(req.principal, {
       branchId,
@@ -36,6 +37,7 @@ export class LedgerController {
       search,
       status,
       customerUserId,
+      expiringWithinDays: expiringWithinDays ? Number(expiringWithinDays) : undefined,
     });
   }
 
@@ -100,6 +102,18 @@ export class LedgerController {
     @Param('userId') userId: string,
   ) {
     return this.ledger.removePackageMember(req.principal, id, userId);
+  }
+
+  /** Log terpusat perpanjangan, freeze, dan buka freeze paket member. */
+  @Get('package-validity-changes')
+  riwayatMasaBerlaku(
+    @Req() req: AuthenticatedRequest,
+    @Query('branchId') branchId?: string,
+    @Query('q') q?: string,
+    @Query('cursor') cursor?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.ledger.riwayatMasaBerlaku(req.principal, { branchId, q, cursor, limit });
   }
 
   @Get('session-adjustments')
