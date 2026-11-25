@@ -40,7 +40,7 @@ describe('StokMinumanView', () => {
     render(<StokMinumanView client={client} />);
     expect(await screen.findByText('10 botol')).toBeVisible();
     expect(screen.queryByRole('tab', { name: 'Master barang' })).toBeNull();
-    await user.click(screen.getByRole('tab', { name: 'Catat masuk/keluar' }));
+    await user.click(screen.getByRole('tab', { name: 'Catat' }));
     await user.selectOptions(screen.getByLabelText('Barang'), 'b1');
     await user.type(screen.getByLabelText(/^Jumlah/), '24');
     const tombol = screen.getByRole('button', { name: 'Catat barang masuk' });
@@ -58,7 +58,7 @@ describe('StokMinumanView', () => {
     const user = userEvent.setup();
     const client = klien(2);
     render(<StokMinumanView client={client} />);
-    await user.click(await screen.findByRole('tab', { name: 'Catat masuk/keluar' }));
+    await user.click(await screen.findByRole('tab', { name: 'Catat' }));
     await user.click(screen.getByLabelText('Dijual'));
     await user.selectOptions(screen.getByLabelText('Barang'), 'b1');
     await user.type(screen.getByLabelText(/^Jumlah/), '3');
@@ -70,11 +70,27 @@ describe('StokMinumanView', () => {
     await waitFor(() => expect(client.catat).toHaveBeenCalledWith(expect.objectContaining({ jenis: 'DIJUAL', jumlah: 2, hargaSatuanRp: 8000 })));
   });
 
+  it('tombol cepat Jual di daftar stok membuka form dengan barang dan jenis terisi; tombol + menambah jumlah', async () => {
+    caps = ['inventory:record'];
+    const user = userEvent.setup();
+    const client = klien(5);
+    render(<StokMinumanView client={client} />);
+    await user.click(await screen.findByRole('button', { name: 'Catat jual Air mineral' }));
+    expect(screen.getByRole('tab', { name: 'Catat' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByLabelText('Dijual')).toBeChecked();
+    expect(screen.getByLabelText('Barang')).toHaveValue('b1');
+    expect(screen.getByLabelText(/^Jumlah/)).toHaveValue('1');
+    await user.click(screen.getByRole('button', { name: 'Tambah jumlah' }));
+    expect(screen.getByLabelText(/^Jumlah/)).toHaveValue('2');
+    await user.click(screen.getByRole('button', { name: 'Catat dijual' }));
+    await waitFor(() => expect(client.catat).toHaveBeenCalledWith(expect.objectContaining({ jenis: 'DIJUAL', barangId: 'b1', jumlah: 2 })));
+  });
+
   it('owner hanya melihat stok dan riwayat, tanpa tab catat', async () => {
     caps = ['inventory:read'];
     render(<StokMinumanView client={klien()} />);
     expect(await screen.findByRole('tab', { name: 'Riwayat' })).toBeVisible();
-    expect(screen.queryByRole('tab', { name: 'Catat masuk/keluar' })).toBeNull();
+    expect(screen.queryByRole('tab', { name: 'Catat' })).toBeNull();
   });
 
   it('pesan galat menyebut sisa stok dan tabel yang belum dibuat', () => {

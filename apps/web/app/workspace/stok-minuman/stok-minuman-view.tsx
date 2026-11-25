@@ -1,6 +1,6 @@
 'use client';
 
-import { type FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { apiFetch } from '../../lib/api-client';
 import { Button } from '../../components/actions';
 import { DateInput, SelectInput, TextInput } from '../../components/forms';
@@ -65,6 +65,9 @@ export const LABEL_JENIS: Record<JenisMutasi, string> = {
   DIPAKAI_OWNER: 'Dipakai owner',
 };
 
+/** 16px di ponsel supaya Safari iOS tidak memperbesar halaman saat kolom diketuk. */
+const INPUT = 'text-base sm:text-sm';
+
 const rupiah = (n: number) => `Rp${n.toLocaleString('id-ID')}`;
 const hariIniWib = () => new Date(Date.now() + 7 * 3_600_000).toISOString().slice(0, 10);
 
@@ -104,9 +107,18 @@ export function StokMinumanView({ client = browserStokMinumanClient }: { client?
   const cabangList = useMemo(() => (session?.branches ?? []).map((b) => ({ id: b.id, name: b.name })), [session?.branches]);
   const [branchId, setBranchId] = useState(ctx?.activeBranchId || cabangList[0]?.id || '');
   const [tab, setTab] = useState<Tab>('stok');
+  const [awalCatat, setAwalCatat] = useState<{ jenis: JenisMutasi; barangId: string; kunci: number }>({ jenis: 'MASUK', barangId: '', kunci: 0 });
   const [stok, setStok] = useState<Array<{ barang: BarangMinuman; stok: number }> | null>(null);
   const [galat, setGalat] = useState('');
   const [info, setInfo] = useState('');
+  const pesanRef = useRef<HTMLDivElement>(null);
+
+  // Di ponsel pesan berhasil/galat ada di atas layar, sedangkan tombol simpan di bawah: gulir ke pesannya.
+  useEffect(() => {
+    if (!info && !galat) return;
+    const gerak = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth';
+    pesanRef.current?.scrollIntoView?.({ behavior: gerak, block: 'center' });
+  }, [info, galat]);
 
   useEffect(() => {
     if (!branchId && cabangList[0]) setBranchId(ctx?.activeBranchId || cabangList[0].id);
@@ -126,15 +138,15 @@ export function StokMinumanView({ client = browserStokMinumanClient }: { client?
 
   const tabs: Array<{ id: Tab; label: string }> = [
     { id: 'stok', label: 'Stok' },
-    ...(bolehCatat ? [{ id: 'catat' as const, label: 'Catat masuk/keluar' }] : []),
+    ...(bolehCatat ? [{ id: 'catat' as const, label: 'Catat' }] : []),
     { id: 'riwayat', label: 'Riwayat' },
     ...(bolehKelola ? [{ id: 'master' as const, label: 'Master barang' }] : []),
   ];
 
   return (
-    <main className="mx-auto grid max-w-4xl gap-5 p-4">
+    <main className="mx-auto grid max-w-4xl gap-4 p-4 sm:gap-5">
       <header className="grid gap-1">
-        <h1 className="m-0 text-2xl font-semibold text-dd-ink">Stok Minuman</h1>
+        <h1 className="m-0 text-xl font-semibold text-dd-ink sm:text-2xl">Stok Minuman</h1>
         <p className="m-0 text-[15px] text-dd-muted">
           Barang masuk otomatis jadi pengeluaran cabang di Jurnal kas. Barang keluar dicatat sebagai dijual (masuk laba) atau
           dipakai owner.
@@ -142,7 +154,7 @@ export function StokMinumanView({ client = browserStokMinumanClient }: { client?
       </header>
 
       {cabangList.length > 1 && (
-        <SelectInput label="Cabang" value={branchId} onChange={(e) => setBranchId(e.target.value)} wrapperClassName="max-w-xs">
+        <SelectInput label="Cabang" value={branchId} onChange={(e) => setBranchId(e.target.value)} wrapperClassName="sm:max-w-xs" className={INPUT}>
           {cabangList.map((b) => (
             <option key={b.id} value={b.id}>
               {b.name}
@@ -151,7 +163,7 @@ export function StokMinumanView({ client = browserStokMinumanClient }: { client?
         </SelectInput>
       )}
 
-      <div role="tablist" aria-label="Bagian stok minuman" className="flex flex-wrap gap-2">
+      <div role="tablist" aria-label="Bagian stok minuman" className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
         {tabs.map((t) => (
           <button
             key={t.id}
@@ -163,7 +175,7 @@ export function StokMinumanView({ client = browserStokMinumanClient }: { client?
               setGalat('');
               setInfo('');
             }}
-            className={`min-h-11 rounded-dd-md border px-4 text-[15px] font-semibold motion-safe:transition-colors ${
+            className={`min-h-11 rounded-dd-md border px-3 text-[15px] font-semibold motion-safe:transition-colors sm:px-4 ${
               tab === t.id ? 'border-dd-ink bg-dd-ink text-white' : 'border-dd-line bg-white text-dd-ink hover:bg-dd-surface'
             }`}
           >
@@ -172,12 +184,30 @@ export function StokMinumanView({ client = browserStokMinumanClient }: { client?
         ))}
       </div>
 
-      {info && <Feedback kind="status">{info}</Feedback>}
-      {galat && <Feedback kind="error">{galat}</Feedback>}
+      <div ref={pesanRef} className="grid gap-2 empty:hidden">
+        {info && <Feedback kind="status">{info}</Feedback>}
+        {galat && <Feedback kind="error">{galat}</Feedback>}
+      </div>
 
-      {tab === 'stok' && <TabelStok stok={stok} />}
+      {tab === 'stok' && (
+        <TabelStok
+          stok={stok}
+          onCepat={
+            bolehCatat
+              ? (jenis, barangId) => {
+                  setAwalCatat((a) => ({ jenis, barangId, kunci: a.kunci + 1 }));
+                  setTab('catat');
+                  setGalat('');
+                  setInfo('');
+                }
+              : undefined
+          }
+        />
+      )}
       {tab === 'catat' && bolehCatat && (
         <FormCatat
+          key={awalCatat.kunci}
+          awal={awalCatat}
           client={client}
           branchId={branchId}
           barang={(stok ?? []).filter((s) => s.barang.aktif || s.stok > 0)}
@@ -211,7 +241,13 @@ export function StokMinumanView({ client = browserStokMinumanClient }: { client?
   );
 }
 
-function TabelStok({ stok }: { stok: Array<{ barang: BarangMinuman; stok: number }> | null }) {
+function TabelStok({
+  stok,
+  onCepat,
+}: {
+  stok: Array<{ barang: BarangMinuman; stok: number }> | null;
+  onCepat?: (jenis: JenisMutasi, barangId: string) => void;
+}) {
   if (stok === null) return <Skeleton label="Memuat stok minuman" />;
   if (stok.length === 0)
     return (
@@ -222,17 +258,31 @@ function TabelStok({ stok }: { stok: Array<{ barang: BarangMinuman; stok: number
   return (
     <ul className="m-0 grid list-none rounded-dd-lg border border-dd-line bg-white p-0">
       {stok.map(({ barang, stok: n }) => (
-        <li key={barang.id} className="flex items-center justify-between gap-3 border-b border-dd-line px-4 py-3 last:border-b-0">
-          <div className="grid gap-0.5">
-            <span className="text-[15px] font-semibold text-dd-ink">{barang.nama}</span>
-            <span className="text-sm text-dd-muted">
-              {barang.hargaJualRp !== null ? `Harga jual ${rupiah(barang.hargaJualRp)} / ${barang.satuan}` : 'Harga jual belum diisi'}
-              {!barang.aktif ? ' · nonaktif' : ''}
+        <li key={barang.id} className="grid gap-3 border-b border-dd-line px-4 py-3 last:border-b-0 sm:flex sm:items-center sm:justify-between">
+          <div className="flex items-start justify-between gap-3 sm:contents">
+            <div className="grid min-w-0 gap-0.5">
+              <span className="text-[15px] font-semibold text-dd-ink">{barang.nama}</span>
+              <span className="text-sm text-dd-muted">
+                {barang.hargaJualRp !== null ? `Harga jual ${rupiah(barang.hargaJualRp)} / ${barang.satuan}` : 'Harga jual belum diisi'}
+                {!barang.aktif ? ' · nonaktif' : ''}
+              </span>
+            </div>
+            <span
+              className={`shrink-0 text-lg font-semibold tabular-nums sm:ml-auto ${n <= 0 ? 'text-dd-danger' : n < 5 ? 'text-dd-warning' : 'text-dd-ink'}`}
+            >
+              {n} {barang.satuan}
             </span>
           </div>
-          <span className={`text-lg font-semibold tabular-nums ${n <= 0 ? 'text-dd-danger' : n < 5 ? 'text-dd-warning' : 'text-dd-ink'}`}>
-            {n} {barang.satuan}
-          </span>
+          {onCepat && (
+            <div className="grid grid-cols-2 gap-2 sm:flex">
+              <Button variant="secondary" disabled={!barang.aktif} onClick={() => onCepat('MASUK', barang.id)} aria-label={`Catat barang masuk ${barang.nama}`}>
+                + Masuk
+              </Button>
+              <Button variant="secondary" disabled={n <= 0} onClick={() => onCepat('DIJUAL', barang.id)} aria-label={`Catat jual ${barang.nama}`}>
+                Jual
+              </Button>
+            </div>
+          )}
         </li>
       ))}
     </ul>
@@ -240,21 +290,24 @@ function TabelStok({ stok }: { stok: Array<{ barang: BarangMinuman; stok: number
 }
 
 function FormCatat({
+  awal,
   client,
   branchId,
   barang,
   onBerhasil,
   onGalat,
 }: {
+  awal: { jenis: JenisMutasi; barangId: string };
   client: StokMinumanClient;
   branchId: string;
   barang: Array<{ barang: BarangMinuman; stok: number }>;
   onBerhasil: (pesan: string) => void;
   onGalat: (pesan: string) => void;
 }) {
-  const [jenis, setJenis] = useState<JenisMutasi>('MASUK');
-  const [barangId, setBarangId] = useState('');
-  const [jumlah, setJumlah] = useState('');
+  const [jenis, setJenis] = useState<JenisMutasi>(awal.jenis);
+  const [barangId, setBarangId] = useState(awal.barangId);
+  // Dari tombol cepat (Masuk/Jual) jumlah langsung 1, jadi jual satu botol cukup dua klik.
+  const [jumlah, setJumlah] = useState(awal.barangId ? '1' : '');
   const [harga, setHarga] = useState('');
   const [tanggal, setTanggal] = useState(hariIniWib);
   const [catatan, setCatatan] = useState('');
@@ -296,24 +349,24 @@ function FormCatat({
   };
 
   return (
-    <form onSubmit={(e) => void kirim(e)} className="grid gap-3 rounded-dd-lg border border-dd-line bg-white p-4 sm:grid-cols-2">
+    <form onSubmit={(e) => void kirim(e)} className="grid gap-4 rounded-dd-lg border border-dd-line bg-white p-4 sm:grid-cols-2 sm:gap-3">
       <fieldset className="m-0 grid gap-2 border-0 p-0 sm:col-span-2">
         <legend className="mb-2 text-[15px] font-semibold text-dd-ink">Jenis</legend>
-        <div className="flex flex-wrap gap-2">
+        <div className="grid grid-cols-3 gap-2 sm:flex sm:flex-wrap">
           {(Object.keys(LABEL_JENIS) as JenisMutasi[]).map((j) => (
             <label
               key={j}
-              className={`flex min-h-11 cursor-pointer items-center gap-2 rounded-dd-md border px-4 text-[15px] ${
-                jenis === j ? 'border-dd-ink bg-dd-surface font-semibold' : 'border-dd-line'
+              className={`flex min-h-12 cursor-pointer items-center justify-center gap-2 rounded-dd-md border px-2 text-center text-[15px] leading-tight sm:justify-start sm:px-4 sm:text-left ${
+                jenis === j ? 'border-dd-ink bg-dd-ink font-semibold text-white' : 'border-dd-line bg-white text-dd-ink'
               }`}
             >
-              <input type="radio" name="jenis" value={j} checked={jenis === j} onChange={() => setJenis(j)} />
+              <input type="radio" name="jenis" value={j} checked={jenis === j} onChange={() => setJenis(j)} className="sr-only sm:not-sr-only" />
               {LABEL_JENIS[j]}
             </label>
           ))}
         </div>
       </fieldset>
-      <SelectInput label="Barang" value={barangId} onChange={(e) => setBarangId(e.target.value)}>
+      <SelectInput label="Barang" value={barangId} onChange={(e) => setBarangId(e.target.value)} className={INPUT}>
         <option value="">Pilih barang</option>
         {barang.map(({ barang: b, stok }) => (
           <option key={b.id} value={b.id}>
@@ -321,13 +374,41 @@ function FormCatat({
           </option>
         ))}
       </SelectInput>
-      <TextInput
-        label={`Jumlah${pilihan ? ` (${pilihan.barang.satuan})` : ''}`}
-        inputMode="numeric"
-        value={jumlah}
-        onChange={(e) => setJumlah(e.target.value.replace(/\D/g, ''))}
-        error={jumlah && !stokCukup ? `Stok hanya ${pilihan?.stok ?? 0}.` : undefined}
-      />
+      <div className="grid gap-1.5">
+        <div className="flex items-end gap-2">
+          <Button
+            variant="secondary"
+            className="w-12 shrink-0 px-0 text-lg"
+            aria-label="Kurangi jumlah"
+            disabled={!jumlah || n <= 1}
+            onClick={() => setJumlah(String(Math.max(1, n - 1)))}
+          >
+            −
+          </Button>
+          <TextInput
+            label={`Jumlah${pilihan ? ` (${pilihan.barang.satuan})` : ''}`}
+            inputMode="numeric"
+            value={jumlah}
+            onChange={(e) => setJumlah(e.target.value.replace(/\D/g, ''))}
+            className={`${INPUT} text-center tabular-nums`}
+            wrapperClassName="flex-1"
+          />
+          <Button
+            variant="secondary"
+            className="w-12 shrink-0 px-0 text-lg"
+            aria-label="Tambah jumlah"
+            disabled={n >= 10_000}
+            onClick={() => setJumlah(String((Number.isInteger(n) ? n : 0) + 1))}
+          >
+            +
+          </Button>
+        </div>
+        {jumlah && !stokCukup && (
+          <p role="alert" className="m-0 text-sm font-medium text-dd-danger">
+            Stok hanya {pilihan?.stok ?? 0}.
+          </p>
+        )}
+      </div>
       {butuhHarga && (
         <TextInput
           label={jenis === 'MASUK' ? 'Harga beli per satuan (Rp)' : 'Harga jual per satuan (Rp)'}
@@ -335,6 +416,7 @@ function FormCatat({
           value={harga}
           placeholder={jenis === 'DIJUAL' && pilihan?.barang.hargaJualRp ? String(pilihan.barang.hargaJualRp) : undefined}
           onChange={(e) => setHarga(e.target.value.replace(/\D/g, ''))}
+          className={INPUT}
           description={
             jenis === 'DIJUAL' && pilihan?.barang.hargaJualRp
               ? `Kosongkan untuk memakai harga jual ${rupiah(pilihan.barang.hargaJualRp)}.`
@@ -342,19 +424,24 @@ function FormCatat({
           }
         />
       )}
-      <DateInput label="Tanggal" value={tanggal} max={hariIniWib()} onChange={(e) => setTanggal(e.target.value)} />
+      <DateInput label="Tanggal" value={tanggal} max={hariIniWib()} onChange={(e) => setTanggal(e.target.value)} className={INPUT} />
       <TextInput
         label="Catatan (opsional)"
         value={catatan}
         maxLength={200}
         onChange={(e) => setCatatan(e.target.value)}
+        className={INPUT}
         wrapperClassName="sm:col-span-2"
       />
-      <div className="flex flex-wrap items-center gap-3 sm:col-span-2">
-        <Button type="submit" disabled={!siap} loading={sibuk}>
+      <div className="grid gap-2 sm:col-span-2 sm:flex sm:flex-row-reverse sm:items-center sm:justify-end sm:gap-3">
+        {siap && butuhHarga && (
+          <span className="text-[15px] text-dd-muted" aria-live="polite">
+            Total <strong className="text-dd-ink tabular-nums">{rupiah(n * h)}</strong>
+          </span>
+        )}
+        <Button type="submit" disabled={!siap} loading={sibuk} className="w-full sm:w-auto">
           Catat {LABEL_JENIS[jenis].toLowerCase()}
         </Button>
-        {siap && butuhHarga && <span className="text-[15px] text-dd-muted">Total {rupiah(n * h)}</span>}
       </div>
       <p className="m-0 text-sm text-dd-muted sm:col-span-2">
         Catatan stok tidak bisa diubah atau dihapus. Bila salah, catat kebalikannya dengan keterangan di kolom catatan.
@@ -422,7 +509,7 @@ function Riwayat({ client, branchId }: { client: StokMinumanClient; branchId: st
       )}
       {cursor && (
         <div>
-          <Button variant="secondary" loading={sibuk} onClick={() => void muat(cursor)}>
+          <Button variant="secondary" loading={sibuk} onClick={() => void muat(cursor)} className="w-full sm:w-auto">
             Muat lebih banyak
           </Button>
         </div>
@@ -490,16 +577,17 @@ function MasterBarang({
     <section className="grid gap-4">
       <form onSubmit={(e) => void tambah(e)} className="grid gap-3 rounded-dd-lg border border-dd-line bg-white p-4 sm:grid-cols-3">
         <h2 className="m-0 text-lg font-semibold text-dd-ink sm:col-span-3">Tambah barang</h2>
-        <TextInput label="Nama barang" value={form.nama} maxLength={80} onChange={(e) => setForm((f) => ({ ...f, nama: e.target.value }))} />
-        <TextInput label="Satuan" value={form.satuan} maxLength={20} onChange={(e) => setForm((f) => ({ ...f, satuan: e.target.value }))} />
+        <TextInput label="Nama barang" value={form.nama} maxLength={80} onChange={(e) => setForm((f) => ({ ...f, nama: e.target.value }))} className={INPUT} />
+        <TextInput label="Satuan" value={form.satuan} maxLength={20} onChange={(e) => setForm((f) => ({ ...f, satuan: e.target.value }))} className={INPUT} />
         <TextInput
           label="Harga jual (Rp, opsional)"
           inputMode="numeric"
           value={form.harga}
           onChange={(e) => setForm((f) => ({ ...f, harga: e.target.value.replace(/\D/g, '') }))}
+          className={INPUT}
         />
         <div className="sm:col-span-3">
-          <Button type="submit" disabled={!siap} loading={sibuk}>
+          <Button type="submit" disabled={!siap} loading={sibuk} className="w-full sm:w-auto">
             Tambah barang
           </Button>
         </div>
@@ -511,15 +599,16 @@ function MasterBarang({
           {items.map((b) =>
             edit?.id === b.id ? (
               <li key={b.id} className="grid gap-3 border-b border-dd-line px-4 py-3 last:border-b-0 sm:grid-cols-3">
-                <TextInput label="Nama barang" value={edit.nama} maxLength={80} onChange={(e) => setEdit({ ...edit, nama: e.target.value })} />
-                <TextInput label="Satuan" value={edit.satuan} maxLength={20} onChange={(e) => setEdit({ ...edit, satuan: e.target.value })} />
+                <TextInput label="Nama barang" value={edit.nama} maxLength={80} onChange={(e) => setEdit({ ...edit, nama: e.target.value })} className={INPUT} />
+                <TextInput label="Satuan" value={edit.satuan} maxLength={20} onChange={(e) => setEdit({ ...edit, satuan: e.target.value })} className={INPUT} />
                 <TextInput
                   label="Harga jual (Rp)"
                   inputMode="numeric"
                   value={edit.harga}
                   onChange={(e) => setEdit({ ...edit, harga: e.target.value.replace(/\D/g, '') })}
+                  className={INPUT}
                 />
-                <div className="flex gap-2 sm:col-span-3">
+                <div className="grid grid-cols-2 gap-2 sm:col-span-3 sm:flex">
                   <Button
                     loading={sibuk}
                     disabled={edit.nama.trim().length < 2 || !edit.satuan.trim()}
@@ -538,7 +627,7 @@ function MasterBarang({
                 </div>
               </li>
             ) : (
-              <li key={b.id} className="flex flex-wrap items-center justify-between gap-3 border-b border-dd-line px-4 py-3 last:border-b-0">
+              <li key={b.id} className="grid gap-3 border-b border-dd-line px-4 py-3 last:border-b-0 sm:flex sm:items-center sm:justify-between">
                 <div className="grid gap-0.5">
                   <span className="text-[15px] font-semibold text-dd-ink">{b.nama}</span>
                   <span className="text-sm text-dd-muted">
@@ -546,7 +635,7 @@ function MasterBarang({
                     {b.aktif ? 'Aktif' : 'Nonaktif'}
                   </span>
                 </div>
-                <div className="flex flex-wrap gap-2">
+                <div className="grid grid-cols-2 gap-2 sm:flex">
                   <Button
                     variant="secondary"
                     onClick={() => setEdit({ id: b.id, nama: b.nama, satuan: b.satuan, harga: b.hargaJualRp === null ? '' : String(b.hargaJualRp) })}
