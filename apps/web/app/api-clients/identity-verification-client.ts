@@ -122,9 +122,6 @@ export const verificationClient = {
     email: string;
     password: string;
     consent: boolean;
-    /** Pilihan, tidak wajib: menerima info promo dan tampil di materi promosi. */
-    setujuPromo?: boolean;
-    setujuDokumentasi?: boolean;
     selfie?: File | null;
     ktp?: File | null;
   }) {
@@ -134,8 +131,6 @@ export const verificationClient = {
     form.set('email', input.email);
     form.set('password', input.password);
     form.set('consent', String(input.consent));
-    if (input.setujuPromo) form.set('setujuPromo', 'true');
-    if (input.setujuDokumentasi) form.set('setujuDokumentasi', 'true');
     if (input.selfie) form.set('selfie', input.selfie);
     if (input.ktp) form.set('ktp', input.ktp);
     return request('/auth/customer-registrations', { method: 'POST', body: form });

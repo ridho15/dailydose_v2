@@ -44,10 +44,8 @@ describe('LengkapiAkunView', () => {
     const tombol = screen.getByRole('button', { name: 'Setuju dan lanjut' });
     expect(tombol).toBeDisabled();
     await userEvent.click(screen.getByRole('checkbox', { name: /telah membaca dan menyetujui/ }));
-    await userEvent.click(screen.getByRole('checkbox', { name: /info promo/ }));
     await userEvent.click(tombol);
-    // Promo dicentang, tampil di materi promosi tidak: keduanya pilihan dan dikirim apa adanya.
-    expect(client.setujuiSyarat).toHaveBeenCalledWith({ promo: true, dokumentasi: false });
+    expect(client.setujuiSyarat).toHaveBeenCalled();
     await waitFor(() => expect(refresh).toHaveBeenCalled());
   });
 

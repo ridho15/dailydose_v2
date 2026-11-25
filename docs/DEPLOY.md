@@ -461,8 +461,7 @@ CREATE TABLE `mutasi_stok_minuman` (
 ```
 
 `persetujuan_syarat` (bukti persetujuan Syarat & Ketentuan, 25 November 2026). Mencatat kapan member
-menyetujui syarat saat mendaftar, saat checkout, dan saat staf mencatat penjualan, serta persetujuan
-pilihan untuk info promo (`jenis` PROMO) dan tampil di materi promosi (`jenis` DOKUMENTASI). Tanpa tabel ini
+menyetujui syarat saat mendaftar, saat checkout, dan saat staf mencatat penjualan,. Tanpa tabel ini
 pendaftaran dan checkout tetap jalan (persetujuan tetap wajib dicentang) tetapi tidak tercatat, dan
 member lama tidak diminta menyetujui ulang.
 

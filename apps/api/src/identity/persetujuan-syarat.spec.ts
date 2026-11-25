@@ -44,18 +44,3 @@ describe('Persetujuan Syarat & Ketentuan', () => {
   });
 });
 
-describe('setujuiSyarat: persetujuan pilihan promo dan dokumentasi', () => {
-  const { IdentityService } = require('./identity.service');
-  const { PolicyService } = require('./policy.service');
-  const { ConfigGatedGoogleProvider } = require('./provider-adapters');
-  it('DAFTAR selalu dicatat; PROMO dan DOKUMENTASI hanya bila dicentang', async () => {
-    const create = jest.fn(async () => ({}));
-    const db = { persetujuanSyarat: { create, findFirst: jest.fn(async () => null) } };
-    const service = new IdentityService(db, new PolicyService(), new ConfigGatedGoogleProvider(), { consume: jest.fn() }, { sendAction: jest.fn() });
-    await service.setujuiSyarat({ userId: 'u1' }, { setuju: true, promo: true, dokumentasi: false });
-    expect(create.mock.calls.map((c: any) => c[0].data.jenis)).toEqual(['PROMO', 'DAFTAR']);
-    await expect(service.setujuiSyarat({ userId: 'u1' }, { setuju: false, promo: true })).rejects.toMatchObject({
-      response: 'TERMS_CONSENT_REQUIRED',
-    });
-  });
-});

@@ -1,5 +1,5 @@
 import { nomorWajib, perluLengkapiNomor } from './nomor-wajib';
-import { catatPersetujuan, setuju, sudahSetujuVersiIni, VERSI_SYARAT, wajibSetuju } from './persetujuan-syarat';
+import { catatPersetujuan, sudahSetujuVersiIni, VERSI_SYARAT, wajibSetuju } from './persetujuan-syarat';
 import { HttpStatus, Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { KeycloakJitService } from './keycloak-jit.service';
 export type SessionChannel = 'WEB' | 'MOBILE' | string;
@@ -214,16 +214,10 @@ export class IdentityService {
   /** Member menyetujui versi Syarat & Ketentuan yang berlaku (layar Lengkapi akun). */
   async setujuiSyarat(
     principal: SessionPrincipal,
-    input: { setuju?: unknown; promo?: unknown; dokumentasi?: unknown; userAgent?: string },
+    input: { setuju?: unknown; userAgent?: string },
   ) {
     wajibSetuju(input.setuju, 'setuju');
     if (await sudahSetujuVersiIni(this.db as never, principal.userId)) return { versi: VERSI_SYARAT, tercatat: true };
-    for (const [nilai, jenis] of [
-      [input.promo, 'PROMO'],
-      [input.dokumentasi, 'DOKUMENTASI'],
-    ] as const)
-      if (setuju(nilai))
-        await catatPersetujuan(this.db as never, this.db, { userId: principal.userId, jenis, userAgent: input.userAgent });
     const tercatat = await catatPersetujuan(this.db as never, this.db, {
       userId: principal.userId,
       jenis: 'DAFTAR',
@@ -665,8 +659,6 @@ export class IdentityService {
       selfie?: any;
       ktp?: any;
       userAgent?: string;
-      setujuPromo?: unknown;
-      setujuDokumentasi?: unknown;
     },
     _correlationId?: string,
     _requestFingerprint?: string,
@@ -766,11 +758,6 @@ export class IdentityService {
           },
         });
         await catatPersetujuan(tx as never, tx, { userId, jenis: 'DAFTAR', userAgent: input.userAgent });
-        // Persetujuan pilihan (promo, tampil di materi promosi): dicatat hanya bila dicentang.
-        if (setuju(input.setujuPromo))
-          await catatPersetujuan(tx as never, tx, { userId, jenis: 'PROMO', userAgent: input.userAgent });
-        if (setuju(input.setujuDokumentasi))
-          await catatPersetujuan(tx as never, tx, { userId, jenis: 'DOKUMENTASI', userAgent: input.userAgent });
         return newUser;
       });
       return this.issueSession(user.id, 'WEB');

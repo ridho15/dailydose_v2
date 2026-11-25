@@ -170,9 +170,9 @@ export const PASAL_SYARAT: readonly PasalSyarat[] = [
     id: 'dokumentasi',
     judul: '14. Foto, Video, Ulasan, dan Komunikasi',
     butir: [
-      'Studio dapat mengambil foto atau video suasana kelas untuk dokumentasi internal. Wajah Member hanya ditampilkan dalam materi promosi bila Member memberikan persetujuan terpisah (pilihan, tidak wajib). Persetujuan ini dapat ditarik kapan saja dengan memberi tahu Studio.',
+      'Studio dapat mengambil foto atau video suasana kelas untuk keperluan dokumentasi dan promosi. Member yang tidak berkenan tampil wajib memberi tahu staf sebelum kelas dimulai.',
       'Ulasan dan penilaian yang diberikan Member tentang kelas atau instruktur dapat dipakai Studio untuk evaluasi internal.',
-      'Member setuju menerima pesan WhatsApp, email, dan notifikasi Aplikasi dari Studio terkait QR kehadiran, pengingat kelas, masa berlaku Paket, dan tagihan. Informasi promo hanya dikirim bila Member memberikan persetujuan terpisah (pilihan, tidak wajib), yang dapat ditarik kapan saja.',
+      'Member setuju menerima pesan WhatsApp, email, dan notifikasi Aplikasi dari Studio terkait QR kehadiran, pengingat kelas, masa berlaku Paket, tagihan, dan informasi promo. Member dapat meminta berhenti menerima informasi promo dengan memberi tahu Studio.',
     ],
   },
   {

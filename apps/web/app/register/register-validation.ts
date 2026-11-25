@@ -6,9 +6,6 @@ export type RegisterValues = {
   email: string;
   password: string;
   consent: boolean;
-  /** Pilihan, tidak wajib (lihat Syarat & Ketentuan Pasal 14). */
-  setujuPromo?: boolean;
-  setujuDokumentasi?: boolean;
 };
 
 export type RegisterErrors = Partial<Record<RegisterFieldName, string>>;

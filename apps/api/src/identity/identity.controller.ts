@@ -137,8 +137,6 @@ export class IdentityController {
       email: string;
       password: string;
       consent: string | boolean;
-      setujuPromo?: string | boolean;
-      setujuDokumentasi?: string | boolean;
     },
     @UploadedFiles() files: { selfie?: MemoryUpload[]; ktp?: MemoryUpload[] },
   ) {
@@ -193,12 +191,10 @@ export class IdentityController {
   @HttpCode(200)
   setujuiSyarat(
     @Req() request: AuthenticatedRequest,
-    @Body() body: { setuju?: unknown; promo?: unknown; dokumentasi?: unknown },
+    @Body() body: { setuju?: unknown },
   ) {
     return this.identities.setujuiSyarat(request.principal, {
       setuju: body?.setuju,
-      promo: body?.promo,
-      dokumentasi: body?.dokumentasi,
       userAgent: request.headers?.['user-agent'],
     });
   }
