@@ -852,6 +852,10 @@ export function CustomerDetailView({ id }: { id: string }) {
             {/* Tab 1: Paket Aktif & Sisa Sesi */}
             {activeTab === 'packages' && (
               <div className="p-6 space-y-6">
+                {/* Jalan pintas: ubah tanggal berakhir, bekukan, atau jual perpanjangan dalam satu layar. */}
+                <ButtonLink href={`/workspace/paket-member?member=${encodeURIComponent(customer.id)}`}>
+                  Kelola paket member ini
+                </ButtonLink>
                 {(() => {
                   const now = new Date();
                   const activePkgs = customer.customerPackages.filter(

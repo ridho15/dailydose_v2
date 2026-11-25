@@ -212,6 +212,19 @@ export const frontendPages: FrontendPageDefinition[] = [
     roleRelevance: ['SUPER_OWNER', 'MANAGER', 'ADMIN'],
   },
   {
+    href: '/workspace/paket-member',
+    label: 'Paket member',
+    shortLabel: 'Paket member',
+    description: 'Cari member, lihat semua paketnya, lalu ubah tanggal berakhir atau bekukan langsung dari kartunya.',
+    group: 'Member & Pelanggan',
+    capabilities: ['ledger:read'],
+    mutationCapabilities: ['customer-package:manage'],
+    priority: 10,
+    branchScope: 'topbar',
+    accent: 'brand',
+    roleRelevance: ['SUPER_OWNER', 'OWNER', 'MANAGER', 'ADMIN', 'FINANCE'],
+  },
+  {
     href: '/ledger',
     label: 'Paket & Sesi Pelanggan',
     shortLabel: 'Paket & Sesi',
@@ -718,7 +731,7 @@ export const GRUP_TAB: readonly { label: string; hrefs: readonly string[] }[] = 
   { label: 'Keuangan', hrefs: ['/finance', '/workspace/kas', '/workspace/branch-performance'] },
   { label: 'Paket & Promo', hrefs: ['/workspace/packages', '/workspace/vouchers'] },
   { label: 'Instruktur & Staf', hrefs: ['/instructors', '/users', '/assignments'] },
-  { label: 'Member', hrefs: ['/customers', '/ledger', '/ledger/adjustments', '/workspace/renewal'] },
+  { label: 'Member', hrefs: ['/customers', '/workspace/paket-member', '/ledger', '/ledger/adjustments', '/workspace/renewal'] },
   {
     label: 'Notifikasi & Otomasi',
     hrefs: ['/workspace/reminders', '/operations', '/notification-management', '/health'],

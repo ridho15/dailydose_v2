@@ -68,6 +68,7 @@ const routeCapabilities: Array<[string, string[]]> = [
   ['/finance', ['finance:reconcile']],
   ['/ledger/adjustments', ['ledger:adjust:read']],
   ['/ledger', ['ledger:read']],
+  ['/workspace/paket-member', ['ledger:read']],
   ['/health', ['operations:read']],
   ['/workspace/classes/riwayat', ['class-slot:manage']],
   ['/workspace/classes/salin', ['class-slot:manage']],

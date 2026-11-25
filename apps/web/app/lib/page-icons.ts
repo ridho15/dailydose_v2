@@ -1,5 +1,6 @@
 import {
   ScanLine,
+  PackageSearch,
   CupSoda,
   Activity,
   Bell,
@@ -60,6 +61,7 @@ export const pageIcons: Record<string, LucideIcon> = {
   '/workspace/guide': BookOpen,
   '/customers': Users,
   '/ledger': CircleDollarSign,
+  '/workspace/paket-member': PackageSearch,
   '/identity-verifications': ShieldCheck,
   '/ledger/adjustments': ListChecks,
   '/workspace/payments': CreditCard,
