@@ -12,16 +12,16 @@ import { useSessionContext } from '../../session-context';
 import { Skeleton } from '../../ui';
 
 export interface LengkapiAkunClient {
-  setujuiSyarat(): Promise<unknown>;
+  setujuiSyarat(pilihan?: { promo: boolean; dokumentasi: boolean }): Promise<unknown>;
   simpanNomor(phone: string): Promise<unknown>;
   kirimSelfie(file: File): Promise<unknown>;
 }
 
 const browserClient: LengkapiAkunClient = {
-  setujuiSyarat: () =>
+  setujuiSyarat: (pilihan) =>
     apiFetch('/me/terms-consent', {
       method: 'POST',
-      body: JSON.stringify({ setuju: true }),
+      body: JSON.stringify({ setuju: true, promo: Boolean(pilihan?.promo), dokumentasi: Boolean(pilihan?.dokumentasi) }),
       label: 'Menyimpan persetujuan…',
     }),
   simpanNomor: (phone) =>
@@ -71,6 +71,8 @@ export function LengkapiAkunView({ client = browserClient }: { client?: Lengkapi
   const perluNomor = Boolean(session?.phoneRequired);
   const perluSelfie = session?.identityVerificationStatus !== 'APPROVED';
   const [centang, setCentang] = useState(false);
+  const [promo, setPromo] = useState(false);
+  const [dokumentasi, setDokumentasi] = useState(false);
 
   useEffect(() => {
     if (session && !perluSyarat && !perluNomor && !perluSelfie) router.replace('/account');
@@ -97,7 +99,7 @@ export function LengkapiAkunView({ client = browserClient }: { client?: Lengkapi
     setSibuk(true);
     setGalat('');
     try {
-      await client.setujuiSyarat();
+      await client.setujuiSyarat({ promo, dokumentasi });
       await context?.refresh?.({ quiet: true });
     } catch {
       setGalat('Persetujuan belum tersimpan. Periksa koneksi lalu coba lagi.');
@@ -178,6 +180,19 @@ export function LengkapiAkunView({ client = browserClient }: { client?: Lengkapi
             checked={centang}
             disabled={sibuk}
             onChange={(e) => setCentang(e.target.checked)}
+          />
+          <p className="m-0 text-sm font-medium text-dd-muted">Pilihan, tidak wajib:</p>
+          <CheckboxInput
+            label="Saya bersedia menerima info promo dan paket baru lewat WhatsApp dan email."
+            checked={promo}
+            disabled={sibuk}
+            onChange={(e) => setPromo(e.target.checked)}
+          />
+          <CheckboxInput
+            label="Saya bersedia wajah saya tampil di foto atau video kelas untuk promosi Daily Dose."
+            checked={dokumentasi}
+            disabled={sibuk}
+            onChange={(e) => setDokumentasi(e.target.checked)}
           />
           {galat && (
             <p role="alert" className="m-0 text-sm font-medium text-dd-danger">

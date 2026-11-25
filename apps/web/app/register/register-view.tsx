@@ -97,6 +97,8 @@ function formValues(form: HTMLFormElement): RegisterValues {
     email: String(data.get('email') ?? ''),
     password: String(data.get('password') ?? ''),
     consent: data.get('consent') === 'true',
+    setujuPromo: data.get('setujuPromo') === 'true',
+    setujuDokumentasi: data.get('setujuDokumentasi') === 'true',
   };
 }
 
@@ -249,6 +251,8 @@ export function RegisterView() {
               email: values.email.trim(),
               password: values.password,
               consent: values.consent,
+              setujuPromo: values.setujuPromo,
+              setujuDokumentasi: values.setujuDokumentasi,
               selfie,
             });
             const searchParams = new URLSearchParams(window.location.search);
@@ -477,6 +481,35 @@ export function RegisterView() {
             </span>
           </label>
           {errors.consent && <FieldError id={errorId('consent')}>{errors.consent}</FieldError>}
+          <p className="m-0 pt-2 text-xs font-medium text-ed-muted">Pilihan, tidak wajib:</p>
+          <label
+            className="flex min-h-[44px] cursor-pointer select-none items-start gap-3 text-xs leading-5 text-ed-ink"
+            htmlFor="register-promo"
+          >
+            <input
+              className="mt-0.5 size-4 shrink-0 accent-ed-forest"
+              id="register-promo"
+              name="setujuPromo"
+              type="checkbox"
+              value="true"
+              disabled={loading}
+            />
+            <span>Saya bersedia menerima info promo dan paket baru lewat WhatsApp dan email.</span>
+          </label>
+          <label
+            className="flex min-h-[44px] cursor-pointer select-none items-start gap-3 text-xs leading-5 text-ed-ink"
+            htmlFor="register-dokumentasi"
+          >
+            <input
+              className="mt-0.5 size-4 shrink-0 accent-ed-forest"
+              id="register-dokumentasi"
+              name="setujuDokumentasi"
+              type="checkbox"
+              value="true"
+              disabled={loading}
+            />
+            <span>Saya bersedia wajah saya tampil di foto atau video kelas untuk promosi Daily Dose.</span>
+          </label>
         </div>
 
         {/* Submit Action */}

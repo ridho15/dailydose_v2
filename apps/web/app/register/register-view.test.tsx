@@ -144,6 +144,9 @@ describe('customer self-registration', () => {
       email: 'nadia@example.com',
       password: 'password-aman',
       consent: true,
+      // Promo dan tampil di materi promosi tidak dicentang: tidak wajib, bawaannya tidak setuju.
+      setujuPromo: false,
+      setujuDokumentasi: false,
       selfie: foto,
     });
     expect(screen.getByRole('button', { name: 'Membuat akun…' })).toBeDisabled();

@@ -10,7 +10,8 @@ import { ApiProblem } from './security';
  */
 export const VERSI_SYARAT = '2026-11-25';
 
-export type JenisPersetujuan = 'DAFTAR' | 'PEMBELIAN' | 'PEMBELIAN_STAF';
+/** PROMO dan DOKUMENTASI adalah persetujuan pilihan (Pasal 14): hanya dicatat bila member mencentangnya. */
+export type JenisPersetujuan = 'DAFTAR' | 'PEMBELIAN' | 'PEMBELIAN_STAF' | 'PROMO' | 'DOKUMENTASI';
 
 type Db = {
   persetujuanSyarat?: {

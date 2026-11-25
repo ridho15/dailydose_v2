@@ -31,9 +31,10 @@ export const PASAL_SYARAT: readonly PasalSyarat[] = [
     id: 'persetujuan',
     judul: '2. Persetujuan dan Perubahan Syarat',
     butir: [
-      'Dengan mencentang persetujuan saat mendaftar, saat membeli Paket atau Perpanjangan, atau dengan tetap menggunakan layanan Studio, Member menyatakan telah membaca, memahami, dan menyetujui seluruh Syarat & Ketentuan ini.',
-      'Persetujuan Member dicatat secara elektronik di sistem Studio (tanggal, jam, versi syarat, dan pesanan terkait) dan berlaku sebagai bukti yang sah. Untuk pembelian yang dicatat staf di studio, staf menyampaikan syarat ini kepada Member dan persetujuannya dicatat atas nama staf tersebut.',
+      'Dengan mencentang persetujuan saat mendaftar atau saat membeli Paket atau Perpanjangan, Member menyatakan telah membaca, memahami, dan menyetujui seluruh Syarat & Ketentuan ini.',
+      'Persetujuan Member dicatat secara elektronik di sistem Studio (tanggal, jam, versi syarat, dan pesanan terkait) dan dapat digunakan sebagai bukti. Untuk pembelian yang dicatat staf di studio, staf menyampaikan syarat ini kepada Member dan persetujuannya dicatat atas nama staf tersebut.',
       'Studio dapat memperbarui Syarat & Ketentuan ini. Versi terbaru ditampilkan di Aplikasi dan Member diminta menyetujuinya kembali sebelum dapat membeli Paket atau memesan kelas.',
+      'Perubahan harga, batas waktu (misalnya batas pembatalan, pemesanan, atau jendela perpanjangan), dan aturan lain tidak berlaku surut untuk Paket yang sudah dibayar sebelum perubahan tersebut.',
       'Bila Member tidak menyetujui versi terbaru, Member dapat berhenti menggunakan layanan. Paket yang sedang berjalan tetap tunduk pada ketentuan Masa Berlaku dan hangus sebagaimana diatur di bawah.',
     ],
   },
@@ -69,7 +70,7 @@ export const PASAL_SYARAT: readonly PasalSyarat[] = [
     butir: [
       'Masa Berlaku setiap Paket berbeda-beda, sesuai Paket yang dibeli dan sebagaimana tertera saat pembelian (misalnya 30, 60, atau 90 hari). Tanggal berakhir dapat dilihat di akun Member. Member wajib memantau sendiri sisa sesi dan tanggal berakhir Paketnya.',
       'Setelah Masa Berlaku berakhir, seluruh sisa sesi pada Paket tersebut HANGUS secara otomatis, tidak dapat digunakan, tidak dapat dipindahkan, tidak dapat ditukar dengan Paket lain, dan tidak dapat diuangkan.',
-      'Dengan membeli Paket, Member menyatakan sudah mengetahui Masa Berlaku Paket yang dibelinya dan menyetujui bahwa Paket akan hangus sesuai Masa Berlaku tersebut, tanpa kewajiban Studio untuk memberikan kompensasi apa pun.',
+      'Dengan membeli Paket, Member menyatakan sudah mengetahui Masa Berlaku Paket yang dibelinya dan menyetujui bahwa Paket akan hangus sesuai Masa Berlaku tersebut.',
       'Sesi yang sudah dipesan untuk kelas setelah tanggal berakhir Paket tidak dapat dipakai bila Paket sudah hangus.',
       'Pengingat masa berlaku yang dikirim Studio lewat WhatsApp atau Aplikasi hanya bersifat bantuan. Tidak diterimanya pengingat, karena alasan apa pun, tidak menunda atau membatalkan hangusnya Paket.',
       'Masa Berlaku tetap berjalan selama Member sakit, bepergian, cuti, atau berhalangan karena alasan pribadi apa pun, kecuali Studio secara tertulis menyetujui pembekuan Paket.',
@@ -92,10 +93,11 @@ export const PASAL_SYARAT: readonly PasalSyarat[] = [
     id: 'hak-studio',
     judul: '7. Hak Studio atas Paket dan Akun',
     butir: [
-      'Studio berhak sewaktu-waktu memotong sesi, membekukan, membatasi, atau membatalkan Paket Member, termasuk namun tidak terbatas pada keadaan berikut: pelanggaran Syarat & Ketentuan atau aturan studio, penyalahgunaan Paket atau akun, pembayaran yang tidak sah atau dibatalkan, ketidakhadiran (no-show), pembatalan terlambat, kesalahan sistem atau pencatatan, serta keputusan operasional Studio.',
+      'Studio berhak sewaktu-waktu memotong sesi, membekukan, membatasi, atau membatalkan Paket Member, termasuk namun tidak terbatas pada keadaan berikut: pelanggaran Syarat & Ketentuan atau aturan studio, penyalahgunaan Paket atau akun, pembayaran yang tidak sah atau dibatalkan, ketidakhadiran (no-show), pembatalan terlambat, serta kesalahan sistem atau pencatatan.',
+      'Bila Studio menghentikan atau membatalkan Paket bukan karena kesalahan Member, Studio akan menyelesaikannya dengan Member secara wajar, misalnya dengan memindahkan sisa sesi ke Paket atau cabang lain, menyesuaikan Masa Berlaku, atau cara lain yang ditetapkan Studio.',
       'Pemotongan sesi karena no-show, pembatalan terlambat, atau pelanggaran dilakukan otomatis oleh sistem atau oleh staf dan dicatat di riwayat Paket Member.',
       'Bila terjadi kesalahan pencatatan sesi, pembayaran, atau masa berlaku (misalnya sesi terkredit ganda), Studio berhak mengoreksinya kapan pun tanpa persetujuan Member terlebih dahulu.',
-      'Studio berhak mengubah jadwal, instruktur, ruangan, kapasitas, atau jenis kelas, serta membatalkan kelas, misalnya karena kuota minimum peserta tidak terpenuhi atau keadaan lain. Bila kelas dibatalkan oleh Studio, sesi dikembalikan ke Paket dan hal ini merupakan satu-satunya bentuk kompensasi.',
+      'Studio berhak mengubah jadwal, instruktur, ruangan, kapasitas, atau jenis kelas, serta membatalkan kelas, misalnya karena kuota minimum peserta tidak terpenuhi atau keadaan lain. Bila kelas dibatalkan oleh Studio, sesi dikembalikan ke Paket.',
       'Bila kuota minimum tidak terpenuhi, Studio dapat memutuskan kelas tetap berjalan atau dibatalkan, termasuk sesaat sebelum kelas dimulai.',
       'Studio berhak menolak memberikan layanan kepada siapa pun yang berperilaku tidak pantas, membahayakan, atau mengganggu member lain dan staf, dengan sesi tetap dianggap terpakai.',
     ],
@@ -129,7 +131,7 @@ export const PASAL_SYARAT: readonly PasalSyarat[] = [
     butir: [
       'Kehadiran dicatat dengan memindai QR Member di studio, paling cepat 45 menit sebelum kelas dimulai, atau dicatat manual oleh staf bila Member tidak dapat menunjukkan QR. QR dapat dikirim Studio ke WhatsApp Member.',
       'QR hanya berlaku untuk kelas yang dipesan di cabang dan jam tersebut. QR tidak boleh dibagikan kepada orang lain.',
-      'Catatan kehadiran di sistem Studio menjadi acuan resmi penggunaan sesi.',
+      'Catatan kehadiran di sistem Studio digunakan sebagai dasar pencatatan penggunaan sesi.',
       'Member wajib hadir 10 sampai 15 menit sebelum kelas untuk persiapan.',
     ],
   },
@@ -137,8 +139,8 @@ export const PASAL_SYARAT: readonly PasalSyarat[] = [
     id: 'refund',
     judul: '11. Tidak Ada Pengembalian Dana (Non-refundable)',
     butir: [
-      'Semua pembayaran Paket, Perpanjangan, dan layanan lain bersifat final dan tidak dapat dikembalikan, dialihkan, atau ditukar, termasuk untuk sesi yang tidak terpakai atau Paket yang hangus.',
-      'Pengecualian hanya dapat diberikan atas kebijakan penuh manajemen Studio. Bila disetujui, pengembalian dihitung prorata dari harga yang dibayar (setelah promo atau voucher, tanpa kode unik) untuk sisa sesi, dapat dikurangi biaya administrasi, ditransfer ke rekening atas nama yang diberikan Member, dan Paket dinolkan. Studio menerbitkan surat konfirmasi refund.',
+      'Semua pembayaran Paket, Perpanjangan, dan layanan lain bersifat final dan tidak dapat dikembalikan, dialihkan, atau ditukar, termasuk untuk sesi yang tidak terpakai atau Paket yang hangus, kecuali Studio tidak dapat lagi menyediakan layanan yang dibeli (misalnya cabang tutup permanen dan tidak ada cabang pengganti).',
+      'Pengecualian lain hanya dapat diberikan atas kebijakan penuh manajemen Studio. Bila disetujui, pengembalian dihitung prorata dari harga yang dibayar (setelah promo atau voucher, tanpa kode unik) untuk sisa sesi, dapat dikurangi biaya administrasi, ditransfer ke rekening atas nama yang diberikan Member, dan Paket dinolkan. Studio menerbitkan surat konfirmasi refund.',
       'Pemindahan Paket atau pembelian ke member lain hanya dapat dilakukan oleh Studio atas permohonan Member dan persetujuan manajemen.',
     ],
   },
@@ -148,8 +150,8 @@ export const PASAL_SYARAT: readonly PasalSyarat[] = [
     butir: [
       'Member menyatakan dalam kondisi sehat dan layak berolahraga. Member wajib memberi tahu instruktur sebelum kelas tentang cedera, kondisi medis, kehamilan, atau operasi yang pernah dijalani, dan disarankan berkonsultasi dengan dokter.',
       'Member memahami bahwa latihan Pilates, termasuk penggunaan reformer dan alat lain, memiliki risiko cedera, dan mengikuti kelas atas kesadaran dan risiko sendiri.',
-      'Sepanjang diizinkan hukum, Studio, instruktur, dan staf tidak bertanggung jawab atas cedera, sakit, atau kerugian yang timbul karena kondisi kesehatan yang tidak diberitahukan, tidak mengikuti arahan instruktur, atau kelalaian Member sendiri.',
-      'Instruktur berhak memodifikasi gerakan, membatasi penggunaan alat, atau meminta Member berhenti atau tidak mengikuti kelas demi keselamatan, dengan sesi tetap terpotong.',
+      'Studio, instruktur, dan staf tidak bertanggung jawab atas cedera, sakit, atau kerugian yang timbul karena kondisi kesehatan yang tidak diberitahukan, tidak mengikuti arahan instruktur, atau kelalaian Member sendiri, kecuali yang disebabkan oleh kelalaian Studio.',
+      'Instruktur berhak memodifikasi gerakan, membatasi penggunaan alat, atau meminta Member berhenti atau tidak mengikuti kelas demi keselamatan. Penggunaan sesi dalam keadaan ini mengikuti kebijakan Studio.',
       'Member wajib memakai kaus kaki anti-slip (grip socks) di area latihan dan mengikuti aturan kebersihan studio.',
     ],
   },
@@ -159,7 +161,7 @@ export const PASAL_SYARAT: readonly PasalSyarat[] = [
     butir: [
       'Member wajib menjaga sikap, kebersihan, dan ketenangan selama di studio, serta menghormati member lain, instruktur, dan staf.',
       'Kerusakan alat atau fasilitas karena kelalaian atau kesengajaan Member menjadi tanggung jawab Member dan wajib diganti sesuai nilai perbaikan atau penggantian.',
-      'Studio tidak bertanggung jawab atas kehilangan atau kerusakan barang pribadi di area studio.',
+      'Studio tidak menyediakan layanan penitipan barang. Member diharapkan menjaga sendiri barang pribadinya selama di studio.',
       'Merekam video atau mengambil foto member lain dan instruktur tanpa izin tidak diperbolehkan.',
       'Minuman dan barang lain yang dijual di studio dibayar terpisah dan tidak termasuk dalam Paket.',
     ],
@@ -168,9 +170,9 @@ export const PASAL_SYARAT: readonly PasalSyarat[] = [
     id: 'dokumentasi',
     judul: '14. Foto, Video, Ulasan, dan Komunikasi',
     butir: [
-      'Studio dapat mengambil foto atau video suasana kelas untuk keperluan dokumentasi dan promosi. Member yang tidak berkenan tampil wajib memberi tahu staf sebelum kelas dimulai.',
+      'Studio dapat mengambil foto atau video suasana kelas untuk dokumentasi internal. Wajah Member hanya ditampilkan dalam materi promosi bila Member memberikan persetujuan terpisah (pilihan, tidak wajib). Persetujuan ini dapat ditarik kapan saja dengan memberi tahu Studio.',
       'Ulasan dan penilaian yang diberikan Member tentang kelas atau instruktur dapat dipakai Studio untuk evaluasi internal.',
-      'Member setuju menerima pesan WhatsApp, email, dan notifikasi Aplikasi dari Studio terkait QR kehadiran, pengingat kelas, masa berlaku Paket, tagihan, dan informasi promo.',
+      'Member setuju menerima pesan WhatsApp, email, dan notifikasi Aplikasi dari Studio terkait QR kehadiran, pengingat kelas, masa berlaku Paket, dan tagihan. Informasi promo hanya dikirim bila Member memberikan persetujuan terpisah (pilihan, tidak wajib), yang dapat ditarik kapan saja.',
     ],
   },
   {
@@ -178,15 +180,15 @@ export const PASAL_SYARAT: readonly PasalSyarat[] = [
     judul: '15. Data Pribadi',
     butir: [
       'Studio mengumpulkan dan menyimpan data Member (nama, nomor WhatsApp, email, foto selfie, bukti pembayaran, riwayat pembelian, pemesanan, dan kehadiran) untuk menjalankan layanan, keamanan, dan pencatatan keuangan, sebagaimana dijelaskan di Kebijakan Privasi.',
-      'Foto selfie hanya dilihat staf Studio dan tidak ditampilkan kepada member lain.',
+      'Foto selfie dipakai untuk mencocokkan wajah saat check-in dan mencegah penyalahgunaan Paket, hanya dapat dilihat staf Studio yang bertugas, tidak ditampilkan kepada member lain, dan disimpan selama akun aktif serta selama diperlukan untuk pencatatan.',
     ],
   },
   {
     id: 'batas-tanggung-jawab',
     judul: '16. Batas Tanggung Jawab dan Keadaan Kahar',
     butir: [
-      'Sepanjang diizinkan hukum, tanggung jawab Studio atas klaim apa pun dibatasi paling banyak sebesar nilai sisa sesi Paket yang bersangkutan.',
-      'Studio tidak bertanggung jawab atas gangguan layanan karena keadaan di luar kendali Studio, termasuk bencana alam, wabah, kebijakan pemerintah, pemadaman listrik, gangguan internet, gangguan WhatsApp, atau gangguan Aplikasi. Dalam keadaan tersebut Studio dapat menyesuaikan jadwal atau Masa Berlaku sesuai kebijakannya.',
+      'Tanggung jawab Studio terbatas pada hal yang berkaitan langsung dengan layanan yang dibeli Member, dan diselesaikan secara wajar sesuai ketentuan yang berlaku.',
+      'Studio tidak bertanggung jawab atas gangguan layanan karena keadaan di luar kendali Studio, termasuk bencana alam, wabah, kebijakan pemerintah, pemadaman listrik, gangguan internet, gangguan WhatsApp, atau gangguan Aplikasi. Dalam keadaan tersebut Studio akan menyesuaikan jadwal atau Masa Berlaku secara wajar.',
     ],
   },
   {
@@ -194,7 +196,7 @@ export const PASAL_SYARAT: readonly PasalSyarat[] = [
     judul: '17. Hukum yang Berlaku dan Penyelesaian Sengketa',
     butir: [
       'Syarat & Ketentuan ini tunduk pada hukum Republik Indonesia.',
-      'Setiap perselisihan diselesaikan terlebih dahulu secara musyawarah dengan manajemen Studio. Catatan sistem Studio (pembayaran, persetujuan, pemesanan, pembatalan, dan kehadiran) menjadi acuan utama dalam penyelesaiannya.',
+      'Setiap perselisihan diselesaikan terlebih dahulu secara musyawarah dengan manajemen Studio. Catatan sistem Studio (pembayaran, persetujuan, pemesanan, pembatalan, dan kehadiran) menjadi salah satu dasar dalam penyelesaiannya.',
       'Bila satu ketentuan dinyatakan tidak berlaku, ketentuan lainnya tetap berlaku sepenuhnya.',
     ],
   },
