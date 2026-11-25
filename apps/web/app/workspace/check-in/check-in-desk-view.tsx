@@ -77,6 +77,9 @@ export function CheckInDeskView({
   const session = useSessionContext();
   const feedback = useAppFeedback();
   const branchId = branchIdOverride ?? session?.activeBranchId ?? '';
+  // Petugas Check-in (`attendance:desk` saja) hanya memindai dan mencatat manual: keputusan kuota,
+  // menutup kelas, dan laporan tidak hadir disembunyikan (server juga menolaknya).
+  const bolehKelola = session ? session.hasCapability('attendance:manage') : true;
 
   const [meja, setMeja] = useState<MejaCheckIn | null>(null);
   const [tidakHadir, setTidakHadir] = useState<BarisTidakHadir[]>([]);
@@ -114,8 +117,9 @@ export function CheckInDeskView({
       // Daftar tidak hadir jarang berubah; memuatnya tiap 5 detik hanya membebani server.
       const kini = Date.now();
       if (
-        tidakHadirPada.current.tanggal !== data.tanggal ||
-        kini - tidakHadirPada.current.pada >= SELANG_TIDAK_HADIR_MS
+        bolehKelola &&
+        (tidakHadirPada.current.tanggal !== data.tanggal ||
+        kini - tidakHadirPada.current.pada >= SELANG_TIDAK_HADIR_MS)
       ) {
         tidakHadirPada.current = { tanggal: data.tanggal, pada: kini };
         client
@@ -131,7 +135,7 @@ export function CheckInDeskView({
         ),
       );
     }
-  }, [branchId, client]);
+  }, [branchId, client, bolehKelola]);
 
   useEffect(() => {
     terlihat.current = null;
@@ -306,6 +310,7 @@ export function CheckInDeskView({
                   kelas={kelas}
                   timezone={tz}
                   busy={busyId === kelas.id}
+                  bolehMemutuskan={bolehKelola}
                   onTetapJalan={(alasan) => void tetapJalan(kelas, alasan)}
                   onBatalkan={() => void batalkan(kelas)}
                 />
@@ -365,7 +370,7 @@ export function CheckInDeskView({
               </p>
             </div>
 
-            {perluDitutup.map((kelas) => (
+            {bolehKelola && perluDitutup.map((kelas) => (
               <div
                 key={kelas.id}
                 className="rounded-dd-md border border-dd-border-interactive bg-white p-5"
@@ -391,7 +396,7 @@ export function CheckInDeskView({
         </div>
       )}
 
-      {meja && <TabelTidakHadir baris={tidakHadir} timezone={tz} />}
+      {meja && bolehKelola && <TabelTidakHadir baris={tidakHadir} timezone={tz} />}
 
       {meja && manualOpen && bookingClient.backfillAttendance && (
         <CatatManual
@@ -507,12 +512,14 @@ function KartuKelas({
   busy,
   onTetapJalan,
   onBatalkan,
+  bolehMemutuskan = true,
 }: {
   kelas: KelasMeja;
   timezone: string;
   busy: boolean;
   onTetapJalan(alasan: string): void;
   onBatalkan(): void;
+  bolehMemutuskan?: boolean;
 }) {
   const [menulisAlasan, setMenulisAlasan] = useState(false);
   const [alasan, setAlasan] = useState('');
@@ -591,7 +598,13 @@ function KartuKelas({
         </p>
       )}
 
-      {butuhKeputusan && (
+      {butuhKeputusan && !bolehMemutuskan && (
+        <p className="m-0 mt-3 text-[15px] text-dd-warning">
+          Kelas ini kurang dari kuota minimum. Beri tahu Admin atau Manager cabang untuk memutuskan.
+        </p>
+      )}
+
+      {butuhKeputusan && bolehMemutuskan && (
         <>
           {menulisAlasan ? (
             <div className="mt-4 space-y-2.5">

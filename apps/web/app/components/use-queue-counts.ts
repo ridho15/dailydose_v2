@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { browserWorkQueueClient } from '@/api-clients/work-queue-client';
 import { useSessionContext } from '../session-context';
+import { isCheckinStaffOnlySession } from '../lib/session-audience';
 
 export type QueueCounts = Record<string, number>;
 
@@ -18,7 +19,8 @@ export function useQueueCounts(enabled: boolean): QueueCounts {
   const [counts, setCounts] = useState<QueueCounts>({});
 
   useEffect(() => {
-    if (!enabled || !session || !browserWorkQueueClient.tindakan) return;
+    // Petugas Check-in tidak punya kotak keputusan (server menolak rutenya).
+    if (!enabled || !session || !browserWorkQueueClient.tindakan || isCheckinStaffOnlySession(session)) return;
     let active = true;
     browserWorkQueueClient
       .tindakan({ branchId: activeBranchId || undefined })

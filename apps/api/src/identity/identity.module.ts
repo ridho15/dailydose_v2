@@ -32,6 +32,8 @@ import { RoleAliasMigrationService } from './role-alias-migration.service';
 import { HrGroupController } from './hr-group.controller';
 import { HrGroupService } from './hr-group.service';
 import { KeycloakJitService } from './keycloak-jit.service';
+import { PetugasCheckinController } from './petugas-checkin.controller';
+import { PetugasCheckinService } from './petugas-checkin.service';
 
 @Module({
   imports: [DatabaseModule],
@@ -41,6 +43,7 @@ import { KeycloakJitService } from './keycloak-jit.service';
     CustomerManagementController,
     InstructorManagementController,
     HrGroupController,
+    PetugasCheckinController,
   ],
   providers: [
     RoleAliasMigrationService,
@@ -56,6 +59,7 @@ import { KeycloakJitService } from './keycloak-jit.service';
     { provide: APP_GUARD, useClass: AccessGuard },
     IdentityDocumentWorkflowService,
     UserAdministrationService,
+    PetugasCheckinService,
     AccessManagementService,
     CustomerManagementService,
     InstructorManagementService,

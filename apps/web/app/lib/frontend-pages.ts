@@ -88,11 +88,11 @@ export const frontendPages: FrontendPageDefinition[] = [
     description:
       'Kartu check-in dengan foto selfie, kelas yang perlu diputuskan atau ditutup, dan peserta yang tidak hadir.',
     group: 'Operasional Studio',
-    capabilities: ['attendance:manage'],
+    capabilities: ['attendance:manage', 'attendance:desk'],
     priority: 3,
     branchScope: 'topbar',
     accent: 'brand',
-    roleRelevance: ['ADMIN', 'MANAGER', 'SUPER_OWNER'],
+    roleRelevance: ['ADMIN', 'MANAGER', 'SUPER_OWNER', 'CHECKIN_STAFF'],
   },
   {
     href: '/workspace/availability',
@@ -428,6 +428,18 @@ export const frontendPages: FrontendPageDefinition[] = [
     accent: 'neutral',
   },
   {
+    href: '/workspace/petugas-checkin',
+    label: 'Petugas Check-in',
+    shortLabel: 'Petugas Check-in',
+    description: 'Akun sales atau OB yang hanya bisa membuka layar check-in cabangnya.',
+    group: 'Pengaturan & Sistem',
+    capabilities: ['checkin-staff:manage'],
+    priority: 32,
+    branchScope: 'global',
+    accent: 'info',
+    roleRelevance: ['SUPER_OWNER', 'MANAGER'],
+  },
+  {
     href: '/users/roles-permissions',
     label: 'Peran & Hak Akses',
     shortLabel: 'Hak Akses',
@@ -575,9 +587,9 @@ export const frontendPageGroups: FrontendPageGroup[] = [
 ];
 
 /** Peran yang menentukan susunan menu staf; akun berperan ganda memakai yang tertinggi. */
-export type PeranMenu = 'SUPER_OWNER' | 'OWNER' | 'MANAGER' | 'FINANCE' | 'ADMIN';
+export type PeranMenu = 'SUPER_OWNER' | 'OWNER' | 'MANAGER' | 'FINANCE' | 'ADMIN' | 'CHECKIN_STAFF';
 
-const URUTAN_PERAN: readonly PeranMenu[] = ['SUPER_OWNER', 'OWNER', 'MANAGER', 'FINANCE', 'ADMIN'];
+const URUTAN_PERAN: readonly PeranMenu[] = ['SUPER_OWNER', 'OWNER', 'MANAGER', 'FINANCE', 'ADMIN', 'CHECKIN_STAFF'];
 
 export interface MenuUtama {
   href: string;
@@ -589,6 +601,11 @@ export interface MenuUtama {
  * akun tidak hilang, tetapi dikumpulkan di bagian "Lainnya" (atau "Pengaturan" untuk Super Owner).
  */
 export const MENU_PERAN: Record<PeranMenu, { utama: readonly MenuUtama[]; lainnyaLabel: string }> = {
+  // Petugas Check-in (sales/OB): satu menu saja.
+  CHECKIN_STAFF: {
+    utama: [{ href: '/workspace/check-in', label: 'Check-in' }],
+    lainnyaLabel: 'Lainnya',
+  },
   ADMIN: {
     utama: [
       { href: '/workspace', label: 'Hari ini' },

@@ -15,6 +15,8 @@ import {
 import { Feedback, Skeleton } from './ui';
 import {
   internalStaffRoles,
+  isCheckinStaffOnlySession,
+  HALAMAN_PETUGAS_CHECKIN,
   isCustomerOnlySession,
   isInstructorOnlySession,
   isPublicExperiencePath,
@@ -71,7 +73,8 @@ const routeCapabilities: Array<[string, string[]]> = [
   ['/workspace/classes/salin', ['class-slot:manage']],
   ['/workspace/classes/rutin', ['class-slot:manage']],
   ['/workspace/classes', ['class-slot:read']],
-  ['/workspace/check-in', ['attendance:manage']],
+  ['/workspace/check-in', ['attendance:manage', 'attendance:desk']],
+  ['/workspace/petugas-checkin', ['checkin-staff:manage']],
   ['/workspace/renewal', ['package:read']],
   ['/workspace/perpanjangan', ['package:read']],
   ['/workspace/pembatalan', ['booking:late-cancel:decide', 'ledger:adjust:decide']],
@@ -157,6 +160,7 @@ export const LENGKAPI_AKUN = '/account/lengkapi';
 export function defaultSessionDestination(session: WebSession): string {
   if (session.passwordChangeRequired) return '/account/security?required=true';
   if (session.phoneRequired && isCustomerOnlySession(session)) return LENGKAPI_AKUN;
+  if (isCheckinStaffOnlySession(session)) return '/workspace/check-in';
   if (isInstructorOnlySession(session)) return '/workspace';
   if (session.roles.some((role) => internalStaffRoles.has(role))) return '/workspace';
   if (session.roles.some((role) => role === 'CUSTOMER'))
@@ -181,6 +185,9 @@ export function canAccessSessionPath(session: WebSession, value: string): boolea
   const path = new URL(value, 'http://local.invalid').pathname;
   if (isPublicExperiencePath(path)) return true;
   if (session.passwordChangeRequired) return path === '/account/security';
+  // Petugas Check-in hanya layar check-in (server juga menolak rute lain).
+  if (isCheckinStaffOnlySession(session))
+    return HALAMAN_PETUGAS_CHECKIN.some((p) => path === p || path.startsWith(`${p}/`));
   const customerOnly = isCustomerOnlySession(session);
   // Nomor WhatsApp dulu; halaman publik tetap bisa dibuka.
   if (customerOnly && session.phoneRequired) return path === LENGKAPI_AKUN;

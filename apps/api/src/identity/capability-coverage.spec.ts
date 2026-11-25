@@ -123,7 +123,7 @@ describe('capability coverage', () => {
     for (const capability of ['branch:manage', 'branch:operate', 'branch:own'])
       expect(superOwner.has(capability)).toBe(true);
     expect(Object.keys(ROLE_CAPABILITIES).sort()).toEqual(
-      ['ADMIN', 'CUSTOMER', 'FINANCE', 'INSTRUCTOR', 'MANAGER', 'OWNER', 'SUPER_OWNER'],
+      ['ADMIN', 'CHECKIN_STAFF', 'CUSTOMER', 'FINANCE', 'INSTRUCTOR', 'MANAGER', 'OWNER', 'SUPER_OWNER'],
     );
   });
 });

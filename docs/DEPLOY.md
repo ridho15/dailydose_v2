@@ -405,6 +405,22 @@ CREATE TABLE `bukti_sidik` (
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 ```
 
+`petugas_checkin` (peran Petugas Check-in untuk sales/OB, 25 November 2026). Menandai akun staf yang hanya boleh
+memindai QR dan mencatat kehadiran manual di satu cabang. **Tanpa tabel ini akun petugas tidak bisa dibuat** (menu
+Petugas Check-in menjawab 503); akun staf lain tidak terpengaruh.
+
+```sql
+CREATE TABLE `petugas_checkin` (
+    `userId` CHAR(36) NOT NULL,
+    `branchId` CHAR(36) NOT NULL,
+    `createdById` CHAR(36) NULL,
+    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+
+    INDEX `petugas_checkin_branchId_idx`(`branchId`),
+    PRIMARY KEY (`userId`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+```
+
 ## Akun HR Group (SSO)
 
 Tombol "Masuk dengan Akun HR Group" di halaman masuk dan credential bridge untuk migrasi member lama. Kontraknya

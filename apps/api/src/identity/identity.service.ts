@@ -34,6 +34,7 @@ import {
 } from './security';
 import { NotificationWriterService } from '../notifications/notification-writer.service';
 import { canonicalRole } from './role-aliases';
+import { cabangPetugasCheckin } from './petugas-checkin';
 
 export interface SessionPrincipal {
   sessionId: string;
@@ -47,11 +48,16 @@ export interface SessionPrincipal {
   passwordChangeRequired?: boolean;
 }
 
-export function mapUserToEffectiveRoles(user: {
-  role: string;
-  preferredBranchId?: string | null;
-  ownedBranches?: Array<{ branchId: string }>;
-}): Array<{ role: ApplicationRole; branchId: string | null }> {
+export function mapUserToEffectiveRoles(
+  user: {
+    role: string;
+    preferredBranchId?: string | null;
+    ownedBranches?: Array<{ branchId: string }>;
+  },
+  /** Cabang petugas check-in (lihat `cabangPetugasCheckin`); bila ada, peran lain diabaikan. */
+  cabangPetugas: string | null = null,
+): Array<{ role: ApplicationRole; branchId: string | null }> {
+  if (cabangPetugas) return [{ role: 'CHECKIN_STAFF', branchId: cabangPetugas }];
   switch (canonicalRole(user.role)) {
     case 'SUPER_OWNER':
       return [{ role: 'SUPER_OWNER', branchId: null }];
@@ -130,7 +136,7 @@ export class IdentityService {
     if (!user || user.status !== 'ACTIVE')
       throw new ApiProblem('SESSION_REVOKED', HttpStatus.UNAUTHORIZED);
 
-    const effectiveRoles = mapUserToEffectiveRoles(user);
+    const effectiveRoles = mapUserToEffectiveRoles(user, await cabangPetugasCheckin(this.db as never, user.id));
     const access = this.policy.resolveAccess(user.id, effectiveRoles);
 
     const preferredBranch = user.preferredBranchId
@@ -401,7 +407,10 @@ export class IdentityService {
     )
       throw new ApiProblem('SESSION_REVOKED', HttpStatus.UNAUTHORIZED);
 
-    const effectiveRoles = mapUserToEffectiveRoles(session.user);
+    const effectiveRoles = mapUserToEffectiveRoles(
+      session.user,
+      await cabangPetugasCheckin(this.db as never, session.userId),
+    );
     const access = this.policy.resolveAccess(session.userId, effectiveRoles);
 
     return {

@@ -426,7 +426,7 @@ export class AttendanceService {
     correlationId: string,
     now = new Date(),
   ) {
-    this.policy.requireCapability(principal.capabilities, 'attendance:manage');
+    this.policy.requireAnyCapability(principal.capabilities, ['attendance:manage', 'attendance:desk']);
     if (
       !UUID.test(input.bookingId) ||
       !idempotencyKey ||
@@ -460,7 +460,9 @@ export class AttendanceService {
           },
         });
         if (!booking) throw new ApiProblem('RESOURCE_NOT_FOUND', HttpStatus.NOT_FOUND);
-        this.requireBranch(principal, booking.classSlot.branchId, 'attendance:manage');
+        // Petugas check-in (`attendance:desk`) juga boleh, hanya di cabangnya.
+        if (!this.policy.hasCapability(principal, 'attendance:desk', booking.classSlot.branchId))
+          this.requireBranch(principal, booking.classSlot.branchId, 'attendance:manage');
         if (booking.attendance)
           throw new ApiProblem('ATTENDANCE_ALREADY_RECORDED', HttpStatus.CONFLICT);
         if (!['BOOKED', 'NO_SHOW'].includes(booking.status))

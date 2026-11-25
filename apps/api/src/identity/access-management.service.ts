@@ -4,6 +4,7 @@ import { PrismaService } from '../database/prisma.service';
 import { IdempotencyService } from '../foundation/idempotency.service';
 import { AuditService } from '../foundation/audit.service';
 import { mapUserToEffectiveRoles, type SessionPrincipal } from './identity.service';
+import { cabangPetugasCheckin } from './petugas-checkin';
 import { PolicyService } from './policy.service';
 import { ApiProblem, newId } from './security';
 import { ROLE_CAPABILITIES, type ApplicationRole } from './role-capabilities';
@@ -142,7 +143,7 @@ export class AccessManagementService {
     });
     if (!user) throw new ApiProblem('NOT_FOUND', HttpStatus.NOT_FOUND);
 
-    const effectiveRoles = mapUserToEffectiveRoles(user);
+    const effectiveRoles = mapUserToEffectiveRoles(user, await cabangPetugasCheckin(this.db as never, user.id));
     const access = this.policy.resolveAccess(user.id, effectiveRoles);
     const branchIds = [...new Set(effectiveRoles.flatMap(({ branchId }) => (branchId ? [branchId] : [])))];
     const branches = branchIds.length

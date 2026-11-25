@@ -99,7 +99,7 @@ export class CheckInDeskService {
     input: { branchId?: string },
     now = new Date(),
   ): Promise<MejaCheckIn> {
-    this.policy.requireCapability(principal.capabilities, 'attendance:manage');
+    this.policy.requireAnyCapability(principal.capabilities, ['attendance:manage', 'attendance:desk']);
     const branchId = this.wajibCabang(principal, input.branchId);
 
     const cabang = await this.db.cabang.findUnique({
@@ -385,7 +385,7 @@ export class CheckInDeskService {
     input: { userId: string; branchId?: string },
     now = new Date(),
   ): Promise<{ mimeType: string; stream: Readable }> {
-    this.policy.requireCapability(principal.capabilities, 'attendance:manage');
+    this.policy.requireAnyCapability(principal.capabilities, ['attendance:manage', 'attendance:desk']);
     const branchId = this.wajibCabang(principal, input.branchId);
     const tidakAda = () => new ApiProblem('RESOURCE_NOT_FOUND', HttpStatus.NOT_FOUND);
 

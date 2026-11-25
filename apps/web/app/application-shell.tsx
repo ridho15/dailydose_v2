@@ -41,6 +41,7 @@ import {
   isCustomerCatalogPath,
   isCustomerOnlySession,
   isInstructorOnlySession,
+  isCheckinStaffOnlySession,
   isPublicExperiencePath,
 } from '@/lib/session-audience';
 import { formatStudioName } from './lib/system-dictionary';
@@ -531,7 +532,7 @@ export function ApplicationShell({ children }: { children: React.ReactNode }) {
               >
                 <Search className="size-[18px]" />
               </IconButton>
-              {session && !isInstructorOnlySession(session) && (
+              {session && !isInstructorOnlySession(session) && !isCheckinStaffOnlySession(session) && (
                 <Link
                   href="/help?role=admin"
                   aria-label="Panduan operasional (SOP)"

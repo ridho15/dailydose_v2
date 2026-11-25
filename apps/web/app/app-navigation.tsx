@@ -43,6 +43,7 @@ export { MENU_FRONT_DESK };
 /** Label badge di samping logo: peran tertinggi akun, bukan sekadar "Staf". */
 export function badgePeran(roles: readonly string[] | undefined, instructorOnly: boolean): string {
   if (instructorOnly) return 'Instruktur';
+  if (roles?.length && roles.every((r) => r === 'CHECKIN_STAFF')) return 'Petugas Check-in';
   if (roles?.includes('SUPER_OWNER')) return 'Super Owner';
   if (roles?.includes('OWNER')) return 'Owner';
   if (roles?.includes('MANAGER')) return 'Manager';

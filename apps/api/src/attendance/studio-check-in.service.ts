@@ -50,7 +50,7 @@ export class StudioCheckInService {
     pass: unknown,
     now = new Date(),
   ): Promise<HasilPindaiStudio> {
-    this.policy.requireCapability(principal.capabilities, 'attendance:manage');
+    this.policy.requireAnyCapability(principal.capabilities, ['attendance:manage', 'attendance:desk']);
     if (!branchId) {
       throw new ApiProblem('VALIDATION_ERROR', HttpStatus.UNPROCESSABLE_ENTITY, false, [
         { field: 'branchId', issue: 'REQUIRED' },

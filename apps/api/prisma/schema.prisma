@@ -1455,3 +1455,16 @@ model PerpanjanganPaket {
   @@index([userId])
   @@map("perpanjangan_paket")
 }
+
+/// Petugas check-in (sales/OB, 25 November 2026): akun staf yang HANYA boleh memindai QR dan mencatat
+/// kehadiran manual di satu cabang. Akunnya tersimpan sebagai `user.role = ADMIN`; baris di sini yang
+/// membatasinya menjadi peran CHECKIN_STAFF. Tanpa relasi, sesuai aturan tabel baru.
+model PetugasCheckin {
+  userId      String   @id @db.Char(36)
+  branchId    String   @db.Char(36)
+  createdById String?  @db.Char(36)
+  createdAt   DateTime @default(now())
+
+  @@index([branchId])
+  @@map("petugas_checkin")
+}

@@ -5,11 +5,16 @@ export type ApplicationRole =
   | 'MANAGER'
   | 'OWNER'
   | 'SUPER_OWNER'
-  | 'FINANCE';
+  | 'FINANCE'
+  /** Petugas check-in (sales/OB): hanya memindai QR dan mencatat kehadiran manual di satu cabang. */
+  | 'CHECKIN_STAFF';
 
 /** Super Owner memegang seluruh izin operasional (kecuali izin self-service pelanggan/instruktur). */
 const SUPER_OWNER_CAPABILITIES: readonly string[] = [
   ...new Set([
+    // Membuat dan menonaktifkan akun Petugas Check-in (Manager juga, untuk cabangnya).
+    'checkin-staff:manage',
+    'attendance:desk',
     'automation:read',
     'automation:run',
     'notification:manage',
@@ -145,6 +150,7 @@ export const ROLE_CAPABILITIES: Record<ApplicationRole, readonly string[]> = {
     'expense:create',
   ],
   MANAGER: [
+    'checkin-staff:manage',
     'automation:read',
     'branch:manage',
     // Manager membaca staf cabang (matriks hak akses) dan memilih instruktur saat menjadwalkan kelas.
@@ -204,6 +210,9 @@ export const ROLE_CAPABILITIES: Record<ApplicationRole, readonly string[]> = {
     'booking:late-cancel:decide',
   ],
   SUPER_OWNER: SUPER_OWNER_CAPABILITIES,
+  // Hanya layar meja check-in: pindai QR, foto member hari itu, dan catat kehadiran manual.
+  // Sengaja bukan `attendance:manage` (yang juga membuka kirim QR WhatsApp, token instruktur, dan target omzet).
+  CHECKIN_STAFF: ['attendance:desk'],
   FINANCE: [
     'automation:read',
     'finance:read',

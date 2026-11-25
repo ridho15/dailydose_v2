@@ -1,4 +1,5 @@
 import {
+  ScanLine,
   Activity,
   Bell,
   BookOpen,
@@ -68,6 +69,7 @@ export const pageIcons: Record<string, LucideIcon> = {
   '/instructors': UserCheck,
   '/users': UserCog,
   '/users/roles-permissions': KeyRound,
+  '/workspace/petugas-checkin': ScanLine,
   '/assignments': Handshake,
   '/master': Database,
   '/audit': ScrollText,

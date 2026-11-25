@@ -3,6 +3,7 @@ import type { Request } from 'express';
 import { IdentityService, type SessionPrincipal } from './identity.service';
 import { ApiProblem } from './security';
 import { HttpStatus } from '@nestjs/common';
+import { pastikanRutePetugas } from './rute-petugas-checkin';
 
 export type AuthenticatedRequest = Request & {
   principal: SessionPrincipal;
@@ -24,6 +25,8 @@ export class AuthGuard implements CanActivate {
     const token = bearer ?? cookie;
     if (!token) throw new ApiProblem('AUTHENTICATION_REQUIRED', HttpStatus.UNAUTHORIZED);
     request.principal = await this.identities.authenticateBearer(token);
+    // Akun Petugas Check-in hanya boleh memakai rute layar check-in.
+    pastikanRutePetugas(request.principal, request.method, request.path, request.query as Record<string, unknown>);
     if (request.principal.passwordChangeRequired) {
       const allowed = ['/me', '/auth/security', '/auth/password/change', '/auth/logout'].some(
         (path) => request.path === path || request.path.endsWith(path),

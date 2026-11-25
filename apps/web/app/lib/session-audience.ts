@@ -41,7 +41,17 @@ export const internalStaffRoles = new Set([
   'MANAGER',
   'FINANCE',
   'INSTRUCTOR',
+  'CHECKIN_STAFF',
 ]);
+
+/** Petugas Check-in (sales/OB): hanya layar check-in, tidak ada halaman staf lain. */
+export function isCheckinStaffOnlySession(session: WebSession | null | undefined): boolean {
+  if (!session || !session.roles || session.roles.length === 0) return false;
+  return session.roles.every((role) => role === 'CHECKIN_STAFF');
+}
+
+/** Halaman yang boleh dibuka Petugas Check-in; yang lain dialihkan ke layar check-in. */
+export const HALAMAN_PETUGAS_CHECKIN = ['/workspace/check-in', '/account/security'] as const;
 
 export function isCustomerOnlySession(session: WebSession | null | undefined): boolean {
   if (!session || !session.roles || session.roles.length === 0) return false;

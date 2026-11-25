@@ -12,6 +12,7 @@ const labels: Record<string, { scoped: string; short: string }> = {
   FINANCE: { scoped: 'Finance', short: 'Finance' },
   INSTRUCTOR: { scoped: 'Instruktur', short: 'Instruktur' },
   CUSTOMER: { scoped: 'Pelanggan', short: 'Pelanggan' },
+  CHECKIN_STAFF: { scoped: 'Petugas check-in', short: 'Petugas check-in' },
 };
 
 function humanizeRoleCode(role: string): string {
