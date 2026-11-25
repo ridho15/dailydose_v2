@@ -1506,3 +1506,20 @@ model MutasiStokMinuman {
   @@index([jenis, tanggal])
   @@map("mutasi_stok_minuman")
 }
+
+/// Bukti persetujuan Syarat & Ketentuan (25 November 2026). Tabel tambahan tanpa relasi; dibuat lewat SQL di docs/DEPLOY.md.
+model PersetujuanSyarat {
+  id          String   @id @db.Char(36)
+  userId      String   @db.Char(36)
+  /// DAFTAR (akun), PEMBELIAN (member checkout), PEMBELIAN_STAF (penjualan dicatat staf)
+  jenis       String   @db.VarChar(20)
+  versi       String   @db.VarChar(20)
+  purchaseId  String?  @db.Char(36)
+  dicatatOleh String?  @db.Char(36)
+  userAgent   String?  @db.VarChar(255)
+  createdAt   DateTime @default(now())
+
+  @@index([userId, jenis, versi])
+  @@index([purchaseId])
+  @@map("persetujuan_syarat")
+}

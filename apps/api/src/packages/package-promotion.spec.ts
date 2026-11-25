@@ -360,7 +360,7 @@ describe('customer checkout with a package promotion', () => {
     const { service, created } = checkoutSetup(live);
     const result = await service.createOrder(
       customer,
-      { packageId, branchId: id(1), expectedPromotionId: promoId, expectedPromotionVersion: 2 },
+      { setujuSyarat: true, packageId, branchId: id(1), expectedPromotionId: promoId, expectedPromotionVersion: 2 },
       'k-12345678',
       'c',
     );
@@ -386,17 +386,17 @@ describe('customer checkout with a package promotion', () => {
   it('refuses to bill a different price than the customer saw', async () => {
     const changed = checkoutSetup(live);
     await expect(
-      changed.service.createOrder(customer, { packageId, branchId: id(1), expectedPromotionId: null }, 'k-12345678', 'c'),
+      changed.service.createOrder(customer, { setujuSyarat: true, packageId, branchId: id(1), expectedPromotionId: null }, 'k-12345678', 'c'),
     ).rejects.toMatchObject({ code: 'PROMOTION_CHANGED' });
     await expect(
-      changed.service.createOrder(customer, { packageId, branchId: id(1), expectedPromotionId: promoId, expectedPromotionVersion: 1 }, 'k-12345678', 'c'),
+      changed.service.createOrder(customer, { setujuSyarat: true, packageId, branchId: id(1), expectedPromotionId: promoId, expectedPromotionVersion: 1 }, 'k-12345678', 'c'),
     ).rejects.toMatchObject({ code: 'PROMOTION_CHANGED' });
     const ended = checkoutSetup(null);
     await expect(
-      ended.service.createOrder(customer, { packageId, branchId: id(1), expectedPromotionId: promoId, expectedPromotionVersion: 2 }, 'k-12345678', 'c'),
+      ended.service.createOrder(customer, { setujuSyarat: true, packageId, branchId: id(1), expectedPromotionId: promoId, expectedPromotionVersion: 2 }, 'k-12345678', 'c'),
     ).rejects.toMatchObject({ code: 'PROMOTION_CHANGED' });
     expect(changed.created).toHaveLength(0);
     // Klien lama yang tidak mengirim ekspektasi tetap dilayani dengan harga berlaku.
-    await checkoutSetup(live).service.createOrder(customer, { packageId, branchId: id(1) }, 'k-12345678', 'c');
+    await checkoutSetup(live).service.createOrder(customer, { setujuSyarat: true, packageId, branchId: id(1) }, 'k-12345678', 'c');
   });
 });

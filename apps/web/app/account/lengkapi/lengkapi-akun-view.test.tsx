@@ -17,6 +17,7 @@ vi.mock('../../session-context', () => ({
 }));
 
 const klien = () => ({
+  setujuiSyarat: vi.fn().mockResolvedValue({}),
   simpanNomor: vi.fn().mockResolvedValue({}),
   kirimSelfie: vi.fn().mockResolvedValue({}),
 });
@@ -25,6 +26,35 @@ describe('LengkapiAkunView', () => {
   beforeEach(() => {
     replace.mockClear();
     refresh.mockClear();
+  });
+
+  it('member Google: syarat dulu (langkah 1 dari 3), tombol aktif hanya setelah dicentang', async () => {
+    session = {
+      displayName: 'Ayu Lestari',
+      termsRequired: true,
+      phoneRequired: true,
+      identityVerificationStatus: 'ACTION_REQUIRED',
+    };
+    const client = klien();
+    const view = render(<LengkapiAkunView client={client} />);
+    expect(screen.getByText('Langkah 1 dari 3')).toBeVisible();
+    expect(screen.getByText(/maksimal 3 kali per paket/)).toBeVisible();
+    expect(screen.getByRole('link', { name: 'Syarat & Ketentuan' })).toHaveAttribute('href', '/terms');
+    expect((await axe(view.container)).violations).toHaveLength(0);
+    const tombol = screen.getByRole('button', { name: 'Setuju dan lanjut' });
+    expect(tombol).toBeDisabled();
+    await userEvent.click(screen.getByRole('checkbox'));
+    await userEvent.click(tombol);
+    expect(client.setujuiSyarat).toHaveBeenCalled();
+    await waitFor(() => expect(refresh).toHaveBeenCalled());
+  });
+
+  it('member lama yang sudah lengkap hanya diminta menyetujui syarat versi baru', () => {
+    session = { displayName: 'Ayu', termsRequired: true, identityVerificationStatus: 'APPROVED' };
+    render(<LengkapiAkunView client={klien()} />);
+    expect(screen.getByText('Langkah 1 dari 1')).toBeVisible();
+    expect(screen.getByText(/Syarat & Ketentuan Daily Dose diperbarui/)).toBeVisible();
+    expect(replace).not.toHaveBeenCalled();
   });
 
   it('meminta nomor WhatsApp lebih dulu lalu menyegarkan sesi', async () => {

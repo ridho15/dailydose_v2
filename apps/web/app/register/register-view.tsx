@@ -465,7 +465,15 @@ export function RegisterView() {
               }}
             />
             <span className="font-medium">
-              Saya menyetujui Syarat &amp; Ketentuan Layanan serta Kebijakan Privasi Daily Dose.
+              Saya telah membaca dan menyetujui{' '}
+              <a href="/terms" target="_blank" rel="noreferrer" className="underline underline-offset-2">
+                Syarat &amp; Ketentuan
+              </a>{' '}
+              serta{' '}
+              <a href="/privacy" target="_blank" rel="noreferrer" className="underline underline-offset-2">
+                Kebijakan Privasi
+              </a>{' '}
+              Daily Dose, termasuk bahwa paket hangus setelah masa berlaku habis dan perpanjangan maksimal 3 kali.
             </span>
           </label>
           {errors.consent && <FieldError id={errorId('consent')}>{errors.consent}</FieldError>}

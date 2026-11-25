@@ -8,7 +8,8 @@ import { CustomerPaymentFlow } from '../components/customer/customer-payment-flo
 import { AlertBanner, useAppFeedback } from '../components/app-feedback';
 import { useTrackedRouter } from '../components/app-loading';
 import { Button, ButtonLink, StickyActionBar } from '../components/actions';
-import { SearchSelect, TextInput } from '../components/forms';
+import { CheckboxInput, SearchSelect, TextInput } from '../components/forms';
+import { ringkasanPembelian } from '../lib/syarat-ketentuan';
 import { PackagePrice } from '../components/public/package-price';
 import {
   browserOrderClient,
@@ -35,6 +36,8 @@ export function CheckoutView() {
   const orderId = params.get('order') || params.get('orderId');
   const [options, setOptions] = useState<CheckoutOptions | null>(null);
   const [selectedClassTypeId, setSelectedClassTypeId] = useState('');
+  // Persetujuan Syarat & Ketentuan pembelian; dikirim ke server dan dicatat per pesanan.
+  const [setujuSyarat, setSetujuSyarat] = useState(false);
   const [order, setOrder] = useState<CustomerOrder | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -232,7 +235,7 @@ export function CheckoutView() {
   }
 
   const extension = options.extension ?? null;
-  const readyToSubmit = extension ? Boolean(targetId) : Boolean(selectedClassTypeId);
+  const readyToSubmit = (extension ? Boolean(targetId) : Boolean(selectedClassTypeId)) && setujuSyarat;
 
   return (
     <main className="space-y-6 pt-2" aria-labelledby="checkout-title">
@@ -506,6 +509,31 @@ export function CheckoutView() {
         )}
       </section>
 
+      <section aria-labelledby="syarat-pembelian" className="space-y-3 border border-ed-line bg-white p-4 sm:p-5">
+        <h2 id="syarat-pembelian" className="m-0 text-base font-semibold text-ed-ink">
+          Sebelum membayar
+        </h2>
+        <ul className="m-0 list-disc space-y-1.5 pl-5 text-sm leading-relaxed text-ed-muted">
+          {ringkasanPembelian({ masaBerlakuHari: options.package.durationDays, perpanjangan: Boolean(extension) }).map((poin) => (
+            <li key={poin}>{poin}</li>
+          ))}
+        </ul>
+        <CheckboxInput
+          label={
+            <>
+              Saya telah membaca dan menyetujui{' '}
+              <a href="/terms" target="_blank" rel="noreferrer" className="font-semibold text-ed-green underline">
+                Syarat &amp; Ketentuan
+              </a>
+              , termasuk paket hangus saat masa berlaku habis dan perpanjangan maksimal 3 kali.
+            </>
+          }
+          checked={setujuSyarat}
+          disabled={submitting}
+          onChange={(e) => setSetujuSyarat(e.target.checked)}
+        />
+      </section>
+
       <StickyActionBar
         description={
           <p>Pesanan memiliki batas pembayaran {options.paymentAccount.paymentWindowHours} jam.</p>
@@ -536,6 +564,7 @@ export function CheckoutView() {
                 voucherPreview?.code,
                 options.package,
                 extension ? targetId : undefined,
+                setujuSyarat,
               );
               setOrder(created);
               router.replace(`/checkout?order=${encodeURIComponent(created.id)}`);

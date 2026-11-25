@@ -33,6 +33,9 @@ export interface WebSession {
   passwordChangeRequired?: boolean;
   /** Member belum punya nomor WhatsApp (biasanya daftar lewat Google); wajib dilengkapi dulu. */
   phoneRequired?: boolean;
+  /** Member belum menyetujui versi Syarat & Ketentuan yang berlaku. */
+  termsRequired?: boolean;
+  termsVersion?: string;
 }
 
 export interface SessionClient {

@@ -26,7 +26,7 @@ describe('customer self-registration', () => {
     expect(unggahan).toHaveLength(1);
     expect(unggahan[0]).toHaveAttribute('name', 'selfie');
     expect(unggahan[0]).toHaveAttribute('capture', 'user');
-    expect(screen.getByLabelText(/Saya menyetujui Syarat & Ketentuan Layanan/i)).not.toBeRequired();
+    expect(screen.getByLabelText(/Saya telah membaca dan menyetujui/i)).not.toBeRequired();
     expect(screen.getByText(/Data pendaftaran Anda disimpan secara privat/i)).toBeVisible();
     expect(screen.getByRole('button', { name: 'Daftar dan masuk' })).toHaveClass(
       'min-h-12',
@@ -55,7 +55,7 @@ describe('customer self-registration', () => {
     await user.type(screen.getByLabelText('Nomor WhatsApp'), '0812 3456 7890');
     await user.type(screen.getByLabelText('Email'), 'nadia@example.com');
     await user.type(screen.getByLabelText('Password'), 'password-aman');
-    await user.click(screen.getByLabelText(/Saya menyetujui Syarat & Ketentuan Layanan/i));
+    await user.click(screen.getByLabelText(/Saya telah membaca dan menyetujui/i));
     await user.click(screen.getByRole('button', { name: 'Daftar dan masuk' }));
 
     expect(register).not.toHaveBeenCalled();
@@ -134,7 +134,7 @@ describe('customer self-registration', () => {
     await user.type(screen.getByLabelText('Password'), 'password-aman');
     const foto = new File(['wajah'], 'selfie.jpg', { type: 'image/jpeg' });
     await user.upload(screen.getByLabelText(/Ambil foto sekarang/), foto);
-    await user.click(screen.getByLabelText(/Saya menyetujui Syarat & Ketentuan Layanan/i));
+    await user.click(screen.getByLabelText(/Saya telah membaca dan menyetujui/i));
     await user.click(screen.getByRole('button', { name: 'Daftar dan masuk' }));
 
     expect(register).toHaveBeenCalledTimes(1);
@@ -166,7 +166,7 @@ describe('customer self-registration', () => {
       ),
     ).toBeVisible();
 
-    await user.click(screen.getByLabelText(/Saya menyetujui Syarat & Ketentuan Layanan/i));
+    await user.click(screen.getByLabelText(/Saya telah membaca dan menyetujui/i));
     expect(
       screen.queryByText(
         'Anda wajib menyetujui Syarat & Ketentuan serta Kebijakan Privasi Daily Dose.',
@@ -203,7 +203,7 @@ describe('customer self-registration', () => {
     await user.type(screen.getByLabelText("Password"), "password-aman");
     const foto = new File(["wajah"], "selfie.jpg", { type: "image/jpeg" });
     await user.upload(screen.getByLabelText(/Ambil foto sekarang/), foto);
-    await user.click(screen.getByLabelText(/Saya menyetujui Syarat & Ketentuan Layanan/i));
+    await user.click(screen.getByLabelText(/Saya telah membaca dan menyetujui/i));
     await user.click(screen.getByRole("button", { name: "Daftar dan masuk" }));
 
     expect(
@@ -228,7 +228,7 @@ describe('customer self-registration', () => {
     await user.type(screen.getByLabelText("Password"), "password-aman");
     const foto = new File(["wajah"], "selfie.jpg", { type: "image/jpeg" });
     await user.upload(screen.getByLabelText(/Ambil foto sekarang/), foto);
-    await user.click(screen.getByLabelText(/Saya menyetujui Syarat & Ketentuan Layanan/i));
+    await user.click(screen.getByLabelText(/Saya telah membaca dan menyetujui/i));
     await user.click(screen.getByRole("button", { name: "Daftar dan masuk" }));
 
     expect(

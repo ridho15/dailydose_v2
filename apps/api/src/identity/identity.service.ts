@@ -1,4 +1,5 @@
 import { nomorWajib, perluLengkapiNomor } from './nomor-wajib';
+import { catatPersetujuan, sudahSetujuVersiIni, VERSI_SYARAT, wajibSetuju } from './persetujuan-syarat';
 import { HttpStatus, Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { KeycloakJitService } from './keycloak-jit.service';
 export type SessionChannel = 'WEB' | 'MOBILE' | string;
@@ -182,6 +183,7 @@ export class IdentityService {
     let identityVerificationStatus = 'APPROVED';
     // Member tanpa nomor WhatsApp (biasanya daftar lewat Google) diminta melengkapinya lebih dulu.
     let phoneRequired = false;
+    let termsRequired = false;
     if (isCustomerOnly) {
       // Nomor wajib hanya bila PHONE_REQUIRED=true (lihat nomor-wajib.ts); bawaannya tidak.
       const pemilik =
@@ -194,15 +196,32 @@ export class IdentityService {
         : null;
       // Selfie saja: punya foto berarti terverifikasi.
       identityVerificationStatus = statusSelfie(profile);
+      // Member (termasuk yang daftar lewat Google dan member lama) wajib menyetujui versi syarat terbaru.
+      termsRequired = !(await sudahSetujuVersiIni(this.db as never, userId));
     }
 
     return {
       ...projection,
       identityVerificationStatus,
       phoneRequired,
+      termsRequired,
+      termsVersion: VERSI_SYARAT,
       sessionExpiresAt: sessionExpiresAt.toISOString(),
       branches,
     };
+  }
+
+  /** Member menyetujui versi Syarat & Ketentuan yang berlaku (layar Lengkapi akun). */
+  async setujuiSyarat(principal: SessionPrincipal, input: { setuju?: unknown; userAgent?: string }) {
+    wajibSetuju(input.setuju, 'setuju');
+    if (await sudahSetujuVersiIni(this.db as never, principal.userId)) return { versi: VERSI_SYARAT, tercatat: true };
+    const tercatat = await catatPersetujuan(this.db as never, this.db, {
+      userId: principal.userId,
+      jenis: 'DAFTAR',
+      userAgent: input.userAgent,
+    });
+    if (!tercatat) throw new ApiProblem('TERMS_CONSENT_UNAVAILABLE', HttpStatus.SERVICE_UNAVAILABLE);
+    return { versi: VERSI_SYARAT, tercatat };
   }
 
   meForSession(principal: SessionPrincipal, at = new Date()) {
@@ -636,6 +655,7 @@ export class IdentityService {
       consent: boolean;
       selfie?: any;
       ktp?: any;
+      userAgent?: string;
     },
     _correlationId?: string,
     _requestFingerprint?: string,
@@ -646,6 +666,8 @@ export class IdentityService {
     if (!displayName || !email || !input.password || !phone) {
       throw new ApiProblem('VALIDATION_ERROR', HttpStatus.UNPROCESSABLE_ENTITY);
     }
+    // Centang Syarat & Ketentuan wajib dan diperiksa di server, bukan hanya di formulir.
+    wajibSetuju(input.consent, 'consent');
     if (!isValidEmail(email)) {
       throw new ApiProblem('VALIDATION_ERROR', HttpStatus.UNPROCESSABLE_ENTITY, false, [
         { field: 'email', issue: 'Format email tidak valid.' },
@@ -732,6 +754,7 @@ export class IdentityService {
             selfieUrl,
           },
         });
+        await catatPersetujuan(tx as never, tx, { userId, jenis: 'DAFTAR', userAgent: input.userAgent });
         return newUser;
       });
       return this.issueSession(user.id, 'WEB');

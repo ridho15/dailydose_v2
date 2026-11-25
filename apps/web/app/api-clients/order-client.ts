@@ -314,12 +314,14 @@ export const browserOrderClient = {
     voucherCode?: string,
     pricing?: CheckoutOptions['package'],
     targetCustomerPackageId?: string,
+    setujuSyarat = false,
   ) {
     const value = await request<any>('/orders', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Idempotency-Key': crypto.randomUUID() },
       body: JSON.stringify({
         packageId,
+        setujuSyarat,
         ...(slotId ? { slotId } : {}),
         ...(branchId ? { branchId } : {}),
         ...(classTypeId ? { classTypeId } : {}),

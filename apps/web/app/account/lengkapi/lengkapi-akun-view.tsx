@@ -5,17 +5,25 @@ import { verificationClient } from '@/api-clients/identity-verification-client';
 import { ApiError, apiFetch } from '../../lib/api-client';
 import { AmbilSelfie } from '../../components/ambil-selfie';
 import { Button } from '../../components/actions';
-import { TextInput } from '../../components/forms';
+import { CheckboxInput, TextInput } from '../../components/forms';
+import { PASAL_SYARAT, VERSI_SYARAT } from '../../lib/syarat-ketentuan';
 import { useTrackedRouter } from '../../components/app-loading';
 import { useSessionContext } from '../../session-context';
 import { Skeleton } from '../../ui';
 
 export interface LengkapiAkunClient {
+  setujuiSyarat(): Promise<unknown>;
   simpanNomor(phone: string): Promise<unknown>;
   kirimSelfie(file: File): Promise<unknown>;
 }
 
 const browserClient: LengkapiAkunClient = {
+  setujuiSyarat: () =>
+    apiFetch('/me/terms-consent', {
+      method: 'POST',
+      body: JSON.stringify({ setuju: true }),
+      label: 'Menyimpan persetujuan…',
+    }),
   simpanNomor: (phone) =>
     apiFetch('/me/phone', {
       method: 'POST',
@@ -59,12 +67,14 @@ export function LengkapiAkunView({ client = browserClient }: { client?: Lengkapi
   const [sibuk, setSibuk] = useState(false);
   const [galat, setGalat] = useState('');
 
+  const perluSyarat = Boolean(session?.termsRequired);
   const perluNomor = Boolean(session?.phoneRequired);
   const perluSelfie = session?.identityVerificationStatus !== 'APPROVED';
+  const [centang, setCentang] = useState(false);
 
   useEffect(() => {
-    if (session && !perluNomor && !perluSelfie) router.replace('/account');
-  }, [session, perluNomor, perluSelfie, router]);
+    if (session && !perluSyarat && !perluNomor && !perluSelfie) router.replace('/account');
+  }, [session, perluSyarat, perluNomor, perluSelfie, router]);
 
   if (!session) return <Skeleton label="Menyiapkan akun" />;
 
@@ -82,7 +92,26 @@ export function LengkapiAkunView({ client = browserClient }: { client?: Lengkapi
     }
   };
 
-  const langkah = perluNomor ? 1 : 2;
+  const setujui = async () => {
+    if (!centang) return;
+    setSibuk(true);
+    setGalat('');
+    try {
+      await client.setujuiSyarat();
+      await context?.refresh?.({ quiet: true });
+    } catch {
+      setGalat('Persetujuan belum tersimpan. Periksa koneksi lalu coba lagi.');
+    } finally {
+      setSibuk(false);
+    }
+  };
+
+  // Urutan: syarat, nomor WhatsApp, selfie. Nomor dan selfie selalu dihitung dua langkah (selfie
+  // tetap "langkah 2 dari 2" setelah nomor tersimpan); syarat menambah satu langkah di depan.
+  const aktif = perluSyarat ? 'syarat' : perluNomor ? 'nomor' : 'selfie';
+  const hanyaSyarat = perluSyarat && !perluNomor && !perluSelfie;
+  const total = hanyaSyarat ? 1 : perluSyarat ? 3 : 2;
+  const langkah = aktif === 'syarat' ? 1 : aktif === 'nomor' ? total - 1 : total;
 
   return (
     <main
@@ -90,17 +119,76 @@ export function LengkapiAkunView({ client = browserClient }: { client?: Lengkapi
       className="mx-auto max-w-xl space-y-6 font-sans text-dd-ink"
     >
       <header>
-        <p className="m-0 text-sm font-semibold text-dd-forest">Langkah {langkah} dari 2</p>
+        <p className="m-0 text-sm font-semibold text-dd-forest">
+          Langkah {langkah} dari {total}
+        </p>
         <h1 id="lengkapi-title" className="m-0 mt-1 text-[28px] font-semibold tracking-[-0.02em]">
           Lengkapi akun Anda
         </h1>
         <p className="m-0 mt-2 text-[17px] text-dd-muted">
-          Halo {session.displayName.split(/\s+/)[0]}, akun Google Anda sudah tersambung. Sebelum
-          membeli paket dan booking kelas, kami perlu nomor WhatsApp dan satu foto selfie.
+          {perluSyarat && !perluNomor && !perluSelfie
+            ? `Halo ${session.displayName.split(/\s+/)[0]}, Syarat & Ketentuan Daily Dose diperbarui. Setujui dulu untuk melanjutkan membeli paket dan booking kelas.`
+            : `Halo ${session.displayName.split(/\s+/)[0]}, sebelum membeli paket dan booking kelas, lengkapi dulu akun Anda.`}
         </p>
       </header>
 
-      {perluNomor ? (
+      {aktif === 'syarat' ? (
+        <section aria-labelledby="syarat-title" className="space-y-4 rounded-dd-xl border border-dd-line bg-white p-5">
+          <h2 id="syarat-title" className="m-0 text-lg font-semibold">
+            Syarat &amp; Ketentuan
+          </h2>
+          <ul className="m-0 list-disc space-y-1.5 pl-5 text-[15px] text-dd-muted">
+            <li>Paket yang lewat masa berlaku hangus otomatis, termasuk sisa sesinya.</li>
+            <li>Perpanjangan masa berlaku berbayar dan maksimal 3 kali per paket.</li>
+            <li>Batal kurang dari 12 jam sebelum kelas atau tidak hadir, sesi tetap terpotong.</li>
+            <li>Pembayaran final dan tidak dapat dikembalikan.</li>
+            <li>Studio berhak memotong, membekukan, atau membatalkan paket sesuai Syarat &amp; Ketentuan.</li>
+          </ul>
+          <details className="rounded-dd-md border border-dd-line">
+            <summary className="flex min-h-11 cursor-pointer items-center px-3 text-[15px] font-semibold text-dd-forest">
+              Baca selengkapnya ({PASAL_SYARAT.length} pasal)
+            </summary>
+            <div className="max-h-80 space-y-4 overflow-y-auto border-t border-dd-line p-3 text-sm text-dd-muted">
+              {PASAL_SYARAT.map((p) => (
+                <section key={p.id}>
+                  <h3 className="m-0 text-sm font-semibold text-dd-ink">{p.judul}</h3>
+                  <ol className="m-0 mt-1 list-decimal space-y-1 pl-5">
+                    {p.butir.map((b) => (
+                      <li key={b}>{b}</li>
+                    ))}
+                  </ol>
+                </section>
+              ))}
+            </div>
+          </details>
+          <CheckboxInput
+            label={
+              <>
+                Saya telah membaca dan menyetujui{' '}
+                <a href="/terms" target="_blank" rel="noreferrer" className="font-semibold text-dd-forest underline">
+                  Syarat &amp; Ketentuan
+                </a>{' '}
+                (versi {VERSI_SYARAT}) dan{' '}
+                <a href="/privacy" target="_blank" rel="noreferrer" className="font-semibold text-dd-forest underline">
+                  Kebijakan Privasi
+                </a>
+                .
+              </>
+            }
+            checked={centang}
+            disabled={sibuk}
+            onChange={(e) => setCentang(e.target.checked)}
+          />
+          {galat && (
+            <p role="alert" className="m-0 text-sm font-medium text-dd-danger">
+              {galat}
+            </p>
+          )}
+          <Button disabled={!centang} loading={sibuk} onClick={() => void setujui()} className="w-full sm:w-auto">
+            Setuju dan lanjut
+          </Button>
+        </section>
+      ) : perluNomor ? (
         <form
           onSubmit={simpanNomor}
           aria-label="Langkah 1, nomor WhatsApp"

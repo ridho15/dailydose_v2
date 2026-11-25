@@ -27,6 +27,16 @@ describe('pendaftaran member mewajibkan selfie', () => {
     expect(db.user.findFirst).not.toHaveBeenCalled();
   });
 
+  it('menolak pendaftaran tanpa centang Syarat & Ketentuan, juga bila formulir dilewati', async () => {
+    db.user.findFirst.mockClear();
+    await expect(service.registerCustomer({ ...isian, consent: false })).rejects.toMatchObject({
+      status: 422,
+      response: 'TERMS_CONSENT_REQUIRED',
+      details: [expect.objectContaining({ field: 'consent' })],
+    });
+    expect(db.user.findFirst).not.toHaveBeenCalled();
+  });
+
   it('tidak meminta KTP', async () => {
     // Dengan selfie, pemeriksaan lolos sampai pengecekan duplikat; KTP tidak ikut diperiksa.
     db.user.findFirst.mockResolvedValueOnce({ email: 'sari@contoh.id' });

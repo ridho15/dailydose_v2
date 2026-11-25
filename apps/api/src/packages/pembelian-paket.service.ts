@@ -1,4 +1,5 @@
 import { HttpStatus, Injectable, Optional } from '@nestjs/common';
+import { catatPersetujuan, wajibSetuju } from '../identity/persetujuan-syarat';
 import { Prisma, PurchaseStatus } from '@prisma/client';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { RuntimeConfigService } from '../configuration/runtime-config.service';
@@ -358,6 +359,7 @@ export class CustomerOrderService {
       expectedPromotionId?: string | null;
       expectedPromotionVersion?: number;
       targetCustomerPackageId?: string;
+      setujuSyarat?: unknown;
     },
     key: string,
     correlationId: string,
@@ -365,6 +367,8 @@ export class CustomerOrderService {
     await this.access.requireVerifiedCustomer(principal);
     if (!input.packageId || !input.branchId)
       throw new ApiProblem('VALIDATION_ERROR', HttpStatus.BAD_REQUEST);
+    // Member wajib mencentang Syarat & Ketentuan pembelian (masa berlaku, hangus, maks 3x perpanjangan).
+    wajibSetuju(input.setujuSyarat, 'setujuSyarat');
 
     const hasil = await this.idempotency.execute(
       {
@@ -445,9 +449,11 @@ export class CustomerOrderService {
           totalAmountRp = baseAmountRp + uniqueCode;
         }
 
+        const orderId = randomUUID();
+        await catatPersetujuan(tx as never, tx, { userId: principal.userId, jenis: 'PEMBELIAN', purchaseId: orderId });
         const order = await tx.pembelian.create({
           data: {
-            id: randomUUID(),
+            id: orderId,
             invoiceNumber,
             userId: principal.userId,
             branchId: input.branchId,
@@ -894,9 +900,17 @@ export class CustomerOrderService {
             { field: 'voucherCode', issue: 'NOT_APPLICABLE' },
           ]);
 
+        const orderId = randomUUID();
+        // Staf mencatat bahwa syarat pembelian sudah disampaikan kepada member (lihat teks di laci penjualan).
+        await catatPersetujuan(tx as never, tx, {
+          userId: customer.id,
+          jenis: 'PEMBELIAN_STAF',
+          purchaseId: orderId,
+          dicatatOleh: principal.userId,
+        });
         const order = await tx.pembelian.create({
           data: {
-            id: randomUUID(),
+            id: orderId,
             invoiceNumber: newInvoiceNumber(),
             userId: customer.id,
             branchId,

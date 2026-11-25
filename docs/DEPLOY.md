@@ -460,6 +460,27 @@ CREATE TABLE `mutasi_stok_minuman` (
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 ```
 
+`persetujuan_syarat` (bukti persetujuan Syarat & Ketentuan, 25 November 2026). Mencatat kapan member
+menyetujui syarat saat mendaftar, saat checkout, dan saat staf mencatat penjualan. Tanpa tabel ini
+pendaftaran dan checkout tetap jalan (persetujuan tetap wajib dicentang) tetapi tidak tercatat, dan
+member lama tidak diminta menyetujui ulang.
+
+```sql
+CREATE TABLE `persetujuan_syarat` (
+    `id` CHAR(36) NOT NULL,
+    `userId` CHAR(36) NOT NULL,
+    `jenis` VARCHAR(20) NOT NULL,
+    `versi` VARCHAR(20) NOT NULL,
+    `purchaseId` CHAR(36) NULL,
+    `dicatatOleh` CHAR(36) NULL,
+    `userAgent` VARCHAR(255) NULL,
+    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    INDEX `persetujuan_syarat_userId_jenis_versi_idx`(`userId`, `jenis`, `versi`),
+    INDEX `persetujuan_syarat_purchaseId_idx`(`purchaseId`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+```
+
 ## Akun HR Group (SSO)
 
 Tombol "Masuk dengan Akun HR Group" di halaman masuk dan credential bridge untuk migrasi member lama. Kontraknya

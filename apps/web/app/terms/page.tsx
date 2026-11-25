@@ -1,15 +1,18 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { ArrowLeft, Clock, FileText, HeartHandshake, ShieldCheck, Sparkles } from 'lucide-react';
 import { PublicFooter } from '../components/public/public-footer';
 import { PublicHeader } from '../components/public/public-header';
 import { PublicPageHero } from '../components/public/public-page';
+import { BERLAKU_SEJAK, PASAL_SYARAT, VERSI_SYARAT } from '../lib/syarat-ketentuan';
 
 export const metadata: Metadata = {
   title: 'Syarat & Ketentuan Layanan',
   description:
-    'Syarat dan Ketentuan keanggotaan, pembelian paket sesi, dan reservasi kelas Daily Dose Pilates.',
+    'Syarat dan Ketentuan akun member, pembelian paket, masa berlaku, perpanjangan, pembatalan, dan penggunaan studio Daily Dose Pilates.',
 };
+
+/** Pasal yang paling sering ditanyakan; ditebalkan di daftar isi supaya mudah ditemukan. */
+const PENTING = new Set(['masa-berlaku', 'perpanjangan', 'hak-studio', 'pembatalan', 'refund']);
 
 export default function TermsPage() {
   return (
@@ -22,106 +25,71 @@ export default function TermsPage() {
         <PublicPageHero
           eyebrow="Ketentuan Keanggotaan &amp; Layanan"
           title="Syarat &amp; Ketentuan Studio"
-          description="Panduan resmi mengenai hak, kewajiban, reservasi kelas, dan masa berlaku paket sesi Daily Dose Pilates."
+          description="Berlaku untuk pendaftaran akun, pembelian paket, perpanjangan, pemesanan kelas, dan penggunaan studio Daily Dose Pilates."
         />
 
-        <section className="py-[clamp(64px,8vw,120px)]">
+        <section className="py-[clamp(48px,7vw,104px)]">
           <div className="ed-wrap">
-            <div className="mx-auto max-w-3xl">
-              {/* Seksi 1: Ketentuan Umum */}
-              <article className="space-y-4 border-t border-ed-line py-8">
-                <div className="flex items-center gap-3 text-xl font-medium tracking-[-0.03em] text-ed-ink [&>svg]:size-5 [&>svg]:text-ed-green">
-                  <FileText className="size-4" />
-                  <h2>1. Ketentuan Umum &amp; Akun Member</h2>
-                </div>
-                <div className="space-y-3 text-[15px] leading-[1.7] text-ed-muted">
-                  <p>
-                    Dengan mendaftar akun atau membeli paket sesi di Daily Dose Pilates, Anda menyetujui untuk memberikan data diri yang benar (nama, nomor WhatsApp aktif, dan email valid).
-                  </p>
-                  <p>
-                    Setiap akun bersifat personal dan tidak dapat dipindahtangankan tanpa persetujuan tertulis dari manajemen studio. Sesi latihan dalam paket akun Anda hanya dapat digunakan oleh pemilik akun terdaftar.
-                  </p>
-                </div>
-              </article>
+            <div className="mx-auto grid max-w-3xl gap-8">
+              <p className="m-0 text-sm text-ed-muted">
+                Versi {VERSI_SYARAT} · berlaku sejak {BERLAKU_SEJAK}
+              </p>
 
-              {/* Seksi 2: Paket Sesi & Pembayaran */}
-              <article className="space-y-4 border-t border-ed-line py-8">
-                <div className="flex items-center gap-3 text-xl font-medium tracking-[-0.03em] text-ed-ink [&>svg]:size-5 [&>svg]:text-ed-green">
-                  <Sparkles className="size-4" />
-                  <h2>2. Pembelian Paket &amp; Masa Berlaku</h2>
-                </div>
-                <div className="space-y-3 text-[15px] leading-[1.7] text-ed-muted">
-                  <p>
-                    Setiap paket sesi memiliki masa berlaku (durasi aktif) yang tertera saat pembelian. Masa berlaku dihitung sejak tanggal pembayaran diverifikasi dan paket dinyatakan aktif.
-                  </p>
-                  <p>
-                    Sesi yang tidak digunakan setelah masa berlaku habis akan otomatis kedaluwarsa dan tidak dapat dikembalikan <em>(non-refundable)</em>.
-                  </p>
-                  <p>
-                    Pembayaran dapat dilakukan melalui transfer bank atau QRIS instan resmi. Paket akan otomatis dikreditkan ke saldo akun Anda setelah verifikasi transaksi selesai.
-                  </p>
-                </div>
-              </article>
+              <div className="border border-ed-line bg-white p-5 text-[15px] leading-[1.7] text-ed-ink">
+                <p className="m-0 font-semibold">Yang paling penting:</p>
+                <ul className="m-0 mt-2 list-disc space-y-1 pl-5 text-ed-muted">
+                  <li>Paket yang lewat masa berlaku hangus otomatis, termasuk sisa sesinya.</li>
+                  <li>Perpanjangan masa berlaku berbayar dan maksimal 3 kali per paket.</li>
+                  <li>Batal kurang dari 12 jam atau tidak hadir, sesi tetap terpotong.</li>
+                  <li>Pembayaran final dan tidak dapat dikembalikan.</li>
+                  <li>Studio berhak memotong, membekukan, atau membatalkan paket sesuai Pasal 7.</li>
+                </ul>
+              </div>
 
-              {/* Seksi 3: Reservasi & Pembatalan Kelas */}
-              <article className="space-y-4 border-t border-ed-line py-8">
-                <div className="flex items-center gap-3 text-xl font-medium tracking-[-0.03em] text-ed-ink [&>svg]:size-5 [&>svg]:text-ed-green">
-                  <Clock className="size-4" />
-                  <h2>3. Pemesanan Kelas &amp; Kebijakan Pembatalan</h2>
-                </div>
-                <div className="space-y-3 text-[15px] leading-[1.7] text-ed-muted">
-                  <p>
-                    Member dapat memesan slot kelas maksimal 14 hari ke depan selama kuota kelas masih tersedia dan saldo paket sesi mencukupi.
-                  </p>
-                  <p>
-                    <strong>Pembatalan Sesi (Late Cancel):</strong> Pembatalan kelas harus diajukan minimal 12 jam sebelum jadwal kelas dimulai agar sesi dapat dikembalikan ke saldo akun Anda. Pembatalan kurang dari 12 jam sebelum kelas atau ketidakhadiran tanpa pemberitahuan <em>(no-show)</em> akan mengakibatkan 1 sesi terpotong.
-                  </p>
-                  <p>
-                    Member diharapkan hadir di studio 10–15 menit sebelum kelas dimulai untuk persiapan dan pemanasan. Keterlambatan lebih dari 10 menit dapat mengorbankan hak mengikuti kelas demi keselamatan latihan.
-                  </p>
-                </div>
-              </article>
+              <nav aria-labelledby="daftar-isi" className="border-t border-ed-line pt-6">
+                <h2 id="daftar-isi" className="m-0 text-lg font-medium text-ed-ink">
+                  Daftar isi
+                </h2>
+                <ol className="m-0 mt-3 grid list-none gap-1 p-0 text-[15px] sm:grid-cols-2">
+                  {PASAL_SYARAT.map((p) => (
+                    <li key={p.id}>
+                      <a
+                        href={`#${p.id}`}
+                        className={`inline-flex min-h-11 items-center text-ed-green underline-offset-4 hover:underline ${PENTING.has(p.id) ? 'font-semibold' : ''}`}
+                      >
+                        {p.judul}
+                      </a>
+                    </li>
+                  ))}
+                </ol>
+              </nav>
 
-              {/* Seksi 4: Keselamatan & Kesehatan */}
-              <article className="space-y-4 border-t border-ed-line py-8">
-                <div className="flex items-center gap-3 text-xl font-medium tracking-[-0.03em] text-ed-ink [&>svg]:size-5 [&>svg]:text-ed-green">
-                  <HeartHandshake className="size-4" />
-                  <h2>4. Kesehatan, Cedera &amp; Keselamatan Latihan</h2>
-                </div>
-                <div className="space-y-3 text-[15px] leading-[1.7] text-ed-muted">
-                  <p>
-                    Member wajib menginformasikan riwayat cedera, kondisi medis khusus, atau kehamilan kepada instruktur sebelum sesi dimulai.
-                  </p>
-                  <p>
-                    Instruktur berhak merekomendasikan modifikasi gerakan atau mengarahkan ke sesi privat demi keselamatan dan kenyamanan Anda.
-                  </p>
-                  <p>
-                    Member diwajibkan menggunakan kaus kaki khusus Pilates dengan anti-slip <em>(grip socks)</em> saat berada di area reformer studio.
-                  </p>
-                </div>
-              </article>
+              {PASAL_SYARAT.map((p) => (
+                <article key={p.id} id={p.id} className="scroll-mt-24 space-y-3 border-t border-ed-line pt-6">
+                  <h2 className="m-0 text-xl font-medium tracking-[-0.03em] text-ed-ink">{p.judul}</h2>
+                  <ol className="m-0 list-decimal space-y-2 pl-5 text-[15px] leading-[1.7] text-ed-muted marker:text-ed-ink">
+                    {p.butir.map((b) => (
+                      <li key={b}>{b}</li>
+                    ))}
+                  </ol>
+                </article>
+              ))}
 
-              {/* Seksi 5: Bantuan & Perubahan Ketentuan */}
-              <article className="space-y-4 border-t border-ed-line py-8">
-                <div className="flex items-center gap-3 text-xl font-medium tracking-[-0.03em] text-ed-ink [&>svg]:size-5 [&>svg]:text-ed-green">
-                  <ShieldCheck className="size-4" />
-                  <h2>5. Pertanyaan &amp; Kontak Bantuan</h2>
-                </div>
-                <p className="text-sm leading-relaxed text-ed-muted">
-                  Jika Anda memiliki pertanyaan mengenai syarat dan ketentuan ini, hubungi tim kami melalui WhatsApp studio resmi atau kunjungi front desk cabang Daily Dose Pilates terdekat.
+              <article className="space-y-3 border-t border-ed-line pt-6">
+                <h2 className="m-0 text-xl font-medium tracking-[-0.03em] text-ed-ink">Pertanyaan</h2>
+                <p className="m-0 text-[15px] leading-[1.7] text-ed-muted">
+                  Hubungi WhatsApp studio atau front desk cabang terdekat. Baca juga{' '}
+                  <Link href="/privacy" className="text-ed-green underline underline-offset-4">
+                    Kebijakan Privasi
+                  </Link>
+                  .
                 </p>
-                <div className="pt-2 flex flex-wrap gap-3">
+                <div className="flex flex-wrap gap-3 pt-1">
                   <Link
                     href="/contact"
-                    className="inline-flex items-center gap-2 rounded-none bg-ed-green px-4 py-2 text-sm font-semibold text-white no-underline transition hover:bg-ed-forest"
+                    className="inline-flex min-h-11 items-center bg-ed-green px-4 text-sm font-semibold text-white no-underline transition hover:bg-ed-forest"
                   >
-                    <span>Hubungi Kami</span>
-                  </Link>
-                  <Link
-                    href="/guide"
-                    className="inline-flex items-center gap-2 rounded-none border border-ed-line bg-white px-4 py-2 text-sm font-semibold text-ed-ink no-underline transition hover:bg-ed-tint"
-                  >
-                    <span>Panduan &amp; Etika Studio</span>
+                    Hubungi Kami
                   </Link>
                 </div>
               </article>

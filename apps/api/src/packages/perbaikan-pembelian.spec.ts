@@ -230,7 +230,7 @@ describe('createOrder: paket harus dijual di cabang pesanan', () => {
       {} as never,
     );
     await expect(
-      service.createOrder(staff([], customerId), { packageId, branchId: branchA }, 'key-12345', 'c'),
+      service.createOrder(staff([], customerId), { setujuSyarat: true, packageId, branchId: branchA }, 'key-12345', 'c'),
     ).rejects.toMatchObject({ code: 'PACKAGE_BRANCH_MISMATCH' });
   });
 });

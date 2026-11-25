@@ -155,12 +155,12 @@ export function safeReturnTo(value: string | null): string {
   }
 }
 
-/** Halaman melengkapi nomor WhatsApp dan selfie untuk akun yang mendaftar lewat Google. */
+/** Halaman persetujuan Syarat & Ketentuan, nomor WhatsApp, dan selfie (akun Google dan member lama). */
 export const LENGKAPI_AKUN = '/account/lengkapi';
 
 export function defaultSessionDestination(session: WebSession): string {
   if (session.passwordChangeRequired) return '/account/security?required=true';
-  if (session.phoneRequired && isCustomerOnlySession(session)) return LENGKAPI_AKUN;
+  if ((session.phoneRequired || session.termsRequired) && isCustomerOnlySession(session)) return LENGKAPI_AKUN;
   if (isCheckinStaffOnlySession(session)) return '/workspace/check-in';
   if (isInstructorOnlySession(session)) return '/workspace';
   if (session.roles.some((role) => internalStaffRoles.has(role))) return '/workspace';
@@ -191,7 +191,8 @@ export function canAccessSessionPath(session: WebSession, value: string): boolea
     return HALAMAN_PETUGAS_CHECKIN.some((p) => path === p || path.startsWith(`${p}/`));
   const customerOnly = isCustomerOnlySession(session);
   // Nomor WhatsApp dulu; halaman publik tetap bisa dibuka.
-  if (customerOnly && session.phoneRequired) return path === LENGKAPI_AKUN;
+  // Persetujuan Syarat & Ketentuan versi terbaru juga diminta di halaman yang sama.
+  if (customerOnly && (session.phoneRequired || session.termsRequired)) return path === LENGKAPI_AKUN;
   if (!customerOnly && (path === '/bookings' || path.startsWith('/bookings/'))) return false;
   if (customerOnly && (path === '/workspace/bookings' || path.startsWith('/workspace/bookings/')))
     return false;

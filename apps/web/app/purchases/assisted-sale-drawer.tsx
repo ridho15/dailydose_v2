@@ -185,11 +185,12 @@ export function AssistedSaleDrawer({
     const accepted = await feedback.confirm({
       tone: 'warning',
       title: 'Catat penjualan paket?',
-      message: selectedTarget
+      message: (selectedTarget
         ? selectedTarget.kedaluwarsa
           ? `${packageOption.label} untuk ${customerOption.label} (${formatRupiah(packageOption.priceRp)}, ${assistedPaymentMethodLabels[method]}). ${selectedTarget.packageName} sudah kedaluwarsa; setelah penyetuju lain menyetujuinya di antrean Pembayaran, paket aktif lagi 30 hari dari hari disetujui.`
           : `${packageOption.label} untuk ${customerOption.label} (${formatRupiah(packageOption.priceRp)}, ${assistedPaymentMethodLabels[method]}). Masa aktif ${selectedTarget.packageName} bertambah 30 hari setelah penyetuju lain menyetujuinya di antrean Pembayaran.`
-        : `${packageOption.label} untuk ${customerOption.label} (${formatRupiah(packageOption.priceRp)}, ${assistedPaymentMethodLabels[method]}). Paket aktif setelah penyetuju lain menyetujuinya di antrean Pembayaran.`,
+        : `${packageOption.label} untuk ${customerOption.label} (${formatRupiah(packageOption.priceRp)}, ${assistedPaymentMethodLabels[method]}). Paket aktif setelah penyetuju lain menyetujuinya di antrean Pembayaran.`)
+        + ' Dengan mencatat, Anda menyatakan sudah menyampaikan Syarat & Ketentuan kepada member: paket hangus saat masa berlaku habis, perpanjangan maksimal 3 kali, dan pembayaran tidak dapat dikembalikan.',
       confirmLabel: 'Catat penjualan',
     });
     if (!accepted) return;

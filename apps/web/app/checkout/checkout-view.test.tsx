@@ -310,12 +310,17 @@ describe('CheckoutView paket perpanjangan masa aktif', () => {
     expect(submit).toBeDisabled();
 
     await user.click(screen.getByRole('radio', { name: /Paket 4 Sesi/ }));
+    // Paket sudah dipilih, tetapi tombol baru aktif setelah Syarat & Ketentuan dicentang.
+    expect(submit).toBeDisabled();
+    expect(screen.getByText(/maksimal 3 kali perpanjangan/)).toBeVisible();
+    await user.click(screen.getByRole('checkbox', { name: /menyetujui Syarat & Ketentuan/ }));
     expect(submit).toBeEnabled();
     // Tanpa dialog konfirmasi: satu tekan langsung membuat pesanan.
     await user.click(submit);
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
 
     expect(vi.mocked(browserOrderClient.create).mock.calls[0]?.[6]).toBe('cp-2');
+    expect(vi.mocked(browserOrderClient.create).mock.calls[0]?.[7]).toBe(true);
     expect(
       (await screen.findAllByText(/sudah tidak bisa diperpanjang .*bukti bayar/)).length,
     ).toBeGreaterThan(0);
@@ -356,6 +361,7 @@ describe('CheckoutView paket perpanjangan masa aktif', () => {
     );
     expect(await screen.findByRole('radio', { name: /Paket 4 Sesi/ })).toBeChecked();
     expect(screen.getByRole('radio', { name: /Paket 8 Sesi/ })).not.toBeChecked();
+    await userEvent.setup().click(screen.getByRole('checkbox', { name: /menyetujui Syarat & Ketentuan/ }));
     expect(screen.getByRole('button', { name: 'Buat pesanan' })).toBeEnabled();
   });
 

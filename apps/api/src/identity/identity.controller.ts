@@ -148,6 +148,7 @@ export class IdentityController {
         {
           ...body,
           consent: body.consent === true || body.consent === 'true',
+          userAgent: request.headers?.['user-agent'],
           selfie: selfie
             ? {
                 originalName: selfie.originalname,
@@ -181,6 +182,18 @@ export class IdentityController {
   @Get('me/profile')
   myProfile(@Req() request: AuthenticatedRequest) {
     return this.customerProfiles.get(request.principal);
+  }
+
+  /** Persetujuan Syarat & Ketentuan versi terbaru (member Google dan member lama). */
+  @SelfService()
+  @UseGuards(AuthGuard)
+  @Post('me/terms-consent')
+  @HttpCode(200)
+  setujuiSyarat(@Req() request: AuthenticatedRequest, @Body() body: { setuju?: unknown }) {
+    return this.identities.setujuiSyarat(request.principal, {
+      setuju: body?.setuju,
+      userAgent: request.headers?.['user-agent'],
+    });
   }
 
   /** Nomor WhatsApp untuk akun yang belum punya (mis. daftar lewat Google). */
