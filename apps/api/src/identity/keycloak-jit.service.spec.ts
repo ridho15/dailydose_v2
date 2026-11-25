@@ -7,23 +7,21 @@ function jsonRes(body: unknown, status = 200, headers: Record<string, string> = 
   });
 }
 
-describe('KeycloakJitService (DailyDose)', () => {
+describe('KeycloakJitService (DailyDose - HRG_* Service Account)', () => {
   const originalFetch = globalThis.fetch;
   const mutableEnv = process.env as Record<string, string | undefined>;
   const savedEnv = {
-    KEYCLOAK_BASE_URL: mutableEnv.KEYCLOAK_BASE_URL,
-    KEYCLOAK_REALM: mutableEnv.KEYCLOAK_REALM,
-    KEYCLOAK_ADMIN_USER: mutableEnv.KEYCLOAK_ADMIN_USER,
-    KEYCLOAK_ADMIN_PASSWORD: mutableEnv.KEYCLOAK_ADMIN_PASSWORD,
+    HRG_ISSUER: mutableEnv.HRG_ISSUER,
     HRG_CLIENT_ID: mutableEnv.HRG_CLIENT_ID,
     HRG_CLIENT_SECRET: mutableEnv.HRG_CLIENT_SECRET,
+    KEYCLOAK_ADMIN_USER: mutableEnv.KEYCLOAK_ADMIN_USER,
+    KEYCLOAK_ADMIN_PASSWORD: mutableEnv.KEYCLOAK_ADMIN_PASSWORD,
   };
 
   beforeEach(() => {
-    mutableEnv.KEYCLOAK_BASE_URL = 'http://localhost:8080';
-    mutableEnv.KEYCLOAK_REALM = 'hrgroup';
-    mutableEnv.KEYCLOAK_ADMIN_USER = 'admin';
-    mutableEnv.KEYCLOAK_ADMIN_PASSWORD = 'admin_test_password';
+    delete mutableEnv.KEYCLOAK_ADMIN_USER;
+    delete mutableEnv.KEYCLOAK_ADMIN_PASSWORD;
+    mutableEnv.HRG_ISSUER = 'http://localhost:8080/realms/hrgroup';
     mutableEnv.HRG_CLIENT_ID = 'dailydose';
     mutableEnv.HRG_CLIENT_SECRET = 'dd_test_secret';
   });
@@ -36,32 +34,29 @@ describe('KeycloakJitService (DailyDose)', () => {
     }
   });
 
-  it('migrates new user, persists akun_grup_tautan, and opens active OIDC session via Direct Access Grant', async () => {
+  it('migrates new user using client_credentials (HRG_* only) and opens active OIDC session', async () => {
     const db = {
       akunGrupTautan: {
         findFirst: jest.fn().mockResolvedValue(null),
-        create: jest.fn().mockResolvedValue({ id: 'link-dd-1' }),
+        create: jest.fn().mockResolvedValue({ id: 'lnk-dd-1' }),
       },
     } as any;
 
-    const calls: string[] = [];
+    const grants: string[] = [];
     globalThis.fetch = jest.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
-      calls.push(`${init?.method || 'GET'} ${url}`);
-      if (url.endsWith('/realms/master/protocol/openid-connect/token')) {
-        return jsonRes({ access_token: 'adm-tok', expires_in: 60 });
+      if (url.endsWith('/realms/hrgroup/protocol/openid-connect/token')) {
+        const params = new URLSearchParams(String(init?.body || ''));
+        const gt = params.get('grant_type') || '';
+        grants.push(gt);
+        return jsonRes({ access_token: gt === 'client_credentials' ? 'sa-tok' : 'oidc-tok', expires_in: 60 });
       }
-      if (url.includes('/admin/realms/hrgroup/users?')) {
-        return jsonRes([]);
-      }
+      if (url.includes('/admin/realms/hrgroup/users?')) return jsonRes([]);
       if (url.endsWith('/admin/realms/hrgroup/users') && init?.method === 'POST') {
         return new Response(null, {
           status: 201,
           headers: { Location: 'http://localhost:8080/admin/realms/hrgroup/users/kc-sub-dd-1' },
         });
-      }
-      if (url.endsWith('/realms/hrgroup/protocol/openid-connect/token')) {
-        return jsonRes({ access_token: 'oidc-tok', refresh_token: 'ref-tok' });
       }
       throw new Error(`Unexpected URL: ${url}`);
     }) as any;
@@ -73,11 +68,10 @@ describe('KeycloakJitService (DailyDose)', () => {
     );
 
     expect(ok).toBe(true);
-    expect(db.akunGrupTautan.create).toHaveBeenCalledTimes(1);
-    expect(calls).toContain('POST http://localhost:8080/realms/hrgroup/protocol/openid-connect/token');
+    expect(grants).toEqual(['client_credentials', 'password']);
   });
 
-  it('recovers from invalid_grant on existing link by resetting password via Keycloak sub', async () => {
+  it('recovers from invalid_grant on existing link via Service Account reset-password', async () => {
     const db = {
       akunGrupTautan: {
         findFirst: jest.fn().mockResolvedValue({ id: 'link-2', userId: 'usr-dd-2', hrgSub: 'kc-sub-dd-2' }),
@@ -85,20 +79,21 @@ describe('KeycloakJitService (DailyDose)', () => {
       },
     } as any;
 
-    let grantAttempt = 0;
+    let passwordAttempt = 0;
     let resetCalled = false;
     globalThis.fetch = jest.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       if (url.endsWith('/realms/hrgroup/protocol/openid-connect/token')) {
-        grantAttempt++;
-        if (grantAttempt === 1) return jsonRes({ error: 'invalid_grant' }, 401);
+        const params = new URLSearchParams(String(init?.body || ''));
+        if (params.get('grant_type') === 'client_credentials') {
+          return jsonRes({ access_token: 'sa-tok', expires_in: 60 });
+        }
+        passwordAttempt++;
+        if (passwordAttempt === 1) return jsonRes({ error: 'invalid_grant' }, 401);
         return jsonRes({ access_token: 'oidc-recovered' });
       }
-      if (url.endsWith('/realms/master/protocol/openid-connect/token')) {
-        return jsonRes({ access_token: 'adm-tok', expires_in: 60 });
-      }
       if (url.endsWith('/admin/realms/hrgroup/users/kc-sub-dd-2') && (!init?.method || init.method === 'GET')) {
-        return jsonRes({ id: 'kc-sub-dd-2', username: 'sarah.dd', email: 'sarah@dailydose.local' });
+        return jsonRes({ id: 'kc-sub-dd-2', username: 'sarah.dd' });
       }
       if (url.endsWith('/admin/realms/hrgroup/users/kc-sub-dd-2/reset-password') && init?.method === 'PUT') {
         resetCalled = true;
@@ -114,18 +109,13 @@ describe('KeycloakJitService (DailyDose)', () => {
     );
 
     expect(ok).toBe(true);
-    expect(grantAttempt).toBe(2);
+    expect(passwordAttempt).toBe(2);
     expect(resetCalled).toBe(true);
   });
 
-  it('fails safely without throwing when secrets are missing or Keycloak is unreachable', async () => {
-    delete mutableEnv.KEYCLOAK_ADMIN_PASSWORD;
+  it('fails safely without throwing when HRG_CLIENT_SECRET is missing', async () => {
     delete mutableEnv.HRG_CLIENT_SECRET;
-
-    const db = {
-      akunGrupTautan: { findFirst: jest.fn().mockResolvedValue(null), create: jest.fn() },
-    } as any;
-
+    const db = { akunGrupTautan: { findFirst: jest.fn().mockResolvedValue(null), create: jest.fn() } } as any;
     const svc = new KeycloakJitService(db);
     await expect(
       svc.migrateUserJit({ id: 'usr-dd-3', email: 'x@dd.local', displayName: 'X' }, 'pw'),

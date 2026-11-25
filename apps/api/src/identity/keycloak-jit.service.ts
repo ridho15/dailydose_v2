@@ -26,21 +26,17 @@ export class KeycloakJitService {
 
   constructor(private readonly db: PrismaService) {}
 
+  private get issuerRaw(): string {
+    return (process.env.HRG_ISSUER || process.env.KEYCLOAK_BASE_URL || 'http://localhost:8080/realms/hrgroup').trim();
+  }
+
   private get baseUrl(): string {
-    const raw = process.env.KEYCLOAK_BASE_URL || process.env.HRG_ISSUER || 'http://localhost:8080';
-    return raw.replace(/\/realms\/.*$/u, '').replace(/\/+$/u, '');
+    return this.issuerRaw.replace(/\/realms\/.*$/u, '').replace(/\/+$/u, '');
   }
 
   private get realm(): string {
-    return process.env.KEYCLOAK_REALM || 'hrgroup';
-  }
-
-  private get adminUser(): string {
-    return process.env.KEYCLOAK_ADMIN_USER || 'admin';
-  }
-
-  private get adminPassword(): string {
-    return process.env.KEYCLOAK_ADMIN_PASSWORD?.trim() || '';
+    const match = this.issuerRaw.match(/\/realms\/([^/]+)/u);
+    return match?.[1] || process.env.KEYCLOAK_REALM || 'hrgroup';
   }
 
   private get clientId(): string {
@@ -51,9 +47,12 @@ export class KeycloakJitService {
     return process.env.HRG_CLIENT_SECRET?.trim() || '';
   }
 
-  private async getAdminToken(): Promise<string | null> {
-    if (!this.adminPassword) {
-      this.logger.warn('[KeycloakJIT] KEYCLOAK_ADMIN_PASSWORD belum diisi; sinkronisasi dilewati.');
+  /**
+   * Mendapatkan Service Account Token (client_credentials) memakai HRG_CLIENT_ID & HRG_CLIENT_SECRET.
+   */
+  private async getServiceToken(): Promise<string | null> {
+    if (!this.clientSecret) {
+      this.logger.warn('[KeycloakJIT] HRG_CLIENT_SECRET belum diisi; sinkronisasi dilewati.');
       return null;
     }
 
@@ -63,20 +62,19 @@ export class KeycloakJitService {
     }
 
     try {
-      const response = await fetch(`${this.baseUrl}/realms/master/protocol/openid-connect/token`, {
+      const response = await fetch(`${this.baseUrl}/realms/${this.realm}/protocol/openid-connect/token`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({
-          client_id: 'admin-cli',
-          grant_type: 'password',
-          username: this.adminUser,
-          password: this.adminPassword,
+          client_id: this.clientId,
+          client_secret: this.clientSecret,
+          grant_type: 'client_credentials',
         }).toString(),
         signal: AbortSignal.timeout(4000),
       });
 
       if (!response.ok) {
-        this.logger.warn(`Gagal otentikasi admin Keycloak (HTTP ${response.status})`);
+        this.logger.warn(`Gagal otentikasi Service Account Keycloak (HTTP ${response.status})`);
         return null;
       }
 
@@ -90,7 +88,7 @@ export class KeycloakJitService {
 
       return data.access_token;
     } catch (err) {
-      this.logger.warn(`Koneksi Keycloak Admin gagal: ${(err as Error).message}`);
+      this.logger.warn(`Koneksi Service Account Keycloak gagal: ${(err as Error).message}`);
       return null;
     }
   }
@@ -141,7 +139,7 @@ export class KeycloakJitService {
    * Memulihkan sesi bila username/password di Keycloak tidak sinkron dengan login lokal terbaru.
    */
   private async recoverSessionBySub(hrgSub: string, plainPassword: string): Promise<boolean> {
-    const token = await this.getAdminToken();
+    const token = await this.getServiceToken();
     if (!token) return false;
 
     const userRes = await fetch(
@@ -190,9 +188,9 @@ export class KeycloakJitService {
         return false;
       }
 
-      const token = await this.getAdminToken();
+      const token = await this.getServiceToken();
       if (!token) {
-        this.logger.warn(`Keycloak JIT tertunda untuk user ${user.id}: Admin token tidak tersedia`);
+        this.logger.warn(`Keycloak JIT tertunda untuk user ${user.id}: Service token tidak tersedia`);
         return false;
       }
 
