@@ -697,7 +697,7 @@ export interface ExtensionTargetList {
 export interface AssistedSaleClient {
   record(input: AssistedSaleInput, idempotencyKey: string): Promise<Purchase>;
   searchPackages(query: string): Promise<Package[]>;
-  extensionTargets?(customerUserId: string, branchId: string): Promise<ExtensionTargetList>;
+  extensionTargets?(customerUserId: string, branchId: string, packageId?: string): Promise<ExtensionTargetList>;
 }
 
 export const browserAssistedSaleClient: AssistedSaleClient = {
@@ -718,8 +718,9 @@ export const browserAssistedSaleClient: AssistedSaleClient = {
     });
     return (result.items ?? []).map(mapPackage);
   },
-  async extensionTargets(customerUserId, branchId) {
+  async extensionTargets(customerUserId, branchId, packageId) {
     const params = new URLSearchParams({ customerUserId, branchId });
+    if (packageId) params.set('packageId', packageId);
     return apiFetch<ExtensionTargetList>(`/purchases/extension-targets?${params.toString()}`, {
       label: 'Memuat paket member…',
     });

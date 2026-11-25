@@ -391,7 +391,7 @@ export function CustomerDashboard({
                   </div>
                   {perpanjang && (
                     <ButtonLink href={perpanjang} variant="secondary" size="lg" fullWidth className="text-base">
-                      Perpanjang 30 hari
+                      Perpanjang masa aktif
                     </ButtonLink>
                   )}
                 </li>

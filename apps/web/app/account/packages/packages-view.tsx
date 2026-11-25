@@ -142,7 +142,7 @@ function KartuPesanan({ order, waHref }: { order: CustomerOrder; waHref: string 
   );
 }
 
-/** Masa aktif tinggal sebanyak ini atau kurang: tawarkan perpanjangan 30 hari. */
+/** Masa aktif tinggal sebanyak ini atau kurang: tawarkan perpanjangan masa aktif. */
 export const BATAS_HARI_PERPANJANG = 14;
 
 /** Tautan checkout paket perpanjangan dengan paket member ini sudah terpilih sebagai target. */
@@ -204,7 +204,7 @@ function KartuPaket({
         </ButtonLink>
         {milikSendiri && perpanjangHref && (
           <ButtonLink variant="secondary" href={perpanjangHref}>
-            Perpanjang 30 hari
+            Perpanjang masa aktif
           </ButtonLink>
         )}
         {item.isShareable && (

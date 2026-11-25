@@ -138,9 +138,9 @@ export function LengkapiAkunView({ client = browserClient }: { client?: Lengkapi
             Syarat &amp; Ketentuan
           </h2>
           <ul className="m-0 list-disc space-y-1.5 pl-5 text-[15px] text-dd-muted">
-            <li>Paket yang lewat masa berlaku hangus otomatis, termasuk sisa sesinya.</li>
-            <li>Perpanjangan masa berlaku berbayar dan maksimal 3 kali per paket.</li>
-            <li>Batal kurang dari 12 jam sebelum kelas atau tidak hadir, sesi tetap terpotong.</li>
+            <li>Masa berlaku sesuai paket yang dibeli. Lewat masa berlaku, paket dan sisa sesinya hangus otomatis.</li>
+            <li>Perpanjangan berbayar, lamanya sesuai paket perpanjangan yang dibeli, dan maksimal 3 kali per paket.</li>
+            <li>Batal, ganti jadwal, atau pindah sesi paling lambat 12 jam sebelum kelas dan tergantung kondisi di lapangan. Lewat dari itu atau tidak hadir, sesi tetap terpotong.</li>
             <li>Pembayaran final dan tidak dapat dikembalikan.</li>
             <li>Studio berhak memotong, membekukan, atau membatalkan paket sesuai Syarat &amp; Ketentuan.</li>
           </ul>

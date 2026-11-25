@@ -169,7 +169,8 @@ describe('AssistedSaleDrawer', () => {
     open(client);
     const dialog = screen.getByRole('dialog', { name: 'Catat penjualan paket' });
     await pickPackage(user, dialog, /Perpanjangan 30 Hari/);
-    expect(extensionTargets).toHaveBeenCalledWith('customer-1', 'branch-1');
+    // ID paket perpanjangan ikut dikirim: lama tambahan masa aktif mengikuti paket itu.
+    expect(extensionTargets).toHaveBeenCalledWith('customer-1', 'branch-1', 'pkg-ext');
     expect(await within(dialog).findByRole('radio', { name: /Paket 8 Sesi Lama/ })).toBeDisabled();
     // Satu-satunya paket yang masih bisa diperpanjang langsung terpilih.
     expect(within(dialog).getByRole('radio', { name: /Paket 4 Sesi/ })).toBeChecked();

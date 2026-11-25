@@ -474,7 +474,7 @@ export function PackagesManagementView() {
                   </div>
                   <p className="text-xs text-dd-muted">
                     {item.perpanjanganMasaAktif
-                      ? 'Tanpa sesi · tambah masa aktif 30 hari'
+                      ? `Tanpa sesi · tambah masa aktif ${item.durationDays > 0 ? item.durationDays : 30} hari`
                       : `${item.sessionCount} sesi · ${item.durationDays} hari`}
                   </p>
                 </div>
@@ -1643,7 +1643,8 @@ function PerpanjanganCheckbox({ checked, onChange }: { checked: boolean; onChang
         <span className="font-semibold text-dd-forest">Perpanjangan masa aktif</span>
         <p className="text-xs text-dd-muted">
           Paket tanpa sesi (jumlah sesi otomatis 0). Setelah lunas, masa aktif satu paket member yang
-          masih aktif bertambah 30 hari, paling banyak 3 kali per paket. Pembeli memilih paket yang
+          masih aktif bertambah sebanyak <strong>Masa berlaku</strong> paket ini (misalnya 30 atau 60
+          hari; kosong berarti 30 hari), paling banyak 3 kali per paket. Pembeli memilih paket yang
           diperpanjang saat membeli.
         </p>
       </div>

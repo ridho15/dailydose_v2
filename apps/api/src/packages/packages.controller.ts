@@ -471,8 +471,9 @@ export class PackagesController {
     @Req() r: AuthenticatedRequest,
     @Query('customerUserId') customerUserId?: string,
     @Query('branchId') branchId?: string,
+    @Query('packageId') packageId?: string,
   ) {
-    return this.customerOrders.extensionTargets(r.principal, { customerUserId, branchId });
+    return this.customerOrders.extensionTargets(r.principal, { customerUserId, branchId, packageId });
   }
   @Get('purchases') listPurchases(
     @Req() r: AuthenticatedRequest,

@@ -378,3 +378,13 @@ describe('jendela 14 hari paket perpanjangan', () => {
   });
 });
 
+
+describe('hariPerpanjangan: lama perpanjangan mengikuti paket perpanjangan yang dibeli', () => {
+  const { hariPerpanjangan } = require('./perpanjangan-masa-aktif');
+  it('memakai masa berlaku paket perpanjangan; kosong, 0, atau tidak wajar kembali ke 30 hari', () => {
+    expect(hariPerpanjangan({ validityDays: 60 })).toBe(60);
+    expect(hariPerpanjangan({ validityDays: 14 })).toBe(14);
+    for (const v of [0, null, undefined, -5, 1.5, 999]) expect(hariPerpanjangan({ validityDays: v })).toBe(30);
+    expect(hariPerpanjangan(null)).toBe(30);
+  });
+});

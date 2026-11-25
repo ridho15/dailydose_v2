@@ -32,6 +32,7 @@ import {
   infoPerpanjangan,
   periksaTargetPerpanjangan,
   pilihanTargetPerpanjangan,
+  hariPerpanjangan,
 } from './perpanjangan-masa-aktif';
 
 const PAGE_SIZE = 20;
@@ -308,9 +309,9 @@ export class CustomerOrderService {
     // Paket perpanjangan: pembeli memilih satu paket aktifnya sendiri yang akan diperpanjang.
     const extension = (await adalahPaketPerpanjangan(this.db, pkg.id))
       ? {
-          days: HARI_PERPANJANGAN,
+          days: hariPerpanjangan(pkg),
           maxPerPackage: MAKS_PERPANJANGAN,
-          targets: await pilihanTargetPerpanjangan(this.db, principal.userId),
+          targets: await pilihanTargetPerpanjangan(this.db, principal.userId, new Date(), { hari: hariPerpanjangan(pkg) }),
         }
       : null;
 
@@ -491,6 +492,7 @@ export class CustomerOrderService {
             targetCustomerPackageId: target.id,
             userId: principal.userId,
             actorId: principal.userId,
+            hari: hariPerpanjangan(pkg),
           });
 
         if (input.paymentProofId) {
@@ -743,7 +745,10 @@ export class CustomerOrderService {
    * Staf (penjualan di meja): paket aktif milik member yang bisa diperpanjang. Wewenang sama dengan
    * mencatat penjualan di cabang itu.
    */
-  async extensionTargets(principal: SessionPrincipal, query: { customerUserId?: string; branchId?: string }) {
+  async extensionTargets(
+    principal: SessionPrincipal,
+    query: { customerUserId?: string; branchId?: string; packageId?: string },
+  ) {
     const branchId = query.branchId ?? '';
     if (!UUID.test(branchId))
       throw new ApiProblem('VALIDATION_ERROR', HttpStatus.UNPROCESSABLE_ENTITY, false, [
@@ -761,10 +766,16 @@ export class CustomerOrderService {
     });
     if (!customer || customer.role !== 'CUSTOMER')
       throw new ApiProblem('RESOURCE_NOT_FOUND', HttpStatus.NOT_FOUND);
+    // Lama perpanjangan mengikuti paket perpanjangan yang dipilih staf (bawaan 30 hari).
+    const paketPerpanjangan =
+      query.packageId && UUID.test(query.packageId)
+        ? await this.db.paket.findUnique({ where: { id: query.packageId }, select: { validityDays: true } })
+        : null;
+    const hari = hariPerpanjangan(paketPerpanjangan);
     return {
-      days: HARI_PERPANJANGAN,
+      days: hari,
       maxPerPackage: MAKS_PERPANJANGAN,
-      items: await pilihanTargetPerpanjangan(this.db, customer.id, new Date(), { staf: true }),
+      items: await pilihanTargetPerpanjangan(this.db, customer.id, new Date(), { staf: true, hari }),
     };
   }
 
@@ -949,6 +960,7 @@ export class CustomerOrderService {
             targetCustomerPackageId: target.id,
             userId: customer.id,
             actorId: principal.userId,
+            hari: hariPerpanjangan(pkg),
           });
 
         this.auditService.record({

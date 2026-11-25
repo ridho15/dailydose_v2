@@ -511,7 +511,7 @@ describe('customer dashboard (Tiket T-02)', () => {
     });
   });
 
-  it('tanpa booking: sisa paket, tombol Perpanjang 30 hari bila hampir habis, tiga sesi terakhir, dan promo', async () => {
+  it('tanpa booking: sisa paket, tombol Perpanjang masa aktif bila hampir habis, tiga sesi terakhir, dan promo', async () => {
     session.identityVerificationStatus = 'APPROVED';
     (session as Record<string, unknown>).preferredBranch = {
       id: 'branch-gg',
@@ -618,7 +618,7 @@ describe('customer dashboard (Tiket T-02)', () => {
     const paketSaya = await screen.findByRole('region', { name: 'Sisa paket saya' });
     expect(within(paketSaya).getByText('7')).toBeVisible();
     // Berlaku 8 hari lagi: tombol perpanjang membawa paket ini sebagai target.
-    expect(await within(paketSaya).findByRole('link', { name: 'Perpanjang 30 hari' })).toHaveAttribute(
+    expect(await within(paketSaya).findByRole('link', { name: 'Perpanjang masa aktif' })).toHaveAttribute(
       'href',
       '/checkout?package=ext&branch=branch-gg&target=p',
     );

@@ -8,19 +8,30 @@ import { tanggalWib } from './instructor-fee-calculator';
 /**
  * Paket "Perpanjangan masa aktif" (keputusan pemilik, November 2026):
  * - Paket 0 sesi; setelah lunas menambah masa berlaku SATU Paket Pelanggan milik member yang sama
- *   sebanyak 30 hari, dihitung dari tanggal berakhir saat itu (bukan dari hari ini).
+ *   sebanyak masa berlaku paket perpanjangan itu (bawaan 30 hari), dihitung dari tanggal berakhir saat
+ *   itu (bukan dari hari ini).
  * - Paling banyak 3 kali per Paket Pelanggan.
  * - Untuk paket yang masih aktif: status ACTIVE, belum lewat masa berlaku, sisa sesi > 0.
  *   Diperiksa saat pesanan dibuat dan sekali lagi saat pembayaran disetujui.
  * - Paket yang sudah kedaluwarsa tetapi masih bersisa sesi (25 November 2026): hanya lewat staf,
- *   wajib bukti pembayaran saat disetujui, berlaku 30 hari dari hari disetujui, status kembali ACTIVE.
+ *   wajib bukti pembayaran saat disetujui, berlaku sebanyak masa berlaku paket perpanjangan dari hari disetujui, status kembali ACTIVE.
  * - Pembelian perpanjangan tidak membuat Paket Pelanggan baru (paket 0 sesi hanya akan muncul di
  *   pilihan booking dan daftar paket member sebagai paket kosong).
  *
  * Penanda paket ada di `paket_perpanjangan`, catatan per pembelian di `perpanjangan_paket`; tabel lama
  * tidak berubah. Bila tabel penanda belum dibuat, tidak ada paket yang dianggap perpanjangan.
  */
+/** Bawaan bila paket perpanjangan belum diisi masa berlakunya di Data Master. */
 export const HARI_PERPANJANGAN = 30;
+
+/**
+ * Lama perpanjangan mengikuti paket perpanjangan yang dibeli (keputusan pemilik 25 November 2026):
+ * "masa berlaku" paket itu di Data Master, mis. 30 atau 60 hari. Kosong atau 0 berarti 30 hari.
+ */
+export function hariPerpanjangan(paket: { validityDays?: number | null } | null | undefined): number {
+  const hari = Number(paket?.validityDays);
+  return Number.isInteger(hari) && hari > 0 && hari <= 366 ? hari : HARI_PERPANJANGAN;
+}
 export const MAKS_PERPANJANGAN = 3;
 /**
  * Paket perpanjangan baru bisa dibeli bila paket target tinggal sekian hari lagi sebelum berakhir
@@ -186,7 +197,7 @@ export async function pilihanTargetPerpanjangan(
   db: Db,
   userId: string,
   now = new Date(),
-  opsi: { staf?: boolean } = {},
+  opsi: { staf?: boolean; hari?: number } = {},
 ) {
   const hampirBerakhir = {
     status: 'ACTIVE',
@@ -216,7 +227,7 @@ export async function pilihanTargetPerpanjangan(
       validUntil: p.validUntil,
       /** Sudah lewat masa berlaku: perpanjangan wajib bukti bayar dan dihitung dari hari disetujui. */
       kedaluwarsa: paketKedaluwarsaBersisa(p, now),
-      validUntilAfterExtension: masaBerlakuSetelahPerpanjangan(p, HARI_PERPANJANGAN, now),
+      validUntilAfterExtension: masaBerlakuSetelahPerpanjangan(p, opsi.hari ?? HARI_PERPANJANGAN, now),
       extensionsUsed: terpakai,
       extensionsPending: menunggu,
       extensionsLeft: Math.max(0, MAKS_PERPANJANGAN - terpakai - menunggu),
@@ -262,7 +273,7 @@ export async function periksaTargetPerpanjangan(
 /** Mencatat paket target untuk pesanan yang baru dibuat; perpanjangannya diterapkan saat lunas. */
 export async function catatPerpanjangan(
   tx: Db,
-  data: { purchaseId: string; targetCustomerPackageId: string; userId: string; actorId: string },
+  data: { purchaseId: string; targetCustomerPackageId: string; userId: string; actorId: string; hari?: number },
 ) {
   return tx.perpanjanganPaket.create({
     data: {
@@ -270,7 +281,7 @@ export async function catatPerpanjangan(
       purchaseId: data.purchaseId,
       targetCustomerPackageId: data.targetCustomerPackageId,
       userId: data.userId,
-      hari: HARI_PERPANJANGAN,
+      hari: data.hari ?? HARI_PERPANJANGAN,
       createdById: data.actorId,
     },
   });

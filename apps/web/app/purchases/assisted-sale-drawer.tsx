@@ -115,7 +115,7 @@ export function AssistedSaleDrawer({
           id: pkg.id,
           label: pkg.name,
           description: pkg.perpanjanganMasaAktif
-            ? `${formatRupiah(pkg.priceRp)} · perpanjangan masa aktif 30 hari`
+            ? `${formatRupiah(pkg.priceRp)} · perpanjangan masa aktif ${pkg.durationDays > 0 ? pkg.durationDays : 30} hari`
             : `${formatRupiah(pkg.priceRp)} · ${pkg.sessionCount} sesi · ${pkg.durationDays} hari`,
           priceRp: pkg.priceRp,
           perpanjangan: Boolean(pkg.perpanjanganMasaAktif),
@@ -155,7 +155,7 @@ export function AssistedSaleDrawer({
     const load = client.extensionTargets ?? browserAssistedSaleClient.extensionTargets!;
     let active = true;
     setTargets({ status: 'loading' });
-    load(customerId, saleBranchId)
+    load(customerId, saleBranchId, packageOption?.id)
       .then((list) => {
         if (!active) return;
         setTargets({ status: 'ready', list });
@@ -170,8 +170,10 @@ export function AssistedSaleDrawer({
     return () => {
       active = false;
     };
-  }, [open, isExtension, customerId, saleBranchId, client, perpanjangTargetId]);
+  }, [open, isExtension, customerId, saleBranchId, client, perpanjangTargetId, packageOption?.id]);
 
+  // Lama perpanjangan mengikuti paket perpanjangan yang dipilih (dari server; bawaan 30 hari).
+  const hariTambah = targets.status === 'ready' ? targets.list.days : 30;
   const selectedTarget =
     targets.status === 'ready' ? targets.list.items.find((item) => item.customerPackageId === targetId) : undefined;
   // Paket kedaluwarsa hanya diperpanjang dengan bukti pembayaran (keputusan pemilik 25 November 2026).
@@ -187,8 +189,8 @@ export function AssistedSaleDrawer({
       title: 'Catat penjualan paket?',
       message: (selectedTarget
         ? selectedTarget.kedaluwarsa
-          ? `${packageOption.label} untuk ${customerOption.label} (${formatRupiah(packageOption.priceRp)}, ${assistedPaymentMethodLabels[method]}). ${selectedTarget.packageName} sudah kedaluwarsa; setelah penyetuju lain menyetujuinya di antrean Pembayaran, paket aktif lagi 30 hari dari hari disetujui.`
-          : `${packageOption.label} untuk ${customerOption.label} (${formatRupiah(packageOption.priceRp)}, ${assistedPaymentMethodLabels[method]}). Masa aktif ${selectedTarget.packageName} bertambah 30 hari setelah penyetuju lain menyetujuinya di antrean Pembayaran.`
+          ? `${packageOption.label} untuk ${customerOption.label} (${formatRupiah(packageOption.priceRp)}, ${assistedPaymentMethodLabels[method]}). ${selectedTarget.packageName} sudah kedaluwarsa; setelah penyetuju lain menyetujuinya di antrean Pembayaran, paket aktif lagi ${hariTambah} hari dari hari disetujui.`
+          : `${packageOption.label} untuk ${customerOption.label} (${formatRupiah(packageOption.priceRp)}, ${assistedPaymentMethodLabels[method]}). Masa aktif ${selectedTarget.packageName} bertambah ${hariTambah} hari setelah penyetuju lain menyetujuinya di antrean Pembayaran.`
         : `${packageOption.label} untuk ${customerOption.label} (${formatRupiah(packageOption.priceRp)}, ${assistedPaymentMethodLabels[method]}). Paket aktif setelah penyetuju lain menyetujuinya di antrean Pembayaran.`)
         + ' Dengan mencatat, Anda menyatakan sudah menyampaikan Syarat & Ketentuan kepada member: paket hangus saat masa berlaku habis, perpanjangan maksimal 3 kali, dan pembayaran tidak dapat dikembalikan.',
       confirmLabel: 'Catat penjualan',
@@ -323,7 +325,7 @@ export function AssistedSaleDrawer({
           <fieldset className="grid gap-2 rounded-dd-md border border-dd-line p-3">
             <legend className="px-1 text-sm font-semibold text-dd-ink">Paket member yang diperpanjang</legend>
             <p className="text-xs text-dd-muted">
-              Masa aktif bertambah 30 hari dari tanggal berakhir saat ini setelah pembayaran disetujui.
+              Masa aktif bertambah {hariTambah} hari dari tanggal berakhir saat ini setelah pembayaran disetujui.
               Hanya paket yang masih aktif, paling banyak 3 kali per paket.
             </p>
             {!customerOption ? (

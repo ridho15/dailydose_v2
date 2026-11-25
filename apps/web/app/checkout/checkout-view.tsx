@@ -55,7 +55,7 @@ export function CheckoutView() {
   } | null>(null);
   const [voucherBusy, setVoucherBusy] = useState(false);
   const [targetId, setTargetId] = useState('');
-  /** Paket member yang akan diperpanjang, dikirim dari tombol "Perpanjang 30 hari" di Paket Saya. */
+  /** Paket member yang akan diperpanjang, dikirim dari tombol "Perpanjang masa aktif" di Paket Saya. */
   const requestedTargetId = params.get('target') || '';
 
   const effectiveBranchId = branchId?.trim() || options?.package.branchId || '';
@@ -514,7 +514,11 @@ export function CheckoutView() {
           Sebelum membayar
         </h2>
         <ul className="m-0 list-disc space-y-1.5 pl-5 text-sm leading-relaxed text-ed-muted">
-          {ringkasanPembelian({ masaBerlakuHari: options.package.durationDays, perpanjangan: Boolean(extension) }).map((poin) => (
+          {ringkasanPembelian({
+            masaBerlakuHari: options.package.durationDays,
+            perpanjangan: Boolean(extension),
+            hariPerpanjangan: extension?.days,
+          }).map((poin) => (
             <li key={poin}>{poin}</li>
           ))}
         </ul>

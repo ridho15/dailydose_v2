@@ -349,7 +349,7 @@ describe('CheckoutView paket perpanjangan masa aktif', () => {
     expect(screen.getByRole('button', { name: 'Buat pesanan' })).toBeDisabled();
   });
 
-  it('tombol Perpanjang 30 hari membawa target: paket itu langsung terpilih', async () => {
+  it('tombol Perpanjang masa aktif membawa target: paket itu langsung terpilih', async () => {
     mockSearchParams.set('target', 'cp-2');
     vi.mocked(browserOrderClient.checkout).mockResolvedValue(
       options([target(), target({ customerPackageId: 'cp-2', packageName: 'Paket 4 Sesi' })]),
