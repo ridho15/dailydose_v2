@@ -29,10 +29,10 @@ describe('hrGroupStartHref', () => {
 });
 
 describe('hrGroupErrorMessage', () => {
-  it('memetakan kode callback ke pesan Indonesia, kode asing ke pesan umum', () => {
+  it('memetakan kode callback ke pesan Inggris, kode asing ke pesan umum', () => {
     expect(hrGroupErrorMessage(null)).toBeNull();
-    expect(hrGroupErrorMessage('ambiguous')).toContain('akun ganda');
-    expect(hrGroupErrorMessage('cancelled')).toBe('Masuk dengan Akun HR Group dibatalkan.');
+    expect(hrGroupErrorMessage('ambiguous')).toContain('more than one Daily Dose account');
+    expect(hrGroupErrorMessage('cancelled')).toBe('HR Group sign-in was cancelled.');
     expect(hrGroupErrorMessage('<script>')).toBe(hrGroupErrorMessage('server'));
   });
 });

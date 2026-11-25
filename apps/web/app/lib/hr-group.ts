@@ -15,13 +15,13 @@ export function hrGroupStartHref(returnTo: string): string {
 
 /** Pesan untuk `?hrg_error=<kode>` dari callback API. */
 const hrGroupErrors: Record<string, string> = {
-  cancelled: 'Masuk dengan Akun HR Group dibatalkan.',
-  state: 'Sesi masuk Akun HR Group sudah kedaluwarsa. Silakan coba lagi.',
-  token: 'Akun HR Group tidak dapat diverifikasi. Silakan coba lagi.',
+  cancelled: 'HR Group sign-in was cancelled.',
+  state: 'Your HR Group sign-in timed out. Please try again.',
+  token: "We couldn't verify your HR Group account. Please try again.",
   ambiguous:
-    'Hubungi admin, akun ganda: nomor atau email Akun HR Group Anda cocok dengan lebih dari satu akun Daily Dose.',
-  inactive: 'Akun Daily Dose Anda tidak aktif. Hubungi admin studio.',
-  server: 'Layanan Akun HR Group sedang tidak tersedia. Coba lagi nanti atau masuk dengan password.',
+    'Your HR Group number or email matches more than one Daily Dose account. Please contact the studio so we can sort it out.',
+  inactive: 'Your Daily Dose account is inactive. Please contact the studio.',
+  server: 'HR Group sign-in is unavailable right now. Try again later, or sign in with your password.',
 };
 
 export function hrGroupErrorMessage(code: string | null | undefined): string | null {

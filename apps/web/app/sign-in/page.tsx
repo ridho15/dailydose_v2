@@ -6,7 +6,7 @@ import { hrGroupEnabled } from '../lib/hr-group';
 export const dynamic = 'force-dynamic';
 
 export const metadata: Metadata = {
-  title: 'Masuk',
+  title: 'Sign in',
 };
 
 export default function SignInPage() {

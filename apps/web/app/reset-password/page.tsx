@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import { ResetPasswordView } from './reset-password-view';
 
 export const metadata: Metadata = {
-  title: 'Atur Ulang Password',
+  title: 'Set a new password',
 };
 
 export default function ResetPasswordPage() {

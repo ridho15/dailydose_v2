@@ -21,16 +21,16 @@ import { googleClientId } from '../lib/google-client-id';
 import { hrGroupErrorMessage, hrGroupStartHref } from '../lib/hr-group';
 
 const messages: Record<UiFailure, string> = {
-  AUTHENTICATION_REQUIRED: 'Email, username/nomor WhatsApp, atau password tidak valid.',
-  CONFIGURATION_REQUIRED: 'Layanan masuk sementara tidak tersedia. Silakan coba kembali nanti.',
-  INTERNAL_ERROR: 'Layanan masuk sedang mengalami gangguan.',
-  RATE_LIMITED: 'Terlalu banyak percobaan. Coba kembali nanti.',
-  SERVICE_UNAVAILABLE: 'Proses masuk sementara tidak tersedia. Silakan coba kembali nanti.',
-  FORBIDDEN: 'Akses tidak diizinkan.',
-  IDENTITY_CONFLICT: 'Identitas memerlukan tinjauan dukungan.',
-  STALE_VERSION: 'Data telah berubah. Muat ulang lalu coba kembali.',
-  SESSION_REVOKED: 'Sesi telah berakhir. Silakan masuk kembali.',
-  NOT_IMPLEMENTED: 'Fitur ini belum tersedia.',
+  AUTHENTICATION_REQUIRED: "That email, username, or WhatsApp number and password don't match. Please try again.",
+  CONFIGURATION_REQUIRED: 'Sign-in is unavailable right now. Please try again in a little while.',
+  INTERNAL_ERROR: 'Something went wrong on our side. Please try again in a moment.',
+  RATE_LIMITED: 'Too many attempts. Take a short breather, then try again.',
+  SERVICE_UNAVAILABLE: 'Sign-in is unavailable right now. Please try again in a little while.',
+  FORBIDDEN: "This account doesn't have access here.",
+  IDENTITY_CONFLICT: 'We need to check this account with you. Please message the studio on WhatsApp.',
+  STALE_VERSION: 'Something changed in the meantime. Refresh the page and try again.',
+  SESSION_REVOKED: 'Your session has ended. Please sign in again.',
+  NOT_IMPLEMENTED: "This isn't available yet.",
 };
 
 type AuthState = 'idle' | 'loading' | 'success' | 'invalid' | UiFailure;
@@ -83,7 +83,7 @@ export function SignInView({
         className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:px-4 focus:py-2.5 focus:bg-ed-forest focus:text-white focus:text-[13px] focus:font-bold focus: focus: focus:shadow-lg focus:outline-none focus:rounded-none"
         href="#auth-form"
       >
-        Langsung ke formulir masuk
+        Skip to sign-in form
       </a>
 
       {/* Left Visual Panel */}
@@ -120,9 +120,9 @@ export function SignInView({
             </blockquote>
           </div>
           <div className="flex items-center gap-4 text-xs font-medium text-ed-cream/75 pt-3 border-t border-white/10">
-            <span>Akses Multi-Cabang Resmi</span>
+            <span>Reformer &amp; mat classes</span>
             <span>•</span>
-            <span>Studio Terverifikasi</span>
+            <span>Certified instructors</span>
           </div>
         </div>
       </section>
@@ -144,22 +144,22 @@ export function SignInView({
               href="/"
             >
               <ArrowLeft className="size-3.5 shrink-0" />
-              <span>Ke beranda</span>
+              <span>Back to home</span>
             </Link>
           </div>
 
           <div className="space-y-2">
-            <p className="ed-eyebrow text-ed-green">Akses Member Resmi</p>
+            <p className="ed-eyebrow text-ed-green">Members</p>
             <h2
               className="ed-display text-2xl sm:text-3xl font-normal tracking-[-0.04em] text-ed-ink"
               id="sign-in-title"
             >
-              Masuk ke Daily Dose
+              Sign in to Daily Dose
             </h2>
             <p className="text-sm leading-relaxed text-ed-muted">
               {googleEnabled
-                ? 'Masuk dengan email, username, atau nomor WhatsApp yang terdaftar, atau lanjutkan dengan akun Google Anda.'
-                : 'Masuk dengan email, username, atau nomor WhatsApp yang terdaftar beserta password Anda.'}
+                ? 'Use the email, username, or WhatsApp number on your account, or continue with Google.'
+                : 'Use the email, username, or WhatsApp number on your account, plus your password.'}
             </p>
           </div>
 
@@ -179,15 +179,15 @@ export function SignInView({
             }}
           >
             <label className="block space-y-1.5 text-[13px] font-bold text-ed-ink">
-              <span>Email, Username, atau WhatsApp</span>
+              <span>Email, username, or WhatsApp</span>
               <div className="relative flex items-center">
                 <input
-                  aria-label="Email, Username, atau WhatsApp"
+                  aria-label="Email, username, or WhatsApp"
                   className="w-full min-h-12 rounded-none border border-ed-border-ui bg-white px-4 py-2.5 text-sm text-ed-ink transition-colors focus-visible:outline focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-[#09371f]"
                   name="email"
                   type="text"
                   autoComplete="username"
-                  placeholder="username, nama@email.com, atau 0812..."
+                  placeholder="you@email.com or 0812…"
                   required
                 />
               </div>
@@ -203,7 +203,7 @@ export function SignInView({
                   autoComplete="current-password"
                   minLength={8}
                   maxLength={128}
-                  placeholder="Masukkan password"
+                  placeholder="Your password"
                   required
                 />
                 <button
@@ -212,16 +212,15 @@ export function SignInView({
                   type="button"
                   onClick={() => setShowPassword((value) => !value)}
                 >
-                  {showPassword ? 'Sembunyikan' : 'Lihat'}
+                  {showPassword ? 'Hide' : 'Show'}
                 </button>
               </div>
             </label>
 
             <div className="flex items-center justify-between gap-4 pt-1 text-xs">
               <Link className="font-bold text-ed-forest hover:underline" href="/forgot-password">
-                Lupa password?
+                Forgot password?
               </Link>
-              <span className="text-ed-muted">Akses sesuai hak akun</span>
             </div>
 
             <button
@@ -229,7 +228,7 @@ export function SignInView({
               disabled={state === 'loading' || !hydrated}
               type="submit"
             >
-              {state === 'loading' ? 'Memeriksa akses…' : 'Masuk ke Akun'}
+              {state === 'loading' ? 'Signing you in…' : 'Sign in'}
             </button>
           </form>
 
@@ -241,7 +240,7 @@ export function SignInView({
           {state === 'invalid' && (
             <div className="mt-4">
               <Feedback kind="error">
-                Email, username/nomor WhatsApp, atau password tidak valid.
+                That email, username, or WhatsApp number and password don&apos;t match. Please try again.
               </Feedback>
             </div>
           )}
@@ -250,7 +249,7 @@ export function SignInView({
               <Feedback kind="error">
                 {messages[state as UiFailure]}
                 {reference && (state === 'INTERNAL_ERROR' || state === 'SERVICE_UNAVAILABLE')
-                  ? ` Kode bantuan: ${reference}.`
+                  ? ` Reference: ${reference}.`
                   : ''}
               </Feedback>
             </div>
@@ -258,35 +257,35 @@ export function SignInView({
 
           <div className="mt-6 border-t border-ed-line pt-4 text-center space-y-2">
             <p className="text-xs text-ed-muted">
-              Belum punya akun?{' '}
+              New to Daily Dose?{' '}
               <Link
                 className="font-bold text-ed-forest hover:underline"
                 href={withReturnTo('/register')}
               >
-                Daftar akun baru
+                Create an account
               </Link>
             </p>
             <p className="text-xs text-ed-muted">
-              Lupa akun atau butuh bantuan?{' '}
+              Need a hand?{' '}
               <a
                 href="https://wa.me/62895329736127"
                 target="_blank"
                 rel="noreferrer"
                 className="font-bold text-ed-forest hover:underline"
               >
-                Chat WhatsApp Admin Studio
+                Message the studio on WhatsApp
               </a>
             </p>
           </div>
           {state === 'success' && (
             <div className="mt-4">
-              <Feedback kind="status">Identitas terverifikasi.</Feedback>
+              <Feedback kind="status">You&apos;re in. Taking you there now…</Feedback>
             </div>
           )}
 
           {(googleEnabled || hrGroupEnabled) && (
             <div className="my-6 flex items-center gap-4 text-[13px] font-bold text-ed-muted before:h-px before:flex-1 before:bg-ed-line after:h-px after:flex-1 after:bg-ed-line">
-              atau
+              or
             </div>
           )}
           {googleEnabled && (
@@ -298,16 +297,13 @@ export function SignInView({
               href={hrGroupStartHref(returnTo)}
             >
               <ShieldCheck aria-hidden="true" className="size-4 shrink-0 text-ed-forest" />
-              Masuk dengan Akun HR Group
+              Sign in with HR Group
             </a>
           )}
 
           <div className="mt-6 border-t border-ed-line pt-4 text-xs leading-relaxed text-ed-muted">
-            <strong className="block font-semibold text-ed-ink">
-              Akses terlindungi &amp; Terenkripsi
-            </strong>
-            Seluruh data dan tindakan dibatasi berdasarkan hak akses peran serta cabang resmi
-            terdaftar.
+            <strong className="block font-semibold text-ed-ink">Your account is private</strong>
+            Your details are encrypted, and staff only see what their role at your studio needs.
           </div>
         </div>
       </section>

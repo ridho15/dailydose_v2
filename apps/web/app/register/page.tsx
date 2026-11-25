@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import { RegisterView } from './register-view';
 
 export const metadata: Metadata = {
-  title: 'Daftar Akun',
+  title: 'Create account',
 };
 
 export default function RegisterPage() {

@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import { ActivateAccountView } from './activate-account-view';
 
 export const metadata: Metadata = {
-  title: 'Aktivasi Akun',
+  title: 'Activate account',
 };
 
 export default function ActivateAccountPage() {

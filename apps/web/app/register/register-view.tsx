@@ -77,7 +77,7 @@ function PasswordField({
         <button
           type="button"
           className="absolute right-2 flex size-11 items-center justify-center rounded-none text-ed-muted hover:text-ed-ink transition focus-visible:outline-2 focus-visible:outline-ed-forest"
-          aria-label={`${visible ? 'Sembunyikan' : 'Tampilkan'} ${label.toLowerCase()}`}
+          aria-label={`${visible ? 'Hide' : 'Show'} ${label.toLowerCase()}`}
           aria-pressed={visible}
           disabled={disabled}
           onClick={() => setVisible((current) => !current)}
@@ -137,7 +137,7 @@ export function RegisterView() {
   const handleGoogleFailure = () => {
     setState('error');
     setMessage(
-      'Proses masuk dengan Google belum dapat diselesaikan. Silakan lengkapi formulir pendaftaran di bawah.',
+      "We couldn't finish signing you up with Google. You can use the form below instead.",
     );
   };
 
@@ -165,12 +165,12 @@ export function RegisterView() {
 
   return (
     <AuthPageShell
-      eyebrow="Registrasi customer"
-      title="Buat akun Daily Dose"
-      description="Tiga isian dan satu foto selfie. Tidak perlu KTP."
+      eyebrow="Join the studio"
+      title="Create your Daily Dose account"
+      description="Three details and one selfie. That's all it takes, no ID card needed."
       compactMobileVisual
       visualSrc="/images/public/landing/register-illustration.webp"
-      loginLabel="Masuk"
+      loginLabel="Sign in"
       loginHref={withReturnTo('/sign-in')}
     >
       {/* Kotak Callout Khusus Member Lama Studio (Spesifikasi 5.9 / Tiket T-09) */}
@@ -179,17 +179,17 @@ export function RegisterView() {
           <UserCheck className="size-5 shrink-0 text-ed-forest mt-0.5" />
           <div className="space-y-1">
             <strong className="block font-semibold text-ed-ink">
-              Sudah pernah latihan di studio?
+              Already trained with us?
             </strong>
             <p className="text-ed-muted">
-              Akun kamu mungkin sudah dibuatkan staf. Masuk pakai nomor WhatsApp yang kamu berikan
-              ke studio.
+              The studio may have set up your account already. Sign in with the WhatsApp number you
+              gave us.
             </p>
             <Link
               href={withReturnTo('/sign-in')}
               className="inline-flex items-center gap-1 font-bold text-ed-forest hover:text-ed-green hover:underline pt-0.5"
             >
-              <span>Masuk dengan nomor WhatsApp</span>
+              <span>Sign in with WhatsApp number</span>
               <span>&rarr;</span>
             </Link>
           </div>
@@ -200,7 +200,7 @@ export function RegisterView() {
         <div className="mb-6 space-y-4">
           <div className="rounded-none border border-ed-line bg-ed-tint/30 p-4 shadow-none">
             <p className="mb-3 text-center text-xs font-semibold text-ed-muted">
-              Daftar cepat dengan akun Google Anda:
+              The quickest way to join
             </p>
             <GoogleIdentityButton
               client={browserIdentityClient}
@@ -210,14 +210,14 @@ export function RegisterView() {
             />
           </div>
           <div className="flex items-center gap-4 text-[13px] font-bold text-ed-muted before:h-px before:flex-1 before:bg-ed-line after:h-px after:flex-1 after:bg-ed-line">
-            atau isi data akun secara manual
+            or fill in your details
           </div>
         </div>
       )}
 
       <form
         ref={formRef}
-        aria-label="Registrasi customer"
+        aria-label="Create an account"
         method="post"
         noValidate
         className="space-y-6"
@@ -235,7 +235,7 @@ export function RegisterView() {
           }
           if (!selfie) {
             setSelfieError(
-              'Ambil foto selfie dulu. Foto ini yang dicocokkan staf saat Anda datang.',
+              'Please take a selfie first. Our team uses it to welcome you at the studio.',
             );
             document.getElementById('register-selfie')?.focus();
             return;
@@ -268,11 +268,11 @@ export function RegisterView() {
             const code = res?.data?.code;
             const details = res?.data?.details;
             if (code === 'PHONE_ALREADY_REGISTERED') {
-              setErrors((prev) => ({ ...prev, phone: 'Nomor WhatsApp ini sudah terdaftar.' }));
+              setErrors((prev) => ({ ...prev, phone: 'This WhatsApp number is already registered.' }));
             } else if (code === 'EMAIL_ALREADY_REGISTERED') {
-              setErrors((prev) => ({ ...prev, email: 'Alamat email ini sudah terdaftar.' }));
+              setErrors((prev) => ({ ...prev, email: 'This email is already registered.' }));
             } else if (code === 'UPLOAD_REJECTED') {
-              setSelfieError(details?.[0]?.issue || 'Format foto tidak didukung.');
+              setSelfieError('Please use a JPG, PNG, or WEBP photo.');
             }
             setMessage(registrationRequestErrorMessage(status, code, details));
             setState('error');
@@ -283,26 +283,26 @@ export function RegisterView() {
         <div className="flex items-center justify-between gap-2 rounded-none border border-ed-line bg-ed-tint/50 p-2.5 sm:p-3 text-xs">
           <div className="flex items-center gap-2 text-ed-forest font-semibold min-w-0">
             <User className="size-4 shrink-0 text-ed-green" />
-            <span className="truncate">Pendaftaran Akun Baru</span>
+            <span className="truncate">New account</span>
           </div>
           <span className="shrink-0 whitespace-nowrap rounded-none border border-ed-line bg-white px-2.5 py-0.5 font-bold text-ed-forest text-[13px]">
-            Cepat &amp; Praktis
+            About a minute
           </span>
         </div>
 
         {/* Section 1: Data Diri & Kontak */}
         <div className="space-y-4 rounded-none border border-ed-line bg-white p-4 sm:p-5">
           <div className="flex items-center gap-2 border-b border-ed-line pb-2 text-[13px] font-bold text-ed-forest">
-            <User className="size-3.5 text-ed-green" /> 1. Data Diri &amp; Kontak
+            <User className="size-3.5 text-ed-green" /> 1. About you
           </div>
           <TextInput
             id="register-display-name"
-            label="Nama lengkap"
+            label="Full name"
             name="displayName"
             variant="editorial"
             autoComplete="name"
             maxLength={160}
-            placeholder="Contoh: Nadia Putri"
+            placeholder="e.g. Nadia Putri"
             required
             disabled={loading}
             error={
@@ -316,7 +316,7 @@ export function RegisterView() {
           />
           <TextInput
             id="register-phone"
-            label="Nomor WhatsApp"
+            label="WhatsApp number"
             name="phone"
             variant="editorial"
             type="tel"
@@ -339,7 +339,7 @@ export function RegisterView() {
             inputMode="email"
             autoComplete="email"
             maxLength={254}
-            placeholder="nama@email.com"
+            placeholder="you@email.com"
             required
             disabled={loading}
             error={errors.email ? <span id={errorId('email')}>{errors.email}</span> : undefined}
@@ -352,13 +352,13 @@ export function RegisterView() {
         {/* Section 2: Keamanan Akun */}
         <div className="space-y-4 rounded-none border border-ed-line bg-white p-4 sm:p-5">
           <div className="flex items-center gap-2 border-b border-ed-line pb-2 text-[13px] font-bold text-ed-forest">
-            <Lock className="size-3.5 text-ed-green" /> 2. Keamanan Akun
+            <Lock className="size-3.5 text-ed-green" /> 2. Password
           </div>
           <PasswordField
             id="register-password"
             label="Password"
             name="password"
-            placeholder="Minimal 8 karakter"
+            placeholder="At least 8 characters"
             error={errors.password}
             disabled={loading}
             onBlur={handleTextBlur('password')}
@@ -369,29 +369,29 @@ export function RegisterView() {
         {/* Section 3: Foto selfie, wajib sejak pendaftaran */}
         <div className="space-y-3 rounded-none border border-ed-line bg-white p-4 sm:p-5">
           <div className="flex items-center gap-2 border-b border-ed-line pb-2 text-[13px] font-bold text-ed-forest">
-            <Camera className="size-3.5 text-ed-green" /> 3. Foto selfie
+            <Camera className="size-3.5 text-ed-green" /> 3. Selfie
           </div>
           <p className="text-sm leading-relaxed text-ed-ink">
-            Dipakai staf studio untuk mengenali Anda saat datang, supaya paket Anda tidak bisa
-            dipakai orang lain. Tidak ditampilkan ke member lain.
+            So our team can greet you at check-in and make sure your package is only used by you.
+            Other members never see it.
           </p>
           <div className="flex items-center gap-4">
             {selfiePreview ? (
               <img
                 src={selfiePreview}
-                alt="Pratinjau foto selfie Anda"
+                alt="Your selfie preview"
                 className="size-24 shrink-0 border border-ed-line object-cover"
               />
             ) : (
               <span className="flex size-24 shrink-0 items-center justify-center border border-ed-line bg-ed-tint/50 p-2 text-center text-xs text-ed-muted">
-                Belum ada foto
+                No photo yet
               </span>
             )}
             <label
               htmlFor="register-selfie"
               className="inline-flex min-h-[48px] cursor-pointer items-center justify-center bg-ed-forest px-5 text-sm font-bold text-white transition hover:bg-ed-green focus-within:outline focus-within:outline-3 focus-within:outline-offset-2 focus-within:outline-[#09371f]"
             >
-              {selfie ? 'Ambil ulang' : 'Ambil foto sekarang'}
+              {selfie ? 'Retake' : 'Take a selfie'}
               <input
                 id="register-selfie"
                 name="selfie"
@@ -420,7 +420,7 @@ export function RegisterView() {
             </p>
           ) : (
             <p id="register-selfie-hint" className="text-xs text-ed-muted">
-              Cukup wajah terlihat jelas dan tidak gelap. Bisa diganti kapan saja lewat menu Akun.
+              Face the light and keep your whole face in frame. You can change it later in Account.
             </p>
           )}
         </div>
@@ -433,9 +433,8 @@ export function RegisterView() {
         >
           <ShieldCheck className="size-5 shrink-0 text-ed-green mt-0.5" />
           <span>
-            Data pendaftaran Anda disimpan secara privat dan aman, dan hanya digunakan untuk layanan
-            keanggotaan studio Daily Dose. Foto selfie hanya dilihat staf studio, tidak ditampilkan
-            ke member lain.
+            Your details stay private and are only used for your Daily Dose membership. Your selfie
+            is seen by studio staff only.
           </span>
         </div>
 
@@ -465,35 +464,36 @@ export function RegisterView() {
               }}
             />
             <span className="font-medium">
-              Saya telah membaca dan menyetujui{' '}
+              I have read and agree to the{' '}
               <a href="/terms" target="_blank" rel="noreferrer" className="underline underline-offset-2">
-                Syarat &amp; Ketentuan
+                Terms &amp; Conditions
               </a>{' '}
-              serta{' '}
+              and{' '}
               <a href="/privacy" target="_blank" rel="noreferrer" className="underline underline-offset-2">
-                Kebijakan Privasi
-              </a>{' '}
-              Daily Dose, termasuk bahwa paket hangus setelah masa berlaku habis dan perpanjangan maksimal 3 kali.
+                Privacy Policy
+              </a>
+              , including that packages expire at the end of their validity period and can be extended
+              up to 3 times.
             </span>
           </label>
           {errors.consent && <FieldError id={errorId('consent')}>{errors.consent}</FieldError>}
         </div>
 
         {/* Submit Action */}
-        <Button type="submit" size="lg" fullWidth loading={loading} loadingLabel="Membuat akun…">
-          Daftar dan masuk
+        <Button type="submit" size="lg" fullWidth loading={loading} loadingLabel="Creating your account…">
+          Create account
         </Button>
         {state === 'error' && (
           <div className="space-y-2">
             <Feedback kind="error">{message}</Feedback>
-            {(message.includes('terdaftar') || message.includes('digunakan')) && (
+            {(message.includes('already registered') || message.includes('already in use')) && (
               <div className="rounded-none bg-ed-tint/50 p-3 text-center text-xs text-ed-ink border border-ed-line">
-                <span>Sudah memiliki akun? </span>
+                <span>Already have an account? </span>
                 <Link
                   href={withReturnTo('/sign-in')}
                   className="font-bold text-ed-forest hover:underline"
                 >
-                  Masuk ke Akun Sekarang &rarr;
+                  Sign in &rarr;
                 </Link>
               </div>
             )}

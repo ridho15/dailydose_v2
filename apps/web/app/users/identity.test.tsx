@@ -125,8 +125,8 @@ describe('identity UI', () => {
     expect((await axe(view.container)).violations).toHaveLength(0);
     await userEvent.type(screen.getByLabelText(/Email/i), 'owner@example.test');
     await userEvent.type(screen.getByLabelText('Password'), 'correct-password-123');
-    await userEvent.click(screen.getByRole('button', { name: /Masuk ke Akun/ }));
-    expect(await screen.findByText('Identitas terverifikasi.')).toBeVisible();
+    await userEvent.click(screen.getByRole('button', { name: /^Sign in$/ }));
+    expect(await screen.findByText("You're in. Taking you there now…")).toBeVisible();
     view.unmount();
     render(
       <SignInView
@@ -137,16 +137,16 @@ describe('identity UI', () => {
     );
     await userEvent.type(screen.getByLabelText(/Email/i), 'owner@example.test');
     await userEvent.type(screen.getByLabelText('Password'), 'incorrect-password');
-    await userEvent.click(screen.getByRole('button', { name: /Masuk ke Akun/ }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('Terlalu banyak');
+    await userEvent.click(screen.getByRole('button', { name: /^Sign in$/ }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Too many attempts');
   });
 
   it('describes sign-in as email, username or WhatsApp number and offers a single register link', () => {
     render(<SignInView client={client()} />);
-    expect(screen.getByText(/email, username, atau nomor WhatsApp yang terdaftar/i)).toBeVisible();
+    expect(screen.getByText(/email, username, or WhatsApp number on your account/i)).toBeVisible();
     expect(screen.queryByText(/Gunakan email dan password/)).not.toBeInTheDocument();
-    expect(screen.getAllByText(/Belum punya akun\?/)).toHaveLength(1);
-    expect(screen.getAllByRole('link', { name: /Daftar akun/ })).toHaveLength(1);
+    expect(screen.getAllByText(/New to Daily Dose\?/)).toHaveLength(1);
+    expect(screen.getAllByRole('link', { name: /Create an account/ })).toHaveLength(1);
   });
 
   it('holds the sign-in submit until hydration so credentials can never be posted into the URL', async () => {
@@ -177,9 +177,9 @@ describe('identity UI', () => {
     );
     await userEvent.type(screen.getByLabelText(/Email/i), 'owner@example.test');
     await userEvent.type(screen.getByLabelText('Password'), 'correct-password-123');
-    await userEvent.click(screen.getByRole('button', { name: /Masuk ke Akun/ }));
+    await userEvent.click(screen.getByRole('button', { name: /^Sign in$/ }));
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Layanan masuk sedang mengalami gangguan. Kode bantuan: auth-reference-456.',
+      'Something went wrong on our side. Please try again in a moment. Reference: auth-reference-456.',
     );
   });
 
@@ -188,7 +188,7 @@ describe('identity UI', () => {
     render(<SignInView client={fake} />);
     const password = screen.getByLabelText('Password');
     expect(password).toHaveAttribute('type', 'password');
-    await userEvent.click(screen.getByRole('button', { name: 'Lihat' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Show' }));
     expect(password).toHaveAttribute('type', 'text');
     expect(screen.queryByText(/synthetic non-production/i)).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/Email Google synthetic/i)).not.toBeInTheDocument();
@@ -600,17 +600,17 @@ describe('identity UI', () => {
     const forgot = render(<ForgotPasswordView client={fake} />);
     expect((await axe(forgot.container)).violations).toHaveLength(0);
     await userEvent.type(screen.getByLabelText('Email'), 'member@example.test');
-    await userEvent.click(screen.getByRole('button', { name: 'Kirim tautan reset' }));
-    expect(await screen.findByRole('status')).toHaveTextContent('Jika akun cocok');
+    await userEvent.click(screen.getByRole('button', { name: 'Send reset link' }));
+    expect(await screen.findByRole('status')).toHaveTextContent('If that email belongs to an account');
     forgot.unmount();
 
     window.history.replaceState({}, '', '/reset-password?token=one-time-token');
     render(<ResetPasswordView client={fake} />);
-    await userEvent.type(screen.getByLabelText('Password baru'), 'a-new-secure-password');
-    await userEvent.type(screen.getByLabelText('Ulangi password baru'), 'different-password');
-    await userEvent.click(screen.getByRole('button', { name: 'Simpan password baru' }));
+    await userEvent.type(screen.getByLabelText('New password'), 'a-new-secure-password');
+    await userEvent.type(screen.getByLabelText('Confirm new password'), 'different-password');
+    await userEvent.click(screen.getByRole('button', { name: 'Save new password' }));
     expect(fake.resetPassword).not.toHaveBeenCalled();
-    expect(await screen.findByRole('alert')).toHaveTextContent(/Konfirmasi password tidak cocok|Password harus sama/);
+    expect(await screen.findByRole('alert')).toHaveTextContent(/don't match|need to match/);
   });
 
   it('activates an invitation and exposes password security management', async () => {
@@ -618,8 +618,8 @@ describe('identity UI', () => {
     window.history.replaceState({}, '', '/activate-account?token=activation-token');
     const activation = render(<ActivateAccountView client={fake} />);
     await userEvent.type(screen.getByLabelText('Password'), 'a-secure-invite-password');
-    await userEvent.type(screen.getByLabelText('Ulangi password'), 'a-secure-invite-password');
-    await userEvent.click(screen.getByRole('button', { name: 'Aktifkan akun' }));
+    await userEvent.type(screen.getByLabelText('Confirm password'), 'a-secure-invite-password');
+    await userEvent.click(screen.getByRole('button', { name: 'Activate account' }));
     expect(fake.activatePassword).toHaveBeenCalledWith(
       'activation-token',
       'a-secure-invite-password',

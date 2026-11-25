@@ -68,7 +68,7 @@ export function GoogleIdentityButton({
         shape: 'rectangular',
         text,
         width: effectiveWidth,
-        locale: 'id',
+        locale: 'en',
       });
     };
 

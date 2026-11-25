@@ -10,7 +10,7 @@ export function AuthPageShell({
   children,
   compactMobileVisual = false,
   visualSrc = '/images/public/landing/studio-showcase.png',
-  loginLabel = 'Kembali masuk',
+  loginLabel = 'Sign in',
   loginHref = '/sign-in',
 }: {
   eyebrow: string;
@@ -31,7 +31,7 @@ export function AuthPageShell({
         className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:px-4 focus:py-2.5 focus:bg-ed-forest focus:text-white focus:text-[13px] focus:font-bold focus: focus: focus:shadow-lg focus:outline-none focus:rounded-none"
         href="#auth-form"
       >
-        Langsung ke formulir pendaftaran
+        Skip to form
       </a>
       {/* Left Visual Panel */}
       <section
@@ -67,22 +67,22 @@ export function AuthPageShell({
               Move better, live better
             </p>
             <h2 className="ed-display text-3xl xl:text-4xl font-normal leading-[1.05] tracking-[-0.04em] text-ed-cream">
-              Bergerak tenang,{' '}
-              <span className="ed-serif italic text-ed-mint">terhubung dengan aman.</span>
+              Move with ease,{' '}
+              <span className="ed-serif italic text-ed-mint">breathe with intention.</span>
             </h2>
             <p className="text-sm leading-relaxed text-ed-cream/80 max-w-md">
-              Rasakan pengalaman Pilates yang terkurasi dengan pendampingan instruktur profesional
-              di ruang latihan yang dirancang untuk kenyamanan tubuh Anda.
+              Small classes, attentive instructors, and a calm studio built around how your body
+              feels.
             </p>
           </div>
 
           <div
             className="flex items-center gap-4 text-xs font-medium text-ed-cream/75 pt-3 border-t border-white/10"
-            aria-label="Keunggulan keamanan"
+            aria-label="About the studio"
           >
-            <span>Studio Privat &amp; Semi-Privat</span>
+            <span>Private &amp; semi-private</span>
             <span>•</span>
-            <span>Instruktur Tersertifikasi</span>
+            <span>Certified instructors</span>
           </div>
         </div>
       </section>

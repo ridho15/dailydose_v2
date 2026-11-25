@@ -11,9 +11,9 @@ export function ResetPasswordView({ client = browserIdentityClient }: { client?:
   const [status, setStatus] = useState<'idle' | 'loading' | 'done' | 'mismatch' | 'error'>('idle');
   return (
     <AuthPageShell
-      eyebrow="Kredensial baru"
-      title="Reset password"
-      description="Gunakan password baru sepanjang 8–128 karakter. Seluruh sesi lama akan dicabut."
+      eyebrow="Account help"
+      title="Set a new password"
+      description="Choose a password with at least 8 characters. For your security, you'll be signed out on other devices."
     >
       <form
         method="post"
@@ -35,7 +35,7 @@ export function ResetPasswordView({ client = browserIdentityClient }: { client?:
         }}
       >
         <label className="grid min-w-0 gap-2 text-sm font-bold">
-          Password baru
+          New password
           <span className="relative min-w-0">
             <input
               className="min-h-[50px] w-full min-w-0 rounded-none border border-ed-border-ui bg-white px-4 pr-24 text-sm text-ed-ink transition-colors focus-visible:outline focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-[#09371f]"
@@ -44,7 +44,7 @@ export function ResetPasswordView({ client = browserIdentityClient }: { client?:
               minLength={8}
               maxLength={128}
               autoComplete="new-password"
-              placeholder="Minimal 8 karakter"
+              placeholder="At least 8 characters"
               required
             />
             <button
@@ -52,12 +52,12 @@ export function ResetPasswordView({ client = browserIdentityClient }: { client?:
               type="button"
               onClick={() => setShow((value) => !value)}
             >
-              {show ? 'Sembunyikan' : 'Lihat'}
+              {show ? 'Hide' : 'Show'}
             </button>
           </span>
         </label>
         <label className="grid min-w-0 gap-2 text-sm font-bold">
-          Ulangi password baru
+          Confirm new password
           <input
             className="min-h-[50px] w-full min-w-0 rounded-none border border-ed-border-ui bg-white px-4 text-sm text-ed-ink transition-colors focus-visible:outline focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-[#09371f]"
             name="confirmation"
@@ -65,7 +65,7 @@ export function ResetPasswordView({ client = browserIdentityClient }: { client?:
             minLength={8}
             maxLength={128}
             autoComplete="new-password"
-            placeholder="Ulangi password baru"
+            placeholder="Type it once more"
             required
           />
         </label>
@@ -73,19 +73,19 @@ export function ResetPasswordView({ client = browserIdentityClient }: { client?:
           className="min-h-[50px] rounded-none bg-dd-forest px-5 font-bold text-white transition-colors hover:bg-ed-deep focus-visible:outline focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-[#09371f] disabled:bg-ed-line disabled:text-ed-muted"
           disabled={status === 'loading'}
         >
-          Simpan password baru
+          Save new password
         </button>
       </form>
       {status === 'done' && (
         <Feedback kind="status">
-          Password berhasil diperbarui. <Link href="/sign-in">Silakan masuk ke akun</Link>.
+          Your password is updated. <Link href="/sign-in">Sign in</Link> whenever you&apos;re ready.
         </Feedback>
       )}
       {status === 'mismatch' && (
-        <Feedback kind="error">Konfirmasi password tidak cocok dengan password baru.</Feedback>
+        <Feedback kind="error">The two passwords don&apos;t match yet. Please try again.</Feedback>
       )}
       {status === 'error' && (
-        <Feedback kind="error">Tautan reset password sudah tidak berlaku atau sudah digunakan. Silakan minta tautan baru di halaman Lupa Password.</Feedback>
+        <Feedback kind="error">This reset link has expired or was already used. Request a fresh one from the Forgot password page.</Feedback>
       )}
     </AuthPageShell>
   );

@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import type { IdentityClient } from '@/api-clients/identity-client';
@@ -16,13 +16,13 @@ describe('ResetPasswordView', () => {
     const client = fakeClient();
     render(<ResetPasswordView client={client} />);
 
-    await user.type(screen.getByLabelText('Password baru'), 'passwordBaru123');
-    await user.type(screen.getByLabelText('Ulangi password baru'), 'passwordBeda456');
-    await user.click(screen.getByRole('button', { name: 'Simpan password baru' }));
+    await user.type(screen.getByLabelText('New password'), 'passwordBaru123');
+    await user.type(screen.getByLabelText('Confirm new password'), 'passwordBeda456');
+    await user.click(screen.getByRole('button', { name: 'Save new password' }));
 
     expect(client.resetPassword).not.toHaveBeenCalled();
     expect(
-      screen.getByText('Konfirmasi password tidak cocok dengan password baru.'),
+      screen.getByText("The two passwords don't match yet. Please try again."),
     ).toBeVisible();
   });
 
@@ -33,14 +33,14 @@ describe('ResetPasswordView', () => {
     });
     render(<ResetPasswordView client={client} />);
 
-    await user.type(screen.getByLabelText('Password baru'), 'passwordBaru123');
-    await user.type(screen.getByLabelText('Ulangi password baru'), 'passwordBaru123');
-    await user.click(screen.getByRole('button', { name: 'Simpan password baru' }));
+    await user.type(screen.getByLabelText('New password'), 'passwordBaru123');
+    await user.type(screen.getByLabelText('Confirm new password'), 'passwordBaru123');
+    await user.click(screen.getByRole('button', { name: 'Save new password' }));
 
     expect(client.resetPassword).toHaveBeenCalledTimes(1);
     expect(
       await screen.findByText(
-        'Tautan reset password sudah tidak berlaku atau sudah digunakan. Silakan minta tautan baru di halaman Lupa Password.',
+        'This reset link has expired or was already used. Request a fresh one from the Forgot password page.',
       ),
     ).toBeVisible();
   });
@@ -52,12 +52,12 @@ describe('ResetPasswordView', () => {
     });
     render(<ResetPasswordView client={client} />);
 
-    await user.type(screen.getByLabelText('Password baru'), 'passwordBaru123');
-    await user.type(screen.getByLabelText('Ulangi password baru'), 'passwordBaru123');
-    await user.click(screen.getByRole('button', { name: 'Simpan password baru' }));
+    await user.type(screen.getByLabelText('New password'), 'passwordBaru123');
+    await user.type(screen.getByLabelText('Confirm new password'), 'passwordBaru123');
+    await user.click(screen.getByRole('button', { name: 'Save new password' }));
 
     expect(client.resetPassword).toHaveBeenCalledTimes(1);
-    expect(await screen.findByText(/Password berhasil diperbarui\./i)).toBeVisible();
-    expect(screen.getByRole('link', { name: /Silakan masuk ke akun/i })).toBeVisible();
+    expect(await screen.findByText(/Your password is updated\./i)).toBeVisible();
+    expect(within(screen.getByRole('status')).getByRole('link', { name: /^Sign in$/i })).toBeVisible();
   });
 });

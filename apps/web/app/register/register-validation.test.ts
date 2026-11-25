@@ -25,7 +25,7 @@ describe('registration validation', () => {
     expect(validateRegistration(validValues())).toEqual({});
   });
 
-  it('returns Indonesian field errors for invalid identity values', () => {
+  it('returns field errors for invalid identity values', () => {
     expect(
       validateRegistration(
         validValues({
@@ -37,18 +37,18 @@ describe('registration validation', () => {
         }),
       ),
     ).toMatchObject({
-      displayName: 'Nama lengkap wajib diisi.',
-      phone: 'Masukkan nomor WhatsApp yang valid (awalan 08 atau +62), misalnya 0812 3456 7890.',
-      email: 'Masukkan alamat email yang valid.',
-      password: 'Password minimal 8 karakter.',
-      consent: 'Anda wajib menyetujui Syarat & Ketentuan serta Kebijakan Privasi Daily Dose.',
+      displayName: 'Please enter your full name.',
+      phone: 'Please enter a valid Indonesian WhatsApp number starting with 08 or +62, for example 0812 3456 7890.',
+      email: 'Please enter a valid email address.',
+      password: 'Your password needs at least 8 characters.',
+      consent: 'Please agree to the Terms & Conditions and Privacy Policy to continue.',
     });
   });
 
   it('rejects a WhatsApp number in the wrong format and names the correct format', () => {
     for (const phone of ['12345', '0212345678', '+1 415 555 0100', 'bukan-nomor']) {
       expect(validateRegistration(validValues({ phone })).phone).toBe(
-        'Masukkan nomor WhatsApp yang valid (awalan 08 atau +62), misalnya 0812 3456 7890.',
+        'Please enter a valid Indonesian WhatsApp number starting with 08 or +62, for example 0812 3456 7890.',
       );
     }
     for (const phone of ['08123456789', '0812 3456 7890', '+6281234567890', '6281234567890']) {
@@ -65,10 +65,10 @@ describe('registration validation', () => {
   });
 
   it('maps conflict, validation and dependency failures to safe customer messages', () => {
-    expect(registrationRequestErrorMessage(409)).toBe('Email atau nomor WhatsApp sudah digunakan.');
-    expect(registrationRequestErrorMessage(422)).toBe('Periksa kembali data yang diisi.');
+    expect(registrationRequestErrorMessage(409)).toBe('This email or WhatsApp number is already in use.');
+    expect(registrationRequestErrorMessage(422)).toBe('Please check your details and try again.');
     expect(registrationRequestErrorMessage(503)).toBe(
-      'Registrasi belum dapat diproses. Coba kembali.',
+      "We couldn't create your account just now. Please try again.",
     );
   });
 });
