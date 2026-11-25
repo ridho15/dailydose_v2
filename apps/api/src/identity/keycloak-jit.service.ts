@@ -18,11 +18,13 @@ export interface UserToMigrate {
 }
 
 type GrantResult = 'ok' | 'invalid_grant' | 'error';
+export type JitSyncStatus = 'ok' | 'blocked' | 'deferred';
 
 @Injectable()
 export class KeycloakJitService {
   private readonly logger = new Logger(KeycloakJitService.name);
   private tokenCache: TokenCache | null = null;
+  private clientMetaCache: { uuid: string; memberRole: { id: string; name: string } | null } | null = null;
 
   constructor(private readonly db: PrismaService) {}
 
@@ -166,10 +168,88 @@ export class KeycloakJitService {
     return (await this.triggerDirectGrantSession(realUsername, plainPassword)) === 'ok';
   }
 
+  private async resolveClientMeta(
+    token: string,
+  ): Promise<{ uuid: string; memberRole: { id: string; name: string } | null } | null> {
+    if (this.clientMetaCache) return this.clientMetaCache;
+    try {
+      const cRes = await fetch(
+        `${this.baseUrl}/admin/realms/${this.realm}/clients?clientId=${encodeURIComponent(this.clientId)}&exact=true`,
+        { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(4000) },
+      );
+      if (!cRes.ok) return null;
+      const clients = (await cRes.json()) as Array<{ id: string }>;
+      const uuid = clients?.[0]?.id;
+      if (!uuid) return null;
+
+      let memberRole: { id: string; name: string } | null = null;
+      const rRes = await fetch(
+        `${this.baseUrl}/admin/realms/${this.realm}/clients/${uuid}/roles/member`,
+        { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(4000) },
+      );
+      if (rRes.ok) {
+        const role = (await rRes.json()) as { id?: string; name?: string };
+        if (role?.id && role?.name) memberRole = { id: role.id, name: role.name };
+      }
+
+      this.clientMetaCache = { uuid, memberRole };
+      return this.clientMetaCache;
+    } catch {
+      return null;
+    }
+  }
+
+  private async ensureAppMemberRole(token: string, keycloakUserId: string): Promise<void> {
+    const meta = await this.resolveClientMeta(token);
+    if (!meta?.memberRole) return;
+    await fetch(
+      `${this.baseUrl}/admin/realms/${this.realm}/users/${keycloakUserId}/role-mappings/clients/${meta.uuid}`,
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify([meta.memberRole]),
+        signal: AbortSignal.timeout(4000),
+      },
+    ).catch(() => {});
+  }
+
+  private async checkKeycloakAccess(
+    token: string,
+    keycloakUserId: string,
+  ): Promise<'allowed' | 'blocked' | 'unknown'> {
+    try {
+      const userRes = await fetch(
+        `${this.baseUrl}/admin/realms/${this.realm}/users/${encodeURIComponent(keycloakUserId)}`,
+        { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(4000) },
+      );
+      if (userRes.ok) {
+        const u = (await userRes.json()) as { enabled?: boolean };
+        if (u?.enabled === false) return 'blocked';
+      } else if (userRes.status === 404) {
+        return 'unknown';
+      }
+
+      const meta = await this.resolveClientMeta(token);
+      if (!meta) return 'unknown';
+
+      const roleRes = await fetch(
+        `${this.baseUrl}/admin/realms/${this.realm}/users/${encodeURIComponent(keycloakUserId)}/role-mappings/clients/${meta.uuid}`,
+        { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(4000) },
+      );
+      if (!roleRes.ok) return 'unknown';
+      const roles = (await roleRes.json()) as Array<{ id: string; name: string }>;
+      return Array.isArray(roles) && roles.length > 0 ? 'allowed' : 'blocked';
+    } catch {
+      return 'unknown';
+    }
+  }
+
   /**
-   * Eksekusi Lazy Migration & aktivasi sesi OIDC saat login lokal sukses (fail-safe).
+   * Sinkronisasi dua arah (Opsi B):
+   * - User baru: buat/temukan di Keycloak + assign role 'member' pada client aplikasi + buka sesi OIDC.
+   * - User tertaut: cek status enabled & akses client di Keycloak ('blocked' jika dinonaktifkan/dicabut).
    */
-  async migrateUserJit(user: UserToMigrate, plainPassword: string): Promise<boolean> {
+  async checkAndSyncUser(user: UserToMigrate, plainPassword: string): Promise<JitSyncStatus> {
     try {
       const cleanUsername = (user.username || user.email || user.phone || `dd_${user.id.slice(0, 8)}`)
         .trim()
@@ -180,18 +260,27 @@ export class KeycloakJitService {
       });
 
       if (existingLink) {
-        const result = await this.triggerDirectGrantSession(cleanUsername, plainPassword);
-        if (result === 'ok') return true;
-        if (result === 'invalid_grant') {
-          return await this.recoverSessionBySub(existingLink.hrgSub, plainPassword);
+        const token = await this.getServiceToken();
+        if (token) {
+          const access = await this.checkKeycloakAccess(token, existingLink.hrgSub);
+          if (access === 'blocked') {
+            this.logger.warn(`[KeycloakJIT] Akses ditolak untuk user ${user.id} (dinonaktifkan/dicabut di HR Group)`);
+            return 'blocked';
+          }
         }
-        return false;
+
+        const result = await this.triggerDirectGrantSession(cleanUsername, plainPassword);
+        if (result === 'ok') return 'ok';
+        if (result === 'invalid_grant') {
+          return (await this.recoverSessionBySub(existingLink.hrgSub, plainPassword)) ? 'ok' : 'deferred';
+        }
+        return 'deferred';
       }
 
       const token = await this.getServiceToken();
       if (!token) {
         this.logger.warn(`Keycloak JIT tertunda untuk user ${user.id}: Service token tidak tersedia`);
-        return false;
+        return 'deferred';
       }
 
       let keycloakUserId: string | null = null;
@@ -260,7 +349,7 @@ export class KeycloakJitService {
 
         if (!createRes.ok && createRes.status !== 409) {
           this.logger.warn(`Gagal membuat user di Keycloak (HTTP ${createRes.status})`);
-          return false;
+          return 'deferred';
         }
 
         const locationHeader = createRes.headers.get('Location');
@@ -281,6 +370,7 @@ export class KeycloakJitService {
       }
 
       if (keycloakUserId) {
+        await this.ensureAppMemberRole(token, keycloakUserId);
         try {
           await this.db.akunGrupTautan.create({
             data: {
@@ -293,20 +383,24 @@ export class KeycloakJitService {
             `[KeycloakJIT] Akun ${user.email || user.username || user.id} berhasil dimigrasikan ke Keycloak (sub: ${keycloakUserId})`,
           );
           await this.triggerDirectGrantSession(resolvedUsername, plainPassword);
-          return true;
+          return 'ok';
         } catch (dbErr: any) {
           if (dbErr?.code === 'P2002') {
             await this.triggerDirectGrantSession(resolvedUsername, plainPassword);
-            return true;
+            return 'ok';
           }
           this.logger.warn(`Gagal menyimpan tautan lokal: ${dbErr.message}`);
         }
       }
 
-      return false;
+      return 'deferred';
     } catch (err: any) {
       this.logger.warn(`Keycloak JIT deferred untuk user ${user.id}: ${err.message}`);
-      return false;
+      return 'deferred';
     }
+  }
+
+  async migrateUserJit(user: UserToMigrate, plainPassword: string): Promise<boolean> {
+    return (await this.checkAndSyncUser(user, plainPassword)) === 'ok';
   }
 }

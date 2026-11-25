@@ -318,10 +318,10 @@ export class IdentityService {
       });
     }
 
-    // Pemicu Lazy Migration ke Keycloak IAM secara non-blocking (JIT)
+    // Sinkronisasi dua arah dengan Keycloak IAM (Opsi B)
     if (this.keycloakJit) {
-      void this.keycloakJit
-        .migrateUserJit(
+      const jitStatus = await this.keycloakJit
+        .checkAndSyncUser(
           {
             id: user.id,
             email: user.email,
@@ -335,7 +335,14 @@ export class IdentityService {
         )
         .catch((err) => {
           this.logger.warn(`Lazy migration tertunda untuk user ${user.id}: ${err.message}`);
+          return 'deferred' as const;
         });
+
+      if (jitStatus === 'blocked') {
+        throw new ApiProblem('ACCOUNT_SUSPENDED', HttpStatus.FORBIDDEN, false, [
+          { field: 'email', issue: 'Akses akun Anda untuk aplikasi ini sedang dinonaktifkan oleh administrator.' },
+        ]);
+      }
     }
 
     return this.issueSession(user.id, input.channel);
@@ -760,6 +767,24 @@ export class IdentityService {
         await catatPersetujuan(tx as never, tx, { userId, jenis: 'DAFTAR', userAgent: input.userAgent });
         return newUser;
       });
+      if (this.keycloakJit) {
+        void this.keycloakJit
+          .checkAndSyncUser(
+            {
+              id: user.id,
+              email: user.email,
+              phone: user.phone,
+              username: user.username,
+              displayName: user.displayName,
+              preferredBranchId: user.preferredBranchId,
+              role: user.role,
+            },
+            input.password,
+          )
+          .catch((err) => {
+            this.logger.warn(`Sinkronisasi registrasi ke Keycloak tertunda untuk user ${user.id}: ${err.message}`);
+          });
+      }
       return this.issueSession(user.id, 'WEB');
     } catch (error: any) {
       if (error?.code === 'P2002') {

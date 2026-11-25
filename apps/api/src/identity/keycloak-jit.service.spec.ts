@@ -42,6 +42,7 @@ describe('KeycloakJitService (DailyDose - HRG_* Service Account)', () => {
       },
     } as any;
 
+    let memberRoleAssigned = false;
     const grants: string[] = [];
     globalThis.fetch = jest.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
@@ -52,6 +53,16 @@ describe('KeycloakJitService (DailyDose - HRG_* Service Account)', () => {
         return jsonRes({ access_token: gt === 'client_credentials' ? 'sa-tok' : 'oidc-tok', expires_in: 60 });
       }
       if (url.includes('/admin/realms/hrgroup/users?')) return jsonRes([]);
+      if (url.includes('/admin/realms/hrgroup/clients?clientId=dailydose')) {
+        return jsonRes([{ id: 'client-dd-uuid', clientId: 'dailydose' }]);
+      }
+      if (url.endsWith('/admin/realms/hrgroup/clients/client-dd-uuid/roles/member')) {
+        return jsonRes({ id: 'role-dd-member', name: 'member' });
+      }
+      if (url.endsWith('/role-mappings/clients/client-dd-uuid') && init?.method === 'POST') {
+        memberRoleAssigned = true;
+        return new Response(null, { status: 204 });
+      }
       if (url.endsWith('/admin/realms/hrgroup/users') && init?.method === 'POST') {
         return new Response(null, {
           status: 201,
@@ -68,6 +79,7 @@ describe('KeycloakJitService (DailyDose - HRG_* Service Account)', () => {
     );
 
     expect(ok).toBe(true);
+    expect(memberRoleAssigned).toBe(true);
     expect(grants).toEqual(['client_credentials', 'password']);
   });
 
@@ -93,7 +105,16 @@ describe('KeycloakJitService (DailyDose - HRG_* Service Account)', () => {
         return jsonRes({ access_token: 'oidc-recovered' });
       }
       if (url.endsWith('/admin/realms/hrgroup/users/kc-sub-dd-2') && (!init?.method || init.method === 'GET')) {
-        return jsonRes({ id: 'kc-sub-dd-2', username: 'sarah.dd' });
+        return jsonRes({ id: 'kc-sub-dd-2', username: 'sarah.dd', enabled: true });
+      }
+      if (url.includes('/admin/realms/hrgroup/clients?clientId=dailydose')) {
+        return jsonRes([{ id: 'client-dd-uuid', clientId: 'dailydose' }]);
+      }
+      if (url.endsWith('/admin/realms/hrgroup/clients/client-dd-uuid/roles/member')) {
+        return jsonRes({ id: 'role-dd-member', name: 'member' });
+      }
+      if (url.endsWith('/users/kc-sub-dd-2/role-mappings/clients/client-dd-uuid')) {
+        return jsonRes([{ id: 'role-dd-member', name: 'member' }]);
       }
       if (url.endsWith('/admin/realms/hrgroup/users/kc-sub-dd-2/reset-password') && init?.method === 'PUT') {
         resetCalled = true;
@@ -120,5 +141,38 @@ describe('KeycloakJitService (DailyDose - HRG_* Service Account)', () => {
     await expect(
       svc.migrateUserJit({ id: 'usr-dd-3', email: 'x@dd.local', displayName: 'X' }, 'pw'),
     ).resolves.toBe(false);
+  });
+
+  it('returns blocked when user is disabled or app client role was revoked in Keycloak', async () => {
+    const db = {
+      akunGrupTautan: {
+        findFirst: jest.fn().mockResolvedValue({ id: 'link-4', userId: 'usr-dd-4', hrgSub: 'kc-sub-dd-4' }),
+        create: jest.fn(),
+      },
+    } as any;
+    globalThis.fetch = jest.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith('/realms/hrgroup/protocol/openid-connect/token')) {
+        return jsonRes({ access_token: 'sa-tok', expires_in: 60 });
+      }
+      if (url.endsWith('/admin/realms/hrgroup/users/kc-sub-dd-4')) {
+        return jsonRes({ id: 'kc-sub-dd-4', username: 'blocked.dd', enabled: true });
+      }
+      if (url.includes('/admin/realms/hrgroup/clients?clientId=dailydose')) {
+        return jsonRes([{ id: 'client-dd-uuid', clientId: 'dailydose' }]);
+      }
+      if (url.endsWith('/admin/realms/hrgroup/clients/client-dd-uuid/roles/member')) {
+        return jsonRes({ id: 'role-dd-member', name: 'member' });
+      }
+      if (url.endsWith('/users/kc-sub-dd-4/role-mappings/clients/client-dd-uuid')) {
+        return jsonRes([]);
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    }) as any;
+
+    const svc = new KeycloakJitService(db);
+    await expect(
+      svc.checkAndSyncUser({ id: 'usr-dd-4', email: 'blocked@dd.local', displayName: 'Blocked' }, 'pw'),
+    ).resolves.toBe('blocked');
   });
 });
