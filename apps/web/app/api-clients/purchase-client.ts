@@ -652,7 +652,7 @@ export function purchaseFailure(error: unknown): string {
     DUPLICATE_REQUEST: 'Permintaan persetujuan sedang diproses atau sudah dikirim.',
     ...EXTENSION_ERROR_LABELS,
     PACKAGE_EXTENSION_TARGET_EXPIRED:
-      'Paket yang mau diperpanjang sudah tidak aktif (masa berlaku atau sesinya habis) selama pembayaran menunggu verifikasi, jadi perpanjangan tidak bisa disetujui. Tolak pembayaran ini lalu kembalikan dana ke member.',
+      'Paket yang mau diperpanjang sudah tidak punya sisa sesi atau sedang dibekukan, jadi perpanjangan tidak bisa disetujui. Tolak pembayaran ini lalu kembalikan dana ke member.',
     PACKAGE_EXTENSION_LIMIT_REACHED:
       'Paket ini sudah diperpanjang 3 kali, batas maksimal, jadi pembayaran ini tidak bisa disetujui. Tolak pembayaran lalu kembalikan dana ke member.',
     PACKAGE_EXTENSION_TARGET_REQUIRED:

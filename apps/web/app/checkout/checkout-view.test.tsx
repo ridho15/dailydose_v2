@@ -317,7 +317,7 @@ describe('CheckoutView paket perpanjangan masa aktif', () => {
 
     expect(vi.mocked(browserOrderClient.create).mock.calls[0]?.[6]).toBe('cp-2');
     expect(
-      (await screen.findAllByText(/sudah tidak aktif .* jadi tidak bisa diperpanjang/)).length,
+      (await screen.findAllByText(/sudah tidak bisa diperpanjang .*bukti bayar/)).length,
     ).toBeGreaterThan(0);
   });
 

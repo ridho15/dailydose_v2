@@ -2,14 +2,18 @@ import { HttpStatus } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { bacaOpsional, tabelOpsionalAda } from '../foundation/tabel-opsional';
 import { ApiProblem, ENTITY_ID_REGEX } from '../identity/security';
+import { akhirHariWib } from '../foundation/masa-berlaku';
+import { tanggalWib } from './instructor-fee-calculator';
 
 /**
  * Paket "Perpanjangan masa aktif" (keputusan pemilik, November 2026):
  * - Paket 0 sesi; setelah lunas menambah masa berlaku SATU Paket Pelanggan milik member yang sama
  *   sebanyak 30 hari, dihitung dari tanggal berakhir saat itu (bukan dari hari ini).
  * - Paling banyak 3 kali per Paket Pelanggan.
- * - Hanya untuk paket yang masih aktif: status ACTIVE, belum lewat masa berlaku, sisa sesi > 0.
+ * - Untuk paket yang masih aktif: status ACTIVE, belum lewat masa berlaku, sisa sesi > 0.
  *   Diperiksa saat pesanan dibuat dan sekali lagi saat pembayaran disetujui.
+ * - Paket yang sudah kedaluwarsa tetapi masih bersisa sesi (25 November 2026): hanya lewat staf,
+ *   wajib bukti pembayaran saat disetujui, berlaku 30 hari dari hari disetujui, status kembali ACTIVE.
  * - Pembelian perpanjangan tidak membuat Paket Pelanggan baru (paket 0 sesi hanya akan muncul di
  *   pilihan booking dan daftar paket member sebagai paket kosong).
  *
@@ -121,6 +125,22 @@ export function paketMasihAktif(cp: Pick<PaketTarget, 'status' | 'validUntil' | 
   return cp.status === 'ACTIVE' && cp.validUntil.getTime() > now.getTime() && cp.remainingSessions > 0;
 }
 
+/**
+ * Paket yang sudah lewat masa berlaku tetapi masih punya sesi (keputusan pemilik 25 November 2026):
+ * boleh diperpanjang berbayar lewat staf, wajib bukti pembayaran saat disetujui. Paket beku atau
+ * habis sesinya tidak termasuk.
+ */
+export function paketKedaluwarsaBersisa(cp: Pick<PaketTarget, 'status' | 'validUntil' | 'remainingSessions'>, now: Date) {
+  if (cp.remainingSessions <= 0) return false;
+  return cp.status === 'EXPIRED' || (cp.status === 'ACTIVE' && cp.validUntil.getTime() <= now.getTime());
+}
+
+/** Masa berlaku baru: paket aktif ditambah dari tanggal berakhirnya; paket kedaluwarsa dari hari ini (akhir hari WIB). */
+export function masaBerlakuSetelahPerpanjangan(cp: Pick<PaketTarget, 'validUntil'>, hari: number, now: Date) {
+  if (cp.validUntil.getTime() > now.getTime()) return new Date(cp.validUntil.getTime() + hari * HARI_MS);
+  return akhirHariWib(tanggalWib(new Date(now.getTime() + hari * HARI_MS)))!;
+}
+
 async function kunciPaket(tx: Db, id: string) {
   if (typeof tx.$queryRaw === 'function')
     await tx.$queryRaw`SELECT id FROM paket_pelanggan WHERE id = ${id} FOR UPDATE`;
@@ -162,14 +182,24 @@ async function hitungPerpanjangan(
 }
 
 /** Paket aktif milik member yang bisa dipilih untuk diperpanjang (pilihan di checkout dan meja). */
-export async function pilihanTargetPerpanjangan(db: Db, userId: string, now = new Date()) {
+export async function pilihanTargetPerpanjangan(
+  db: Db,
+  userId: string,
+  now = new Date(),
+  opsi: { staf?: boolean } = {},
+) {
+  const hampirBerakhir = {
+    status: 'ACTIVE',
+    validUntil: { gt: now, lte: new Date(now.getTime() + JENDELA_PERPANJANGAN_HARI * HARI_MS) },
+  };
+  // Staf juga melihat paket yang sudah kedaluwarsa tetapi masih bersisa sesi.
+  const kedaluwarsa = [{ status: 'EXPIRED' }, { status: 'ACTIVE', validUntil: { lte: now } }];
   const paket: Array<PaketTarget & { totalSessions: number; package: { name: string } | null }> =
     await db.paketPelanggan.findMany({
       where: {
         userId,
-        status: 'ACTIVE',
-        validUntil: { gt: now, lte: new Date(now.getTime() + JENDELA_PERPANJANGAN_HARI * HARI_MS) },
         remainingSessions: { gt: 0 },
+        ...(opsi.staf ? { OR: [hampirBerakhir, ...kedaluwarsa] } : hampirBerakhir),
       },
       include: { package: { select: { name: true } } },
       orderBy: [{ validUntil: 'asc' }, { id: 'asc' }],
@@ -184,7 +214,9 @@ export async function pilihanTargetPerpanjangan(db: Db, userId: string, now = ne
       remainingSessions: p.remainingSessions,
       totalSessions: p.totalSessions,
       validUntil: p.validUntil,
-      validUntilAfterExtension: new Date(p.validUntil.getTime() + HARI_PERPANJANGAN * HARI_MS),
+      /** Sudah lewat masa berlaku: perpanjangan wajib bukti bayar dan dihitung dari hari disetujui. */
+      kedaluwarsa: paketKedaluwarsaBersisa(p, now),
+      validUntilAfterExtension: masaBerlakuSetelahPerpanjangan(p, HARI_PERPANJANGAN, now),
       extensionsUsed: terpakai,
       extensionsPending: menunggu,
       extensionsLeft: Math.max(0, MAKS_PERPANJANGAN - terpakai - menunggu),
@@ -201,6 +233,7 @@ export async function periksaTargetPerpanjangan(
   targetId: unknown,
   userId: string,
   now: Date,
+  opsi: { staf?: boolean } = {},
 ): Promise<PaketTarget> {
   if (typeof targetId !== 'string' || !ENTITY_ID_REGEX.test(targetId))
     throw new ApiProblem('PACKAGE_EXTENSION_TARGET_REQUIRED', HttpStatus.UNPROCESSABLE_ENTITY, false, [
@@ -212,10 +245,11 @@ export async function periksaTargetPerpanjangan(
   const cp: PaketTarget | null = await tx.paketPelanggan.findUnique({ where: { id: targetId } });
   if (!cp || cp.userId !== userId)
     throw new ApiProblem('PACKAGE_EXTENSION_TARGET_NOT_FOUND', HttpStatus.NOT_FOUND);
-  if (!paketMasihAktif(cp, now))
+  const kedaluwarsa = paketKedaluwarsaBersisa(cp, now);
+  if (!paketMasihAktif(cp, now) && !(opsi.staf && kedaluwarsa))
     throw new ApiProblem('PACKAGE_EXTENSION_TARGET_EXPIRED', HttpStatus.CONFLICT);
   // Saat pesanan dibuat saja; persetujuan pembayaran yang datang belakangan tidak dicek ulang.
-  if (!dalamJendelaPerpanjangan(cp, now))
+  if (!kedaluwarsa && !dalamJendelaPerpanjangan(cp, now))
     throw new ApiProblem('PACKAGE_EXTENSION_TOO_EARLY', HttpStatus.CONFLICT);
   const { terpakai, menunggu } = (await hitungPerpanjangan(tx, [cp.id])).get(cp.id)!;
   if (terpakai >= MAKS_PERPANJANGAN)
@@ -251,6 +285,7 @@ export async function terapkanPerpanjangan(
   tx: Db,
   purchaseId: string,
   now: Date,
+  opsi: { adaBukti?: boolean } = {},
 ): Promise<CatatanPerpanjangan> {
   if (typeof tx.perpanjanganPaket?.findUnique !== 'function' || !(await tabelOpsionalAda(tx, 'perpanjangan_paket')))
     throw new ApiProblem('PACKAGE_EXTENSION_UNAVAILABLE', HttpStatus.SERVICE_UNAVAILABLE);
@@ -264,19 +299,26 @@ export async function terapkanPerpanjangan(
   });
   if (!cp || cp.userId !== catatan.userId)
     throw new ApiProblem('PACKAGE_EXTENSION_TARGET_NOT_FOUND', HttpStatus.CONFLICT);
-  if (!paketMasihAktif(cp, now))
+  const kedaluwarsa = paketKedaluwarsaBersisa(cp, now);
+  if (!paketMasihAktif(cp, now) && !kedaluwarsa)
     throw new ApiProblem('PACKAGE_EXTENSION_TARGET_EXPIRED', HttpStatus.CONFLICT);
+  // Paket yang sudah kedaluwarsa hanya dihidupkan kembali bila ada bukti pembayaran.
+  if (kedaluwarsa && !opsi.adaBukti)
+    throw new ApiProblem('PACKAGE_EXTENSION_PROOF_REQUIRED', HttpStatus.CONFLICT);
   const { terpakai } = (await hitungPerpanjangan(tx, [cp.id])).get(cp.id)!;
   if (terpakai >= MAKS_PERPANJANGAN)
     throw new ApiProblem('PACKAGE_EXTENSION_LIMIT_REACHED', HttpStatus.CONFLICT);
 
-  const validUntilAfter = new Date(cp.validUntil.getTime() + catatan.hari * HARI_MS);
+  const validUntilAfter = masaBerlakuSetelahPerpanjangan(cp, catatan.hari, now);
   const klaim = await tx.perpanjanganPaket.updateMany({
     where: { purchaseId, appliedAt: null },
     data: { appliedAt: now, validUntilBefore: cp.validUntil, validUntilAfter },
   });
   if (klaim.count === 0) return (await tx.perpanjanganPaket.findUnique({ where: { purchaseId } })) ?? catatan;
-  await tx.paketPelanggan.update({ where: { id: cp.id }, data: { validUntil: validUntilAfter } });
+  await tx.paketPelanggan.update({
+    where: { id: cp.id },
+    data: { validUntil: validUntilAfter, ...(kedaluwarsa ? { status: 'ACTIVE' } : {}) },
+  });
   // Riwayat sesi paket: supaya perpanjangan berbayar ikut tampil di log masa berlaku terpusat.
   if (typeof tx.sessionLedger?.create === 'function')
     await tx.sessionLedger.create({
@@ -286,7 +328,7 @@ export async function terapkanPerpanjangan(
         amount: 0,
         balanceAfter: cp.remainingSessions,
         referenceId: purchaseId,
-        notes: `Perpanjangan masa aktif berbayar +${catatan.hari} hari (hingga ${new Date(validUntilAfter.getTime() + 7 * 3_600_000).toISOString().slice(0, 10)})`,
+        notes: `Perpanjangan masa aktif berbayar +${catatan.hari} hari (hingga ${tanggalWib(validUntilAfter)})${kedaluwarsa ? ', paket kedaluwarsa diaktifkan kembali' : ''}`,
         createdById: null,
       },
     });

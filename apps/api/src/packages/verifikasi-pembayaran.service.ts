@@ -665,7 +665,7 @@ export class PaymentReviewService {
           // membuat persetujuan gagal; staf menolak pembayaran lalu mengembalikan dananya.
           const perpanjangan =
             decision === 'APPROVED' && (await adalahPaketPerpanjangan(tx, purchase.packageId))
-              ? await terapkanPerpanjangan(tx, purchase.id, decidedAt)
+              ? await terapkanPerpanjangan(tx, purchase.id, decidedAt, { adaBukti: Boolean(purchase.paymentProof) })
               : null;
 
           const updated = await tx.pembelian.update({

@@ -174,9 +174,13 @@ Aturan kerahasiaan per peran ada di [Rules.md](./Rules.md#2-kerahasiaan-data-keu
     (`payment.auto_approved_from_proof`). Matikan dengan `AUTO_APPROVE_BUKTI=false`.
 18. Paket perpanjangan masa aktif (16 November 2026): paket 0 sesi (ditandai "Perpanjangan masa
     aktif" di Data Master > Paket, harga diisi di sana, mis. Rp150.000) menambah 30 hari pada masa
-    berlaku 1 paket member yang dipilih. Maksimal 3 kali per paket; pembelian ke-4 ditolak. Hanya untuk
-    paket yang masih aktif (belum hangus). Bisa dibeli member sendiri atau dicatat admin. Modal Rp0, jadi
-    seluruh nilainya masuk laba. Void mengembalikan 30 hari itu.
+    berlaku 1 paket member yang dipilih. Maksimal 3 kali per paket; pembelian ke-4 ditolak. Paket aktif:
+    bisa dibeli member sendiri atau dicatat admin pada 14 hari terakhir masa berlaku (24 November 2026).
+    Paket yang sudah kedaluwarsa tetapi masih bersisa sesi (25 November 2026): hanya dicatat admin
+    (tombol "Perpanjang berbayar" di halaman paket member dan di Paket habis & renewal), wajib bukti
+    pembayaran saat disetujui di antrean Pembayaran, lalu aktif lagi 30 hari dari hari disetujui. Paket
+    tanpa sisa sesi atau yang dibekukan tidak bisa diperpanjang. Modal Rp0, jadi seluruh nilainya masuk
+    laba. Void mengembalikan 30 hari itu.
 15. Presensi instruktur lewat scan QR diterima mulai 45 menit sebelum kelas sampai 10 menit setelah
     kelas **mulai** (kelas 10.00 masih bisa scan 10.10). Scan setelah jam mulai tercatat sebagai anomali
     "Instruktur Check-in Terlambat" di Laporan Keuangan > Rekonsiliasi (5 November 2026).

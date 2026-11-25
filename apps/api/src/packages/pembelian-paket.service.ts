@@ -758,7 +758,7 @@ export class CustomerOrderService {
     return {
       days: HARI_PERPANJANGAN,
       maxPerPackage: MAKS_PERPANJANGAN,
-      items: await pilihanTargetPerpanjangan(this.db, customer.id),
+      items: await pilihanTargetPerpanjangan(this.db, customer.id, new Date(), { staf: true }),
     };
   }
 
@@ -881,7 +881,7 @@ export class CustomerOrderService {
           throw new ApiProblem('RESOURCE_NOT_FOUND', HttpStatus.NOT_FOUND);
         pastikanPaketDijualDiCabang(pkg, branchId);
         const target = (await adalahPaketPerpanjangan(tx, pkg.id))
-          ? await periksaTargetPerpanjangan(tx, input.targetCustomerPackageId, customer.id, new Date())
+          ? await periksaTargetPerpanjangan(tx, input.targetCustomerPackageId, customer.id, new Date(), { staf: true })
           : null;
 
         const { voucher, discountRp, subtotalRp, totalAmountRp, promotion } = await this.priceOrder(

@@ -55,6 +55,8 @@ export interface ExtensionTarget {
   remainingSessions: number;
   totalSessions: number;
   validUntil: string;
+  /** Sudah lewat masa berlaku (masih bersisa sesi): wajib bukti bayar, berlaku 30 hari dari hari disetujui. */
+  kedaluwarsa?: boolean;
   validUntilAfterExtension: string;
   extensionsUsed: number;
   extensionsPending: number;
@@ -606,7 +608,9 @@ export const EXTENSION_ERROR_LABELS: Record<string, string> = {
   PACKAGE_EXTENSION_TARGET_NOT_FOUND:
     'Paket yang dipilih tidak ditemukan atau bukan milik member ini. Muat ulang halaman lalu pilih paket lagi.',
   PACKAGE_EXTENSION_TARGET_EXPIRED:
-    'Paket yang dipilih sudah tidak aktif (masa berlaku habis atau sesi habis), jadi tidak bisa diperpanjang. Beli paket baru untuk melanjutkan latihan.',
+    'Paket yang dipilih sudah tidak bisa diperpanjang (sesinya habis, sedang dibekukan, atau sudah kedaluwarsa; paket kedaluwarsa hanya bisa diperpanjang oleh admin studio dengan bukti bayar). Beli paket baru atau hubungi studio.',
+  PACKAGE_EXTENSION_PROOF_REQUIRED:
+    'Paket ini sudah kedaluwarsa, jadi perpanjangannya wajib disertai bukti pembayaran. Unggah bukti di detail pembayaran lalu setujui lagi.',
   PACKAGE_EXTENSION_TOO_EARLY:
     'Paket perpanjangan baru bisa dibeli 14 hari sebelum masa berlaku paket berakhir.',
   PACKAGE_EXTENSION_LIMIT_REACHED:

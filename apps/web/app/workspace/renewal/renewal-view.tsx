@@ -302,6 +302,14 @@ export function RenewalView({
                           )}
                         </td>
                         <td className="px-4 py-3 text-right">
+                          {!r.renewed && r.endReason === 'EXPIRED' && r.remainingSessions > 0 && (
+                            <a
+                              href={`/ledger/${encodeURIComponent(r.customerPackageId)}?perpanjang=1`}
+                              className="mr-2 inline-flex min-h-11 items-center rounded-dd-sm border border-dd-border-interactive bg-white px-3 text-[15px] font-bold text-dd-forest no-underline hover:border-dd-forest"
+                            >
+                              Perpanjang berbayar
+                            </a>
+                          )}
                           {r.renewed ? (
                             <span className="text-[15px] text-dd-muted">Selesai</span>
                           ) : wa ? (

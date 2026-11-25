@@ -23,6 +23,7 @@ import { ReasonDialog } from '../../components/admin/reason-dialog';
 import { DateInput, TextInput } from '../../components/forms';
 import { useSessionContext } from '../../session-context';
 import { SharedPackageMembersDialog } from '../../components/shared-package-members-dialog';
+import { AssistedSaleDrawer } from '../../purchases/assisted-sale-drawer';
 
 const ledgerLabels: Record<string, string> = {
   PURCHASE: 'Aktivasi paket',
@@ -62,6 +63,15 @@ export function CustomerSessionDetailView({ id }: { id: string }) {
     sessionContext?.session?.roles?.some((r) => ['ADMIN', 'MANAGER', 'OWNER', 'SUPER_OWNER'].includes(r)),
   );
   const isSuperOwner = Boolean(sessionContext?.session?.roles?.includes('SUPER_OWNER'));
+  // Perpanjangan berbayar untuk paket kedaluwarsa (25 November 2026): dicatat sebagai penjualan, wajib bukti bayar.
+  const bolehJual = Boolean(sessionContext?.hasCapability('purchase:record'));
+  const [jualPerpanjangan, setJualPerpanjangan] = useState(false);
+  // Dari tombol "Perpanjang berbayar" di halaman renewal: form penjualan langsung terbuka.
+  const mintaPerpanjang = searchParams?.get('perpanjang') === '1';
+  useEffect(() => {
+    if (mintaPerpanjang && bolehJual) setJualPerpanjangan(true);
+  }, [mintaPerpanjang, bolehJual]);
+  const cabangJual = (sessionContext?.session?.branches ?? []).map((b) => ({ id: b.id, name: b.name }));
   const [syncDialogOpen, setSyncDialogOpen] = useState(false);
   const [syncPreview, setSyncPreview] = useState<PackageSyncPreview | null>(null);
   const [syncLoading, setSyncLoading] = useState(false);
@@ -261,6 +271,14 @@ export function CustomerSessionDetailView({ id }: { id: string }) {
                 Sinkronisasi Riwayat Sesi
               </Button>
             )}
+            {bolehJual &&
+              balance.customer?.id &&
+              balance.ledgerBalance > 0 &&
+              (balance.status === 'EXPIRED' || new Date(balance.expiryAt).getTime() <= Date.now()) && (
+                <Button data-testid="btn-perpanjang-berbayar" onClick={() => setJualPerpanjangan(true)}>
+                  Perpanjang berbayar (upload bukti)
+                </Button>
+              )}
             {balance.status !== 'FROZEN' && balance.ledgerBalance > 0 && (
               <Button
                 variant="secondary"
@@ -593,6 +611,20 @@ export function CustomerSessionDetailView({ id }: { id: string }) {
           />
         </div>
       </Panel>
+      {jualPerpanjangan && balance.customer?.id && cabangJual.length > 0 && (
+        <AssistedSaleDrawer
+          open
+          branch={sessionContext?.activeBranch ?? (cabangJual.length === 1 ? cabangJual[0] : null)}
+          branches={cabangJual}
+          customer={{ id: balance.customer.id, name: balance.customer.displayName ?? 'Member' }}
+          perpanjangTargetId={balance.id}
+          onClose={() => setJualPerpanjangan(false)}
+          onRecorded={() => {
+            setJualPerpanjangan(false);
+            setNotice('Perpanjangan dicatat dan menunggu persetujuan di antrean Pembayaran. Paket aktif lagi setelah disetujui.');
+          }}
+        />
+      )}
       <ReasonDialog
         open={action !== null}
         title={

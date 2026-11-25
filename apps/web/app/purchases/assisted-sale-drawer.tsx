@@ -44,6 +44,7 @@ export function AssistedSaleDrawer({
   client = browserAssistedSaleClient,
   onClose,
   onRecorded,
+  perpanjangTargetId,
 }: {
   open: boolean;
   /** Cabang aktif di topbar; bila kosong, staf memilih cabang penjualan di formulir. */
@@ -55,6 +56,8 @@ export function AssistedSaleDrawer({
   client?: AssistedSaleClient;
   onClose(): void;
   onRecorded?(purchase: Purchase): void;
+  /** Dibuka dari tombol "Perpanjang berbayar": paket perpanjangan dan paket member ini langsung terpilih. */
+  perpanjangTargetId?: string;
 }) {
   const feedback = useAppFeedback();
   const [customerOption, setCustomerOption] = useState<SearchSelectOption | undefined>(
@@ -121,6 +124,25 @@ export function AssistedSaleDrawer({
     [client, saleBranchId],
   );
 
+  // Dari tombol "Perpanjang berbayar": pilih paket perpanjangan yang dijual di cabang ini secara otomatis.
+  useEffect(() => {
+    if (!open || !perpanjangTargetId || !saleBranchId) return;
+    let active = true;
+    searchPackages('')
+      .then((list) => {
+        const pilihan = list.find((pkg) => pkg.perpanjangan);
+        if (!active) return;
+        if (pilihan) {
+          setPackageOption(pilihan);
+          setMethod('BANK_TRANSFER');
+        } else setFailure('Belum ada paket perpanjangan masa aktif yang dijual di cabang ini. Buat dulu di Kelola Paket.');
+      })
+      .catch((error) => active && setFailure(assistedSaleFailure(error)));
+    return () => {
+      active = false;
+    };
+  }, [open, perpanjangTargetId, saleBranchId, searchPackages]);
+
   // Paket perpanjangan masa aktif: muat paket aktif member untuk dipilih yang diperpanjang.
   const isExtension = Boolean(packageOption?.perpanjangan);
   const customerId = customerOption?.id ?? '';
@@ -138,7 +160,9 @@ export function AssistedSaleDrawer({
         if (!active) return;
         setTargets({ status: 'ready', list });
         const eligible = list.items.filter((item) => item.extensionsLeft > 0);
-        if (eligible.length === 1) setTargetId(eligible[0]!.customerPackageId);
+        const diminta = perpanjangTargetId && eligible.find((item) => item.customerPackageId === perpanjangTargetId);
+        if (diminta) setTargetId(diminta.customerPackageId);
+        else if (eligible.length === 1) setTargetId(eligible[0]!.customerPackageId);
       })
       .catch((error) => {
         if (active) setTargets({ status: 'error', message: assistedSaleFailure(error) });
@@ -146,11 +170,15 @@ export function AssistedSaleDrawer({
     return () => {
       active = false;
     };
-  }, [open, isExtension, customerId, saleBranchId, client]);
+  }, [open, isExtension, customerId, saleBranchId, client, perpanjangTargetId]);
 
   const selectedTarget =
     targets.status === 'ready' ? targets.list.items.find((item) => item.customerPackageId === targetId) : undefined;
-  const ready = Boolean(customerOption && packageOption && saleBranch && (!isExtension || selectedTarget));
+  // Paket kedaluwarsa hanya diperpanjang dengan bukti pembayaran (keputusan pemilik 25 November 2026).
+  const wajibBukti = Boolean(selectedTarget?.kedaluwarsa);
+  const ready = Boolean(
+    customerOption && packageOption && saleBranch && (!isExtension || selectedTarget) && (!wajibBukti || proofFile),
+  );
 
   const submit = async () => {
     if (!customerOption || !packageOption || !saleBranch) return;
@@ -158,7 +186,9 @@ export function AssistedSaleDrawer({
       tone: 'warning',
       title: 'Catat penjualan paket?',
       message: selectedTarget
-        ? `${packageOption.label} untuk ${customerOption.label} (${formatRupiah(packageOption.priceRp)}, ${assistedPaymentMethodLabels[method]}). Masa aktif ${selectedTarget.packageName} bertambah 30 hari setelah penyetuju lain menyetujuinya di antrean Pembayaran.`
+        ? selectedTarget.kedaluwarsa
+          ? `${packageOption.label} untuk ${customerOption.label} (${formatRupiah(packageOption.priceRp)}, ${assistedPaymentMethodLabels[method]}). ${selectedTarget.packageName} sudah kedaluwarsa; setelah penyetuju lain menyetujuinya di antrean Pembayaran, paket aktif lagi 30 hari dari hari disetujui.`
+          : `${packageOption.label} untuk ${customerOption.label} (${formatRupiah(packageOption.priceRp)}, ${assistedPaymentMethodLabels[method]}). Masa aktif ${selectedTarget.packageName} bertambah 30 hari setelah penyetuju lain menyetujuinya di antrean Pembayaran.`
         : `${packageOption.label} untuk ${customerOption.label} (${formatRupiah(packageOption.priceRp)}, ${assistedPaymentMethodLabels[method]}). Paket aktif setelah penyetuju lain menyetujuinya di antrean Pembayaran.`,
       confirmLabel: 'Catat penjualan',
     });
@@ -330,8 +360,13 @@ export function AssistedSaleDrawer({
                     <span className="grid gap-0.5">
                       <span className="font-semibold text-dd-ink">{item.packageName}</span>
                       <span className="text-xs text-dd-muted">
-                        Sisa {item.remainingSessions} sesi · berlaku sampai {tanggalWib(item.validUntil)}
-                        {full ? '' : `, menjadi ${tanggalWib(item.validUntilAfterExtension)}`}
+                        Sisa {item.remainingSessions} sesi ·{' '}
+                        {item.kedaluwarsa ? (
+                          <span className="font-semibold text-dd-danger">kedaluwarsa sejak {tanggalWib(item.validUntil)}</span>
+                        ) : (
+                          `berlaku sampai ${tanggalWib(item.validUntil)}`
+                        )}
+                        {full ? '' : `, menjadi ${tanggalWib(item.validUntilAfterExtension)}${item.kedaluwarsa ? ' (dihitung dari hari disetujui, wajib bukti bayar)' : ''}`}
                       </span>
                       <span className="text-xs text-dd-muted">
                         {full
@@ -373,7 +408,7 @@ export function AssistedSaleDrawer({
         />
         <div className="space-y-1.5 rounded-dd-sm border border-dashed border-dd-line bg-dd-surface-muted/40 p-3">
           <label className="block text-xs font-semibold text-dd-ink">
-            Bukti transfer / struk pembayaran (opsional)
+            Bukti transfer / struk pembayaran {wajibBukti ? '(wajib untuk paket kedaluwarsa)' : '(opsional)'}
           </label>
           <p className="text-xs text-dd-muted">
             Format: JPG, PNG, WebP, PDF. Otomatis dikompresi agar hemat kuota.

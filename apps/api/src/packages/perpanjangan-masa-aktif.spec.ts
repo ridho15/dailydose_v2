@@ -276,12 +276,28 @@ describe('persetujuan pembayaran paket perpanjangan', () => {
     expect(hasil.body.extension).toMatchObject({ targetCustomerPackageId: targetId, days: 30 });
   });
 
-  it('paket target hangus saat menunggu verifikasi: persetujuan gagal dan pembelian tidak berubah', async () => {
-    const { service, tx, paket } = setup({ target: { validUntil: new Date(Date.now() - 1000) } });
+  it('paket target kedaluwarsa tanpa bukti bayar: persetujuan gagal dan pembelian tidak berubah', async () => {
+    const { service, tx, paket } = setup({ target: { validUntil: new Date(Date.now() - 1000) } }, { paymentProof: null, paymentMethod: 'QRIS' });
     const awal = paket.validUntil.getTime();
-    await expect(approve(service)).rejects.toMatchObject({ code: 'PACKAGE_EXTENSION_TARGET_EXPIRED', status: 409 });
+    await expect(approve(service)).rejects.toMatchObject({ code: 'PACKAGE_EXTENSION_PROOF_REQUIRED', status: 409 });
     expect(tx.pembelian.update).not.toHaveBeenCalled();
     expect(paket.validUntil.getTime()).toBe(awal);
+  });
+
+  it('paket target kedaluwarsa dengan bukti bayar (25 Nov 2026): aktif lagi, berlaku 30 hari dari hari disetujui', async () => {
+    const { service, paket } = setup({ target: { validUntil: new Date(Date.now() - 20 * HARI), status: 'EXPIRED' } });
+    await approve(service);
+    expect(paket.status).toBe('ACTIVE');
+    const hari = (paket.validUntil.getTime() - Date.now()) / HARI;
+    expect(hari).toBeGreaterThan(29.9);
+    expect(hari).toBeLessThan(31);
+    // Akhir hari WIB: 23:59:59 WIB = 16:59:59 UTC.
+    expect(paket.validUntil.toISOString().slice(11, 19)).toBe('16:59:59');
+  });
+
+  it('paket habis sesinya tetap tidak bisa diperpanjang walau ada bukti', async () => {
+    const { service } = setup({ target: { validUntil: new Date(Date.now() - HARI), status: 'EXPIRED', remainingSessions: 0 } });
+    await expect(approve(service)).rejects.toMatchObject({ code: 'PACKAGE_EXTENSION_TARGET_EXPIRED' });
   });
 
   it('persetujuan kedua ditolak sebagai sudah diputus dan tidak memperpanjang lagi', async () => {
@@ -302,8 +318,8 @@ describe('persetujuan pembayaran paket perpanjangan', () => {
 });
 
 describe('penjualan di meja paket perpanjangan', () => {
-  it('wajib memilih paket target yang masih aktif; pesanan tidak dibuat bila hangus', async () => {
-    const fake = fakeDb({ target: { validUntil: new Date(Date.now() - 1000) } });
+  it('wajib memilih paket target yang masih bersisa sesi; pesanan tidak dibuat bila sesinya habis', async () => {
+    const fake = fakeDb({ target: { validUntil: new Date(Date.now() - 1000), remainingSessions: 0 } });
     const tx = {
       ...fake.db,
       user: { findUnique: jest.fn().mockResolvedValue({ id: memberId, role: 'CUSTOMER', status: 'ACTIVE' }) },
@@ -342,7 +358,8 @@ describe('penjualan di meja paket perpanjangan', () => {
     ).rejects.toMatchObject({ code: 'PACKAGE_EXTENSION_TARGET_EXPIRED' });
     expect(tx.pembelian.create).not.toHaveBeenCalled();
 
-    fake.paket.validUntil = new Date(Date.now() + 5 * HARI);
+    // Staf boleh memperpanjang paket yang sudah kedaluwarsa asalkan masih ada sesinya.
+    fake.paket.remainingSessions = 3;
     tx.pembelian.create.mockImplementation(async ({ data }: any) => ({ ...data, package: {}, branch: { paymentAccounts: [] } }));
     await service.recordAssistedSale(admin, { ...input, targetCustomerPackageId: targetId }, 'key-12345', 'c');
     expect(fake.catatan).toHaveLength(1);
