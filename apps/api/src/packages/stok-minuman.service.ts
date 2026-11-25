@@ -10,7 +10,9 @@ import { tanggalWib } from './instructor-fee-calculator';
 
 /**
  * Stok minuman per cabang (keputusan pemilik 25 November 2026):
- * - master barang berlaku untuk semua cabang (Manager dan Super Owner mengelola);
+ * - master barang (nama dan harga jual) berlaku untuk semua cabang, hanya Super Owner yang mengisi;
+ * - admin hanya mencatat beli (MASUK) dan jual (DIJUAL); harga jual selalu dari master, tidak bisa diubah
+ *   saat mencatat (keputusan pemilik 26 November 2026); DIPAKAI_OWNER hanya untuk pemegang inventory:manage;
  * - MASUK (beli/restock) menambah stok dan otomatis mencatat pengeluaran kas cabang kategori MINUMAN;
  * - keluar hanya DIJUAL (pemasukan penjualan minuman di laporan laba) atau DIPAKAI_OWNER (tanpa nilai);
  * - stok tidak boleh minus; catatan tidak diubah atau dihapus (riwayat utuh untuk audit).
@@ -258,13 +260,18 @@ export class StokMinumanService {
     if (!barang) throw new ApiProblem('RESOURCE_NOT_FOUND', HttpStatus.NOT_FOUND);
     if (!barang.aktif && jenis === 'MASUK') throw new ApiProblem('DRINK_INACTIVE', HttpStatus.CONFLICT);
 
+    if (jenis === 'DIPAKAI_OWNER') this.policy.requireCapability(principal.capabilities, 'inventory:manage');
     let hargaSatuanRp = 0;
-    if (jenis === 'MASUK' || jenis === 'DIJUAL') {
-      const mentah = input.hargaSatuanRp ?? (jenis === 'DIJUAL' ? barang.hargaJualRp : undefined);
+    if (jenis === 'DIJUAL') {
+      // Harga jual ditetapkan studio di master barang; harga kiriman klien diabaikan.
+      if (!barang.hargaJualRp || barang.hargaJualRp <= 0)
+        throw new ApiProblem('DRINK_PRICE_NOT_SET', HttpStatus.CONFLICT, false, [{ field: 'hargaJualRp', issue: 'REQUIRED' }]);
+      hargaSatuanRp = barang.hargaJualRp;
+    } else if (jenis === 'MASUK') {
+      const mentah = input.hargaSatuanRp;
       const h = Number(mentah);
       if (mentah === undefined || mentah === null || mentah === '' || !Number.isInteger(h) || h < 0 || h > MAKS_HARGA)
         throw salah('hargaSatuanRp', 'REQUIRED');
-      if (jenis === 'DIJUAL' && h === 0) throw salah('hargaSatuanRp', 'REQUIRED');
       hargaSatuanRp = h;
     }
     const totalRp = hargaSatuanRp * jumlah;

@@ -76,12 +76,30 @@ describe('StokMinumanService', () => {
 
   it('dipakai owner bernilai Rp0; stok tidak boleh minus', async () => {
     const { svc } = setup([{ branchId: 'gg', barangId: BARANG, jenis: 'MASUK', jumlah: 2 }]);
-    const pakai = await svc.catat(prinsipal('MANAGER'), { branchId: 'gg', barangId: BARANG, jenis: 'DIPAKAI_OWNER', jumlah: 2 }, NOW);
+    const pakai = await svc.catat(prinsipal('SUPER_OWNER', null), { branchId: 'gg', barangId: BARANG, jenis: 'DIPAKAI_OWNER', jumlah: 2 }, NOW);
     expect(pakai.totalRp).toBe(0);
     expect(pakai.stokSesudah).toBe(0);
     await expect(
       svc.catat(prinsipal('MANAGER'), { branchId: 'gg', barangId: BARANG, jenis: 'DIJUAL', jumlah: 1 }, NOW),
     ).rejects.toMatchObject({ response: 'DRINK_STOCK_INSUFFICIENT' });
+  });
+
+  it('admin hanya beli dan jual: dipakai owner ditolak; harga jual selalu dari master walau admin mengirim harga lain', async () => {
+    const { svc } = setup([{ branchId: 'gg', barangId: BARANG, jenis: 'MASUK', jumlah: 5 }]);
+    await expect(
+      svc.catat(prinsipal('ADMIN'), { branchId: 'gg', barangId: BARANG, jenis: 'DIPAKAI_OWNER', jumlah: 1 }, NOW),
+    ).rejects.toMatchObject({ status: 403 });
+    const jual = await svc.catat(prinsipal('ADMIN'), { branchId: 'gg', barangId: BARANG, jenis: 'DIJUAL', jumlah: 2, hargaSatuanRp: 1 }, NOW);
+    expect(jual.hargaSatuanRp).toBe(8000);
+    expect(jual.totalRp).toBe(16_000);
+  });
+
+  it('barang tanpa harga jual tidak bisa dijual sampai Super Owner mengisi harganya', async () => {
+    const { svc, db } = setup([{ branchId: 'gg', barangId: BARANG, jenis: 'MASUK', jumlah: 5 }]);
+    db.barangMinuman.findUnique.mockResolvedValue({ id: BARANG, nama: 'Teh', satuan: 'botol', hargaJualRp: null, aktif: true });
+    await expect(
+      svc.catat(prinsipal('ADMIN'), { branchId: 'gg', barangId: BARANG, jenis: 'DIJUAL', jumlah: 1, hargaSatuanRp: 5000 }, NOW),
+    ).rejects.toMatchObject({ response: 'DRINK_PRICE_NOT_SET' });
   });
 
   it('stok dihitung per cabang: stok cabang lain tidak bisa dijual di sini', async () => {
@@ -104,9 +122,10 @@ describe('StokMinumanService', () => {
     ).rejects.toMatchObject({ status: 422 });
   });
 
-  it('master barang hanya Manager/Super Owner; Owner dan Finance hanya membaca', async () => {
+  it('master barang hanya Super Owner; Manager dan Admin tidak; Owner dan Finance hanya membaca', async () => {
     const { svc } = setup();
     await expect(svc.buatBarang(prinsipal('ADMIN'), { nama: 'Teh', satuan: 'botol' })).rejects.toMatchObject({ status: 403 });
+    await expect(svc.buatBarang(prinsipal('MANAGER'), { nama: 'Teh', satuan: 'botol' })).rejects.toMatchObject({ status: 403 });
     await expect(svc.catat(prinsipal('OWNER'), { branchId: 'gg', barangId: BARANG, jenis: 'DIJUAL', jumlah: 1 }, NOW)).rejects.toMatchObject({ status: 403 });
     await expect(svc.stok(prinsipal('OWNER'), { branchId: 'gg' })).resolves.toMatchObject({ items: [{ stok: 0 }] });
     await expect(svc.stok(prinsipal('FINANCE', null), { branchId: 'gg' })).resolves.toBeDefined();

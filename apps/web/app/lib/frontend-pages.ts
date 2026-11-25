@@ -332,7 +332,7 @@ export const frontendPages: FrontendPageDefinition[] = [
     label: 'Stok minuman',
     shortLabel: 'Stok minuman',
     description:
-      'Master barang minuman, stok per cabang, barang masuk (otomatis jadi pengeluaran) dan keluar (dijual atau dipakai owner).',
+      'Catat beli dan jual minuman per cabang. Pembelian jadi pengeluaran, penjualan masuk Penjualan minuman.',
     group: 'Penjualan & Keuangan',
     capabilities: ['inventory:read', 'inventory:record', 'inventory:manage'],
     mutationCapabilities: ['inventory:record', 'inventory:manage'],

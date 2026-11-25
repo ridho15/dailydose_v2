@@ -59,9 +59,17 @@ export const browserStokMinumanClient: StokMinumanClient = {
   ubahBarang: (id, input) => apiFetch(`/drinks/${q(id)}`, { method: 'PATCH', body: JSON.stringify(input), label: 'Menyimpan barang…' }),
 };
 
+/** Nama aksi di formulir. Admin hanya melihat Beli barang dan Jual. */
 export const LABEL_JENIS: Record<JenisMutasi, string> = {
-  MASUK: 'Barang masuk',
-  DIJUAL: 'Dijual',
+  MASUK: 'Beli barang',
+  DIJUAL: 'Jual',
+  DIPAKAI_OWNER: 'Dipakai owner',
+};
+
+/** Nama catatan di riwayat. */
+export const LABEL_RIWAYAT: Record<JenisMutasi, string> = {
+  MASUK: 'Dibeli',
+  DIJUAL: 'Terjual',
   DIPAKAI_OWNER: 'Dipakai owner',
 };
 
@@ -82,6 +90,7 @@ export function pesanGalatStok(error: unknown): string {
   if (code === 'DRINK_STOCK_UNAVAILABLE')
     return 'Fitur stok minuman belum aktif di server (tabel barang_minuman dan mutasi_stok_minuman belum dibuat). Hubungi pengembang.';
   if (code === 'DRINK_NAME_TAKEN') return 'Nama barang itu sudah ada. Pakai nama lain atau ubah barang yang sudah ada.';
+  if (code === 'DRINK_PRICE_NOT_SET') return 'Harga jual barang ini belum diisi. Minta Super Owner mengisinya di Master barang.';
   if (code === 'DRINK_INACTIVE') return 'Barang ini nonaktif. Aktifkan dulu di Master barang sebelum mencatat barang masuk.';
   if (code === 'FORBIDDEN') return 'Anda tidak punya akses ke stok cabang ini.';
   if (detail?.field === 'hargaSatuanRp')
@@ -148,8 +157,8 @@ export function StokMinumanView({ client = browserStokMinumanClient }: { client?
       <header className="grid gap-1">
         <h1 className="m-0 text-xl font-semibold text-dd-ink sm:text-2xl">Stok Minuman</h1>
         <p className="m-0 text-[15px] text-dd-muted">
-          Barang masuk otomatis jadi pengeluaran cabang di Jurnal kas. Barang keluar dicatat sebagai dijual (masuk laba) atau
-          dipakai owner.
+          Catat pembelian dan penjualan minuman. Pembelian otomatis jadi pengeluaran cabang; penjualan masuk ke Penjualan
+          minuman dengan harga jual yang ditetapkan Super Owner.
         </p>
       </header>
 
@@ -211,6 +220,7 @@ export function StokMinumanView({ client = browserStokMinumanClient }: { client?
           client={client}
           branchId={branchId}
           barang={(stok ?? []).filter((s) => s.barang.aktif || s.stok > 0)}
+          bolehDipakaiOwner={bolehKelola}
           onBerhasil={(pesan) => {
             setGalat('');
             setInfo(pesan);
@@ -252,7 +262,7 @@ function TabelStok({
   if (stok.length === 0)
     return (
       <p className="m-0 rounded-dd-lg border border-dd-line bg-white p-4 text-[15px] text-dd-muted">
-        Belum ada barang minuman. Manager atau Super Owner menambahkannya di tab Master barang.
+        Belum ada barang minuman. Super Owner menambahkannya di tab Master barang, lengkap dengan harga jualnya.
       </p>
     );
   return (
@@ -275,10 +285,10 @@ function TabelStok({
           </div>
           {onCepat && (
             <div className="grid grid-cols-2 gap-2 sm:flex">
-              <Button variant="secondary" disabled={!barang.aktif} onClick={() => onCepat('MASUK', barang.id)} aria-label={`Catat barang masuk ${barang.nama}`}>
-                + Masuk
+              <Button variant="secondary" disabled={!barang.aktif} onClick={() => onCepat('MASUK', barang.id)} aria-label={`Catat pembelian ${barang.nama}`}>
+                + Beli
               </Button>
-              <Button variant="secondary" disabled={n <= 0} onClick={() => onCepat('DIJUAL', barang.id)} aria-label={`Catat jual ${barang.nama}`}>
+              <Button variant="secondary" disabled={n <= 0 || !barang.hargaJualRp} onClick={() => onCepat('DIJUAL', barang.id)} aria-label={`Catat jual ${barang.nama}`}>
                 Jual
               </Button>
             </div>
@@ -294,6 +304,7 @@ function FormCatat({
   client,
   branchId,
   barang,
+  bolehDipakaiOwner,
   onBerhasil,
   onGalat,
 }: {
@@ -301,9 +312,11 @@ function FormCatat({
   client: StokMinumanClient;
   branchId: string;
   barang: Array<{ barang: BarangMinuman; stok: number }>;
+  bolehDipakaiOwner: boolean;
   onBerhasil: (pesan: string) => void;
   onGalat: (pesan: string) => void;
 }) {
+  const pilihanJenis: JenisMutasi[] = bolehDipakaiOwner ? ['MASUK', 'DIJUAL', 'DIPAKAI_OWNER'] : ['MASUK', 'DIJUAL'];
   const [jenis, setJenis] = useState<JenisMutasi>(awal.jenis);
   const [barangId, setBarangId] = useState(awal.barangId);
   // Dari tombol cepat (Masuk/Jual) jumlah langsung 1, jadi jual satu botol cukup dua klik.
@@ -315,7 +328,9 @@ function FormCatat({
 
   const pilihan = barang.find((b) => b.barang.id === barangId);
   const n = Number(jumlah);
-  const h = harga === '' ? (jenis === 'DIJUAL' ? (pilihan?.barang.hargaJualRp ?? NaN) : NaN) : Number(harga);
+  // Harga jual selalu dari master barang (ditetapkan Super Owner); hanya harga beli yang diisi admin.
+  const hargaJual = pilihan?.barang.hargaJualRp ?? null;
+  const h = jenis === 'DIJUAL' ? (hargaJual ?? NaN) : harga === '' ? NaN : Number(harga);
   const butuhHarga = jenis !== 'DIPAKAI_OWNER';
   const jumlahValid = Number.isInteger(n) && n >= 1 && n <= 10_000;
   const hargaValid = !butuhHarga || (Number.isInteger(h) && (jenis === 'DIJUAL' ? h > 0 : h >= 0));
@@ -332,12 +347,17 @@ function FormCatat({
         barangId,
         jenis,
         jumlah: n,
-        ...(butuhHarga ? { hargaSatuanRp: h } : {}),
+        ...(jenis === 'MASUK' ? { hargaSatuanRp: h } : {}),
         tanggal,
         ...(catatan.trim() ? { catatan: catatan.trim() } : {}),
       });
-      const nilai = jenis === 'MASUK' ? ` senilai ${rupiah(hasil.totalRp)} dan masuk pengeluaran cabang` : jenis === 'DIJUAL' ? ` senilai ${rupiah(hasil.totalRp)}` : '';
-      onBerhasil(`${LABEL_JENIS[jenis]}: ${hasil.namaBarang} ${n} ${hasil.satuan}${nilai}. Stok sekarang ${hasil.stokSesudah}.`);
+      const nilai =
+        jenis === 'MASUK'
+          ? ` senilai ${rupiah(hasil.totalRp)}, tercatat sebagai pengeluaran cabang`
+          : jenis === 'DIJUAL'
+            ? ` senilai ${rupiah(hasil.totalRp)}, masuk Penjualan minuman`
+            : '';
+      onBerhasil(`${LABEL_RIWAYAT[jenis]}: ${hasil.namaBarang} ${n} ${hasil.satuan}${nilai}. Stok sekarang ${hasil.stokSesudah}.`);
       setJumlah('');
       setHarga('');
       setCatatan('');
@@ -353,7 +373,7 @@ function FormCatat({
       <fieldset className="m-0 grid gap-2 border-0 p-0 sm:col-span-2">
         <legend className="mb-2 text-[15px] font-semibold text-dd-ink">Jenis</legend>
         <div className="grid grid-cols-3 gap-2 sm:flex sm:flex-wrap">
-          {(Object.keys(LABEL_JENIS) as JenisMutasi[]).map((j) => (
+          {pilihanJenis.map((j) => (
             <label
               key={j}
               className={`flex min-h-12 cursor-pointer items-center justify-center gap-2 rounded-dd-md border px-2 text-center text-[15px] leading-tight sm:justify-start sm:px-4 sm:text-left ${
@@ -409,20 +429,30 @@ function FormCatat({
           </p>
         )}
       </div>
-      {butuhHarga && (
+      {jenis === 'MASUK' && (
         <TextInput
-          label={jenis === 'MASUK' ? 'Harga beli per satuan (Rp)' : 'Harga jual per satuan (Rp)'}
+          label="Harga beli per satuan (Rp)"
           inputMode="numeric"
           value={harga}
-          placeholder={jenis === 'DIJUAL' && pilihan?.barang.hargaJualRp ? String(pilihan.barang.hargaJualRp) : undefined}
           onChange={(e) => setHarga(e.target.value.replace(/\D/g, ''))}
           className={INPUT}
-          description={
-            jenis === 'DIJUAL' && pilihan?.barang.hargaJualRp
-              ? `Kosongkan untuk memakai harga jual ${rupiah(pilihan.barang.hargaJualRp)}.`
-              : undefined
-          }
+          description="Sesuai nota pembelian. Harga jual tetap mengikuti master barang."
         />
+      )}
+      {jenis === 'DIJUAL' && pilihan && (
+        <div className="grid content-start gap-1">
+          <span className="text-sm font-semibold text-dd-ink">Harga jual</span>
+          {hargaJual ? (
+            <p className="m-0 text-[15px] text-dd-ink">
+              <strong className="tabular-nums">{rupiah(hargaJual)}</strong> / {pilihan.barang.satuan}
+              <span className="block text-sm text-dd-muted">Ditetapkan Super Owner</span>
+            </p>
+          ) : (
+            <p role="alert" className="m-0 text-sm font-medium text-dd-danger">
+              Harga jual barang ini belum diisi. Minta Super Owner mengisinya di Master barang.
+            </p>
+          )}
+        </div>
       )}
       <DateInput label="Tanggal" value={tanggal} max={hariIniWib()} onChange={(e) => setTanggal(e.target.value)} className={INPUT} />
       <TextInput
@@ -440,7 +470,7 @@ function FormCatat({
           </span>
         )}
         <Button type="submit" disabled={!siap} loading={sibuk} className="w-full sm:w-auto">
-          Catat {LABEL_JENIS[jenis].toLowerCase()}
+          {jenis === 'MASUK' ? 'Catat pembelian' : jenis === 'DIJUAL' ? 'Catat penjualan' : 'Catat dipakai owner'}
         </Button>
       </div>
       <p className="m-0 text-sm text-dd-muted sm:col-span-2">
@@ -498,7 +528,7 @@ function Riwayat({ client, branchId }: { client: StokMinumanClient; branchId: st
                 <span className="text-sm text-dd-muted">{m.tanggal}</span>
               </div>
               <span className="text-sm text-dd-muted">
-                {LABEL_JENIS[m.jenis]}
+                {LABEL_RIWAYAT[m.jenis]}
                 {m.totalRp > 0 ? ` · ${rupiah(m.totalRp)}` : ''}
                 {m.oleh ? ` · oleh ${m.oleh}` : ''}
                 {m.catatan ? ` · ${m.catatan}` : ''}
@@ -580,7 +610,7 @@ function MasterBarang({
         <TextInput label="Nama barang" value={form.nama} maxLength={80} onChange={(e) => setForm((f) => ({ ...f, nama: e.target.value }))} className={INPUT} />
         <TextInput label="Satuan" value={form.satuan} maxLength={20} onChange={(e) => setForm((f) => ({ ...f, satuan: e.target.value }))} className={INPUT} />
         <TextInput
-          label="Harga jual (Rp, opsional)"
+          label="Harga jual (Rp)"
           inputMode="numeric"
           value={form.harga}
           onChange={(e) => setForm((f) => ({ ...f, harga: e.target.value.replace(/\D/g, '') }))}
