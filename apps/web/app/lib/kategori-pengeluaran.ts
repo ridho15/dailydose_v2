@@ -26,5 +26,7 @@ export function labelKategori(code: string): string {
   if (code === 'CASH') return 'Tunai';
   if (code === 'QRIS') return 'QRIS';
   if (code === 'OTHER') return 'Lain-lain';
+  // Dibuat otomatis dari Stok Minuman saat barang masuk (tidak dipilih manual di formulir).
+  if (code === 'MINUMAN') return 'Beli stok minuman';
   return code.charAt(0) + code.slice(1).toLowerCase().replaceAll('_', ' ');
 }

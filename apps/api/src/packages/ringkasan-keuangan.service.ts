@@ -1,4 +1,5 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
+import { penjualanMinuman } from './stok-minuman.service';
 import { PrismaService } from '../database/prisma.service';
 import { bacaOpsional } from '../foundation/tabel-opsional';
 import type { SessionPrincipal } from '../identity/identity.service';
@@ -32,6 +33,8 @@ export interface AngkaCabang {
   /** Bagian payroll dari koreksi jam; bisa negatif. */
   koreksiPayrollRp: number;
   pengeluaranRp: number;
+  /** Penjualan minuman (stok minuman keluar karena dijual); menambah laba, bukan omset paket. */
+  penjualanMinumanRp: number;
   /** Modal bersih yang mengurangi laba: modal paket terjual − pembalikan (atau sesi terpakai untuk bulan lama). */
   modalSesiRp: number;
   /** Sesi paket yang terjual (lunas) bulan ini; aturan mulai November 2026. */
@@ -160,7 +163,7 @@ export class RingkasanKeuanganService {
     const ids = cabangList.map((c) => c.id);
     const lingkup = { branchId: { in: ids } };
 
-    const [pembelian, biaya, gaji, modal] = await Promise.all([
+    const [pembelian, biaya, gaji, modal, minuman] = await Promise.all([
       this.db.pembelian.findMany({
         where: {
           ...lingkup,
@@ -179,6 +182,7 @@ export class RingkasanKeuanganService {
         fromDate: range.fromDate,
         untilExclusive: range.untilExclusive,
       }),
+      penjualanMinuman(this.db, { branchIds: ids, fromDate: range.fromDate, untilExclusive: range.untilExclusive }),
     ]);
     const kasPayroll = await this.kasPayroll(cabangList, period, { gaji, modal });
 
@@ -200,6 +204,7 @@ export class RingkasanKeuanganService {
       const koreksiPayrollRp = gaji.koreksiPerCabang.get(c.id) ?? 0;
       const payrollRp = gaji.perCabang.get(c.id) ?? 0;
       const modalRp = modal.perCabang.get(c.id) ?? 0;
+      const penjualanMinumanRp = minuman.perCabang.get(c.id) ?? 0;
 
       return {
         branchId: c.id,
@@ -208,13 +213,14 @@ export class RingkasanKeuanganService {
         payrollRp,
         koreksiPayrollRp,
         pengeluaranRp,
+        penjualanMinumanRp,
         modalSesiRp: modalRp,
         sesiTerjual: modal.sesiTerjualPerCabang.get(c.id) ?? 0,
         modalTerjualRp: modal.modalTerjualPerCabang.get(c.id) ?? 0,
         modalBalikRp: modal.modalBalikPerCabang.get(c.id) ?? 0,
         sesiTerpakai: modal.sesiTerpakaiPerCabang.get(c.id) ?? 0,
         sesiTanpaModal: modal.sesiTanpaModalPerCabang.get(c.id) ?? 0,
-        profitRp: omsetRp - modalRp - pengeluaranRp,
+        profitRp: omsetRp + penjualanMinumanRp - modalRp - pengeluaranRp,
         targetRp: c.monthlyTargetRp,
         transaksi: beli.length,
         kelasSelesai: gaji.kelasPerCabang.get(c.id) ?? 0,
@@ -242,6 +248,7 @@ export class RingkasanKeuanganService {
         payrollRp: jumlah((c) => c.payrollRp),
         koreksiPayrollRp: jumlah((c) => c.koreksiPayrollRp),
         pengeluaranRp: jumlah((c) => c.pengeluaranRp),
+        penjualanMinumanRp: jumlah((c) => c.penjualanMinumanRp),
         modalSesiRp: jumlah((c) => c.modalSesiRp),
         sesiTerjual: jumlah((c) => c.sesiTerjual),
         modalTerjualRp: jumlah((c) => c.modalTerjualRp),

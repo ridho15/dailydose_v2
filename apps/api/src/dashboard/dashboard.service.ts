@@ -1,4 +1,5 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
+import { penjualanMinuman } from '../packages/stok-minuman.service';
 import { PurchaseStatus } from '@prisma/client';
 import type { SessionPrincipal } from '../identity/identity.service';
 import { ApiProblem } from '../identity/security';
@@ -364,6 +365,12 @@ export class DashboardService {
       fromDate: new Date(`${params.from}T00:00:00.000Z`),
       untilExclusive: new Date(Date.parse(`${params.until}T00:00:00.000Z`) + 86_400_000),
     });
+    // Penjualan minuman (stok minuman keluar karena dijual) menambah laba; pembeliannya sudah biaya lain.
+    const minuman = await penjualanMinuman(this.db, {
+      branchIds: params.branchIds,
+      fromDate: new Date(`${params.from}T00:00:00.000Z`),
+      untilExclusive: new Date(Date.parse(`${params.until}T00:00:00.000Z`) + 86_400_000),
+    });
     let totalGross = 0;
     let totalRevenue = 0;
     const branchMap = new Map<string, { gross: number; revenue: number }>();
@@ -465,7 +472,7 @@ export class DashboardService {
       totalOtherCost += branchOtherCost;
 
       const branchModal = modal.perCabang.get(branchId) ?? 0;
-      const branchGrossProfit = bData.revenue - branchModal;
+      const branchGrossProfit = bData.revenue + (minuman.perCabang.get(branchId) ?? 0) - branchModal;
       const branchGrossMargin =
         bData.revenue > 0 ? Math.round((branchGrossProfit / bData.revenue) * 1000) / 10 : 0;
       const profit = branchGrossProfit - branchOtherCost;
@@ -487,7 +494,7 @@ export class DashboardService {
     });
 
     const totalDiscount = Math.max(0, totalGross - totalRevenue);
-    const grossProfit = totalRevenue - modal.totalRp;
+    const grossProfit = totalRevenue + minuman.totalRp - modal.totalRp;
     const grossMarginPercent =
       totalRevenue > 0 ? Math.round((grossProfit / totalRevenue) * 1000) / 10 : 0;
     const totalProfit = grossProfit - totalOtherCost;

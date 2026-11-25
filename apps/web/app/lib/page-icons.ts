@@ -1,5 +1,6 @@
 import {
   ScanLine,
+  CupSoda,
   Activity,
   Bell,
   BookOpen,
@@ -51,6 +52,7 @@ export const pageIcons: Record<string, LucideIcon> = {
   '/workspace/check-in': SquareCheck,
   '/workspace/renewal': Repeat2,
   '/workspace/kas': Wallet,
+  '/workspace/stok-minuman': CupSoda,
   '/workspace/koreksi-jam': ClockArrowUp,
   '/workspace/ulasan': MessageSquareHeart,
   '/workspace/reminders': MessageSquare,

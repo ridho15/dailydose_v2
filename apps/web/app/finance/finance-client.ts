@@ -206,6 +206,8 @@ export interface OtherCostReportData {
 }
 
 export interface ProfitData {
+  /** Penjualan minuman (stok keluar karena dijual); menambah laba kotor. */
+  penjualanMinumanRp?: number;
   period: string;
   from: string;
   until: string;

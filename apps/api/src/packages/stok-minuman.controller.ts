@@ -1,0 +1,46 @@
+import { Body, Controller, Get, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { AuthGuard, type AuthenticatedRequest } from '../identity/auth.guard';
+import { StokMinumanService } from './stok-minuman.service';
+
+/** Master barang minuman, stok per cabang, dan barang masuk/keluar. */
+@Controller('drinks')
+@UseGuards(AuthGuard)
+export class StokMinumanController {
+  constructor(private readonly stok: StokMinumanService) {}
+
+  @Get()
+  daftar(@Req() req: AuthenticatedRequest, @Query('semua') semua?: string) {
+    return this.stok.daftarBarang(req.principal, { semua });
+  }
+
+  @Post()
+  buat(@Req() req: AuthenticatedRequest, @Body() body: Record<string, unknown>) {
+    return this.stok.buatBarang(req.principal, body ?? {});
+  }
+
+  @Get('stock')
+  stokCabang(@Req() req: AuthenticatedRequest, @Query('branchId') branchId?: string) {
+    return this.stok.stok(req.principal, { branchId });
+  }
+
+  @Get('movements')
+  riwayat(
+    @Req() req: AuthenticatedRequest,
+    @Query('branchId') branchId?: string,
+    @Query('barangId') barangId?: string,
+    @Query('cursor') cursor?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.stok.riwayat(req.principal, { branchId, barangId, cursor, limit });
+  }
+
+  @Post('movements')
+  catat(@Req() req: AuthenticatedRequest, @Body() body: Record<string, unknown>) {
+    return this.stok.catat(req.principal, body ?? {});
+  }
+
+  @Patch(':id')
+  ubah(@Req() req: AuthenticatedRequest, @Param('id') id: string, @Body() body: Record<string, unknown>) {
+    return this.stok.ubahBarang(req.principal, id, body ?? {});
+  }
+}

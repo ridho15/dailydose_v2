@@ -1468,3 +1468,41 @@ model PetugasCheckin {
   @@index([branchId])
   @@map("petugas_checkin")
 }
+
+/// Master barang minuman (stok minuman, 25 November 2026). Berlaku untuk semua cabang; stoknya per cabang
+/// dihitung dari `mutasi_stok_minuman`. Tanpa relasi, sesuai aturan tabel baru.
+model BarangMinuman {
+  id          String   @id @db.Char(36)
+  nama        String   @db.VarChar(80)
+  satuan      String   @db.VarChar(20)
+  /// Harga jual bawaan per satuan; boleh diubah saat mencatat penjualan.
+  hargaJualRp Int?
+  aktif       Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("barang_minuman")
+}
+
+/// Barang minuman masuk dan keluar per cabang. MASUK otomatis membuat pengeluaran kas (`other_cost`,
+/// kategori MINUMAN); DIJUAL menjadi pemasukan penjualan minuman di laporan laba; DIPAKAI_OWNER tanpa nilai.
+model MutasiStokMinuman {
+  id            String   @id @db.Char(36)
+  barangId      String   @db.Char(36)
+  branchId      String   @db.Char(36)
+  /// MASUK, DIJUAL, DIPAKAI_OWNER
+  jenis         String   @db.VarChar(20)
+  jumlah        Int
+  hargaSatuanRp Int      @default(0)
+  totalRp       Int      @default(0)
+  tanggal       DateTime @db.Date
+  catatan       String?  @db.VarChar(200)
+  otherCostId   String?  @db.Char(36)
+  createdById   String?  @db.Char(36)
+  createdAt     DateTime @default(now())
+
+  @@index([branchId, barangId])
+  @@index([branchId, tanggal])
+  @@index([jenis, tanggal])
+  @@map("mutasi_stok_minuman")
+}

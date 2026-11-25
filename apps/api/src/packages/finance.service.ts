@@ -1,4 +1,5 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
+import { penjualanMinuman } from './stok-minuman.service';
 import { createHash } from 'node:crypto';
 import { PrismaService } from '../database/prisma.service';
 import { AuditService } from '../foundation/audit.service';
@@ -392,26 +393,26 @@ export class FinanceService {
       principal.capabilities.includes('branch:all') ||
       principal.roles.some((r) => ['SUPER_OWNER', 'FINANCE'].includes(r.role as string));
 
-    const [omsetRes, realtimeRes, otherCostRes, modal] = await Promise.all([
+    const branchIds = input.branchId ? [input.branchId] : isGlobal ? null : principal.branchIds;
+    const [omsetRes, realtimeRes, otherCostRes, modal, minuman] = await Promise.all([
       this.omsetReport(principal, scope),
       this.realtimeInstructorCostReport(principal, scope),
       this.otherCostReport(principal, scope),
       hitungModalSesi(this.db, {
-        branchIds: input.branchId
-          ? [input.branchId]
-          : isGlobal
-            ? null
-            : principal.branchIds,
+        branchIds,
         fromDate: range.fromDate,
         untilExclusive: range.untilExclusive,
       }),
+      penjualanMinuman(this.db, { branchIds, fromDate: range.fromDate, untilExclusive: range.untilExclusive }),
     ]);
 
     const omsetRp = omsetRes.totalOmsetRp;
     // Honor instruktur (dibayar dari kas payroll simpanan) hanya ditampilkan; laba memakai modal.
     const costRealtimeRp = realtimeRes.totalInstructorCostRp;
     const otherCostRp = otherCostRes.totalOtherCostRp;
-    const grossProfitRp = omsetRp - modal.totalRp;
+    // Penjualan minuman menambah laba kotor; pembelian stoknya sudah tercatat di biaya lain (kategori MINUMAN).
+    const penjualanMinumanRp = minuman.totalRp;
+    const grossProfitRp = omsetRp + penjualanMinumanRp - modal.totalRp;
     const netProfitRealtimeRp = grossProfitRp - otherCostRp;
     const margin = (value: number) => (omsetRp > 0 ? Math.round((value / omsetRp) * 1000) / 10 : 0);
 
@@ -430,6 +431,7 @@ export class FinanceService {
       sesiTerpakai: modal.sesiTerpakai,
       sesiTanpaModal: modal.sesiTanpaModal,
       kelasBelumSelesai: realtimeRes.kelasBelumSelesai,
+      penjualanMinumanRp,
       grossProfitRp,
       grossMarginPercent: margin(grossProfitRp),
       otherCostRp,

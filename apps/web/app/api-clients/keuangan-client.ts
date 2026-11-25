@@ -7,6 +7,8 @@ export interface AngkaCabang {
   payrollRp: number;
   koreksiPayrollRp: number;
   pengeluaranRp: number;
+  /** Penjualan minuman (stok keluar karena dijual); menambah laba. */
+  penjualanMinumanRp?: number;
   /** Modal yang mengurangi laba: modal paket terjual − pembalikan (bulan lama: sesi terpakai x modal per sesi). */
   modalSesiRp: number;
   /** Sesi paket yang terjual bulan ini (aturan mulai November 2026). */

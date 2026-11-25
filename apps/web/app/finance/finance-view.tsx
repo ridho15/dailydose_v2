@@ -597,6 +597,12 @@ export function FinanceView({
                         - {formatRupiah(profitData.modalSesiRp ?? 0)}
                       </span>
                     </div>
+                    {(profitData.penjualanMinumanRp ?? 0) > 0 && (
+                      <div className="flex justify-between pt-2">
+                        <span>(+) Penjualan minuman:</span>
+                        <span className="font-semibold">{formatRupiah(profitData.penjualanMinumanRp ?? 0)}</span>
+                      </div>
+                    )}
                     <div className="flex justify-between pt-2 font-medium bg-dd-forest/5 px-2 py-1.5 rounded-dd-sm">
                       <span className="text-dd-forest">(=) Laba Kotor (Gross Profit):</span>
                       <span className="font-bold text-dd-forest">

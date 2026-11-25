@@ -275,7 +275,7 @@ export function OwnerHome({
                   {rp(ringkasan.total.profitRp)}
                 </p>
               </div>
-              <dl className="m-0 grid gap-3 sm:grid-cols-3">
+              <dl className={`m-0 grid gap-3 ${(ringkasan.total.penjualanMinumanRp ?? 0) > 0 ? 'sm:grid-cols-2' : 'sm:grid-cols-3'}`}>
                 {[
                   {
                     tanda: '',
@@ -287,6 +287,9 @@ export function OwnerHome({
                       return capaian === null ? transaksi : `${transaksi} · ${capaian}% dari target`;
                     })(),
                   },
+                  ...((ringkasan.total.penjualanMinumanRp ?? 0) > 0
+                    ? [{ tanda: '+', label: 'Penjualan minuman', nilai: ringkasan.total.penjualanMinumanRp ?? 0, catatan: 'Stok minuman yang dijual' }]
+                    : []),
                   { tanda: '−', label: labelModal(ringkasan), nilai: ringkasan.total.modalSesiRp ?? 0, catatan: catatanModal(ringkasan) },
                   { tanda: '−', label: 'Pengeluaran', nilai: ringkasan.total.pengeluaranRp, catatan: 'Biaya cabang bulan ini' },
                 ].map((b) => (

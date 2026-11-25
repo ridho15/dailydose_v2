@@ -315,6 +315,20 @@ export const frontendPages: FrontendPageDefinition[] = [
     roleRelevance: ['SUPER_OWNER', 'OWNER', 'ADMIN', 'MANAGER', 'FINANCE'],
   },
   {
+    href: '/workspace/stok-minuman',
+    label: 'Stok minuman',
+    shortLabel: 'Stok minuman',
+    description:
+      'Master barang minuman, stok per cabang, barang masuk (otomatis jadi pengeluaran) dan keluar (dijual atau dipakai owner).',
+    group: 'Penjualan & Keuangan',
+    capabilities: ['inventory:read', 'inventory:record', 'inventory:manage'],
+    mutationCapabilities: ['inventory:record', 'inventory:manage'],
+    priority: 3,
+    branchScope: 'topbar',
+    accent: 'info',
+    roleRelevance: ['SUPER_OWNER', 'OWNER', 'ADMIN', 'MANAGER', 'FINANCE'],
+  },
+  {
     href: '/workspace/koreksi-jam',
     label: 'Koreksi jam instruktur',
     shortLabel: 'Koreksi jam',
@@ -622,6 +636,7 @@ export const MENU_PERAN: Record<PeranMenu, { utama: readonly MenuUtama[]; lainny
       { href: '/workspace/classes', label: 'Jadwal' },
       { href: '/customers', label: 'Member' },
       { href: '/workspace/kas', label: 'Pengeluaran' },
+      { href: '/workspace/stok-minuman', label: 'Stok minuman' },
     ],
     lainnyaLabel: 'Lainnya',
   },

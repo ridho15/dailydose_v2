@@ -15,6 +15,10 @@ const SUPER_OWNER_CAPABILITIES: readonly string[] = [
     // Membuat dan menonaktifkan akun Petugas Check-in (Manager juga, untuk cabangnya).
     'checkin-staff:manage',
     'attendance:desk',
+    // Stok minuman: lihat, catat masuk/keluar, kelola master barang.
+    'inventory:read',
+    'inventory:record',
+    'inventory:manage',
     'automation:read',
     'automation:run',
     'notification:manage',
@@ -148,6 +152,9 @@ export const ROLE_CAPABILITIES: Record<ApplicationRole, readonly string[]> = {
     'attendance:manage',
     // Admin mencatat pembelian barang cabangnya; mengubah atau menghapus tetap wewenang Finance/Owner.
     'expense:create',
+    // Stok minuman cabang: lihat dan catat barang masuk/keluar (master barang tetap Manager).
+    'inventory:read',
+    'inventory:record',
   ],
   MANAGER: [
     'checkin-staff:manage',
@@ -182,6 +189,9 @@ export const ROLE_CAPABILITIES: Record<ApplicationRole, readonly string[]> = {
     'attendance:read',
     'attendance:manage',
     'expense:create',
+    'inventory:read',
+    'inventory:record',
+    'inventory:manage',
     'instructor:hours:adjust',
     'instructor-review:read',
     'booking:late-cancel:decide',
@@ -208,6 +218,7 @@ export const ROLE_CAPABILITIES: Record<ApplicationRole, readonly string[]> = {
     'attendance:read',
     'instructor-review:read',
     'booking:late-cancel:decide',
+    'inventory:read',
   ],
   SUPER_OWNER: SUPER_OWNER_CAPABILITIES,
   // Hanya layar meja check-in: pindai QR, foto member hari itu, dan catat kehadiran manual.
@@ -226,5 +237,6 @@ export const ROLE_CAPABILITIES: Record<ApplicationRole, readonly string[]> = {
     'voucher:manage',
     'ledger:read',
     'ledger:adjust:read',
+    'inventory:read',
   ],
 };

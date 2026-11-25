@@ -421,6 +421,45 @@ CREATE TABLE `petugas_checkin` (
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 ```
 
+`barang_minuman` dan `mutasi_stok_minuman` (stok minuman, 25 November 2026). Master barang minuman dan catatan
+barang masuk/keluar per cabang. Barang masuk otomatis menulis pengeluaran kas (`other_cost`, kategori `MINUMAN`);
+penjualan minuman ikut dihitung di laporan laba. **Tanpa kedua tabel ini menu Stok Minuman menjawab 503** dan laporan
+laba berjalan seperti biasa (penjualan minuman Rp0).
+
+```sql
+CREATE TABLE `barang_minuman` (
+    `id` CHAR(36) NOT NULL,
+    `nama` VARCHAR(80) NOT NULL,
+    `satuan` VARCHAR(20) NOT NULL,
+    `hargaJualRp` INTEGER NULL,
+    `aktif` BOOLEAN NOT NULL DEFAULT true,
+    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `updatedAt` DATETIME(3) NOT NULL,
+
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+CREATE TABLE `mutasi_stok_minuman` (
+    `id` CHAR(36) NOT NULL,
+    `barangId` CHAR(36) NOT NULL,
+    `branchId` CHAR(36) NOT NULL,
+    `jenis` VARCHAR(20) NOT NULL,
+    `jumlah` INTEGER NOT NULL,
+    `hargaSatuanRp` INTEGER NOT NULL DEFAULT 0,
+    `totalRp` INTEGER NOT NULL DEFAULT 0,
+    `tanggal` DATE NOT NULL,
+    `catatan` VARCHAR(200) NULL,
+    `otherCostId` CHAR(36) NULL,
+    `createdById` CHAR(36) NULL,
+    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+
+    INDEX `mutasi_stok_minuman_branchId_barangId_idx`(`branchId`, `barangId`),
+    INDEX `mutasi_stok_minuman_branchId_tanggal_idx`(`branchId`, `tanggal`),
+    INDEX `mutasi_stok_minuman_jenis_tanggal_idx`(`jenis`, `tanggal`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+```
+
 ## Akun HR Group (SSO)
 
 Tombol "Masuk dengan Akun HR Group" di halaman masuk dan credential bridge untuk migrasi member lama. Kontraknya
