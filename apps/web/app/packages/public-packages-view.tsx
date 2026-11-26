@@ -164,16 +164,19 @@ export function sortPackages(items: PublicPackage[], sort: PackageSortOption): P
 export function groupPackages(items: PublicPackage[]) {
   const introductory: PublicPackage[] = [];
   const routine: PublicPackage[] = [];
+  const extensions: PublicPackage[] = [];
 
   for (const item of items) {
-    if (item.sessionCount >= 1 && item.sessionCount <= 3) {
+    if (item.perpanjanganMasaAktif || item.sessionCount === 0) {
+      extensions.push(item);
+    } else if (item.sessionCount >= 1 && item.sessionCount <= 3) {
       introductory.push(item);
     } else {
       routine.push(item);
     }
   }
 
-  return { introductory, routine };
+  return { introductory, routine, extensions };
 }
 
 function syncCatalogQuery(
@@ -410,7 +413,7 @@ export function PublicPackagesView({
   const showCatalogState =
     status !== 'ready' || !branchId || (branchId.length > 0 && visible.length === 0);
 
-  const { introductory, routine } = useMemo(() => groupPackages(visible), [visible]);
+  const { introductory, routine, extensions } = useMemo(() => groupPackages(visible), [visible]);
   const currentBranch = branches.find((b) => b.id === branchId);
 
   return (
@@ -855,6 +858,36 @@ export function PublicPackagesView({
                       key={item.id}
                       item={item}
                       isCheapest={item.id === cheapestPackageId}
+                      ctaLabel={ctaLabel}
+                      audience={audience}
+                      classTypeId={classTypeId}
+                      continuationSlot={continuationSlot}
+                    />
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {/* Grup 3: PERPANJANGAN MASA AKTIF (0 SESI) */}
+            {extensions.length > 0 && (
+              <section aria-labelledby="heading-perpanjangan">
+                <div className="flex items-center gap-2 border-b border-dd-line/60 pb-2 mb-4">
+                  <h2
+                    id="heading-perpanjangan"
+                    className="text-[13px] font-bold text-dd-forest"
+                  >
+                    PERPANJANGAN MASA AKTIF
+                  </h2>
+                  <span className="text-xs text-dd-muted font-medium">
+                    ({extensions.length} paket)
+                  </span>
+                </div>
+                <div className="grid gap-4 sm:gap-5 md:grid-cols-2">
+                  {extensions.map((item) => (
+                    <PackageCard
+                      key={item.id}
+                      item={item}
+                      isCheapest={false}
                       ctaLabel={ctaLabel}
                       audience={audience}
                       classTypeId={classTypeId}

@@ -785,4 +785,44 @@ describe('payment decision safeguards', () => {
       ),
     );
   });
+
+  it('shows extension target info and navigates to the extended customer package detail after approving', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: vi.fn().mockReturnValue('blob:proof') });
+    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: vi.fn() });
+    const ext = {
+      targetCustomerPackageId: 'cp-ext-1',
+      targetPackageName: 'Reformer 8 Sesi',
+      targetValidUntil: '2026-12-01T16:59:59.000Z',
+      days: 30,
+      appliedAt: null,
+      validUntilBefore: null,
+      validUntilAfter: null,
+      rolledBackAt: null,
+    };
+    const baseClient = reviewFake();
+    const client = reviewFake({
+      detail: vi.fn().mockResolvedValue({
+        ...(await baseClient.detail('purchase-1')),
+        extension: ext,
+      }),
+      approve: vi.fn().mockResolvedValue({
+        purchase: { id: 'purchase-1', status: 'PAID', version: 2, auditReference: null },
+        customerPackage: null,
+        ledgerEntry: null,
+        extension: { ...ext, appliedAt: '2026-11-26T07:00:00.000Z', validUntilAfter: '2026-12-31T16:59:59.000Z' },
+      }),
+    });
+    renderDetail(client, 0);
+    expect(await screen.findByText('Reformer 8 Sesi')).toBeVisible();
+    expect(screen.getByText('+30 hari')).toBeVisible();
+    expect(screen.getByRole('link', { name: 'Lihat detail paket member' })).toHaveAttribute('href', '/ledger/cp-ext-1');
+
+    await user.click(screen.getByRole('button', { name: 'Preview bukti' }));
+    const image = await screen.findByRole('img', { name: /Bukti pembayaran Pelanggan Synthetic/ });
+    fireEvent.load(image);
+    await user.click(screen.getByRole('button', { name: 'Setujui pembayaran' }));
+    await vi.advanceTimersByTimeAsync(100);
+    await waitFor(() => expect(routerPush).toHaveBeenCalledWith('/ledger/cp-ext-1'));
+  });
 });

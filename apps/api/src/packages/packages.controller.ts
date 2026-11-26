@@ -519,6 +519,12 @@ export class PackagesController {
     return this.customerOrders.expireStaleOrders(r.principal, hours);
   }
   // Penjualan manual di meja (staf mencatat atas nama pelanggan; disetujui penyetuju lain).
+  @Post('purchases/assisted/price-preview') @HttpCode(200) previewAssistedSalePrice(
+    @Req() r: AuthenticatedRequest,
+    @Body() b: { branchId?: string; packageId?: string; voucherCode?: string; paymentMethod?: string },
+  ) {
+    return this.customerOrders.previewAssistedSalePrice(r.principal, b ?? {});
+  }
   @Post('purchases/assisted') async recordAssistedSale(
     @Req() r: AuthenticatedRequest,
     @Headers('idempotency-key') key: string,

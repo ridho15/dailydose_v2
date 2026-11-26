@@ -73,7 +73,7 @@ describe('PublicPackageQueryService', () => {
       expect.objectContaining({
         where: expect.objectContaining({
           status: 'ACTIVE',
-          branchId,
+          OR: [{ branchId }, { branchId: null }],
         }),
       }),
     );

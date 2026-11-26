@@ -7,12 +7,13 @@ import {
   browserAssistedSaleClient,
   type AssistedPaymentMethod,
   type AssistedSaleClient,
+  type AssistedSalePricePreview,
   type ExtensionTargetList,
   type Purchase,
 } from '@/api-clients/purchase-client';
 import { customerClient } from '../customers/customer-client';
 import { Feedback } from '../ui';
-import { Button } from '../components/actions';
+import { Button, ButtonLink } from '../components/actions';
 import { Drawer, useAppFeedback } from '../components/app-feedback';
 import {
   AsyncSearchSelect,
@@ -22,6 +23,7 @@ import {
   type SearchSelectOption,
 } from '../components/forms';
 import { formatRupiah } from '../lib/formatters';
+import { formatPaymentCode } from '../lib/order-presenters';
 import { browserOrderClient, sha256Upload } from '@/api-clients/order-client';
 import { compressImageIfNeeded } from '@/lib/image-compression';
 
@@ -73,10 +75,17 @@ export function AssistedSaleDrawer({
   const [chosenBranchId, setChosenBranchId] = useState('');
   const [targets, setTargets] = useState<TargetState>({ status: 'idle' });
   const [targetId, setTargetId] = useState('');
+  const [pricePreview, setPricePreview] = useState<{
+    status: 'idle' | 'loading' | 'ready' | 'error';
+    data?: AssistedSalePricePreview;
+    message?: string;
+  }>({ status: 'idle' });
+  const [recordedPurchase, setRecordedPurchase] = useState<Purchase | null>(null);
   const idempotencyKey = useRef<string | undefined>(undefined);
   const branchKey = branches.map((item) => item.id).join('|');
   const dirty = Boolean(
-    (!customer && customerOption) || packageOption || voucherCode.trim() || note.trim() || Boolean(proofFile),
+    !recordedPurchase &&
+      ((!customer && customerOption) || packageOption || voucherCode.trim() || note.trim() || Boolean(proofFile)),
   );
 
   useEffect(() => {
@@ -89,6 +98,8 @@ export function AssistedSaleDrawer({
     setNote('');
     setProofFile(null);
     setFailure('');
+    setPricePreview({ status: 'idle' });
+    setRecordedPurchase(null);
     idempotencyKey.current = undefined;
   }, [open, customer?.id, customer?.name, branch?.id, branchKey]);
 
@@ -172,6 +183,36 @@ export function AssistedSaleDrawer({
     };
   }, [open, isExtension, customerId, saleBranchId, client, perpanjangTargetId, packageOption?.id]);
 
+  // Hitung rincian tagihan (promo + voucher + rekening tujuan) secara otomatis di form admin.
+  useEffect(() => {
+    if (!open || !saleBranchId || !packageOption?.id) {
+      setPricePreview({ status: 'idle' });
+      return;
+    }
+    const previewFn = client.previewPrice;
+    if (!previewFn) {
+      setPricePreview({ status: 'idle' });
+      return;
+    }
+    let active = true;
+    const trimmedVoucher = voucherCode.trim();
+    const timer = setTimeout(() => {
+      setPricePreview((prev) => ({ status: 'loading', data: prev.data }));
+      previewFn({
+        branchId: saleBranchId,
+        packageId: packageOption.id,
+        paymentMethod: method,
+        ...(trimmedVoucher.length >= 3 ? { voucherCode: trimmedVoucher } : {}),
+      })
+        .then((data) => active && setPricePreview({ status: 'ready', data }))
+        .catch((err) => active && setPricePreview({ status: 'error', message: assistedSaleFailure(err) }));
+    }, trimmedVoucher ? 250 : 0);
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [open, saleBranchId, packageOption?.id, method, voucherCode, client]);
+
   // Lama perpanjangan mengikuti paket perpanjangan yang dipilih (dari server; bawaan 30 hari).
   const hariTambah = targets.status === 'ready' ? targets.list.days : 30;
   const selectedTarget =
@@ -181,6 +222,8 @@ export function AssistedSaleDrawer({
   const ready = Boolean(
     customerOption && packageOption && saleBranch && (!isExtension || selectedTarget) && (!wajibBukti || proofFile),
   );
+  const displaySubtotalRp = pricePreview.data?.subtotalRp ?? packageOption?.priceRp ?? 0;
+  const displayTotalRp = pricePreview.data?.baseAmountRp ?? packageOption?.priceRp ?? 0;
 
   const submit = async () => {
     if (!customerOption || !packageOption || !saleBranch) return;
@@ -189,9 +232,9 @@ export function AssistedSaleDrawer({
       title: 'Catat penjualan paket?',
       message: (selectedTarget
         ? selectedTarget.kedaluwarsa
-          ? `${packageOption.label} untuk ${customerOption.label} (${formatRupiah(packageOption.priceRp)}, ${assistedPaymentMethodLabels[method]}). ${selectedTarget.packageName} sudah kedaluwarsa; setelah penyetuju lain menyetujuinya di antrean Pembayaran, paket aktif lagi ${hariTambah} hari dari hari disetujui.`
-          : `${packageOption.label} untuk ${customerOption.label} (${formatRupiah(packageOption.priceRp)}, ${assistedPaymentMethodLabels[method]}). Masa aktif ${selectedTarget.packageName} bertambah ${hariTambah} hari setelah penyetuju lain menyetujuinya di antrean Pembayaran.`
-        : `${packageOption.label} untuk ${customerOption.label} (${formatRupiah(packageOption.priceRp)}, ${assistedPaymentMethodLabels[method]}). Paket aktif setelah penyetuju lain menyetujuinya di antrean Pembayaran.`)
+          ? `${packageOption.label} untuk ${customerOption.label} (${formatRupiah(displayTotalRp)}, ${assistedPaymentMethodLabels[method]}). ${selectedTarget.packageName} sudah kedaluwarsa; setelah penyetuju lain menyetujuinya di antrean Pembayaran, paket aktif lagi ${hariTambah} hari dari hari disetujui.`
+          : `${packageOption.label} untuk ${customerOption.label} (${formatRupiah(displayTotalRp)}, ${assistedPaymentMethodLabels[method]}). Masa aktif ${selectedTarget.packageName} bertambah ${hariTambah} hari setelah penyetuju lain menyetujuinya di antrean Pembayaran.`
+        : `${packageOption.label} untuk ${customerOption.label} (${formatRupiah(displayTotalRp)}, ${assistedPaymentMethodLabels[method]}). Paket aktif setelah penyetuju lain menyetujuinya di antrean Pembayaran.`)
         + ' Dengan mencatat, Anda menyatakan sudah menyampaikan Syarat & Ketentuan kepada member: paket hangus saat masa berlaku habis, perpanjangan maksimal 3 kali, dan pembayaran tidak dapat dikembalikan.',
       confirmLabel: 'Catat penjualan',
     });
@@ -238,8 +281,12 @@ export function AssistedSaleDrawer({
           ? 'Penjualan dan bukti pembayaran berhasil disimpan.'
           : 'Menunggu persetujuan penyetuju lain di antrean Pembayaran.',
       });
-      onRecorded?.(purchase);
-      onClose();
+      if (purchase.paymentUniqueCode || purchase.extension) {
+        setRecordedPurchase(purchase);
+      } else {
+        onRecorded?.(purchase);
+        onClose();
+      }
     } catch (error) {
       setFailure(assistedSaleFailure(error));
     } finally {
@@ -247,12 +294,24 @@ export function AssistedSaleDrawer({
     }
   };
 
+  const finishRecorded = () => {
+    if (!recordedPurchase) return;
+    const saved = recordedPurchase;
+    setRecordedPurchase(null);
+    onRecorded?.(saved);
+    onClose();
+  };
+
   return (
     <Drawer
       open={open}
-      title="Catat penjualan paket"
+      title={recordedPurchase ? 'Penjualan tercatat' : 'Catat penjualan paket'}
       description={
-        saleBranch ? `Penjualan di meja untuk cabang ${saleBranch.name}.` : 'Pilih cabang tempat penjualan terjadi.'
+        recordedPurchase
+          ? 'Berikan rincian tagihan berikut kepada member, lalu lanjutkan ke persetujuan pembayaran.'
+          : saleBranch
+            ? `Penjualan di meja untuk cabang ${saleBranch.name}.`
+            : 'Pilih cabang tempat penjualan terjadi.'
       }
       busy={busy}
       dirty={dirty}
@@ -264,18 +323,78 @@ export function AssistedSaleDrawer({
           confirmLabel: 'Buang',
         })
       }
-      onClose={onClose}
+      onClose={recordedPurchase ? finishRecorded : onClose}
       footer={
-        <div className="flex justify-end gap-2">
-          <Button type="button" variant="secondary" disabled={busy} onClick={onClose}>
-            Batal
-          </Button>
-          <Button type="submit" form="assisted-sale-form" loading={busy} disabled={!ready}>
-            Catat penjualan
-          </Button>
-        </div>
+        recordedPurchase ? (
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button type="button" onClick={finishRecorded}>
+              Selesai
+            </Button>
+          </div>
+        ) : (
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="secondary" disabled={busy} onClick={onClose}>
+              Batal
+            </Button>
+            <Button type="submit" form="assisted-sale-form" loading={busy} disabled={!ready}>
+              Catat penjualan
+            </Button>
+          </div>
+        )
       }
     >
+      {recordedPurchase ? (
+        <div className="grid gap-4" data-testid="assisted-sale-recorded-summary">
+          <div className="rounded-dd-md border border-dd-forest/30 bg-dd-forest/5 p-4 space-y-2">
+            <p className="text-xs font-bold uppercase tracking-wider text-dd-forest">
+              Total yang harus dibayar
+            </p>
+            <p className="text-2xl font-bold text-dd-ink tabular-nums">
+              {formatRupiah(
+                recordedPurchase.payableAmountRp ??
+                  recordedPurchase.payableAmountRpSnapshot ??
+                  recordedPurchase.priceRpSnapshot ??
+                  displayTotalRp,
+              )}
+            </p>
+            {Number(recordedPurchase.paymentUniqueCode) > 0 && (
+              <p className="text-xs font-semibold text-dd-forest">
+                Termasuk kode unik transfer: {formatPaymentCode(recordedPurchase.paymentUniqueCode ?? null)}
+              </p>
+            )}
+            {recordedPurchase.paymentAccount && (
+              <p className="text-xs text-dd-ink pt-1">
+                Transfer ke <strong>{recordedPurchase.paymentAccount.bankName}</strong>{' '}
+                <span className="font-mono font-semibold">{recordedPurchase.paymentAccount.accountNumber}</span>{' '}
+                a.n. {recordedPurchase.paymentAccount.accountHolderName}
+              </p>
+            )}
+          </div>
+          {recordedPurchase.extension && (
+            <div className="rounded-dd-md border border-dd-line bg-white p-3 text-sm space-y-1">
+              <p className="font-semibold text-dd-ink">
+                Perpanjangan: {recordedPurchase.extension.targetPackageName ?? 'Paket member'} (+{recordedPurchase.extension.days} hari)
+              </p>
+              <p className="text-xs text-dd-muted">
+                Paket akan diperpanjang otomatis setelah transaksi ini disetujui penyetuju lain di Antrean Pembayaran.
+              </p>
+            </div>
+          )}
+          <div className="flex flex-wrap gap-2">
+            <ButtonLink href={`/workspace/payments/${encodeURIComponent(recordedPurchase.id)}`}>
+              Buka detail pembayaran
+            </ButtonLink>
+            {recordedPurchase.extension?.targetCustomerPackageId && (
+              <ButtonLink
+                variant="secondary"
+                href={`/ledger/${encodeURIComponent(recordedPurchase.extension.targetCustomerPackageId)}`}
+              >
+                Lihat detail paket member
+              </ButtonLink>
+            )}
+          </div>
+        </div>
+      ) : (
       <form
         id="assisted-sale-form"
         className="grid gap-4"
@@ -325,8 +444,8 @@ export function AssistedSaleDrawer({
           <fieldset className="grid gap-2 rounded-dd-md border border-dd-line p-3">
             <legend className="px-1 text-sm font-semibold text-dd-ink">Paket member yang diperpanjang</legend>
             <p className="text-xs text-dd-muted">
-              Masa aktif bertambah {hariTambah} hari dari tanggal berakhir saat ini setelah pembayaran disetujui.
-              Hanya paket yang masih aktif, paling banyak 3 kali per paket.
+              Masa aktif bertambah {hariTambah} hari setelah pembayaran disetujui (paket aktif ditambah dari tanggal
+              berakhir saat ini; paket kedaluwarsa dihitung dari hari disetujui). Paling banyak 3 kali per paket.
             </p>
             {!customerOption ? (
               <p className="text-sm text-dd-muted">Pilih pelanggan terlebih dahulu.</p>
@@ -338,8 +457,8 @@ export function AssistedSaleDrawer({
               <Feedback kind="error">{targets.message}</Feedback>
             ) : targets.status === 'ready' && targets.list.items.length === 0 ? (
               <Feedback kind="warning">
-                Member ini tidak punya paket aktif yang bisa diperpanjang. Paket yang sudah hangus tidak
-                bisa diperpanjang; jual paket baru untuk melanjutkan latihan.
+                Member ini tidak punya paket aktif yang bisa diperpanjang atau paket kedaluwarsa yang masih bersisa
+                sesi. Jual paket baru untuk melanjutkan latihan.
               </Feedback>
             ) : targets.status === 'ready' ? (
               targets.list.items.map((item) => {
@@ -434,12 +553,58 @@ export function AssistedSaleDrawer({
           )}
         </div>
 
+        {packageOption && (
+          <div
+            className="rounded-dd-md border border-dd-forest/30 bg-dd-forest/5 p-3 text-sm space-y-1.5"
+            data-testid="assisted-sale-payment-summary"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs font-semibold text-dd-muted">Harga paket</span>
+              <span className="font-medium text-dd-ink tabular-nums">{formatRupiah(displaySubtotalRp)}</span>
+            </div>
+            {pricePreview.data?.promotion && pricePreview.data.promotion.discountRp > 0 && (
+              <div className="flex items-center justify-between gap-2 text-xs">
+                <span className="text-dd-muted">Promo ({pricePreview.data.promotion.name})</span>
+                <span className="font-semibold text-dd-forest tabular-nums">
+                  −{formatRupiah(pricePreview.data.promotion.discountRp)}
+                </span>
+              </div>
+            )}
+            {pricePreview.data?.voucher && pricePreview.data.voucher.discountRp > 0 && (
+              <div className="flex items-center justify-between gap-2 text-xs">
+                <span className="text-dd-muted">Voucher ({pricePreview.data.voucher.code})</span>
+                <span className="font-semibold text-dd-forest tabular-nums">
+                  −{formatRupiah(pricePreview.data.voucher.discountRp)}
+                </span>
+              </div>
+            )}
+            <div className="flex items-center justify-between gap-2 border-t border-dd-line pt-1.5">
+              <span className="font-semibold text-dd-ink">Total yang harus dibayar</span>
+              <span className="text-base font-bold text-dd-forest tabular-nums">
+                {formatRupiah(displayTotalRp)}
+              </span>
+            </div>
+            {method === 'BANK_TRANSFER' && (
+              <p className="text-xs text-dd-muted">
+                Kode unik transfer 3 digit akan ditambahkan otomatis setelah penjualan dicatat.
+                {pricePreview.data?.paymentAccount
+                  ? ` Rekening: ${pricePreview.data.paymentAccount.bankName} ${pricePreview.data.paymentAccount.accountNumber} (a.n. ${pricePreview.data.paymentAccount.accountHolderName}).`
+                  : ''}
+              </p>
+            )}
+            {pricePreview.status === 'error' && pricePreview.message && (
+              <p className="text-xs font-medium text-dd-danger">{pricePreview.message}</p>
+            )}
+          </div>
+        )}
+
         <Feedback kind="info">
           Penjualan dicatat dengan status menunggu. Pencatat tidak dapat menyetujui penjualannya
           sendiri; persetujuan dilakukan oleh Finance atau Manager di antrean Pembayaran.
         </Feedback>
         {failure && <Feedback kind="error">{failure}</Feedback>}
       </form>
+      )}
     </Drawer>
   );
 }

@@ -7,9 +7,9 @@ import { PackagePricingService } from '../packages/kalkulasi-harga-paket.service
 import { branchPublicLocation } from '../master/branch-location';
 import { masaJualPaket, sedangDijual } from '../packages/masa-jual';
 import {
-  HARI_PERPANJANGAN,
   MAKS_PERPANJANGAN,
   adalahPaketPerpanjangan,
+  hariPerpanjangan,
   paketPerpanjanganIds,
 } from '../packages/perpanjangan-masa-aktif';
 
@@ -83,8 +83,8 @@ export class PublicPackageQueryService {
 
     const rawPackages = await this.db.paket.findMany({
       where: {
-        branchId,
         status: 'ACTIVE',
+        OR: [{ branchId }, { branchId: null }],
       },
       include: {
         classType: {
@@ -130,7 +130,7 @@ export class PublicPackageQueryService {
         ...publicPricing(pkg.priceRp, this.pricing.calculate(pkg.priceRp, promotions.get(pkg.id))),
         branch,
         perpanjanganMasaAktif: perpanjangan.has(pkg.id),
-        extensionDays: perpanjangan.has(pkg.id) ? HARI_PERPANJANGAN : null,
+        extensionDays: perpanjangan.has(pkg.id) ? hariPerpanjangan(pkg) : null,
       };
     });
 
@@ -231,6 +231,7 @@ export class PublicPackageQueryService {
     const classType = item.classType ?? { id: 'all', code: 'ALL', name: 'Semua Kelas' };
     const classTypes = [classType];
     const perpanjangan = await adalahPaketPerpanjangan(this.db, item.id);
+    const extensionDays = perpanjangan ? hariPerpanjangan(item) : null;
     const priced = this.pricing.calculate(
       item.priceRp,
       await this.pricing.activePromotion(this.db, item.id, now),
@@ -246,15 +247,15 @@ export class PublicPackageQueryService {
       effectiveFrom: item.createdAt,
       effectiveUntil: null,
       perpanjanganMasaAktif: perpanjangan,
-      extensionDays: perpanjangan ? HARI_PERPANJANGAN : null,
+      extensionDays,
       publicProfile: {
         summary: perpanjangan
-          ? `Tambah masa aktif ${HARI_PERPANJANGAN} hari untuk satu paket yang masih aktif`
+          ? `Tambah masa aktif ${extensionDays} hari untuk satu paket`
           : `${item.sessionCount} Sesi Pilates - Berlaku ${item.validityDays} Hari`,
         description:
           item.description?.trim() ||
           (perpanjangan
-            ? `Perpanjang masa aktif satu paket kamu yang masih aktif selama ${HARI_PERPANJANGAN} hari, paling banyak ${MAKS_PERPANJANGAN} kali per paket.`
+            ? `Perpanjang masa aktif satu paket milikmu selama ${extensionDays} hari, paling banyak ${MAKS_PERPANJANGAN} kali per paket.`
             : `Paket latihan pilates ${item.name} dengan total ${item.sessionCount} sesi kelas.`),
         highlights: ['Akses instruktur bersertifikat', 'Fasilitas studio lengkap', 'Jadwal fleksibel'],
         usageGuidance: 'Pemesanan kelas dapat dilakukan melalui aplikasi kapan saja.',

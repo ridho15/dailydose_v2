@@ -187,4 +187,38 @@ describe('Paket Saya: paket berakhir yang masih bersisa sesi', () => {
       '/checkout?package=pkg-ext&branch=branch-1&target=cp-lama',
     );
   });
+
+  it('paket aktif > 14 hari di cabang lain tetap menawarkan Perpanjang masa aktif', async () => {
+    const katalog = {
+      list: vi.fn((branchId: string) =>
+        Promise.resolve({
+          items:
+            branchId === 'branch-2'
+              ? [{ id: 'pkg-ext-2', branchId: 'branch-2', priceRp: 150_000, validityDays: 30, perpanjanganMasaAktif: true }]
+              : [],
+        }),
+      ),
+    };
+    const ledger = {
+      list: vi.fn().mockResolvedValue({
+        items: [paket({ id: 'cp-aktif-lama', branchId: 'branch-2', branchName: 'PIK 2', packageName: 'Reformer 10', expiryAt: new Date('2027-02-01'), available: 5 })],
+        summary: { packageCount: 1, ledgerBalance: 5, reserved: 0, available: 5 },
+        nextCursor: null,
+      }),
+    };
+    render(
+      <CustomerPackagesView
+        ledger={ledger as never}
+        orders={{ list: vi.fn().mockResolvedValue({ items: [], nextCursor: null }) } as never}
+        bookings={{ list: vi.fn().mockResolvedValue({ items: [], nextCursor: null }) } as never}
+        katalog={katalog as never}
+        now={new Date('2026-11-26T05:00:00Z').getTime()}
+      />,
+    );
+    const aktif = await screen.findByRole('region', { name: 'Paket aktif' });
+    expect(await within(aktif).findByRole('link', { name: 'Perpanjang masa aktif' })).toHaveAttribute(
+      'href',
+      '/checkout?package=pkg-ext-2&branch=branch-2&target=cp-aktif-lama',
+    );
+  });
 });
