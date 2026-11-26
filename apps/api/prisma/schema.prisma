@@ -1523,3 +1523,15 @@ model PersetujuanSyarat {
   @@index([purchaseId])
   @@map("persetujuan_syarat")
 }
+
+/// Penanda nota pengeluaran (26 November 2026). Berkasnya di penyimpanan privat; tabel tambahan tanpa relasi.
+model NotaPengeluaran {
+  otherCostId  String   @id @db.Char(36)
+  storageKey   String   @db.VarChar(200)
+  mimeType     String   @db.VarChar(60)
+  ukuranByte   Int
+  diunggahOleh String?  @db.Char(36)
+  createdAt    DateTime @default(now())
+
+  @@map("nota_pengeluaran")
+}

@@ -43,6 +43,8 @@ export interface StokMinumanClient {
     hargaSatuanRp?: number;
     tanggal: string;
     catatan?: string;
+    /** Foto/PDF nota, wajib untuk pembelian (MASUK). */
+    nota?: File;
   }): Promise<Mutasi & { stokSesudah: number }>;
   buatBarang(input: { nama: string; satuan: string; hargaJualRp: number | null }): Promise<BarangMinuman>;
   ubahBarang(id: string, input: Partial<Pick<BarangMinuman, 'nama' | 'satuan' | 'hargaJualRp' | 'aktif'>>): Promise<BarangMinuman>;
@@ -54,7 +56,16 @@ export const browserStokMinumanClient: StokMinumanClient = {
   stok: (branchId) => apiFetch(`/drinks/stock?branchId=${q(branchId)}`, { label: 'Memuat stok…' }),
   riwayat: (branchId, cursor) =>
     apiFetch(`/drinks/movements?branchId=${q(branchId)}${cursor ? `&cursor=${q(cursor)}` : ''}`, { label: 'Memuat riwayat…' }),
-  catat: (input) => apiFetch('/drinks/movements', { method: 'POST', body: JSON.stringify(input), label: 'Mencatat stok…' }),
+  catat: (input) => {
+    // Multipart supaya nota pembelian ikut terkirim; angka dikirim sebagai teks dan dibaca server.
+    const form = new FormData();
+    for (const [k, v] of Object.entries(input)) {
+      if (v === undefined || v === null || k === 'nota') continue;
+      form.set(k, String(v));
+    }
+    if (input.nota) form.set('nota', input.nota);
+    return apiFetch('/drinks/movements', { method: 'POST', body: form, label: 'Mencatat stok…' });
+  },
   buatBarang: (input) => apiFetch('/drinks', { method: 'POST', body: JSON.stringify(input), label: 'Menambah barang…' }),
   ubahBarang: (id, input) => apiFetch(`/drinks/${q(id)}`, { method: 'PATCH', body: JSON.stringify(input), label: 'Menyimpan barang…' }),
 };
@@ -90,6 +101,8 @@ export function pesanGalatStok(error: unknown): string {
   if (code === 'DRINK_STOCK_UNAVAILABLE')
     return 'Fitur stok minuman belum aktif di server (tabel barang_minuman dan mutasi_stok_minuman belum dibuat). Hubungi pengembang.';
   if (code === 'DRINK_NAME_TAKEN') return 'Nama barang itu sudah ada. Pakai nama lain atau ubah barang yang sudah ada.';
+  if (code === 'RECEIPT_REQUIRED') return 'Foto nota pembelian wajib dilampirkan.';
+  if (detail?.field === 'nota') return 'Nota harus berupa foto (JPG, PNG, WEBP) atau PDF, maksimal 8 MB.';
   if (code === 'DRINK_PRICE_NOT_SET') return 'Harga jual barang ini belum diisi. Minta Super Owner mengisinya di Master barang.';
   if (code === 'DRINK_INACTIVE') return 'Barang ini nonaktif. Aktifkan dulu di Master barang sebelum mencatat barang masuk.';
   if (code === 'FORBIDDEN') return 'Anda tidak punya akses ke stok cabang ini.';
@@ -325,6 +338,9 @@ function FormCatat({
   const [tanggal, setTanggal] = useState(hariIniWib);
   const [catatan, setCatatan] = useState('');
   const [sibuk, setSibuk] = useState(false);
+  // Nota wajib untuk pembelian; `kunciNota` mengosongkan pemilih berkas setelah tersimpan.
+  const [nota, setNota] = useState<File | null>(null);
+  const [kunciNota, setKunciNota] = useState(0);
 
   const pilihan = barang.find((b) => b.barang.id === barangId);
   const n = Number(jumlah);
@@ -335,7 +351,9 @@ function FormCatat({
   const jumlahValid = Number.isInteger(n) && n >= 1 && n <= 10_000;
   const hargaValid = !butuhHarga || (Number.isInteger(h) && (jenis === 'DIJUAL' ? h > 0 : h >= 0));
   const stokCukup = jenis === 'MASUK' || !pilihan || n <= pilihan.stok;
-  const siap = Boolean(branchId && pilihan && jumlahValid && hargaValid && stokCukup && tanggal);
+  const notaTerlaluBesar = Boolean(nota && nota.size > 8_000_000);
+  const notaSiap = jenis !== 'MASUK' || (Boolean(nota) && !notaTerlaluBesar);
+  const siap = Boolean(branchId && pilihan && jumlahValid && hargaValid && stokCukup && tanggal && notaSiap);
 
   const kirim = async (e: FormEvent) => {
     e.preventDefault();
@@ -350,6 +368,7 @@ function FormCatat({
         ...(jenis === 'MASUK' ? { hargaSatuanRp: h } : {}),
         tanggal,
         ...(catatan.trim() ? { catatan: catatan.trim() } : {}),
+        ...(jenis === 'MASUK' && nota ? { nota } : {}),
       });
       const nilai =
         jenis === 'MASUK'
@@ -361,6 +380,8 @@ function FormCatat({
       setJumlah('');
       setHarga('');
       setCatatan('');
+      setNota(null);
+      setKunciNota((k) => k + 1);
     } catch (error) {
       onGalat(pesanGalatStok(error));
     } finally {
@@ -438,6 +459,27 @@ function FormCatat({
           className={INPUT}
           description="Sesuai nota pembelian. Harga jual tetap mengikuti master barang."
         />
+      )}
+      {jenis === 'MASUK' && (
+        <div className="grid content-start gap-1 sm:col-span-2">
+          <label htmlFor="nota-minuman" className="text-sm font-semibold text-dd-ink">
+            Foto nota <span className="text-dd-danger">(wajib)</span>
+          </label>
+          <input
+            key={kunciNota}
+            id="nota-minuman"
+            type="file"
+            accept="image/jpeg,image/png,image/webp,application/pdf"
+            aria-required="true"
+            aria-describedby="nota-minuman-hint"
+            aria-invalid={notaTerlaluBesar || undefined}
+            onChange={(e) => setNota(e.target.files?.[0] ?? null)}
+            className="block min-h-11 w-full rounded-dd-md border border-dd-border-interactive bg-white px-3 py-2 text-base text-dd-ink sm:text-sm file:mr-3 file:min-h-9 file:rounded-dd-md file:border-0 file:bg-dd-forest/10 file:px-3 file:font-semibold file:text-dd-forest"
+          />
+          <span id="nota-minuman-hint" className={`text-sm ${notaTerlaluBesar ? 'font-semibold text-dd-danger' : 'text-dd-muted'}`}>
+            {notaTerlaluBesar ? 'Ukuran nota lebih dari 8 MB. Foto ulang dengan resolusi lebih kecil.' : 'Foto nota atau struk pembelian, JPG/PNG/WEBP atau PDF, maksimal 8 MB.'}
+          </span>
+        </div>
       )}
       {jenis === 'DIJUAL' && pilihan && (
         <div className="grid content-start gap-1">

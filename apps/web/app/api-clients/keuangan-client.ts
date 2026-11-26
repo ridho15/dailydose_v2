@@ -71,6 +71,8 @@ export interface BarisJurnal {
   branchId: string;
   /** Pengeluaran yang dibayar uang pribadi Super Owner. */
   dibayarOleh?: string | null;
+  /** Pengeluaran punya foto/PDF nota (buka lewat alamatNota). */
+  adaNota?: boolean;
 }
 
 export interface JurnalKas {
@@ -218,6 +220,8 @@ export interface KeuanganClient {
     amountRp: number;
     /** Super Owner yang membayar dengan uang pribadi; kosong berarti kas cabang. */
     dibayarOlehId?: string;
+    /** Foto atau PDF nota, wajib. */
+    nota: File;
   }): Promise<unknown>;
   daftarKoreksiJam(branchId?: string): Promise<{ items: KoreksiJam[] }>;
   kirimKoreksiJam(input: {
@@ -316,9 +320,17 @@ export const browserKeuanganClient: KeuanganClient = {
     return hasil;
   },
   catatPengeluaran(input) {
+    const form = new FormData();
+    form.set('branchId', input.branchId);
+    form.set('incurredOn', input.incurredOn);
+    form.set('categoryCode', input.categoryCode);
+    form.set('description', input.description);
+    form.set('amountRp', String(input.amountRp));
+    if (input.dibayarOlehId) form.set('dibayarOlehId', input.dibayarOlehId);
+    form.set('nota', input.nota);
     return apiFetch('/other-costs', {
       method: 'POST',
-      body: JSON.stringify(input),
+      body: form,
       idempotent: true,
       label: 'Mencatat pengeluaran…',
     });
@@ -357,6 +369,9 @@ export const browserKeuanganClient: KeuanganClient = {
 };
 
 /** Pesan galat yang bisa dipahami staf. */
+/** Alamat untuk membuka nota satu pengeluaran (tab baru, sesi staf yang sama). */
+export const alamatNota = (costId: string) => `/api/v1/other-costs/${encodeURIComponent(costId)}/nota`;
+
 export function keuanganFailure(error: unknown, fallback: string): string {
   const data = (error instanceof ApiError ? error.data : null) as {
     code?: string;
@@ -365,6 +380,10 @@ export function keuanganFailure(error: unknown, fallback: string): string {
   } | null;
   const code = data?.error?.code ?? data?.code;
   const issue = data?.issues?.[0];
+  if (code === 'RECEIPT_REQUIRED') return 'Foto nota wajib dilampirkan.';
+  if (issue?.field === 'nota' && issue.issue === 'TOO_LARGE') return 'Foto nota maksimal 8 MB.';
+  if (issue?.field === 'nota' || (code === 'UPLOAD_REJECTED' && !issue))
+    return 'Nota harus berupa foto (JPG, PNG, WEBP) atau PDF.';
   if (issue?.field === 'reason') return 'Alasan minimal 20 karakter dan paling banyak 500.';
   if (issue?.field === 'evidence' && issue.issue === 'TOO_LARGE')
     return 'Berkas bukti maksimal 8 MB.';

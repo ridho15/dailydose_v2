@@ -8,8 +8,14 @@ import {
   Post,
   Query,
   Req,
+  Res,
+  StreamableFile,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import type { Response } from 'express';
 import { AuthGuard, type AuthenticatedRequest } from '../identity/auth.guard';
 import { FinanceService } from './finance.service';
 
@@ -91,7 +97,9 @@ export class FinanceController {
   // BIAYA OPERASIONAL LAIN (BERTANGGAL)
   // ============================================================================
 
+  /** Multipart: isian pengeluaran plus berkas `nota` (wajib, foto atau PDF, maks 8 MB). */
   @Post(['other-costs', 'finance/other-costs'])
+  @UseInterceptors(FileInterceptor('nota', { limits: { fileSize: 8_000_000, files: 1 } }))
   createOtherCost(
     @Req() req: AuthenticatedRequest,
     @Body()
@@ -101,11 +109,34 @@ export class FinanceController {
       period?: string;
       category: string;
       description: string;
-      amountRp: number;
+      amountRp: number | string;
       dibayarOlehId?: string | null;
     },
+    @UploadedFile() nota?: { buffer?: Buffer; size?: number },
   ) {
-    return this.finance.createOtherCost(req.principal, body);
+    // Isian multipart selalu teks: nominal dijadikan angka, pembayar kosong berarti kas cabang.
+    return this.finance.createOtherCost(
+      req.principal,
+      { ...body, amountRp: Number(body?.amountRp), dibayarOlehId: body?.dibayarOlehId || null },
+      nota,
+    );
+  }
+
+  @Get(['other-costs/:id/nota', 'finance/other-costs/:id/nota'])
+  async nota(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const file = await this.finance.notaPengeluaran(req.principal, id);
+    response.set({
+      'Cache-Control': 'private, no-store, max-age=0',
+      'Content-Type': file.mimeType,
+      'Content-Disposition': 'inline; filename="nota-pengeluaran"',
+      'Referrer-Policy': 'no-referrer',
+      'X-Content-Type-Options': 'nosniff',
+    });
+    return new StreamableFile(file.stream);
   }
 
   @Patch(['other-costs/:id', 'finance/other-costs/:id'])

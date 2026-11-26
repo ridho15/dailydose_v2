@@ -2,6 +2,7 @@
 
 import { useCallback, useContext, useEffect, useMemo, useState, type FormEvent } from 'react';
 import {
+  alamatNota,
   browserKeuanganClient,
   keuanganFailure,
   type JurnalKas,
@@ -71,6 +72,9 @@ export function FormPengeluaran({
   const [nominal, setNominal] = useState('');
   // Kosong: dibayar dari kas cabang. Berisi id Super Owner: uang pribadinya, diganti saat settlement.
   const [dibayarOleh, setDibayarOleh] = useState('');
+  // Nota wajib (foto atau PDF, maks 8 MB). `kunciNota` mengosongkan pemilih berkas setelah tersimpan.
+  const [nota, setNota] = useState<File | null>(null);
+  const [kunciNota, setKunciNota] = useState(0);
   const [owners, setOwners] = useState<OwnerSingkat[]>([]);
   const context = useSessionContext();
   const session = context?.session;
@@ -94,11 +98,12 @@ export function FormPengeluaran({
   const [pesan, setPesan] = useState<{ kind: 'status' | 'error'; text: string } | null>(null);
 
   const amountRp = bacaNominal(nominal);
-  const siap = Boolean(tanggal && tanggal <= hariIni && keterangan.trim() && amountRp);
+  const notaTerlaluBesar = Boolean(nota && nota.size > 8_000_000);
+  const siap = Boolean(tanggal && tanggal <= hariIni && keterangan.trim() && amountRp && nota && !notaTerlaluBesar);
 
   const simpan = async (event: FormEvent) => {
     event.preventDefault();
-    if (!siap || !amountRp) return;
+    if (!siap || !amountRp || !nota) return;
     setSibuk(true);
     setPesan(null);
     try {
@@ -109,6 +114,7 @@ export function FormPengeluaran({
         description: keterangan.trim(),
         amountRp,
         ...(dibayarOleh ? { dibayarOlehId: dibayarOleh } : {}),
+        nota,
       });
       const pembayar = owners.find((o) => o.id === dibayarOleh)?.nama;
       setPesan({
@@ -119,6 +125,8 @@ export function FormPengeluaran({
       setKeterangan('');
       setNominal('');
       setDibayarOleh('');
+      setNota(null);
+      setKunciNota((k) => k + 1);
       onSaved();
     } catch (error) {
       setPesan({
@@ -197,6 +205,30 @@ export function FormPengeluaran({
             required
           />
         </label>
+        <div className="text-sm font-medium text-dd-ink sm:col-span-2">
+          <label htmlFor="nota-pengeluaran">
+            Foto nota <span className="text-dd-danger">(wajib)</span>
+          </label>
+          <input
+            key={kunciNota}
+            id="nota-pengeluaran"
+            type="file"
+            accept="image/jpeg,image/png,image/webp,application/pdf"
+            aria-required="true"
+            aria-describedby="nota-pengeluaran-hint"
+            aria-invalid={notaTerlaluBesar || undefined}
+            onChange={(e) => setNota(e.target.files?.[0] ?? null)}
+            className="mt-1 block min-h-11 w-full rounded-dd-lg border border-dd-border-interactive bg-white px-3 py-2 text-[15px] text-dd-ink file:mr-3 file:min-h-9 file:rounded-dd-md file:border-0 file:bg-dd-forest/10 file:px-3 file:font-semibold file:text-dd-forest"
+          />
+          <span
+            id="nota-pengeluaran-hint"
+            className={`mt-1 block text-xs ${notaTerlaluBesar ? 'font-semibold text-dd-danger' : 'text-dd-muted'}`}
+          >
+            {notaTerlaluBesar
+              ? 'Ukuran nota lebih dari 8 MB. Foto ulang dengan resolusi lebih kecil.'
+              : 'Foto nota atau struk (JPG, PNG, WEBP) atau PDF, maksimal 8 MB. Bisa langsung dari kamera HP.'}
+          </span>
+        </div>
         {owners.length > 0 && (
           <label className="text-sm font-medium text-dd-ink">
             Dibayar oleh
@@ -497,6 +529,19 @@ export function KasView({
                             Dibayar {r.dibayarOleh}, diganti saat settlement
                           </span>
                         )}
+                        {r.arah === 'KELUAR' && r.costId &&
+                          (r.adaNota ? (
+                            <a
+                              href={alamatNota(r.costId)}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex min-h-9 items-center text-sm font-semibold text-dd-forest underline-offset-4 hover:underline"
+                            >
+                              Lihat nota
+                            </a>
+                          ) : (
+                            <span className="block text-sm text-dd-muted">Tanpa nota</span>
+                          ))}
                         {(() => {
                           const dibuatMs = r.createdAt ? new Date(r.createdAt).getTime() : 0;
                           const costId = r.costId || (r.id.startsWith('out-') ? r.id.replace('out-', '') : null);

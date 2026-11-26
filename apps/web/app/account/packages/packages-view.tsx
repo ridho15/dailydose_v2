@@ -142,6 +142,8 @@ function KartuPesanan({ order, waHref }: { order: CustomerOrder; waHref: string 
   );
 }
 
+const formatRupiahSingkat = (n: number) => `Rp${n.toLocaleString('id-ID')}`;
+
 /** Masa aktif tinggal sebanyak ini atau kurang: tawarkan perpanjangan masa aktif. */
 export const BATAS_HARI_PERPANJANG = 14;
 
@@ -153,7 +155,8 @@ export function hrefPerpanjang(
 ) {
   if (!perpanjangan) return null;
   const sisaHari = Math.ceil((new Date(item.expiryAt).getTime() - now) / 86_400_000);
-  if (sisaHari < 0 || sisaHari > BATAS_HARI_PERPANJANG) return null;
+  // Paket yang sudah berakhir (sisaHari < 0) tetap bisa diperpanjang bila masih ada sesinya.
+  if (sisaHari > BATAS_HARI_PERPANJANG) return null;
   const query = new URLSearchParams({ package: perpanjangan.id, branch: perpanjangan.branchId, target: item.id });
   return `/checkout?${query.toString()}`;
 }
@@ -301,7 +304,17 @@ export function CustomerPackagesView({
   }, [adaDiperiksa, muat]);
 
   const aktif = (paket ?? []).filter((item) => item.status === 'ACTIVE' && !isExpiredPackage(item));
-  const riwayat = (paket ?? []).filter((item) => isExpiredPackage(item) || item.status !== 'ACTIVE');
+  // Paket berakhir yang masih bersisa sesi milik member sendiri: bisa diaktifkan lagi dengan perpanjangan berbayar.
+  const bisaAktifLagi = (paket ?? []).filter(
+    (item) =>
+      isExpiredPackage(item) &&
+      item.status !== 'FROZEN' &&
+      (item.ledgerBalance ?? item.available) > 0 &&
+      (!item.customer?.id || item.customer.id === currentUserId),
+  );
+  const riwayat = (paket ?? []).filter(
+    (item) => (isExpiredPackage(item) || item.status !== 'ACTIVE') && !(paketPerpanjangan && bisaAktifLagi.includes(item)),
+  );
   const totalSesi = aktif.reduce((s, item) => s + item.available, 0);
 
   const waUntuk = (order: CustomerOrder) => {
@@ -427,6 +440,47 @@ export function CustomerPackagesView({
           </ul>
         )}
       </section>
+
+      {bisaAktifLagi.length > 0 && paketPerpanjangan && (
+        <section aria-labelledby="aktif-lagi" className="space-y-3">
+          <div>
+            <h2 id="aktif-lagi" className="m-0 text-lg font-semibold text-dd-ink">
+              Paket berakhir, sesi masih ada
+            </h2>
+            <p className="m-0 mt-1 text-[15px] text-dd-muted">
+              Aktifkan lagi dengan perpanjangan {formatRupiahSingkat(paketPerpanjangan.priceRp)} untuk{' '}
+              {paketPerpanjangan.validityDays || paketPerpanjangan.durationDays || 30} hari, dihitung sejak pembayaran
+              disetujui. Maksimal 3 kali perpanjangan per paket.
+            </p>
+          </div>
+          <ul className="m-0 grid list-none gap-3 p-0 md:grid-cols-2">
+            {bisaAktifLagi.map((item) => {
+              const href = hrefPerpanjang(item, paketPerpanjangan, now);
+              return (
+                <li key={item.id} className="rounded-dd-xl border border-dd-line bg-white p-5">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0">
+                      <p className="m-0 text-base font-semibold text-dd-ink">{item.packageName ?? 'Paket kelas'}</p>
+                      <p className="m-0 mt-0.5 text-sm font-medium text-dd-danger">Berakhir {tanggal(item.expiryAt)}</p>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <p className="m-0 text-[32px] font-semibold leading-none tabular-nums text-dd-ink">
+                        {item.ledgerBalance ?? item.available}
+                      </p>
+                      <p className="m-0 mt-1 text-xs text-dd-muted">sesi tertahan</p>
+                    </div>
+                  </div>
+                  {href && (
+                    <div className="mt-4">
+                      <ButtonLink href={href}>Aktifkan lagi</ButtonLink>
+                    </div>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
 
       {(riwayat.length > 0 || pesanan.length > berjalan.length) && (
         <details className="rounded-dd-xl border border-dd-line bg-white p-5">

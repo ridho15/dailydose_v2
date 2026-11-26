@@ -1,4 +1,8 @@
-import { HttpStatus, Injectable } from '@nestjs/common';
+import { HttpStatus, Inject, Injectable, Optional } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
+import type { Readable } from 'node:stream';
+import { PRIVATE_FILE_STORAGE, type PrivateFileStorage } from '../identity/private-file-storage';
+import { bacaNota, catatNota, periksaNota, simpanBerkasNota, type BerkasNota } from './nota-pengeluaran';
 import { penjualanMinuman } from './stok-minuman.service';
 import { createHash } from 'node:crypto';
 import { PrismaService } from '../database/prisma.service';
@@ -65,6 +69,7 @@ export class FinanceService {
     private readonly db: PrismaService,
     private readonly policy: PolicyService,
     private readonly audit: AuditService,
+    @Optional() @Inject(PRIVATE_FILE_STORAGE) private readonly storage?: PrivateFileStorage,
   ) {}
 
   private punyaAksesSemuaCabang(principal: SessionPrincipal) {
@@ -459,6 +464,7 @@ export class FinanceService {
       /** Super Owner yang membayar dengan uang pribadi; kosong berarti kas cabang. */
       dibayarOlehId?: string | null;
     },
+    berkasNota?: BerkasNota,
   ) {
     // Admin dan Manager mencatat pembelian barang cabangnya (jurnal kas); mengubah atau menghapus
     // catatan tetap butuh `finance:manage`.
@@ -466,6 +472,8 @@ export class FinanceService {
     this.ensureBranchAccess(principal, input.branchId);
 
     pastikanNominalPengeluaran(input.amountRp);
+    // Nota wajib untuk setiap pengeluaran (26 November 2026); diperiksa sebelum apa pun disimpan.
+    const nota = periksaNota(berkasNota);
     const incurredOn = this.costDay(input);
     // Aturan yang sama dengan updateOtherCost: keterangan 1-2000 karakter, kategori kode huruf besar.
     const description = String(input.description ?? '').trim();
@@ -493,8 +501,13 @@ export class FinanceService {
         ]);
     }
 
-    const created = await this.db.otherCost.create({
+    const id = randomUUID();
+    const hapusNota = await simpanBerkasNota(this.storage, id, nota);
+    let created;
+    try {
+      created = await this.db.otherCost.create({
       data: {
+        id,
         branchId: input.branchId,
         period: incurredOn.toISOString().slice(0, 7),
         incurredOn,
@@ -503,6 +516,17 @@ export class FinanceService {
         amountRp: input.amountRp,
         createdById: principal.userId,
       },
+    });
+    } catch (error) {
+      await hapusNota();
+      throw error;
+    }
+    await catatNota(this.db as never, this.db, {
+      otherCostId: id,
+      ext: nota.jenis.ext,
+      mimeType: nota.jenis.mime,
+      ukuranByte: nota.buffer.length,
+      diunggahOleh: principal.userId,
     });
     if (dibayarOlehId)
       await this.db.pembayarPengeluaran.create({
@@ -1094,6 +1118,16 @@ export class FinanceService {
       items: [],
       page: { hasMore: false, nextCursor: null },
     };
+  }
+
+  /** Buka nota satu pengeluaran: pembaca keuangan, atau staf pencatat pengeluaran di cabangnya. */
+  async notaPengeluaran(principal: SessionPrincipal, id: string): Promise<{ mimeType: string; stream: Readable }> {
+    this.policy.requireAnyCapability(principal.capabilities, ['finance:read', 'expense:create']);
+    if (!/^[0-9a-f-]{36}$/iu.test(id)) throw new ApiProblem('RESOURCE_NOT_FOUND', HttpStatus.NOT_FOUND);
+    const cost = await this.db.otherCost.findUnique({ where: { id }, select: { branchId: true } });
+    if (!cost) throw new ApiProblem('RESOURCE_NOT_FOUND', HttpStatus.NOT_FOUND);
+    this.ensureBranchAccess(principal, cost.branchId);
+    return bacaNota(this.storage, this.db as never, id);
   }
 
   async otherCosts(

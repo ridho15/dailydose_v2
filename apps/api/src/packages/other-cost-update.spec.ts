@@ -1,6 +1,10 @@
 import { PolicyService } from '../identity/policy.service';
 import { FinanceService } from './finance.service';
 
+// Nota pengeluaran wajib sejak 26 November 2026: berkas PDF kecil dan penyimpanan tiruan.
+const NOTA = { buffer: Buffer.from('%PDF-1.4 nota pengeluaran contoh') };
+const STORAGE = { put: jest.fn(async () => undefined), delete: jest.fn(async () => undefined) };
+
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const branchA = id(1);
 const costId = id(10);
@@ -35,7 +39,7 @@ function setup() {
     cabang: { findUnique: jest.fn().mockResolvedValue({ id: branchA }) },
   };
   const audit = { catat: jest.fn().mockResolvedValue(undefined) };
-  const service = new FinanceService(db as never, new PolicyService(), audit as never);
+  const service = new FinanceService(db as never, new PolicyService(), audit as never, STORAGE as never);
   return { service, db, audit };
 }
 
@@ -123,11 +127,11 @@ describe('FinanceService.createOtherCost', () => {
 
   it('uses the category code sent by the finance panel instead of dropping it', async () => {
     const { service, db } = setup();
-    await service.createOtherCost(manager, { ...base, categoryCode: 'sewa_studio' });
+    await service.createOtherCost(manager, { ...base, categoryCode: 'sewa_studio' }, NOTA);
     expect(db.otherCost.create).toHaveBeenCalledWith({
       data: expect.objectContaining({ category: 'SEWA_STUDIO' }),
     });
-    await service.createOtherCost(manager, base);
+    await service.createOtherCost(manager, base, NOTA);
     expect(db.otherCost.create).toHaveBeenLastCalledWith({
       data: expect.objectContaining({ category: 'OTHER' }),
     });
@@ -135,7 +139,7 @@ describe('FinanceService.createOtherCost', () => {
 
   it('stores the spending date and derives the month from it', async () => {
     const { service, db } = setup();
-    await service.createOtherCost(manager, base);
+    await service.createOtherCost(manager, base, NOTA);
     expect(db.otherCost.create).toHaveBeenCalledWith({
       data: expect.objectContaining({ incurredOn: new Date('2026-09-12T00:00:00.000Z'), period: '2026-09' }),
     });
@@ -143,22 +147,22 @@ describe('FinanceService.createOtherCost', () => {
 
   it('still accepts the old month-only input (dated on the 1st) and refuses a missing or invalid date', async () => {
     const { service, db } = setup();
-    await service.createOtherCost(manager, { branchId: branchA, period: '2026-09', description: 'Sewa', amountRp: 100 });
+    await service.createOtherCost(manager, { branchId: branchA, period: '2026-09', description: 'Sewa', amountRp: 100 }, NOTA);
     expect(db.otherCost.create).toHaveBeenLastCalledWith({
       data: expect.objectContaining({ incurredOn: new Date('2026-09-01T00:00:00.000Z'), period: '2026-09' }),
     });
     await expect(
-      service.createOtherCost(manager, { branchId: branchA, description: 'x', amountRp: 100 }),
+      service.createOtherCost(manager, { branchId: branchA, description: 'x', amountRp: 100 }, NOTA),
     ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
     await expect(
-      service.createOtherCost(manager, { ...base, incurredOn: '12/09/2026' }),
+      service.createOtherCost(manager, { ...base, incurredOn: '12/09/2026' }, NOTA),
     ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
   });
 
   it('rejects fractional amounts that the integer column cannot hold', async () => {
     const { service, db } = setup();
     await expect(
-      service.createOtherCost(manager, { ...base, amountRp: 99.5 }),
+      service.createOtherCost(manager, { ...base, amountRp: 99.5 }, NOTA),
     ).rejects.toMatchObject({ code: 'INVALID_AMOUNT' });
     expect(db.otherCost.create).not.toHaveBeenCalled();
   });
@@ -167,7 +171,7 @@ describe('FinanceService.createOtherCost', () => {
 describe('other costs are audited permanently', () => {
   it('records creation and updates (amounts and category, never the free-text description)', async () => {
     const { service, audit } = setup();
-    await service.createOtherCost(manager, { branchId: branchA, incurredOn: '2026-09-12', category: 'sewa', description: 'Sewa', amountRp: 100 });
+    await service.createOtherCost(manager, { branchId: branchA, incurredOn: '2026-09-12', category: 'sewa', description: 'Sewa', amountRp: 100 }, NOTA);
     expect(audit.catat).toHaveBeenLastCalledWith(
       null,
       expect.objectContaining({ action: 'finance.other_cost_created', objectType: 'OtherCost', branchId: branchA }),

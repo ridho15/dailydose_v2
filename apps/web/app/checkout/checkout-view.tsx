@@ -659,8 +659,13 @@ function ExtensionTargetPicker({
                   <span className="grid gap-0.5">
                     <span className="font-semibold text-ed-ink">{item.packageName}</span>
                     <span className="text-ed-muted">
-                      Sisa {item.remainingSessions} sesi · berlaku sampai {tanggalWib(item.validUntil)}
-                      {full ? '' : `, menjadi ${tanggalWib(item.validUntilAfterExtension)}`}
+                      {item.kedaluwarsa
+                        ? `Sisa ${item.remainingSessions} sesi · sudah berakhir ${tanggalWib(item.validUntil)}${
+                            full ? '' : `. Aktif lagi sampai ${tanggalWib(item.validUntilAfterExtension)} bila dibayar hari ini (dihitung dari hari pembayaran disetujui)`
+                          }`
+                        : `Sisa ${item.remainingSessions} sesi · berlaku sampai ${tanggalWib(item.validUntil)}${
+                            full ? '' : `, menjadi ${tanggalWib(item.validUntilAfterExtension)}`
+                          }`}
                     </span>
                     <span className="text-xs text-ed-muted">
                       {full

@@ -1,4 +1,6 @@
-import { HttpStatus, Injectable, Optional } from '@nestjs/common';
+import { HttpStatus, Inject, Injectable, Optional } from '@nestjs/common';
+import { PRIVATE_FILE_STORAGE, type PrivateFileStorage } from '../identity/private-file-storage';
+import { catatNota, periksaNota, simpanBerkasNota, type BerkasNota } from './nota-pengeluaran';
 import { randomUUID } from 'node:crypto';
 import { PrismaService } from '../database/prisma.service';
 import { AuditService } from '../foundation/audit.service';
@@ -61,6 +63,7 @@ export class StokMinumanService {
     private readonly db: PrismaService,
     private readonly policy: PolicyService,
     @Optional() private readonly audit?: AuditService,
+    @Optional() @Inject(PRIVATE_FILE_STORAGE) private readonly storage?: PrivateFileStorage,
   ) {}
 
   private async pastikanTabel() {
@@ -240,6 +243,7 @@ export class StokMinumanService {
       catatan?: unknown;
     },
     now = new Date(),
+    berkasNota?: BerkasNota,
   ) {
     this.policy.requireCapability(principal.capabilities, 'inventory:record');
     const branchId = typeof input.branchId === 'string' ? input.branchId : '';
@@ -277,8 +281,14 @@ export class StokMinumanService {
     const totalRp = hargaSatuanRp * jumlah;
     const hari = new Date(`${tanggal}T00:00:00.000Z`);
     const id = randomUUID();
+    // Pembelian stok adalah pengeluaran cabang: nota wajib, sama seperti pengeluaran di Jurnal kas.
+    const nota = jenis === 'MASUK' ? periksaNota(berkasNota) : null;
+    const biayaId = randomUUID();
+    const hapusNota = nota && totalRp > 0 ? await simpanBerkasNota(this.storage, biayaId, nota) : null;
 
-    return this.db.$transaction(async (tx) => {
+    let hasil;
+    try {
+      hasil = await this.db.$transaction(async (tx) => {
       // Satu pencatatan per barang per cabang pada satu waktu, supaya dua kasir tidak menjual stok terakhir.
       if (typeof (tx as { $queryRaw?: unknown }).$queryRaw === 'function')
         await tx.$queryRaw`SELECT id FROM barang_minuman WHERE id = ${barangId} FOR UPDATE`;
@@ -293,6 +303,7 @@ export class StokMinumanService {
       if (jenis === 'MASUK' && totalRp > 0) {
         const biaya = await tx.otherCost.create({
           data: {
+            id: biayaId,
             branchId,
             period: tanggal.slice(0, 7),
             incurredOn: hari,
@@ -330,6 +341,19 @@ export class StokMinumanService {
       const stokSesudah = (await this.stokMapTx(tx, branchId, barangId)) ?? 0;
       return { ...mutasi, tanggal, stokSesudah, namaBarang: barang.nama, satuan: barang.satuan };
     });
+    } catch (error) {
+      await hapusNota?.();
+      throw error;
+    }
+    if (nota && hasil.otherCostId)
+      await catatNota(this.db as never, this.db, {
+        otherCostId: hasil.otherCostId,
+        ext: nota.jenis.ext,
+        mimeType: nota.jenis.mime,
+        ukuranByte: nota.buffer.length,
+        diunggahOleh: principal.userId || null,
+      });
+    return hasil;
   }
 
   private async stokMapTx(tx: Pick<PrismaService, 'mutasiStokMinuman'>, branchId: string, barangId: string) {

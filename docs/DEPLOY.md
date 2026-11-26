@@ -481,6 +481,23 @@ CREATE TABLE `persetujuan_syarat` (
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 ```
 
+`nota_pengeluaran` (nota wajib untuk pengeluaran, 26 November 2026). Menandai pengeluaran yang punya
+foto/PDF nota (berkasnya di penyimpanan privat, kunci `expense-receipts/<id other_cost>.<ext>`). Tanpa
+tabel ini pengeluaran baru tetap wajib nota dan notanya tetap bisa dibuka, tetapi daftar Jurnal kas
+belum bisa menandai mana yang sudah ada notanya.
+
+```sql
+CREATE TABLE `nota_pengeluaran` (
+    `otherCostId` CHAR(36) NOT NULL,
+    `storageKey` VARCHAR(200) NOT NULL,
+    `mimeType` VARCHAR(60) NOT NULL,
+    `ukuranByte` INTEGER NOT NULL,
+    `diunggahOleh` CHAR(36) NULL,
+    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    PRIMARY KEY (`otherCostId`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+```
+
 ## Akun HR Group (SSO)
 
 Tombol "Masuk dengan Akun HR Group" di halaman masuk dan credential bridge untuk migrasi member lama. Kontraknya

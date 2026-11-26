@@ -1,4 +1,5 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
+import { idDenganNota } from './nota-pengeluaran';
 import { penjualanMinuman } from './stok-minuman.service';
 import { PrismaService } from '../database/prisma.service';
 import { bacaOpsional } from '../foundation/tabel-opsional';
@@ -102,6 +103,8 @@ export interface BarisJurnal {
   branchId: string;
   /** Pengeluaran yang dibayar uang pribadi Super Owner (diganti saat settlement). */
   dibayarOleh?: string | null;
+  /** Pengeluaran punya foto/PDF nota (dibuka lewat GET /other-costs/:id/nota). */
+  adaNota?: boolean;
 }
 
 export interface JurnalKas {
@@ -505,6 +508,7 @@ export class RingkasanKeuanganService {
     const dibayarOleh = new Map(
       pembayar.map((p) => [p.otherCostId, namaPembayar.get(p.dibayarOlehId) ?? 'Super Owner']),
     );
+    const adaNota = await idDenganNota(this.db as never, (biaya as { id: string }[]).map((b) => b.id));
 
     const rows: BarisJurnal[] = [
       ...(pembelian as Beli[]).map((p) => ({
@@ -530,6 +534,7 @@ export class RingkasanKeuanganService {
         createdAt: b.createdAt ? b.createdAt.toISOString() : null,
         branchId: b.branchId,
         dibayarOleh: dibayarOleh.get(b.id) ?? null,
+        adaNota: adaNota.has(b.id),
       })),
     ].sort((a, b) => (a.tanggal === b.tanggal ? 0 : a.tanggal < b.tanggal ? 1 : -1));
 

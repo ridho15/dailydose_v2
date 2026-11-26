@@ -28,7 +28,7 @@ function setup(mutasiAwal: Array<{ branchId: string; barangId: string; jenis: st
   const barang = { id: BARANG, nama: 'Air mineral', satuan: 'botol', hargaJualRp: 8000, aktif: true };
   const tx: any = {
     $queryRaw: jest.fn(async () => []),
-    otherCost: { create: jest.fn(async ({ data }) => ({ id: 'cost-1', ...data })) },
+    otherCost: { create: jest.fn(async ({ data }) => ({ ...data })) },
     mutasiStokMinuman: {
       groupBy,
       create: jest.fn(async ({ data }) => {
@@ -43,24 +43,34 @@ function setup(mutasiAwal: Array<{ branchId: string; barangId: string; jenis: st
     mutasiStokMinuman: { groupBy },
   };
   const audit = { catat: jest.fn() };
-  return { svc: new StokMinumanService(db, policy, audit as never), db, tx, audit, mutasi };
+  const storage = { put: jest.fn(async () => undefined), delete: jest.fn(async () => undefined) };
+  return { svc: new StokMinumanService(db, policy, audit as never, storage as never), db, tx, audit, mutasi, storage };
 }
 
 const NOW = new Date('2026-11-25T05:00:00Z');
+const NOTA = { buffer: Buffer.from('%PDF-1.4 nota pembelian minuman') };
 
 describe('StokMinumanService', () => {
   afterEach(() => jest.restoreAllMocks());
 
   it('barang masuk menambah stok dan otomatis jadi pengeluaran cabang kategori MINUMAN', async () => {
-    const { svc, tx } = setup();
+    const { svc, tx, storage } = setup();
+    // Tanpa nota ditolak sebelum apa pun disimpan.
+    await expect(
+      svc.catat(prinsipal('ADMIN'), { branchId: 'gg', barangId: BARANG, jenis: 'MASUK', jumlah: 24, hargaSatuanRp: 3500 }, NOW),
+    ).rejects.toMatchObject({ response: 'RECEIPT_REQUIRED' });
+    expect(tx.otherCost.create).not.toHaveBeenCalled();
     const hasil = await svc.catat(
       prinsipal('ADMIN'),
       { branchId: 'gg', barangId: BARANG, jenis: 'MASUK', jumlah: 24, hargaSatuanRp: 3500 },
       NOW,
+      NOTA,
     );
+    expect(storage.put).toHaveBeenCalledWith(expect.objectContaining({ key: expect.stringMatching(/^expense-receipts\/.+\.pdf$/) }));
     expect(hasil.stokSesudah).toBe(24);
     expect(hasil.totalRp).toBe(84_000);
-    expect(hasil.otherCostId).toBe('cost-1');
+    // Id pengeluaran dibuat di depan supaya berkas nota tersimpan dengan kunci yang sama.
+    expect(hasil.otherCostId).toEqual(expect.stringMatching(/^[0-9a-f-]{36}$/));
     expect(tx.otherCost.create).toHaveBeenCalledWith({
       data: expect.objectContaining({ branchId: 'gg', category: 'MINUMAN', amountRp: 84_000, period: '2026-11' }),
     });

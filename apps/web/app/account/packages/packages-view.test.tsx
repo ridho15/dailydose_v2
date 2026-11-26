@@ -5,6 +5,12 @@ import type { LedgerBalance } from '@/api-clients/ledger-client';
 import type { CustomerOrder } from '@/api-clients/order-client';
 import { CustomerPackagesView, sejak } from './packages-view';
 
+// Cabang utama member menentukan katalog paket perpanjangan yang dimuat.
+vi.mock('../../session-context', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../session-context')>()),
+  useSessionContext: () => ({ session: { branches: [{ id: 'branch-1', name: 'Untar' }], preferredBranch: { id: 'branch-1' } } }),
+}));
+
 const paket = (over: Partial<LedgerBalance> = {}): LedgerBalance =>
   ({
     id: 'cp-1',
@@ -147,5 +153,38 @@ describe('sejak', () => {
     expect(sejak('2026-11-02T09:35:00Z', now)).toBe('25 menit lalu');
     expect(sejak('2026-11-02T06:00:00Z', now)).toBe('4 jam lalu');
     expect(sejak('2026-10-31T10:00:00Z', now)).toBe('2 hari lalu');
+  });
+});
+
+describe('Paket Saya: paket berakhir yang masih bersisa sesi', () => {
+  it('menawarkan Aktifkan lagi dengan harga dan lama perpanjangan, menuju checkout dengan paket itu terpilih', async () => {
+    const katalog = {
+      list: vi.fn().mockResolvedValue({
+        items: [{ id: 'pkg-ext', branchId: 'branch-1', priceRp: 150_000, validityDays: 30, perpanjanganMasaAktif: true }],
+      }),
+    };
+    const ledger = {
+      list: vi.fn().mockResolvedValue({
+        items: [paket({ id: 'cp-lama', packageName: 'Reformer 8', expiryAt: new Date('2026-11-01'), status: 'EXPIRED', ledgerBalance: 3, available: 3 })],
+        summary: { packageCount: 1, ledgerBalance: 3, reserved: 0, available: 3 },
+        nextCursor: null,
+      }),
+    };
+    render(
+      <CustomerPackagesView
+        ledger={ledger as never}
+        orders={{ list: vi.fn().mockResolvedValue({ items: [], nextCursor: null }) } as never}
+        bookings={{ list: vi.fn().mockResolvedValue({ items: [], nextCursor: null }) } as never}
+        katalog={katalog as never}
+        now={new Date('2026-11-26T05:00:00Z').getTime()}
+      />,
+    );
+    const bagian = await screen.findByRole('region', { name: 'Paket berakhir, sesi masih ada' });
+    expect(within(bagian).getByText(/Rp150\.000 untuk 30 hari/)).toBeVisible();
+    expect(within(bagian).getByText(/Maksimal 3 kali/)).toBeVisible();
+    expect(within(bagian).getByRole('link', { name: 'Aktifkan lagi' })).toHaveAttribute(
+      'href',
+      '/checkout?package=pkg-ext&branch=branch-1&target=cp-lama',
+    );
   });
 });

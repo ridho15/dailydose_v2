@@ -152,9 +152,14 @@ describe('perpanjangan masa aktif: aturan inti', () => {
     expect(pilihan).toMatchObject({ extensionsUsed: 2, extensionsLeft: 1 });
   });
 
-  it('paket target yang sudah hangus, sesi habis, atau milik member lain ditolak saat pesanan dibuat', async () => {
+  it('member boleh memperpanjang paket yang sudah berakhir bila masih bersisa sesi (26 Nov 2026)', async () => {
+    const { db } = fakeDb({ target: { validUntil: new Date(now.getTime() - 3 * 86_400_000) } });
+    await expect(periksaTargetPerpanjangan(db, targetId, memberId, now)).resolves.toMatchObject({ id: targetId });
+  });
+
+  it('paket target tanpa sisa sesi, beku, atau milik member lain ditolak saat pesanan dibuat', async () => {
     for (const target of [
-      { validUntil: new Date(now.getTime() - 1000) },
+      { validUntil: new Date(now.getTime() - 1000), remainingSessions: 0 },
       { remainingSessions: 0 },
       { status: 'FROZEN' },
     ]) {

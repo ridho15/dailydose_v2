@@ -13,7 +13,8 @@ import { tanggalWib } from './instructor-fee-calculator';
  * - Paling banyak 3 kali per Paket Pelanggan.
  * - Untuk paket yang masih aktif: status ACTIVE, belum lewat masa berlaku, sisa sesi > 0.
  *   Diperiksa saat pesanan dibuat dan sekali lagi saat pembayaran disetujui.
- * - Paket yang sudah kedaluwarsa tetapi masih bersisa sesi (25 November 2026): hanya lewat staf,
+ * - Paket yang sudah kedaluwarsa tetapi masih bersisa sesi (25-26 November 2026): bisa dibeli member
+ *   sendiri maupun lewat staf,
  *   wajib bukti pembayaran saat disetujui, berlaku sebanyak masa berlaku paket perpanjangan dari hari disetujui, status kembali ACTIVE.
  * - Pembelian perpanjangan tidak membuat Paket Pelanggan baru (paket 0 sesi hanya akan muncul di
  *   pilihan booking dan daftar paket member sebagai paket kosong).
@@ -203,14 +204,14 @@ export async function pilihanTargetPerpanjangan(
     status: 'ACTIVE',
     validUntil: { gt: now, lte: new Date(now.getTime() + JENDELA_PERPANJANGAN_HARI * HARI_MS) },
   };
-  // Staf juga melihat paket yang sudah kedaluwarsa tetapi masih bersisa sesi.
+  // Paket yang sudah kedaluwarsa tetapi masih bersisa sesi juga bisa diperpanjang (member dan staf).
   const kedaluwarsa = [{ status: 'EXPIRED' }, { status: 'ACTIVE', validUntil: { lte: now } }];
   const paket: Array<PaketTarget & { totalSessions: number; package: { name: string } | null }> =
     await db.paketPelanggan.findMany({
       where: {
         userId,
         remainingSessions: { gt: 0 },
-        ...(opsi.staf ? { OR: [hampirBerakhir, ...kedaluwarsa] } : hampirBerakhir),
+        OR: [hampirBerakhir, ...kedaluwarsa],
       },
       include: { package: { select: { name: true } } },
       orderBy: [{ validUntil: 'asc' }, { id: 'asc' }],
@@ -257,7 +258,7 @@ export async function periksaTargetPerpanjangan(
   if (!cp || cp.userId !== userId)
     throw new ApiProblem('PACKAGE_EXTENSION_TARGET_NOT_FOUND', HttpStatus.NOT_FOUND);
   const kedaluwarsa = paketKedaluwarsaBersisa(cp, now);
-  if (!paketMasihAktif(cp, now) && !(opsi.staf && kedaluwarsa))
+  if (!paketMasihAktif(cp, now) && !kedaluwarsa)
     throw new ApiProblem('PACKAGE_EXTENSION_TARGET_EXPIRED', HttpStatus.CONFLICT);
   // Saat pesanan dibuat saja; persetujuan pembayaran yang datang belakangan tidak dicek ulang.
   if (!kedaluwarsa && !dalamJendelaPerpanjangan(cp, now))

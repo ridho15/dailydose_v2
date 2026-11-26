@@ -2,6 +2,10 @@ import { createHash } from 'node:crypto';
 import { PolicyService } from '../identity/policy.service';
 import { FinanceService } from './finance.service';
 
+// Nota pengeluaran wajib sejak 26 November 2026: berkas PDF kecil dan penyimpanan tiruan.
+const NOTA = { buffer: Buffer.from('%PDF-1.4 nota pengeluaran contoh') };
+const STORAGE = { put: jest.fn(async () => undefined), delete: jest.fn(async () => undefined) };
+
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const branchA = id(1);
 const branchB = id(2);
@@ -37,7 +41,7 @@ function setup() {
     cabang: { findUnique: jest.fn().mockResolvedValue({ code: 'DD-GG' }) },
   };
   const audit = { catat: jest.fn().mockResolvedValue(undefined) };
-  const service = new FinanceService(db as never, new PolicyService(), audit as never);
+  const service = new FinanceService(db as never, new PolicyService(), audit as never, STORAGE as never);
   return { service, db, audit };
 }
 
@@ -174,7 +178,7 @@ describe('FinanceService.realtimeInstructorCostReport instructor attendance', ()
     };
     return {
       db,
-      service: new FinanceService(db as never, new PolicyService(), { catat: jest.fn() } as never),
+      service: new FinanceService(db as never, new PolicyService(), { catat: jest.fn() } as never, STORAGE as never),
     };
   }
 
@@ -251,7 +255,7 @@ describe('instructor honor is computed identically by every finance report', () 
     pembelian: { findMany: jest.fn().mockResolvedValue([]) },
     otherCost: { findMany: jest.fn().mockResolvedValue([]) },
   };
-  const service = new FinanceService(db as never, new PolicyService(), { catat: jest.fn() } as never);
+  const service = new FinanceService(db as never, new PolicyService(), { catat: jest.fn() } as never, STORAGE as never);
 
   it('returns the same per-instructor breakdown in the realtime and owner branch reports', async () => {
     const realtime = await service.realtimeInstructorCostReport(finance, {
@@ -282,7 +286,7 @@ describe('instructor honor is computed identically by every finance report', () 
       ...db,
       slotKelas: { findMany: jest.fn().mockResolvedValue([]) },
     };
-    const emptyService = new FinanceService(emptyDb as never, new PolicyService(), { catat: jest.fn() } as never);
+    const emptyService = new FinanceService(emptyDb as never, new PolicyService(), { catat: jest.fn() } as never, STORAGE as never);
     const emptyReport = await emptyService.ownerBranchPerformance(superOwner, {
       branchId: branchA,
       period: '2026-09',
@@ -311,7 +315,7 @@ describe('instructor honor is computed identically by every finance report', () 
       ...db,
       instructorFee: { findMany: jest.fn().mockResolvedValue(configuredFees) },
     };
-    const fullService = new FinanceService(fullDb as never, new PolicyService(), { catat: jest.fn() } as never);
+    const fullService = new FinanceService(fullDb as never, new PolicyService(), { catat: jest.fn() } as never, STORAGE as never);
     const fullReport = await fullService.ownerBranchPerformance(superOwner, {
       branchId: branchA,
       period: '2026-09',
@@ -469,7 +473,7 @@ describe('FinanceService.createOtherCost validation', () => {
 
   it('stores a trimmed description and an upper-case category', async () => {
     const { service, create } = build();
-    await service.createOtherCost(finance, { ...input, description: '  Handuk studio  ', categoryCode: 'laundry' });
+    await service.createOtherCost(finance, { ...input, description: '  Handuk studio  ', categoryCode: 'laundry' }, NOTA);
     expect(create).toHaveBeenCalledWith({
       data: expect.objectContaining({ description: 'Handuk studio', category: 'LAUNDRY' }),
     });
@@ -477,7 +481,7 @@ describe('FinanceService.createOtherCost validation', () => {
 
   it.each(['', '   ', 'x'.repeat(2001)])('rejects a description of %j', async (description) => {
     const { service, create } = build();
-    await expect(service.createOtherCost(finance, { ...input, description })).rejects.toMatchObject({
+    await expect(service.createOtherCost(finance, { ...input, description }, NOTA)).rejects.toMatchObject({
       status: 422,
     });
     expect(create).not.toHaveBeenCalled();
@@ -485,7 +489,7 @@ describe('FinanceService.createOtherCost validation', () => {
 
   it.each([2_000_000_001, 2_500_000_000])('rejects an amount above the 32-bit limit (%d)', async (amountRp) => {
     const { service, create } = build();
-    await expect(service.createOtherCost(finance, { ...input, amountRp })).rejects.toMatchObject({
+    await expect(service.createOtherCost(finance, { ...input, amountRp }, NOTA)).rejects.toMatchObject({
       code: 'VALIDATION_ERROR',
     });
     expect(create).not.toHaveBeenCalled();
@@ -493,21 +497,29 @@ describe('FinanceService.createOtherCost validation', () => {
 
   it('rejects a fractional amount', async () => {
     const { service, create } = build();
-    await expect(service.createOtherCost(finance, { ...input, amountRp: 10.5 })).rejects.toBeDefined();
+    await expect(service.createOtherCost(finance, { ...input, amountRp: 10.5 }, NOTA)).rejects.toBeDefined();
     expect(create).not.toHaveBeenCalled();
   });
 
   it('rejects a malformed category', async () => {
     const { service, create } = build();
     await expect(
-      service.createOtherCost(finance, { ...input, categoryCode: 'bad category!' }),
+      service.createOtherCost(finance, { ...input, categoryCode: 'bad category!' }, NOTA),
     ).rejects.toMatchObject({ status: 422 });
     expect(create).not.toHaveBeenCalled();
   });
 
   it('answers 404 for a branch that does not exist instead of a database error', async () => {
     const { service, create } = build(false);
-    await expect(service.createOtherCost(superOwner, input)).rejects.toMatchObject({ status: 404 });
+    await expect(service.createOtherCost(superOwner, input, NOTA)).rejects.toMatchObject({ status: 404 });
+  });
+
+  it('refuses an expense without a receipt (nota), or with a file that is not a photo or PDF', async () => {
+    const { service, create } = build();
+    await expect(service.createOtherCost(finance, input)).rejects.toMatchObject({ response: 'RECEIPT_REQUIRED' });
+    await expect(
+      service.createOtherCost(finance, input, { buffer: Buffer.from('bukan gambar atau pdf') }),
+    ).rejects.toMatchObject({ response: 'UPLOAD_REJECTED' });
     expect(create).not.toHaveBeenCalled();
   });
 });

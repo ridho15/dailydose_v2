@@ -47,9 +47,12 @@ describe('StokMinumanView', () => {
     const tombol = screen.getByRole('button', { name: 'Catat pembelian' });
     expect(tombol).toBeDisabled();
     await user.type(screen.getByLabelText('Harga beli per satuan (Rp)'), '3500');
+    // Pembelian wajib nota: tanpa nota tombol tetap terkunci.
+    expect(tombol).toBeDisabled();
+    await user.upload(screen.getByLabelText(/Foto nota/), new File(['%PDF-1.4'], 'nota.pdf', { type: 'application/pdf' }));
     await user.click(tombol);
     await waitFor(() =>
-      expect(client.catat).toHaveBeenCalledWith(expect.objectContaining({ branchId: 'gg', barangId: 'b1', jenis: 'MASUK', jumlah: 24, hargaSatuanRp: 3500 })),
+      expect(client.catat).toHaveBeenCalledWith(expect.objectContaining({ branchId: 'gg', barangId: 'b1', jenis: 'MASUK', jumlah: 24, hargaSatuanRp: 3500, nota: expect.any(File) })),
     );
     // Admin hanya melihat Beli barang dan Jual; Dipakai owner khusus Super Owner.
     expect(screen.queryByLabelText('Dipakai owner')).toBeNull();

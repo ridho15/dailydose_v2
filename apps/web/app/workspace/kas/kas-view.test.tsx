@@ -82,6 +82,10 @@ describe('KasView', () => {
     expect(simpan).toBeDisabled();
     await user.type(screen.getByLabelText('Keterangan'), 'Matras 2 pcs');
     await user.type(screen.getByLabelText('Nominal (Rp)'), 'Rp 1.200.000');
+    // Nota wajib: tanpa foto nota tombol tetap terkunci.
+    expect(simpan).toBeDisabled();
+    const nota = new File(['%PDF-1.4'], 'nota.pdf', { type: 'application/pdf' });
+    await user.upload(screen.getByLabelText(/Foto nota/), nota);
     await user.click(simpan);
 
     expect(c.catatPengeluaran).toHaveBeenCalledWith({
@@ -90,6 +94,7 @@ describe('KasView', () => {
       categoryCode: 'PEMBELIAN_BARANG',
       description: 'Matras 2 pcs',
       amountRp: 1_200_000,
+      nota,
     });
     expect(
       await screen.findByText(/Pembelian barang Rp 1.200.000 tercatat untuk Green Garden/),
@@ -144,6 +149,7 @@ describe('KasView: Dibayar oleh dan settlement Super Owner', () => {
     await user.selectOptions(await screen.findByLabelText('Dibayar oleh'), 'so-2');
     await user.type(screen.getByLabelText('Keterangan'), 'Matras baru');
     await user.type(screen.getByLabelText('Nominal (Rp)'), '500000');
+    await user.upload(screen.getByLabelText(/Foto nota/), new File(['x'], 'nota.jpg', { type: 'image/jpeg' }));
     await user.click(screen.getByRole('button', { name: 'Simpan pengeluaran' }));
     expect(c.catatPengeluaran).toHaveBeenCalledWith(
       expect.objectContaining({ amountRp: 500_000, dibayarOlehId: 'so-2' }),

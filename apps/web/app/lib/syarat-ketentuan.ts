@@ -84,8 +84,8 @@ export const PASAL_SYARAT: readonly PasalSyarat[] = [
       'Perpanjangan masa berlaku adalah layanan berbayar, bukan hak Member, dan hanya tersedia selama Studio menyediakannya.',
       'Setiap Paket HANYA DAPAT DIPERPANJANG MAKSIMAL 3 (TIGA) KALI. Perpanjangan yang masih menunggu pembayaran atau persetujuan ikut dihitung. Setelah 3 kali perpanjangan, Paket tidak dapat diperpanjang lagi dengan cara apa pun dan sisa sesinya hangus pada tanggal berakhir terakhir.',
       'Lama tambahan masa berlaku sesuai paket perpanjangan yang dibeli dan tertera saat pembelian (misalnya 30 hari), dihitung dari tanggal berakhir Paket saat itu, bukan dari hari pembelian. Harga mengikuti yang berlaku di Aplikasi saat perpanjangan dibeli.',
-      'Perpanjangan hanya dapat dibeli untuk Paket yang masih aktif, masih memiliki sisa sesi, dan sudah mendekati tanggal berakhir (dalam 14 hari terakhir, atau jendela lain yang ditampilkan di Aplikasi).',
-      'Paket yang sudah berakhir tetapi masih memiliki sisa sesi hanya dapat diperpanjang atas kebijakan Studio melalui staf, dengan pembayaran dan bukti bayar. Masa berlaku tambahan dihitung dari hari perpanjangan disetujui, dan tetap dihitung dalam batas 3 kali. Studio tidak wajib menyetujuinya.',
+      'Perpanjangan untuk Paket yang masih aktif dapat dibeli bila Paket masih memiliki sisa sesi dan sudah mendekati tanggal berakhir (dalam 14 hari terakhir, atau jendela lain yang ditampilkan di Aplikasi).',
+      'Paket yang sudah berakhir tetapi masih memiliki sisa sesi dapat diaktifkan kembali dengan membeli perpanjangan, baik sendiri melalui Aplikasi maupun melalui staf, dengan pembayaran dan bukti bayar. Masa berlaku tambahan dihitung dari hari pembayaran disetujui, bukan dari tanggal berakhir lama, dan tetap dihitung dalam batas 3 kali. Sampai perpanjangan disetujui, sisa sesi tidak dapat dipakai. Studio berhak menolak pembayaran yang tidak sah.',
       'Perpanjangan tidak menambah jumlah sesi. Perpanjangan baru berlaku setelah pembayarannya disetujui, dan yang sudah dibayar tidak dapat dibatalkan atau dikembalikan.',
     ],
   },
@@ -211,6 +211,7 @@ export function ringkasanPembelian(
     return [
       `Perpanjangan menambah masa berlaku ${tambah} dari tanggal berakhir saat ini, tanpa menambah sesi, setelah pembayaran disetujui.`,
       'Setiap paket maksimal 3 kali perpanjangan (termasuk yang masih menunggu). Setelah itu tidak bisa diperpanjang lagi dan sisa sesi hangus saat masa berlaku habis.',
+      'Untuk paket yang sudah berakhir, masa berlaku baru dihitung dari hari pembayaran disetujui.',
       'Pembayaran perpanjangan final dan tidak dapat dikembalikan.',
     ];
   }

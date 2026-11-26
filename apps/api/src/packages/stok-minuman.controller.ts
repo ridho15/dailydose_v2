@@ -1,4 +1,5 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query, Req, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { AuthGuard, type AuthenticatedRequest } from '../identity/auth.guard';
 import { StokMinumanService } from './stok-minuman.service';
 
@@ -34,9 +35,15 @@ export class StokMinumanController {
     return this.stok.riwayat(req.principal, { branchId, barangId, cursor, limit });
   }
 
+  /** Multipart; `nota` (foto/PDF) wajib untuk pembelian (MASUK). */
   @Post('movements')
-  catat(@Req() req: AuthenticatedRequest, @Body() body: Record<string, unknown>) {
-    return this.stok.catat(req.principal, body ?? {});
+  @UseInterceptors(FileInterceptor('nota', { limits: { fileSize: 8_000_000, files: 1 } }))
+  catat(
+    @Req() req: AuthenticatedRequest,
+    @Body() body: Record<string, unknown>,
+    @UploadedFile() nota?: { buffer?: Buffer; size?: number },
+  ) {
+    return this.stok.catat(req.principal, body ?? {}, new Date(), nota);
   }
 
   @Patch(':id')
