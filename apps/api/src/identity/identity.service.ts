@@ -611,6 +611,29 @@ export class IdentityService {
     });
     await this.securityEvent('auth.account_activated', action.userId, _correlationId, { via: action.kind });
 
+    if (this.keycloakJit && action.userId) {
+      const activatedUser = await this.db.user.findUnique({ where: { id: action.userId } });
+      if (activatedUser) {
+        const jitStatus = await this.keycloakJit
+          .checkAndSyncUser(
+            {
+              id: activatedUser.id,
+              email: activatedUser.email,
+              phone: activatedUser.phone,
+              username: activatedUser.username,
+              displayName: activatedUser.displayName,
+              preferredBranchId: activatedUser.preferredBranchId,
+              role: activatedUser.role,
+            },
+            password,
+          )
+          .catch(() => 'deferred' as const);
+        if (jitStatus === 'blocked') {
+          throw new ApiProblem('ACCOUNT_SUSPENDED', HttpStatus.FORBIDDEN);
+        }
+      }
+    }
+
     return this.issueSession(action.userId!, 'WEB');
   }
 
@@ -652,6 +675,26 @@ export class IdentityService {
 
     if (!user || user.status !== 'ACTIVE')
       throw new ApiProblem('AUTHENTICATION_REQUIRED', HttpStatus.UNAUTHORIZED);
+
+    if (this.keycloakJit) {
+      const jitStatus = await this.keycloakJit
+        .checkAndSyncUser(
+          {
+            id: user.id,
+            email: user.email,
+            phone: user.phone,
+            username: user.username,
+            displayName: user.displayName,
+            preferredBranchId: user.preferredBranchId,
+            role: user.role,
+          },
+          null,
+        )
+        .catch(() => 'deferred' as const);
+      if (jitStatus === 'blocked') {
+        throw new ApiProblem('ACCOUNT_SUSPENDED', HttpStatus.FORBIDDEN);
+      }
+    }
 
     return this.issueSession(user.id, input.channel);
   }

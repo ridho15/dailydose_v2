@@ -34,6 +34,12 @@ type TargetState =
   | { status: 'error'; message: string };
 const NO_BRANCHES: Array<{ id: string; name: string }> = [];
 
+async function kirimBuktiManual(purchase: Purchase, file: File) {
+  const compressed = await compressImageIfNeeded(file);
+  const sha256 = await sha256Upload(compressed);
+  await browserOrderClient.uploadProof(purchase as never, compressed, sha256, undefined);
+}
+
 /**
  * Penjualan manual di meja. Staf mencatat pembayaran yang diterima; paket baru aktif setelah
  * penyetuju LAIN menyetujuinya di antrean Pembayaran (pencatat tidak boleh menyetujui sendiri).
@@ -81,6 +87,10 @@ export function AssistedSaleDrawer({
     message?: string;
   }>({ status: 'idle' });
   const [recordedPurchase, setRecordedPurchase] = useState<Purchase | null>(null);
+  const [step2File, setStep2File] = useState<File | null>(null);
+  const [step2Uploading, setStep2Uploading] = useState(false);
+  const [step2Uploaded, setStep2Uploaded] = useState(false);
+  const [step2Error, setStep2Error] = useState('');
   const idempotencyKey = useRef<string | undefined>(undefined);
   const branchKey = branches.map((item) => item.id).join('|');
   const dirty = Boolean(
@@ -100,6 +110,10 @@ export function AssistedSaleDrawer({
     setFailure('');
     setPricePreview({ status: 'idle' });
     setRecordedPurchase(null);
+    setStep2File(null);
+    setStep2Uploading(false);
+    setStep2Uploaded(false);
+    setStep2Error('');
     idempotencyKey.current = undefined;
   }, [open, customer?.id, customer?.name, branch?.id, branchKey]);
 
@@ -217,10 +231,13 @@ export function AssistedSaleDrawer({
   const hariTambah = targets.status === 'ready' ? targets.list.days : 30;
   const selectedTarget =
     targets.status === 'ready' ? targets.list.items.find((item) => item.customerPackageId === targetId) : undefined;
-  // Paket kedaluwarsa hanya diperpanjang dengan bukti pembayaran (keputusan pemilik 25 November 2026).
-  const wajibBukti = Boolean(selectedTarget?.kedaluwarsa);
+  // Transfer bank baru mendapat kode unik 3 digit setelah transaksi dicatat, sehingga unggah bukti
+  // dilakukan setelah submit (Tahap 2). Metode non-transfer untuk paket kedaluwarsa tetap wajib bukti
+  // sebelum dicatat karena nominal sudah pasti di meja.
+  const isBankTransfer = method === 'BANK_TRANSFER';
+  const wajibBuktiDiAwal = Boolean(selectedTarget?.kedaluwarsa) && !isBankTransfer;
   const ready = Boolean(
-    customerOption && packageOption && saleBranch && (!isExtension || selectedTarget) && (!wajibBukti || proofFile),
+    customerOption && packageOption && saleBranch && (!isExtension || selectedTarget) && (!wajibBuktiDiAwal || proofFile),
   );
   const displaySubtotalRp = pricePreview.data?.subtotalRp ?? packageOption?.priceRp ?? 0;
   const displayTotalRp = pricePreview.data?.baseAmountRp ?? packageOption?.priceRp ?? 0;
@@ -255,33 +272,30 @@ export function AssistedSaleDrawer({
         },
         idempotencyKey.current,
       );
-      if (proofFile) {
+      let buktiTersimpan = false;
+      if (!isBankTransfer && proofFile) {
         try {
-          const compressed = await compressImageIfNeeded(proofFile);
-          const sha256 = await sha256Upload(compressed);
-          await browserOrderClient.uploadProof(
-            purchase as any,
-            compressed,
-            sha256,
-            undefined,
-          );
-        } catch (proofErr: any) {
-          console.error("Gagal melampirkan bukti manual:", proofErr);
+          await kirimBuktiManual(purchase, proofFile);
+          buktiTersimpan = true;
+        } catch (proofErr) {
+          console.error('Gagal melampirkan bukti manual:', proofErr);
           feedback.showToast({
             tone: 'warning',
             title: 'Penjualan dicatat, namun bukti gagal diunggah',
-            message: proofErr.message || 'Anda dapat mengunggah bukti di detail pembayaran.',
+            message: 'Anda dapat mengunggah ulang bukti di halaman Detail Pembayaran.',
           });
         }
       }
       feedback.showToast({
         tone: 'success',
         title: 'Penjualan dicatat',
-        message: proofFile
-          ? 'Penjualan dan bukti pembayaran berhasil disimpan.'
-          : 'Menunggu persetujuan penyetuju lain di antrean Pembayaran.',
+        message: isBankTransfer
+          ? 'Kode unik dibuat. Unggah bukti transfer setelah member membayar sesuai nominal.'
+          : buktiTersimpan
+            ? 'Penjualan dan bukti pembayaran berhasil disimpan.'
+            : 'Menunggu persetujuan penyetuju lain di antrean Pembayaran.',
       });
-      if (purchase.paymentUniqueCode || purchase.extension) {
+      if (isBankTransfer || purchase.paymentUniqueCode || purchase.extension) {
         setRecordedPurchase(purchase);
       } else {
         onRecorded?.(purchase);
@@ -294,10 +308,33 @@ export function AssistedSaleDrawer({
     }
   };
 
+  const uploadStep2Proof = async () => {
+    if (!recordedPurchase || !step2File) return;
+    setStep2Uploading(true);
+    setStep2Error('');
+    try {
+      await kirimBuktiManual(recordedPurchase, step2File);
+      setStep2Uploaded(true);
+      setStep2File(null);
+      feedback.showToast({
+        tone: 'success',
+        title: 'Bukti transfer berhasil diunggah',
+        message: 'Pembayaran siap diperiksa penyetuju lain di antrean Pembayaran.',
+      });
+    } catch {
+      setStep2Error('Bukti belum dapat diunggah. Coba lagi atau unggah lewat Detail Pembayaran.');
+    } finally {
+      setStep2Uploading(false);
+    }
+  };
+
   const finishRecorded = () => {
     if (!recordedPurchase) return;
     const saved = recordedPurchase;
     setRecordedPurchase(null);
+    setStep2File(null);
+    setStep2Uploaded(false);
+    setStep2Error('');
     onRecorded?.(saved);
     onClose();
   };
@@ -378,6 +415,58 @@ export function AssistedSaleDrawer({
               <p className="text-xs text-dd-muted">
                 Paket akan diperpanjang otomatis setelah transaksi ini disetujui penyetuju lain di Antrean Pembayaran.
               </p>
+            </div>
+          )}
+          {(recordedPurchase.paymentMethod === 'BANK_TRANSFER' || Number(recordedPurchase.paymentUniqueCode) > 0) && (
+            <div
+              className="space-y-2 rounded-dd-sm border border-dashed border-dd-line bg-dd-surface-muted/40 p-3"
+              data-testid="assisted-sale-step2-proof-box"
+            >
+              {step2Uploaded ? (
+                <p
+                  role="status"
+                  className="rounded-dd-sm border border-emerald-200 bg-emerald-50 p-2.5 text-xs font-semibold text-emerald-700"
+                >
+                  Bukti transfer berhasil diunggah. Menunggu verifikasi penyetuju lain di Antrean Pembayaran.
+                </p>
+              ) : (
+                <>
+                  <label htmlFor="assisted-sale-step2-proof" className="block text-xs font-semibold text-dd-ink">
+                    Unggah bukti transfer (sesuai nominal di atas)
+                  </label>
+                  <p className="text-xs text-dd-muted">
+                    {selectedTarget?.kedaluwarsa
+                      ? 'Wajib sebelum Finance menyetujui perpanjangan paket kedaluwarsa. Unggah di sini setelah member transfer, atau nanti lewat Detail Pembayaran.'
+                      : 'Unggah di sini setelah member mentransfer tepat sesuai kode unik, atau nanti lewat Detail Pembayaran.'}
+                  </p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <input
+                      id="assisted-sale-step2-proof"
+                      type="file"
+                      data-testid="input-assisted-sale-proof-step2"
+                      accept="image/jpeg,image/png,image/webp,application/pdf"
+                      disabled={step2Uploading}
+                      onChange={(e) => {
+                        setStep2File(e.target.files?.[0] ?? null);
+                        setStep2Error('');
+                      }}
+                      className="text-xs file:mr-2 file:rounded-dd-sm file:border-0 file:bg-dd-forest/10 file:px-2.5 file:py-1 file:text-xs file:font-semibold file:text-dd-forest hover:file:bg-dd-forest/20 cursor-pointer"
+                    />
+                    {step2File && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        data-testid="btn-upload-proof-step2"
+                        loading={step2Uploading}
+                        onClick={() => void uploadStep2Proof()}
+                      >
+                        Unggah bukti
+                      </Button>
+                    )}
+                  </div>
+                  {step2Error && <Feedback kind="error">{step2Error}</Feedback>}
+                </>
+              )}
             </div>
           )}
           <div className="flex flex-wrap gap-2">
@@ -507,7 +596,11 @@ export function AssistedSaleDrawer({
         <SelectInput
           label="Metode pembayaran"
           value={method}
-          onChange={(event) => setMethod(event.target.value as AssistedPaymentMethod)}
+          onChange={(event) => {
+            const next = event.target.value as AssistedPaymentMethod;
+            setMethod(next);
+            if (next === 'BANK_TRANSFER') setProofFile(null);
+          }}
         >
           {Object.entries(assistedPaymentMethodLabels).map(([value, label]) => (
             <option value={value} key={value}>
@@ -528,30 +621,32 @@ export function AssistedSaleDrawer({
           placeholder="Contoh: dibayar tunai di meja resepsionis"
           onChange={(event) => setNote(event.target.value)}
         />
-        <div className="space-y-1.5 rounded-dd-sm border border-dashed border-dd-line bg-dd-surface-muted/40 p-3">
-          <label className="block text-xs font-semibold text-dd-ink">
-            Bukti transfer / struk pembayaran {wajibBukti ? '(wajib untuk paket kedaluwarsa)' : '(opsional)'}
-          </label>
-          <p className="text-xs text-dd-muted">
-            Format: JPG, PNG, WebP, PDF. Otomatis dikompresi agar hemat kuota.
-          </p>
-          <input
-            type="file"
-            data-testid="input-assisted-sale-proof"
-            accept="image/jpeg,image/png,image/webp,application/pdf"
-            disabled={busy}
-            onChange={(e) => {
-              const file = e.target.files?.[0] ?? null;
-              setProofFile(file);
-            }}
-            className="text-xs file:mr-2 file:rounded-dd-sm file:border-0 file:bg-dd-forest/10 file:px-2.5 file:py-1 file:text-xs file:font-semibold file:text-dd-forest hover:file:bg-dd-forest/20 cursor-pointer"
-          />
-          {proofFile && (
-            <p className="text-xs text-emerald-700 font-medium">
-              File dipilih: {proofFile.name} ({(proofFile.size / 1024).toFixed(1)} KB)
+        {!isBankTransfer && (
+          <div className="space-y-1.5 rounded-dd-sm border border-dashed border-dd-line bg-dd-surface-muted/40 p-3">
+            <label className="block text-xs font-semibold text-dd-ink">
+              Bukti transfer / struk pembayaran {wajibBuktiDiAwal ? '(wajib untuk paket kedaluwarsa)' : '(opsional)'}
+            </label>
+            <p className="text-xs text-dd-muted">
+              Format: JPG, PNG, WebP, PDF. Otomatis dikompresi agar hemat kuota.
             </p>
-          )}
-        </div>
+            <input
+              type="file"
+              data-testid="input-assisted-sale-proof"
+              accept="image/jpeg,image/png,image/webp,application/pdf"
+              disabled={busy}
+              onChange={(e) => {
+                const file = e.target.files?.[0] ?? null;
+                setProofFile(file);
+              }}
+              className="text-xs file:mr-2 file:rounded-dd-sm file:border-0 file:bg-dd-forest/10 file:px-2.5 file:py-1 file:text-xs file:font-semibold file:text-dd-forest hover:file:bg-dd-forest/20 cursor-pointer"
+            />
+            {proofFile && (
+              <p className="text-xs text-emerald-700 font-medium">
+                File dipilih: {proofFile.name} ({(proofFile.size / 1024).toFixed(1)} KB)
+              </p>
+            )}
+          </div>
+        )}
 
         {packageOption && (
           <div
@@ -586,7 +681,7 @@ export function AssistedSaleDrawer({
             </div>
             {method === 'BANK_TRANSFER' && (
               <p className="text-xs text-dd-muted">
-                Kode unik transfer 3 digit akan ditambahkan otomatis setelah penjualan dicatat.
+                Kode unik transfer 3 digit akan ditambahkan otomatis setelah penjualan dicatat, lalu Anda dapat langsung mengunggah bukti transfernya.
                 {pricePreview.data?.paymentAccount
                   ? ` Rekening: ${pricePreview.data.paymentAccount.bankName} ${pricePreview.data.paymentAccount.accountNumber} (a.n. ${pricePreview.data.paymentAccount.accountHolderName}).`
                   : ''}

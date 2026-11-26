@@ -282,4 +282,44 @@ describe('AssistedSaleDrawer', () => {
     expect(onRecorded).toHaveBeenCalledTimes(1);
     expect(onClose).toHaveBeenCalledTimes(1);
   });
+
+  it('BANK_TRANSFER menampilkan form unggah bukti di Tahap 2 dan menampilkan galat terbaca jika unggah gagal', async () => {
+    const user = userEvent.setup();
+    const orderClient = await import('@/api-clients/order-client');
+    const uploadSpy = vi.spyOn(orderClient.browserOrderClient, 'uploadProof').mockRejectedValueOnce(new Error('network'));
+    const client = fake({
+      record: vi.fn().mockResolvedValue({
+        id: 'purchase-tf-1',
+        paymentMethod: 'BANK_TRANSFER',
+        paymentUniqueCode: 512,
+        payableAmountRp: 1_000_512,
+      }),
+    });
+    open(client);
+    const dialog = screen.getByRole('dialog', { name: 'Catat penjualan paket' });
+    await pickPackage(user, dialog, /Paket 8 Sesi/);
+    await user.selectOptions(within(dialog).getByLabelText('Metode pembayaran'), 'BANK_TRANSFER');
+    expect(within(dialog).queryByTestId('input-assisted-sale-proof')).toBeNull();
+
+    await user.click(within(dialog).getByRole('button', { name: 'Catat penjualan' }));
+    const confirm = await screen.findByRole('dialog', { name: 'Catat penjualan paket?' });
+    await user.click(within(confirm).getByRole('button', { name: 'Catat penjualan' }));
+
+    const step2 = await within(dialog).findByTestId('assisted-sale-recorded-summary');
+    expect(within(step2).getByText(/kode unik transfer: 512/i)).toBeVisible();
+    await user.upload(
+      within(step2).getByTestId('input-assisted-sale-proof-step2'),
+      new File(['x'], 'bukti.png', { type: 'image/png' }),
+    );
+    await user.click(within(step2).getByTestId('btn-upload-proof-step2'));
+
+    expect(
+      await within(step2).findByText('Bukti belum dapat diunggah. Coba lagi atau unggah lewat Detail Pembayaran.'),
+    ).toBeVisible();
+    expect(within(step2).getByRole('link', { name: 'Buka detail pembayaran' })).toHaveAttribute(
+      'href',
+      '/workspace/payments/purchase-tf-1',
+    );
+    uploadSpy.mockRestore();
+  });
 });
