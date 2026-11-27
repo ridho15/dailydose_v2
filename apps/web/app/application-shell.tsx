@@ -130,6 +130,10 @@ export function ApplicationShell({ children }: { children: React.ReactNode }) {
         })),
       ]
     : [];
+  // Kotak cari atas juga mencari member (nama, WhatsApp, email) untuk staf yang boleh melihat paket.
+  const bisaCariMember = Boolean(session?.capabilities.includes('ledger:read'));
+  const kataMember = commandQuery.trim();
+  const hrefCariMember = `/workspace/paket-member?q=${encodeURIComponent(kataMember)}`;
   const commandPages = useMemo(
     () =>
       session
@@ -686,24 +690,49 @@ export function ApplicationShell({ children }: { children: React.ReactNode }) {
       </div>
       <Modal
         open={commandOpen}
-        title="Pencarian halaman"
-        description="Buka halaman yang tersedia sesuai capability akun Anda."
+        title={bisaCariMember ? 'Cari member atau halaman' : 'Pencarian halaman'}
+        description={
+          bisaCariMember
+            ? 'Ketik nama, nomor WhatsApp, atau email member, lalu tekan Enter untuk melihat paket dan booking-nya.'
+            : 'Buka halaman yang tersedia sesuai capability akun Anda.'
+        }
         className="max-w-2xl"
         bodyClassName="p-0 sm:p-0"
         onClose={() => setCommandOpen(false)}
       >
-        <label className="flex items-center gap-3 border-b border-dd-line px-4">
-          <Search className="size-5 text-dd-muted" aria-hidden="true" />
-          <span className="sr-only">Cari halaman</span>
-          <input
-            autoFocus
-            value={commandQuery}
-            onChange={(event) => setCommandQuery(event.target.value)}
-            placeholder="Cari halaman atau pekerjaan…"
-            className="min-h-14 flex-1 border-0 bg-transparent px-0 shadow-none outline-none"
-          />
-        </label>
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            // Enter: langsung ke hasil pencarian member (2 langkah: ketik nama, Enter).
+            if (bisaCariMember && kataMember.length >= 2) {
+              setCommandOpen(false);
+              window.location.assign(hrefCariMember);
+            }
+          }}
+        >
+          <label className="flex items-center gap-3 border-b border-dd-line px-4">
+            <Search className="size-5 text-dd-muted" aria-hidden="true" />
+            <span className="sr-only">{bisaCariMember ? 'Cari member atau halaman' : 'Cari halaman'}</span>
+            <input
+              autoFocus
+              value={commandQuery}
+              onChange={(event) => setCommandQuery(event.target.value)}
+              placeholder={bisaCariMember ? 'Nama member, nomor WhatsApp, atau halaman…' : 'Cari halaman atau pekerjaan…'}
+              className="min-h-14 flex-1 border-0 bg-transparent px-0 text-base shadow-none outline-none sm:text-sm"
+            />
+          </label>
+        </form>
         <div className="max-h-[50vh] overflow-y-auto p-2">
+          {bisaCariMember && kataMember.length >= 2 && (
+            <Link
+              href={hrefCariMember}
+              onClick={() => setCommandOpen(false)}
+              className="mb-1 block rounded-dd-md border border-dd-line px-4 py-3 text-dd-ink no-underline hover:bg-dd-surface-muted"
+            >
+              <strong className="block text-sm">Cari member &ldquo;{kataMember}&rdquo;</strong>
+              <span className="mt-1 block text-xs text-dd-muted">Paket, sisa sesi, booking mendatang, dan aksinya.</span>
+            </Link>
+          )}
           {commandPages.length ? (
             commandPages.map((page) => (
               <Link
@@ -719,7 +748,7 @@ export function ApplicationShell({ children }: { children: React.ReactNode }) {
                 <span className="mt-1 block text-xs text-dd-muted">{page.description}</span>
               </Link>
             ))
-          ) : (
+          ) : bisaCariMember && kataMember.length >= 2 ? null : (
             <p className="p-8 text-center text-sm text-dd-muted">
               Tidak ada halaman yang cocok atau dapat Anda akses.
             </p>

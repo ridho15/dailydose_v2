@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import { FormEvent, useCallback, useEffect, useState } from 'react';
 import { ActionGroup, Button, ButtonLink } from '../../components/actions';
+import { PaketMemberView } from '../../workspace/paket-member/paket-member-view';
 import { setSessionHint } from '../../api-clients/session-client';
 import { Drawer, Modal, PreviewModal } from '../../components/app-feedback';
 import { SearchSelect, TextInput } from '../../components/forms';
@@ -852,10 +853,13 @@ export function CustomerDetailView({ id }: { id: string }) {
             {/* Tab 1: Paket Aktif & Sisa Sesi */}
             {activeTab === 'packages' && (
               <div className="p-6 space-y-6">
-                {/* Jalan pintas: ubah tanggal berakhir, bekukan, atau jual perpanjangan dalam satu layar. */}
-                <ButtonLink href={`/workspace/paket-member?member=${encodeURIComponent(customer.id)}`}>
-                  Kelola paket member ini
-                </ButtonLink>
+                {/* Paket dengan aksinya (ubah tanggal, bekukan, jual perpanjangan, booking kelas) langsung di profil. */}
+                <PaketMemberView memberTetap={customer.id} />
+                <details className="rounded-dd-lg border border-dd-line">
+                  <summary className="flex min-h-11 cursor-pointer items-center px-4 text-sm font-semibold text-dd-ink">
+                    Tabel paket lengkap (termasuk refund dan riwayat)
+                  </summary>
+                  <div className="space-y-6 border-t border-dd-line p-4">
                 {(() => {
                   const now = new Date();
                   const activePkgs = customer.customerPackages.filter(
@@ -1095,6 +1099,8 @@ export function CustomerDetailView({ id }: { id: string }) {
                     </>
                   );
                 })()}
+                  </div>
+                </details>
               </div>
             )}
 

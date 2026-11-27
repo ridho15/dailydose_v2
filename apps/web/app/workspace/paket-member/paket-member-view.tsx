@@ -3,7 +3,15 @@
 import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { apiFetch } from '../../lib/api-client';
-import { manageCustomerPackage, packageActionFailure, type CustomerPackageAction } from '../../api-clients/ledger-client';
+import {
+  manageCustomerPackage,
+  packageActionFailure,
+  paketBisaDipakaiUntukKelas,
+  type CustomerPackageAction,
+  type LedgerBalance,
+} from '../../api-clients/ledger-client';
+import { bookingFailure, browserBookingClient } from '../../api-clients/booking-client';
+import { Modal } from '../../components/app-feedback';
 import { Button, ButtonLink } from '../../components/actions';
 import { DateInput, TextInput } from '../../components/forms';
 import { Feedback, Skeleton } from '../../ui';
@@ -22,6 +30,36 @@ export interface PaketMember {
   classTypeName: string;
   customer: { id: string; displayName: string; phoneMasked?: string | null };
   usage?: { initialSessions: number };
+  /** Dipakai untuk menentukan kelas yang boleh dibooking dengan paket ini. */
+  classTypeId?: string | null;
+  isMultiBranch?: boolean;
+  packageBranchId?: string | null;
+  allowedBranchIds?: string[];
+}
+
+/** Booking mendatang satu member (GET /bookings?customerId=…&timeline=UPCOMING). */
+export interface BookingRingkas {
+  id: string;
+  status: string;
+  classSlot?: {
+    startAt: string;
+    timezone?: string;
+    classType?: { name?: string } | null;
+    branch?: { name?: string } | null;
+  } | null;
+}
+
+/** Kelas yang bisa dipilih saat staf membooking member. */
+export interface SlotRingkas {
+  id: string;
+  branchId: string;
+  classTypeId: string;
+  startAt: string;
+  capacity: number;
+  bookedCount: number;
+  status: string;
+  classType?: { name?: string } | null;
+  instructor?: { displayName?: string } | null;
 }
 
 export interface PaketMemberClient {
@@ -31,6 +69,9 @@ export interface PaketMemberClient {
     action: CustomerPackageAction,
     input: { reason: string; newValidUntil?: string; expectedValidUntil?: string },
   ): Promise<unknown>;
+  bookingMendatang(memberId: string): Promise<BookingRingkas[]>;
+  kelasTersedia(branchId: string | null): Promise<SlotRingkas[]>;
+  booking(input: { classSlotId: string; customerPackageId: string; customerUserId: string }): Promise<unknown>;
 }
 
 export type Filter = 'segera' | 'berakhir' | 'semua';
@@ -47,6 +88,24 @@ export const browserPaketMemberClient: PaketMemberClient = {
     return !q.trim() && !member && filter === 'berakhir' ? r.items.filter((i) => i.ledgerBalance > 0) : r.items;
   },
   kelola: (id, action, input) => manageCustomerPackage(id, action, input),
+  async bookingMendatang(memberId) {
+    const p = new URLSearchParams({ customerId: memberId, timeline: 'UPCOMING', limit: '5' });
+    const r = await apiFetch<{ items: BookingRingkas[] }>(`/bookings?${p.toString()}`, { label: 'Memuat booking member…' });
+    return r.items ?? [];
+  },
+  async kelasTersedia(branchId) {
+    const now = new Date();
+    const p = new URLSearchParams({
+      from: now.toISOString(),
+      until: new Date(now.getTime() + 7 * HARI).toISOString(),
+      limit: '300',
+    });
+    if (branchId) p.set('branchId', branchId);
+    const r = await apiFetch<{ items: SlotRingkas[] }>(`/class-slots?${p.toString()}`, { label: 'Memuat jadwal kelas…' });
+    return r.items ?? [];
+  },
+  booking: (input) =>
+    browserBookingClient.create({ ...input, source: 'ADMIN_ASSISTED' }, `staf-booking:${input.customerUserId}:${input.classSlotId}`),
 };
 
 const HARI = 86_400_000;
@@ -82,20 +141,44 @@ const FILTER: Array<{ id: Filter; label: string }> = [
  * berakhir, bekukan, buka kembali, atau jual perpanjangan langsung dari kartunya. Paling banyak tiga
  * langkah: cari, pilih aksi, simpan.
  */
-export function PaketMemberView({ client = browserPaketMemberClient }: { client?: PaketMemberClient }) {
+export function PaketMemberView({
+  client = browserPaketMemberClient,
+  memberTetap,
+}: {
+  client?: PaketMemberClient;
+  /** Mode tanam (profil member): paket satu member saja, tanpa kotak cari dan saringan. */
+  memberTetap?: string;
+}) {
   const ctx = useSessionContext();
   const params = useSearchParams();
   const bolehKelola = Boolean(ctx?.hasCapability('customer-package:manage'));
   const bolehJual = Boolean(ctx?.hasCapability('purchase:record'));
+  const bolehBooking = Boolean(ctx?.hasCapability('booking:create:assisted'));
+  const [bookingUntuk, setBookingUntuk] = useState<{ member: PaketMember['customer']; paket: PaketMember[] } | null>(null);
   const cabang = useMemo(() => (ctx?.session?.branches ?? []).map((b) => ({ id: b.id, name: b.name })), [ctx?.session?.branches]);
 
-  const [q, setQ] = useState(params?.get('q') ?? '');
-  const [member, setMember] = useState(params?.get('member') ?? '');
+  const [q, setQ] = useState(memberTetap ? '' : (params?.get('q') ?? ''));
+  const [member, setMember] = useState(memberTetap ?? params?.get('member') ?? '');
+  // Kotak cari di bilah atas membuka halaman ini dengan ?q= baru: ikuti perubahan alamatnya.
+  const qAlamat = params?.get('q') ?? '';
+  const memberAlamat = params?.get('member') ?? '';
+  useEffect(() => {
+    if (memberTetap) return;
+    if (qAlamat) {
+      setQ(qAlamat);
+      setMember('');
+    } else if (memberAlamat) {
+      setMember(memberAlamat);
+      setQ('');
+    }
+  }, [qAlamat, memberAlamat, memberTetap]);
   const [filter, setFilter] = useState<Filter>('segera');
   const [items, setItems] = useState<PaketMember[] | null>(null);
   const [galat, setGalat] = useState('');
   const [info, setInfo] = useState('');
   const [jual, setJual] = useState<PaketMember | null>(null);
+  // Dinaikkan setelah staf membooking, supaya daftar booking mendatang dimuat ulang.
+  const [versiBooking, setVersiBooking] = useState(0);
   const permintaan = useRef(0);
 
   const muat = useCallback(async () => {
@@ -132,7 +215,9 @@ export function PaketMemberView({ client = browserPaketMemberClient }: { client?
   const namaMember = member ? kelompok[0]?.member.displayName : null;
 
   return (
-    <main className="mx-auto grid max-w-3xl gap-4 p-4 sm:gap-5">
+    <main className={memberTetap ? 'grid gap-4' : 'mx-auto grid max-w-3xl gap-4 p-4 sm:gap-5'}>
+      {!memberTetap && (
+      <>
       <header className="grid gap-1">
         <h1 className="m-0 text-xl font-semibold text-dd-ink sm:text-2xl">Paket member</h1>
         <p className="m-0 text-[15px] text-dd-muted">Cari member, lalu ubah masa berlaku atau bekukan paketnya langsung dari kartunya.</p>
@@ -150,8 +235,10 @@ export function PaketMemberView({ client = browserPaketMemberClient }: { client?
         }}
         className="text-base sm:text-sm"
       />
+      </>
+      )}
 
-      {member && !q ? (
+      {memberTetap ? null : member && !q ? (
         <div className="flex flex-wrap items-center gap-2 text-[15px]">
           <span className="text-dd-muted">Menampilkan paket {namaMember ?? 'member ini'}.</span>
           <Button variant="link" onClick={() => setMember('')}>
@@ -176,6 +263,20 @@ export function PaketMemberView({ client = browserPaketMemberClient }: { client?
             ))}
           </div>
         )
+      )}
+
+      {!memberTetap && (
+        <nav aria-label="Halaman paket lainnya" className="flex flex-wrap gap-x-4 text-sm">
+          <a href="/ledger/adjustments" className="inline-flex min-h-11 items-center font-semibold text-dd-forest underline-offset-4 hover:underline">
+            Penyesuaian sesi
+          </a>
+          <a href="/workspace/renewal" className="inline-flex min-h-11 items-center font-semibold text-dd-forest underline-offset-4 hover:underline">
+            Paket habis &amp; renewal
+          </a>
+          <a href="/ledger" className="inline-flex min-h-11 items-center font-semibold text-dd-forest underline-offset-4 hover:underline">
+            Tabel semua paket
+          </a>
+        </nav>
       )}
 
       {info && (
@@ -205,10 +306,20 @@ export function PaketMemberView({ client = browserPaketMemberClient }: { client?
               {g.member.displayName}
               {g.member.phoneMasked && <span className="ml-2 text-sm font-normal text-dd-muted">{g.member.phoneMasked}</span>}
             </h2>
-            <a href={`/customers/${encodeURIComponent(g.member.id)}`} className="inline-flex min-h-11 items-center text-sm font-semibold text-dd-forest underline-offset-4 hover:underline">
-              Profil member
-            </a>
+            <div className="flex flex-wrap items-center gap-2">
+              {bolehBooking && g.paket.some((p) => p.status === 'ACTIVE' && sisaHari(p.expiryAt) >= 0 && p.ledgerBalance > 0) && (
+                <Button variant="secondary" onClick={() => setBookingUntuk(g)}>
+                  Booking kelas
+                </Button>
+              )}
+              {!memberTetap && (
+                <a href={`/customers/${encodeURIComponent(g.member.id)}`} className="inline-flex min-h-11 items-center px-2 text-sm font-semibold text-dd-forest underline-offset-4 hover:underline">
+                  Profil member
+                </a>
+              )}
+            </div>
           </div>
+          {(member || memberTetap || kelompok.length === 1) && <BookingMendatang client={client} memberId={g.member.id} kunci={versiBooking} />}
           <ul className="m-0 grid list-none gap-2 p-0">
             {g.paket.map((p) => (
               <KartuPaket
@@ -232,6 +343,22 @@ export function PaketMemberView({ client = browserPaketMemberClient }: { client?
           </ul>
         </section>
       ))}
+
+      {bookingUntuk && (
+        <BookingKelasDialog
+          client={client}
+          member={bookingUntuk.member}
+          paket={bookingUntuk.paket}
+          branchId={ctx?.activeBranchId || null}
+          onTutup={() => setBookingUntuk(null)}
+          onBerhasil={(pesan) => {
+            setBookingUntuk(null);
+            setInfo(pesan);
+            setVersiBooking((v) => v + 1);
+            void muat();
+          }}
+        />
+      )}
 
       {jual && (
         <AssistedSaleDrawer
@@ -476,5 +603,171 @@ function FormAksi({
         </Button>
       </div>
     </form>
+  );
+}
+
+const tampilWaktu = (iso: string, timezone = 'Asia/Jakarta') =>
+  new Date(iso).toLocaleString('id-ID', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: timezone });
+
+function BookingMendatang({ client, memberId, kunci }: { client: PaketMemberClient; memberId: string; kunci: number }) {
+  const [items, setItems] = useState<BookingRingkas[] | null>(null);
+  const [galat, setGalat] = useState(false);
+  useEffect(() => {
+    let batal = false;
+    setGalat(false);
+    client
+      .bookingMendatang(memberId)
+      .then((r) => !batal && setItems(r))
+      .catch(() => {
+        if (!batal) {
+          setItems([]);
+          setGalat(true);
+        }
+      });
+    return () => {
+      batal = true;
+    };
+  }, [client, memberId, kunci]);
+
+  if (items === null) return null;
+  return (
+    <div className="rounded-dd-lg border border-dd-line bg-white p-4">
+      <h3 className="m-0 text-[15px] font-semibold text-dd-ink">Booking mendatang</h3>
+      {galat ? (
+        <p className="m-0 mt-1 text-sm text-dd-muted">Booking belum bisa dimuat. Muat ulang halaman untuk mencoba lagi.</p>
+      ) : items.length === 0 ? (
+        <p className="m-0 mt-1 text-sm text-dd-muted">Belum ada booking mendatang.</p>
+      ) : (
+        <ul className="m-0 mt-2 grid list-none gap-1 p-0">
+          {items.map((b) => (
+            <li key={b.id}>
+              <a
+                href={`/workspace/bookings/${encodeURIComponent(b.id)}`}
+                className="flex min-h-11 flex-wrap items-center justify-between gap-2 rounded-dd-md px-2 text-[15px] text-dd-ink no-underline hover:bg-dd-surface"
+              >
+                <span className="font-semibold">{b.classSlot?.classType?.name ?? 'Kelas'}</span>
+                <span className="text-sm text-dd-muted">
+                  {b.classSlot ? tampilWaktu(b.classSlot.startAt, b.classSlot.timezone) : ''}
+                  {b.classSlot?.branch?.name ? ` · ${b.classSlot.branch.name}` : ''}
+                </span>
+              </a>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+/** Paket pertama yang boleh dipakai untuk kelas itu (yang paling cepat berakhir dipakai lebih dulu). */
+function paketUntukKelas(paket: PaketMember[], slot: SlotRingkas) {
+  return [...paket]
+    .sort((a, b) => Date.parse(a.expiryAt) - Date.parse(b.expiryAt))
+    .find((p) =>
+      paketBisaDipakaiUntukKelas(
+        {
+          isMultiBranch: p.isMultiBranch,
+          packageBranchId: p.packageBranchId ?? null,
+          allowedBranchIds: p.allowedBranchIds,
+          classTypeId: p.classTypeId ?? null,
+          expiryAt: new Date(p.expiryAt),
+          available: p.available,
+          status: p.status,
+        } as Pick<LedgerBalance, 'isMultiBranch' | 'packageBranchId' | 'allowedBranchIds' | 'classTypeId' | 'expiryAt' | 'available' | 'status'>,
+        slot,
+      ),
+    );
+}
+
+/**
+ * Staf membooking member ke kelas dalam dua klik: pilih kelas dari 7 hari ke depan (hanya yang masih
+ * ada kursi dan cocok dengan paket member), lalu sistem memakai paket yang paling cepat berakhir.
+ */
+function BookingKelasDialog({
+  client,
+  member,
+  paket,
+  branchId,
+  onTutup,
+  onBerhasil,
+}: {
+  client: PaketMemberClient;
+  member: PaketMember['customer'];
+  paket: PaketMember[];
+  branchId: string | null;
+  onTutup: () => void;
+  onBerhasil: (pesan: string) => void;
+}) {
+  const [slots, setSlots] = useState<SlotRingkas[] | null>(null);
+  const [galat, setGalat] = useState('');
+  const [sibuk, setSibuk] = useState<string | null>(null);
+
+  useEffect(() => {
+    let batal = false;
+    client
+      .kelasTersedia(branchId)
+      .then((r) => !batal && setSlots(r))
+      .catch(() => {
+        if (!batal) {
+          setSlots([]);
+          setGalat('Jadwal kelas belum bisa dimuat. Periksa koneksi lalu coba lagi.');
+        }
+      });
+    return () => {
+      batal = true;
+    };
+  }, [client, branchId]);
+
+  const sekarang = Date.now();
+  const pilihan = (slots ?? [])
+    .filter((s) => ['PUBLISHED', 'CONFIRMED'].includes(s.status) && Date.parse(s.startAt) > sekarang && s.bookedCount < s.capacity)
+    .map((s) => ({ slot: s, paket: paketUntukKelas(paket, s) }))
+    .filter((x): x is { slot: SlotRingkas; paket: PaketMember } => Boolean(x.paket))
+    .sort((a, b) => Date.parse(a.slot.startAt) - Date.parse(b.slot.startAt));
+
+  const pesan = async (slot: SlotRingkas, p: PaketMember) => {
+    setSibuk(slot.id);
+    setGalat('');
+    try {
+      await client.booking({ classSlotId: slot.id, customerPackageId: p.id, customerUserId: member.id });
+      onBerhasil(`${member.displayName} dibooking ke ${slot.classType?.name ?? 'kelas'}, ${tampilWaktu(slot.startAt)} (paket ${p.packageName}).`);
+    } catch (error) {
+      setGalat(await bookingFailure(error));
+      setSibuk(null);
+    }
+  };
+
+  return (
+    <Modal open title={`Booking kelas untuk ${member.displayName}`} description="Kelas 7 hari ke depan yang masih ada kursi dan cocok dengan paket member." onClose={onTutup} busy={Boolean(sibuk)}>
+      {galat && (
+        <p role="alert" className="m-0 mb-3 text-sm font-medium text-dd-danger">
+          {galat}
+        </p>
+      )}
+      {slots === null ? (
+        <Skeleton label="Memuat jadwal kelas" />
+      ) : pilihan.length === 0 ? (
+        <p className="m-0 text-[15px] text-dd-muted">
+          Tidak ada kelas 7 hari ke depan yang cocok dengan paket member ini dan masih ada kursi. Coba pilih cabang lain di bilah atas.
+        </p>
+      ) : (
+        <ul className="m-0 grid max-h-[60vh] list-none gap-2 overflow-y-auto p-0">
+          {pilihan.map(({ slot, paket: p }) => (
+            <li key={slot.id} className="flex flex-wrap items-center justify-between gap-3 rounded-dd-lg border border-dd-line p-3">
+              <span className="grid min-w-0 gap-0.5">
+                <span className="text-[15px] font-semibold text-dd-ink">{slot.classType?.name ?? 'Kelas'}</span>
+                <span className="text-sm text-dd-muted">
+                  {tampilWaktu(slot.startAt)}
+                  {slot.instructor?.displayName ? ` · ${slot.instructor.displayName}` : ''} · sisa {slot.capacity - slot.bookedCount} kursi
+                </span>
+              </span>
+              <Button loading={sibuk === slot.id} disabled={Boolean(sibuk)} onClick={() => void pesan(slot, p)} aria-label={`Booking ${slot.classType?.name ?? 'kelas'} ${tampilWaktu(slot.startAt)}`}>
+                Booking
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Modal>
   );
 }

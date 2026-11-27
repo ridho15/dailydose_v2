@@ -35,6 +35,9 @@ const paket = (over: Partial<PaketMember> = {}): PaketMember => ({
 const klien = (items: PaketMember[]): PaketMemberClient => ({
   cari: vi.fn(async () => items),
   kelola: vi.fn(async () => ({})),
+  bookingMendatang: vi.fn(async () => []),
+  kelasTersedia: vi.fn(async () => []),
+  booking: vi.fn(async () => ({})),
 });
 
 describe('PaketMemberView', () => {
@@ -104,6 +107,57 @@ describe('PaketMemberView', () => {
     await user.type(screen.getByLabelText('Cari member'), 'sinta');
     expect(await screen.findByText(/Tidak ada paket untuk "sinta"/)).toBeVisible();
     expect(client.cari).toHaveBeenLastCalledWith(expect.objectContaining({ q: 'sinta' }));
+  });
+
+  it('Booking kelas: hanya kelas yang cocok dengan paket dan masih ada kursi; satu klik membooking dengan paket itu', async () => {
+    caps = ['ledger:read', 'booking:create:assisted'];
+    const user = userEvent.setup();
+    const utama = paket({ classTypeId: 'ct-reformer', expiryAt: hariLagi(20), allowedBranchIds: ['gg'], packageBranchId: 'gg' });
+    const client = klien([utama]);
+    const slot = (id: string, over: Record<string, unknown> = {}) => ({
+      id,
+      branchId: 'gg',
+      classTypeId: 'ct-reformer',
+      startAt: hariLagi(1),
+      capacity: 8,
+      bookedCount: 3,
+      status: 'PUBLISHED',
+      classType: { name: 'Reformer Group' },
+      instructor: { displayName: 'Coach Lina' },
+      ...over,
+    });
+    vi.mocked(client.kelasTersedia).mockResolvedValue([
+      slot('s-ok'),
+      slot('s-penuh', { bookedCount: 8 }),
+      slot('s-mat', { classTypeId: 'ct-mat', classType: { name: 'Mat Pilates' } }),
+      slot('s-batal', { status: 'CANCELLED' }),
+    ]);
+    render(<PaketMemberView client={client} />);
+    await user.click(await screen.findByRole('button', { name: 'Booking kelas' }));
+    const dialog = await screen.findByRole('dialog', { name: /Booking kelas untuk Ayu Lestari/ });
+    const tombol = await within(dialog).findAllByRole('button', { name: /^Booking Reformer Group/ });
+    expect(tombol).toHaveLength(1);
+    expect(within(dialog).queryByText('Mat Pilates')).toBeNull();
+    expect(within(dialog).getByText(/sisa 5 kursi/)).toBeVisible();
+    await user.click(tombol[0]!);
+    await waitFor(() =>
+      expect(client.booking).toHaveBeenCalledWith({ classSlotId: 's-ok', customerPackageId: 'cp-1', customerUserId: 'u-ayu' }),
+    );
+    expect(await screen.findByText(/Ayu Lestari dibooking ke Reformer Group/)).toBeVisible();
+  });
+
+  it('mode tanam di profil member: tanpa kotak cari, paket member itu langsung tampil dengan booking mendatang', async () => {
+    caps = ['ledger:read', 'customer-package:manage'];
+    const client = klien([paket()]);
+    vi.mocked(client.bookingMendatang).mockResolvedValue([
+      { id: 'b-1', status: 'BOOKED', classSlot: { startAt: hariLagi(2), classType: { name: 'Reformer Group' }, branch: { name: 'Green Garden' } } },
+    ]);
+    render(<PaketMemberView client={client} memberTetap="u-ayu" />);
+    expect(await screen.findByText('Reformer 8 Sesi')).toBeVisible();
+    expect(screen.queryByLabelText('Cari member')).toBeNull();
+    expect(client.cari).toHaveBeenCalledWith(expect.objectContaining({ member: 'u-ayu' }));
+    expect(await screen.findByText('Booking mendatang')).toBeVisible();
+    expect(screen.getByRole('link', { name: /Reformer Group/ })).toHaveAttribute('href', '/workspace/bookings/b-1');
   });
 
   it('rute: staf dengan ledger:read boleh membuka; petugas check-in tidak', () => {

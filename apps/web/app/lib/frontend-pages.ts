@@ -182,6 +182,8 @@ export const frontendPages: FrontendPageDefinition[] = [
   // ==========================================
   {
     href: '/workspace/renewal',
+    // Digabung ke Paket member (27 Nov 2026): tetap bisa dibuka lewat tautan, tidak tampil di menu.
+    hideFromNav: true,
     label: 'Paket habis & renewal',
     shortLabel: 'Paket habis & renewal',
     description:
@@ -226,6 +228,8 @@ export const frontendPages: FrontendPageDefinition[] = [
   },
   {
     href: '/ledger',
+    // Digabung ke Paket member (27 Nov 2026): tetap bisa dibuka lewat tautan, tidak tampil di menu.
+    hideFromNav: true,
     label: 'Paket & Sesi Pelanggan',
     shortLabel: 'Paket & Sesi',
     description: 'Kelola sisa kuota latihan, masa berlaku paket, pembekuan sesi, dan riwayat kehadiran.',
@@ -252,6 +256,8 @@ export const frontendPages: FrontendPageDefinition[] = [
   },
   {
     href: '/ledger/adjustments',
+    // Digabung ke Paket member (27 Nov 2026): tetap bisa dibuka lewat tautan, tidak tampil di menu.
+    hideFromNav: true,
     label: 'Penyesuaian Sesi',
     shortLabel: 'Penyesuaian Sesi',
     description: 'Pengajuan koreksi saldo sesi member dengan persetujuan manajer cabang.',
@@ -677,7 +683,7 @@ export const MENU_PERAN: Record<PeranMenu, { utama: readonly MenuUtama[]; lainny
       { href: '/workspace', label: 'Beranda' },
       { href: '/finance', label: 'Keuangan' },
       { href: '/workspace/vouchers', label: 'Voucher' },
-      { href: '/ledger', label: 'Paket & Sesi' },
+      { href: '/workspace/paket-member', label: 'Paket member' },
     ],
     lainnyaLabel: 'Lainnya',
   },
@@ -731,7 +737,7 @@ export const GRUP_TAB: readonly { label: string; hrefs: readonly string[] }[] = 
   { label: 'Keuangan', hrefs: ['/finance', '/workspace/kas', '/workspace/branch-performance'] },
   { label: 'Paket & Promo', hrefs: ['/workspace/packages', '/workspace/vouchers'] },
   { label: 'Instruktur & Staf', hrefs: ['/instructors', '/users', '/assignments'] },
-  { label: 'Member', hrefs: ['/customers', '/workspace/paket-member', '/ledger', '/ledger/adjustments', '/workspace/renewal'] },
+  { label: 'Member', hrefs: ['/customers', '/workspace/paket-member'] },
   {
     label: 'Notifikasi & Otomasi',
     hrefs: ['/workspace/reminders', '/operations', '/notification-management', '/health'],

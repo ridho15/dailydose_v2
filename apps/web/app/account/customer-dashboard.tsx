@@ -88,6 +88,8 @@ type CustomerDashboardOverview = {
     available: number;
     reserved?: number;
   }>;
+  /** Paket berakhir yang masih bersisa sesi: bisa diaktifkan lagi dengan perpanjangan berbayar. */
+  paketBerakhirBersisa?: Array<{ id: string; packageName: string; expiryAt: string; remainingSessions: number }>;
   bookingLagi?: {
     classSlotId: string;
     className: string;
@@ -256,6 +258,31 @@ export function CustomerDashboard({
           </span>
         </Link>
       ))}
+
+      {paketPerpanjangan &&
+        overview?.paketBerakhirBersisa?.map((item) => {
+          const href = hrefPerpanjang(item, paketPerpanjangan, now);
+          if (!href) return null;
+          return (
+            <Link
+              key={item.id}
+              href={href}
+              className="flex min-h-16 items-center justify-between gap-3 rounded-dd-lg border border-dd-line bg-white p-4 text-dd-ink no-underline hover:border-dd-forest"
+            >
+              <span>
+                <strong className="block text-base">{item.packageName}</strong>
+                <span className="block text-base text-dd-danger">
+                  Berakhir {new Date(item.expiryAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', timeZone: 'Asia/Jakarta' })} ·{' '}
+                  {item.remainingSessions} sesi masih ada
+                </span>
+              </span>
+              <span className="shrink-0 text-right">
+                <strong className="block text-base text-dd-ink">{formatRupiah(paketPerpanjangan.priceRp)}</strong>
+                <span className="block text-sm font-semibold text-dd-forest">Aktifkan lagi</span>
+              </span>
+            </Link>
+          );
+        })}
 
       {/* 2. Booking terdekat: QR untuk check-in dan semua tindakannya di satu kartu. */}
       {nearestBooking && nearest ? (

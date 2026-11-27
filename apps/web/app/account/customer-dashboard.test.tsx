@@ -637,3 +637,35 @@ describe('customer dashboard (Tiket T-02)', () => {
     expect(within(promoBagian).getByText('Hemat 20%')).toBeVisible();
   });
 });
+
+describe('Beranda: paket berakhir yang masih bersisa sesi', () => {
+  it('menampilkan kartu Aktifkan lagi dengan harga perpanjangan, menuju checkout dengan paket itu terpilih', async () => {
+    Object.assign(session, { preferredBranch: { id: 'branch-gg' } });
+    stubDashboard({
+      paketBerakhirBersisa: [
+        { id: 'cp-lama', packageName: 'Reformer 8 Sesi', expiryAt: '2026-11-20T16:59:59.000Z', remainingSessions: 3 },
+      ],
+    });
+    render(
+      <AppFeedbackProvider>
+        <CustomerDashboard
+          now={new Date('2026-11-27T03:00:00Z').getTime()}
+          muatQr={() => Promise.resolve('dd-pass:v1:x')}
+          bookingClient={{ list: vi.fn().mockResolvedValue({ items: [] }) } as never}
+          packageCatalogClient={
+            {
+              list: vi.fn().mockResolvedValue({
+                items: [{ id: 'ext', name: 'Perpanjangan', branchId: 'branch-gg', priceRp: 150_000, perpanjanganMasaAktif: true }],
+              }),
+            } as never
+          }
+          classCatalogClient={{ list: vi.fn().mockResolvedValue({ branches: [], items: [], range: { from: '', until: '' } }) }}
+        />
+      </AppFeedbackProvider>,
+    );
+    const kartu = await screen.findByRole('link', { name: /Reformer 8 Sesi/ });
+    expect(kartu).toHaveTextContent('3 sesi masih ada');
+    expect(kartu).toHaveTextContent('Aktifkan lagi');
+    expect(kartu).toHaveAttribute('href', '/checkout?package=ext&branch=branch-gg&target=cp-lama');
+  });
+});

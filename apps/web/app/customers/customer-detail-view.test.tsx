@@ -60,6 +60,8 @@ describe('CustomerDetailView konsistensi status', () => {
   it('menghitung hanya paket yang benar-benar aktif pada tab paket', async () => {
     render(<CustomerDetailView id="c1" />);
     expect(await screen.findByRole('button', { name: /Paket & Sesi \(0 aktif\)/ })).toBeVisible();
+    // Tabel paket lengkap dilipat di bawah panel kartu paket; buka dulu.
+    await userEvent.click(screen.getByText(/Tabel paket lengkap/));
     expect(screen.getByText('Pelanggan belum memiliki paket aktif saat ini.')).toBeVisible();
   });
 
@@ -103,6 +105,8 @@ describe('CustomerDetailView konsistensi status', () => {
     } as never);
     render(<CustomerDetailView id="c1" />);
     expect(await screen.findByRole('button', { name: /Paket & Sesi \(0 aktif\)/ })).toBeVisible();
+    // Tabel paket lengkap dilipat di bawah panel kartu paket; buka dulu.
+    await userEvent.click(screen.getByText(/Tabel paket lengkap/));
     expect(screen.getByText('Pelanggan belum memiliki paket aktif saat ini.')).toBeVisible();
   });
 });

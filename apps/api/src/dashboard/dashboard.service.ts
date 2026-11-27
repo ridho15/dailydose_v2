@@ -211,6 +211,20 @@ export class DashboardService {
     // angka di Beranda langsung turun setelah booking walau sesinya baru dipotong saat hadir.
     const tertahan = await tertahanPerPaket(this.db, packages.map((item) => item.id));
     const bookingLagi = await bookingLagiUntuk(this.db, principal.userId, now);
+    // Paket yang sudah berakhir tetapi masih bersisa sesi: Beranda menawarkan "Aktifkan lagi"
+    // (perpanjangan berbayar, maks 3 kali; 26 November 2026).
+    const paketBerakhir = typeof this.db.paketPelanggan?.findMany === 'function'
+      ? await this.db.paketPelanggan.findMany({
+          where: {
+            userId: principal.userId,
+            remainingSessions: { gt: 0 },
+            OR: [{ status: 'EXPIRED' }, { status: 'ACTIVE', validUntil: { lte: now } }],
+          },
+          include: { package: { select: { name: true } } },
+          orderBy: { validUntil: 'desc' },
+          take: 3,
+        })
+      : [];
     // Kursi teman: booking mana yang kursi teman, dan apakah paket booking itu masih boleh menambah teman.
     const temanPerBooking = await bookingTeman(this.db, upcomingBookings.map((b) => b.id));
     const maksTeman = await maksTemanPaket(
@@ -255,6 +269,12 @@ export class DashboardService {
         reserved: tertahan.get(item.id) ?? 0,
       })),
       bookingLagi,
+      paketBerakhirBersisa: (paketBerakhir as Array<{ id: string; validUntil: Date; remainingSessions: number; package?: { name: string } | null }>).map((item) => ({
+        id: item.id,
+        packageName: item.package?.name ?? 'Paket',
+        expiryAt: item.validUntil,
+        remainingSessions: item.remainingSessions,
+      })),
       actionableOrders: actionableOrders.map((order) => ({
         id: order.id,
         packageName: order.package.name,

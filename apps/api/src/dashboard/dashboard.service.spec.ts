@@ -258,20 +258,20 @@ describe('DashboardService', () => {
     const p = principal({ userId: 'cached-user', roles: [{ role: 'CUSTOMER', branchId: null }] });
 
     const first = await service.customerOverview(p, { ttlMs: 10_000 });
-    // findMany is shared by pemesananKelas, paketPelanggan, and pembelian (3 calls total)
-    expect(db.pemesananKelas.findMany).toHaveBeenCalledTimes(3);
+    // findMany is shared by pemesananKelas, paketPelanggan (active and expired-with-sessions), and pembelian (4 calls total)
+    expect(db.pemesananKelas.findMany).toHaveBeenCalledTimes(4);
 
     const second = await service.customerOverview(p, { ttlMs: 10_000 });
     // Second call within TTL should return cached object without querying database again
-    expect(db.pemesananKelas.findMany).toHaveBeenCalledTimes(3);
+    expect(db.pemesananKelas.findMany).toHaveBeenCalledTimes(4);
     expect(second).toBe(first);
 
     const third = await service.customerOverview(p, { forceRefresh: true, ttlMs: 10_000 });
-    expect(db.pemesananKelas.findMany).toHaveBeenCalledTimes(6);
+    expect(db.pemesananKelas.findMany).toHaveBeenCalledTimes(8);
 
     service.clearCustomerOverviewCache('cached-user');
     await service.customerOverview(p, { ttlMs: 10_000 });
-    expect(db.pemesananKelas.findMany).toHaveBeenCalledTimes(9);
+    expect(db.pemesananKelas.findMany).toHaveBeenCalledTimes(12);
   });
 
   it('upcoming bookings say which seat is a friend seat and whether another friend may still be added', async () => {
