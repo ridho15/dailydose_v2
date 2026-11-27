@@ -546,6 +546,7 @@ export function orderErrorDetails(error: unknown) {
       'Batas waktu unggah bukti sudah lewat. Hubungi studio lewat WhatsApp; admin bisa mengunggahkan bukti Anda.',
     PAYMENT_PROOF_SCAN_PENDING: 'Pemeriksaan file masih berjalan. Tunggu sebentar lalu coba lagi.',
     PAYMENT_PROOF_TOO_LARGE: 'Ukuran file melebihi batas 10 MB.',
+    PAYMENT_PROOF_STORAGE_FAILED: 'Bukti belum tersimpan karena gangguan penyimpanan. Coba unggah lagi sebentar lagi.',
     PAYMENT_PROOF_CHECKSUM_MISMATCH: 'File berubah saat diunggah. Silakan pilih ulang.',
     PAYMENT_PROOF_NOT_CLEAN:
       'File ditolak oleh pemeriksaan keamanan. Pilih file bukti yang berbeda.',

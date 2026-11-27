@@ -49,6 +49,23 @@ describe('PaymentProofService upload lifecycle', () => {
     expect(storage.storePrivateObject).toHaveBeenCalledWith(proof.objectKey, png);
   });
 
+  it('storage failure is reported instead of pretending the proof was uploaded', async () => {
+    const storage = {
+      storePrivateObject: jest.fn().mockRejectedValue(new Error('disk full')),
+      readPrivateObject: jest.fn().mockResolvedValue(Buffer.from('customer-1')),
+    };
+    const service = new PaymentProofService(
+      {} as never,
+      { catalog: jest.fn() } as never,
+      {} as never,
+      {} as never,
+      storage as never,
+    );
+    await expect(service.uploadContent(principal, proof.id, png)).rejects.toMatchObject({
+      code: 'PAYMENT_PROOF_STORAGE_FAILED',
+    });
+  });
+
   it('rejects content from someone other than the uploader, and files that are not images or PDF', async () => {
     const storage = {
       storePrivateObject: jest.fn().mockResolvedValue(undefined),

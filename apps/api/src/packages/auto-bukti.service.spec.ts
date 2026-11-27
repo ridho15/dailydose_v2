@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import * as tabelOpsional from '../foundation/tabel-opsional';
 import { join } from 'node:path';
 import { AKSI_AUTO_LEWAT, AKSI_AUTO_SETUJU, AutoBuktiService, bacaTeksTesseract, PELAKU_SISTEM } from './auto-bukti.service';
+import { cocokkanBukti } from './ocr-bukti';
 
 const PNG = Buffer.from('89504e470d0a1a0a0000000d49484452', 'hex');
 const PDF = Buffer.from('%PDF-1.7\n', 'ascii');
@@ -122,16 +123,32 @@ describe('AutoBuktiService', () => {
     });
   });
 
-  it('tabel bukti_sidik belum dibuat: tidak menyetujui otomatis (foto dipakai ulang tak bisa dicek)', async () => {
-    const { service, review, storage, db } = setup();
+  it('tabel bukti_sidik belum dibuat: foto dipakai ulang dicek dari audit persetujuan otomatis', async () => {
+    const { service, review, db } = setup();
+    db.auditLog.findFirst = jest.fn(async () => null);
     const spy = jest.spyOn(tabelOpsional, 'tabelOpsionalAda').mockResolvedValue(false);
-    expect(await service.periksa('pur-1', ID)).toBe('TIDAK_BERLAKU');
-    expect(storage.readPrivateObject).not.toHaveBeenCalled();
+    expect(await service.periksa('pur-1', ID)).toBe('COCOK');
+    expect(db.buktiSidik.findFirst).not.toHaveBeenCalled();
+    expect(db.auditLog.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ action: AKSI_AUTO_SETUJU, objectId: { not: 'pur-1' } }) }),
+    );
+    expect(review.decide).toHaveBeenCalled();
+
+    db.auditLog.findFirst = jest.fn(async () => ({ objectId: 'pur-lain' }));
+    review.decide.mockClear();
+    expect(await service.periksa('pur-1', ID)).toBe('FOTO_DIPAKAI_ULANG');
+    expect(review.decide).not.toHaveBeenCalled();
+    spy.mockRestore();
+  });
+
+  it('foto tidak ada di penyimpanan: dicatat dengan alasan yang jelas', async () => {
+    const { service, review, storage, db } = setup();
+    storage.readPrivateObject.mockRejectedValue(new Error('ENOENT'));
+    expect(await service.periksa('pur-1', ID)).toBe('FOTO_TIDAK_ADA_DI_PENYIMPANAN');
     expect(review.decide).not.toHaveBeenCalled();
     expect(db.auditLog.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({ detail: { proofId: ID, hasil: 'TABEL_BUKTI_SIDIK_BELUM_ADA' } }),
+      data: expect.objectContaining({ detail: { proofId: ID, hasil: 'FOTO_TIDAK_ADA_DI_PENYIMPANAN' } }),
     });
-    spy.mockRestore();
   });
 
   it('OCR sungguhan membaca contoh bukti m-BCA', async () => {
@@ -140,4 +157,12 @@ describe('AutoBuktiService', () => {
     expect(teks).toContain('1.500.123');
     expect(teks).toContain('23/11/2026 10:15:32');
   }, 30_000);
+
+  it('OCR sungguhan: layar mode gelap dan JPEG buram tanpa tahun tetap cocok', async () => {
+    const p = { totalRp: 1_500_123, dibuatPada: wib('2026-11-23T09:50:00'), diunggahPada: wib('2026-11-23T10:40:00') };
+    for (const berkas of ['bukti-mode-gelap.png', 'bukti-tanpa-tahun.jpg']) {
+      const teks = await bacaTeksTesseract(readFileSync(join(__dirname, '__fixtures__', berkas)));
+      expect(cocokkanBukti({ ...p, teks })).toMatchObject({ cocok: true, dasarWaktu: 'JAM' });
+    }
+  }, 60_000);
 });

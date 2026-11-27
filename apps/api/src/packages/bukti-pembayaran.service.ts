@@ -91,8 +91,11 @@ export class PaymentProofService {
       throw new ApiProblem('PAYMENT_PROOF_MIME_MISMATCH', HttpStatus.UNPROCESSABLE_ENTITY);
 
     const objectKey = `payment-proofs/${id}`;
+    // Gagal simpan harus terlihat: tanpa file, staf tidak bisa melihat bukti dan cek otomatis tidak jalan.
     if (this.storage) {
-      await this.storage.storePrivateObject(objectKey, bytes).catch(() => undefined);
+      await this.storage.storePrivateObject(objectKey, bytes).catch(() => {
+        throw new ApiProblem('PAYMENT_PROOF_STORAGE_FAILED', HttpStatus.SERVICE_UNAVAILABLE, true);
+      });
     }
 
     return {

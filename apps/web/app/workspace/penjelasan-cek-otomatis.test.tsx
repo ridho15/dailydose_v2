@@ -15,7 +15,7 @@ describe('PenjelasanCekOtomatis', () => {
       />,
     );
     const teks = screen.getByText(/Belum disetujui otomatis/).textContent ?? '';
-    expect(teks).toContain('lebih dari 1 jam');
+    expect(teks).toContain('sebelum pesanan dibuat');
     expect(teks).toContain('1.500.123');
     expect(teks).toMatch(/08[.:]15/);
   });

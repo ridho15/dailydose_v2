@@ -41,11 +41,12 @@ const rp = (n: number) => `Rp ${n.toLocaleString('id-ID')}`;
 /** Penjelasan hasil cek otomatis untuk staf: kenapa sistem tidak menyetujui sendiri. */
 export const ALASAN_CEK_OTOMATIS: Record<string, string> = {
   NOMINAL_TIDAK_DITEMUKAN: 'Nominal unik tidak terbaca di foto bukti.',
-  WAKTU_TIDAK_TERBACA: 'Tanggal dan jam transfer tidak terbaca di foto bukti.',
-  WAKTU_DI_LUAR_JENDELA: 'Waktu transfer di foto lebih dari 1 jam sebelum bukti diunggah, atau sebelum pesanan dibuat.',
+  WAKTU_TIDAK_TERBACA: 'Tanggal, jam, dan tulisan "Berhasil" tidak terbaca di foto bukti.',
+  WAKTU_DI_LUAR_JENDELA: 'Tanggal atau jam transfer di foto sebelum pesanan dibuat atau sesudah bukti diunggah.',
   FOTO_DIPAKAI_ULANG: 'Foto yang sama pernah dipakai untuk pesanan lain.',
   BUKAN_GAMBAR: 'Bukti berupa PDF; sistem hanya membaca foto.',
   GAGAL_BACA: 'Foto tidak bisa dibaca sistem (OCR gagal).',
+  FOTO_TIDAK_ADA_DI_PENYIMPANAN: 'File foto tidak ditemukan di penyimpanan server. Minta pelanggan unggah ulang.',
   TANPA_KODE_UNIK: 'Pesanan ini tidak punya kode unik.',
   BUKAN_TRANSFER_BANK: 'Metode bayarnya bukan transfer bank.',
   TABEL_BUKTI_SIDIK_BELUM_ADA: 'Fitur belum aktif di server: tabel bukti_sidik belum dibuat.',

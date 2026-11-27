@@ -169,8 +169,12 @@ Aturan kerahasiaan per peran ada di [Rules.md](./Rules.md#2-kerahasiaan-data-keu
 22. Persetujuan otomatis transfer dari foto bukti (23 November 2026, keputusan pemilik setelah
     diberi tahu risikonya: foto bisa diedit). Disetujui otomatis hanya bila semua terpenuhi: transfer bank
     dengan nominal unik; foto (bukan PDF) belum pernah dipakai pesanan lain; teks foto (OCR lokal) memuat
-    nominal unik persis; waktu transfer di foto paling lama 1 jam sebelum bukti diunggah dan tidak
-    sebelum pesanan dibuat. Selain itu bukti tetap diperiksa staf. Tercatat di audit log
+    nominal unik persis; waktu transfer di foto tidak sebelum pesanan dibuat dan tidak sesudah bukti
+    diunggah. Pembaruan 27 November 2026: OCR dibaca hingga 4 putaran (gambar asli dan gambar diperbesar,
+    abu-abu, dibalik untuk mode gelap), salah baca angka dirapikan, tanggal tanpa tahun dikenali; bila jam
+    tidak terbaca, tanggal di rentang pesanan cukup, dan bila tanggal juga tidak terbaca, tulisan
+    "Berhasil"/"Sukses" cukup. Jam atau tanggal yang terbaca di luar rentang tetap ditolak. Selain itu
+    bukti tetap diperiksa staf. Tercatat di audit log
     (`payment.auto_approved_from_proof`). Matikan dengan `AUTO_APPROVE_BUKTI=false`.
 18. Paket perpanjangan masa aktif (16 November 2026): paket 0 sesi (ditandai "Perpanjangan masa
     aktif" di Data Master > Paket, harga diisi di sana, mis. Rp150.000) menambah 30 hari pada masa

@@ -27,16 +27,59 @@ export const PELAKU_SISTEM: SessionPrincipal = {
 
 export { AKSI_AUTO_LEWAT, AKSI_AUTO_SETUJU };
 
-/** Pembacaan teks gambar; dipisah supaya tes tidak menjalankan OCR sungguhan. */
-export type PembacaTeks = (gambar: Buffer) => Promise<string>;
+/**
+ * Pembacaan teks gambar; dipisah supaya tes tidak menjalankan OCR sungguhan. `cukup` dipanggil dengan
+ * teks gabungan sesudah tiap putaran baca; putaran berikutnya dilewati begitu hasilnya cukup.
+ */
+export type PembacaTeks = (gambar: Buffer, cukup?: (teks: string) => boolean) => Promise<string>;
 
-/** OCR lokal (tesseract.js, data bahasa dari paket npm, tanpa unduhan saat jalan). */
-export const bacaTeksTesseract: PembacaTeks = async (gambar) => {
+/**
+ * Gambar untuk putaran baca kedua: diperbesar (teks kecil di layar HP), abu-abu, kontras diratakan,
+ * dan dibalik bila latarnya gelap (mode gelap aplikasi bank). Null bila gambar tidak bisa diolah.
+ */
+export async function siapkanGambar(gambar: Buffer): Promise<Buffer | null> {
+  try {
+    const sharp = (await import('sharp')).default;
+    const { width = 0 } = await sharp(gambar).metadata();
+    const terang = (await sharp(gambar).greyscale().stats()).channels[0]?.mean ?? 255;
+    let olah = sharp(gambar)
+      .rotate()
+      .greyscale()
+      .resize({ width: Math.min(Math.max(width * 2, 1200), 2400), kernel: 'lanczos3' });
+    if (terang < 110) olah = olah.negate({ alpha: false });
+    return await olah.normalise().png().toBuffer();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * OCR lokal (tesseract.js, data bahasa dari paket npm, tanpa unduhan saat jalan). Hingga empat
+ * putaran: gambar asli dan gambar olahan, masing-masing dengan susunan halaman otomatis (PSM 3) dan
+ * teks terpencar (PSM 11). Tiap aplikasi bank gagal di putaran berbeda; teks semua putaran digabung.
+ */
+export const bacaTeksTesseract: PembacaTeks = async (gambar, cukup) => {
   const { createWorker } = await import('tesseract.js');
   const langPath = join(dirname(require.resolve('@tesseract.js-data/eng/package.json')), '4.0.0_best_int');
   const worker = await createWorker('eng', 1, { langPath, cacheMethod: 'none', gzip: true });
+  const teks: string[] = [];
+  let olahan: Buffer | null | undefined;
+  const putaran: Array<{ olah: boolean; psm: string }> = [
+    { olah: false, psm: '3' },
+    { olah: true, psm: '3' },
+    { olah: true, psm: '11' },
+    { olah: false, psm: '11' },
+  ];
   try {
-    return (await worker.recognize(gambar)).data.text;
+    for (const p of putaran) {
+      if (p.olah && olahan === undefined) olahan = await siapkanGambar(gambar);
+      const sumber = p.olah ? olahan : gambar;
+      if (!sumber) continue;
+      await worker.setParameters({ tessedit_pageseg_mode: p.psm as never });
+      teks.push((await worker.recognize(sumber)).data.text);
+      if (cukup?.(teks.join('\n'))) break;
+    }
+    return teks.join('\n');
   } finally {
     await worker.terminate();
   }
@@ -47,7 +90,8 @@ export const bacaTeksTesseract: PembacaTeks = async (gambar) => {
  * latar setelah bukti diunggah. Disetujui hanya bila SEMUA terpenuhi:
  * - pembayaran transfer bank yang masih menunggu, dengan nominal unik (harga + kode unik);
  * - foto (bukan PDF) belum pernah dipakai pesanan lain (sidik SHA-256 di `bukti_sidik`);
- * - teks foto memuat nominal unik persis dan waktu transfer paling lama 1 jam sebelum diunggah.
+ * - teks foto memuat nominal unik persis, dan waktu transfernya antara pesanan dibuat dan bukti
+ *   diunggah (lihat `cocokkanBukti` untuk bukti tanpa jam terbaca).
  * Selain itu tidak ada yang berubah: bukti tetap menunggu diperiksa staf. Persetujuan memakai jalur
  * keputusan yang sama dengan staf (`PaymentReviewService.decide`) dan tercatat di audit log.
  * Matikan dengan AUTO_APPROVE_BUKTI=false.
@@ -104,12 +148,12 @@ export class AutoBuktiService {
     if (!['PENDING', 'WAITING_VERIFICATION'].includes(purchase.status)) return 'TIDAK_BERLAKU';
     if (purchase.paymentMethod !== 'BANK_TRANSFER') return lewat('BUKAN_TRANSFER_BANK');
     if (purchase.uniqueCode == null) return lewat('TANPA_KODE_UNIK');
-    // Tanpa tabel sidik, foto dipakai ulang tidak bisa dideteksi: jangan setujui otomatis.
     if (!this.storage) return lewat('PENYIMPANAN_TIDAK_SIAP');
-    if (!(await tabelOpsionalAda(this.db, 'bukti_sidik'))) return lewat('TABEL_BUKTI_SIDIK_BELUM_ADA');
+    // Tanpa tabel sidik, foto dipakai ulang dicek dari sidik yang tercatat di audit persetujuan otomatis.
+    const adaTabelSidik = await tabelOpsionalAda(this.db, 'bukti_sidik');
 
     try {
-      return await this.periksaFoto(purchase, proofId, sekarang);
+      return await this.periksaFoto(purchase, proofId, sekarang, adaTabelSidik);
     } catch (error) {
       await this.audit(AKSI_AUTO_LEWAT, purchase, {
         proofId,
@@ -130,48 +174,79 @@ export class AutoBuktiService {
     },
     proofId: string,
     sekarang: Date,
+    adaTabelSidik: boolean,
   ): Promise<string> {
     const purchaseId = purchase.id;
-    const bytes = await this.storage!.readPrivateObject(`payment-proofs/${proofId}`);
+    const bytes = await this.storage!
+      .readPrivateObject(`payment-proofs/${proofId}`)
+      .catch(() => null);
+    if (!bytes?.length) {
+      await this.audit(AKSI_AUTO_LEWAT, purchase, { proofId, hasil: 'FOTO_TIDAK_ADA_DI_PENYIMPANAN' });
+      return 'FOTO_TIDAK_ADA_DI_PENYIMPANAN';
+    }
     const sha256 = createHash('sha256').update(bytes).digest('hex');
     const catat = (hasil: string, waktuBukti: Date | null = null) =>
-      bacaOpsional(
-        'bukti_sidik',
-        () =>
-          this.db.buktiSidik.upsert({
-            where: { proofId },
-            create: { proofId, purchaseId, sha256, hasil, waktuBukti },
-            update: { sha256, hasil, waktuBukti },
-          }),
-        null,
-      );
+      adaTabelSidik
+        ? bacaOpsional(
+            'bukti_sidik',
+            () =>
+              this.db.buktiSidik.upsert({
+                where: { proofId },
+                create: { proofId, purchaseId, sha256, hasil, waktuBukti },
+                update: { sha256, hasil, waktuBukti },
+              }),
+            null,
+          )
+        : Promise.resolve(null);
 
-    const dipakaiLain = await this.db.buktiSidik.findFirst({
-      where: { sha256, purchaseId: { not: purchaseId } },
-      select: { purchaseId: true },
-    });
+    const dipakaiLain = adaTabelSidik
+      ? await this.db.buktiSidik.findFirst({
+          where: { sha256, purchaseId: { not: purchaseId } },
+          select: { purchaseId: true },
+        })
+      : await this.db.auditLog.findFirst({
+          where: {
+            action: AKSI_AUTO_SETUJU,
+            objectId: { not: purchaseId },
+            detail: { path: '$.sha256', equals: sha256 },
+          },
+          select: { objectId: true },
+        });
     let hasil: string;
     let waktuBukti: Date | null = null;
+    let dasarWaktu: string | null = null;
     // Angka dan waktu yang terbaca OCR, untuk menjelaskan kenapa tidak cocok.
     let terbaca: { nominal: number[]; waktu: string[] } | null = null;
     if (dipakaiLain) hasil = 'FOTO_DIPAKAI_ULANG';
     else if (!(jenisBukti(bytes) ?? '').startsWith('image/')) hasil = 'BUKAN_GAMBAR';
     else {
-      const teks = await this.bacaTeks(bytes).catch(() => null);
-      if (teks === null) hasil = 'GAGAL_BACA';
-      else {
-        terbaca = {
-          nominal: bacaNominal(teks).slice(0, 10),
-          waktu: bacaWaktu(teks).slice(0, 5).map((w) => w.toISOString()),
-        };
-        const cek: HasilCekBukti = cocokkanBukti({
+      const cek = (teks: string): HasilCekBukti =>
+        cocokkanBukti({
           teks,
           totalRp: purchase.totalAmountRp,
           dibuatPada: purchase.createdAt,
           diunggahPada: purchase.paymentProof?.uploadedAt ?? sekarang,
         });
-        hasil = cek.cocok ? 'COCOK' : cek.alasan;
-        if (cek.cocok) waktuBukti = cek.waktu;
+      // Berhenti lebih awal hanya bila jam transfer sudah cocok; selain itu semua putaran dibaca supaya
+      // jam di luar rentang (bukti lama) tidak terlewat.
+      const cukup = (t: string) => {
+        const c = cek(t);
+        return c.cocok && c.dasarWaktu === 'JAM';
+      };
+      const teks = await this.bacaTeks(bytes, cukup).catch(() => null);
+      if (teks === null) hasil = 'GAGAL_BACA';
+      else {
+        const acuan = purchase.paymentProof?.uploadedAt ?? sekarang;
+        terbaca = {
+          nominal: bacaNominal(teks).slice(0, 10),
+          waktu: bacaWaktu(teks, acuan).slice(0, 5).map((w) => w.toISOString()),
+        };
+        const putusan = cek(teks);
+        hasil = putusan.cocok ? 'COCOK' : putusan.alasan;
+        if (putusan.cocok) {
+          waktuBukti = putusan.waktu;
+          dasarWaktu = putusan.dasarWaktu;
+        }
       }
     }
     await catat(hasil, waktuBukti);
@@ -191,7 +266,7 @@ export class AutoBuktiService {
       'APPROVED',
       {
         reasonCode: 'PAYMENT_VERIFIED',
-        note: 'Disetujui otomatis: nominal unik dan waktu transfer di foto bukti cocok.',
+        note: 'Disetujui otomatis: nominal unik di foto bukti cocok dengan pesanan.',
       },
       `auto-bukti:${proofId}`,
       `auto-bukti:${proofId}`,
@@ -200,6 +275,7 @@ export class AutoBuktiService {
       proofId,
       nominalRp: purchase.totalAmountRp,
       waktuBukti: waktuBukti?.toISOString() ?? null,
+      dasarWaktu,
       sha256,
     });
     return hasil;
@@ -215,7 +291,7 @@ export class AutoBuktiService {
           branchId: purchase.branchId,
           objectType: 'Purchase',
           objectId: purchase.id,
-          reason: action === AKSI_AUTO_SETUJU ? 'Nominal unik dan waktu di foto bukti cocok' : null,
+          reason: action === AKSI_AUTO_SETUJU ? 'Nominal unik di foto bukti cocok' : null,
           detail: detail as never,
         },
       })
