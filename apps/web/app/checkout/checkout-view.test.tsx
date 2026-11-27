@@ -345,7 +345,7 @@ describe('CheckoutView paket perpanjangan masa aktif', () => {
         <CheckoutView />
       </AppFeedbackProvider>,
     );
-    expect(await screen.findByText('Belum ada paket aktif')).toBeVisible();
+    expect(await screen.findByText('Belum ada paket yang bisa diperpanjang')).toBeVisible();
     expect(screen.getByRole('button', { name: 'Buat pesanan' })).toBeDisabled();
   });
 

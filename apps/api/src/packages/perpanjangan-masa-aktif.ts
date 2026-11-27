@@ -193,25 +193,19 @@ async function hitungPerpanjangan(
   return hasil;
 }
 
-/** Paket aktif milik member yang bisa dipilih untuk diperpanjang (pilihan di checkout dan meja). */
+/** Paket aktif (termasuk > 14 hari) maupun kedaluwarsa yang masih bersisa sesi milik member untuk diperpanjang. */
 export async function pilihanTargetPerpanjangan(
   db: Db,
   userId: string,
   now = new Date(),
   opsi: { staf?: boolean; hari?: number } = {},
 ) {
-  const hampirBerakhir = {
-    status: 'ACTIVE',
-    validUntil: { gt: now, lte: new Date(now.getTime() + JENDELA_PERPANJANGAN_HARI * HARI_MS) },
-  };
-  // Paket yang sudah kedaluwarsa tetapi masih bersisa sesi juga bisa diperpanjang (member dan staf).
-  const kedaluwarsa = [{ status: 'EXPIRED' }, { status: 'ACTIVE', validUntil: { lte: now } }];
   const paket: Array<PaketTarget & { totalSessions: number; package: { name: string } | null }> =
     await db.paketPelanggan.findMany({
       where: {
         userId,
         remainingSessions: { gt: 0 },
-        OR: [hampirBerakhir, ...kedaluwarsa],
+        status: { in: ['ACTIVE', 'EXPIRED'] },
       },
       include: { package: { select: { name: true } } },
       orderBy: [{ validUntil: 'asc' }, { id: 'asc' }],
@@ -220,6 +214,7 @@ export async function pilihanTargetPerpanjangan(
   const angka = await hitungPerpanjangan(db, paket.map((p) => p.id));
   return paket.map((p) => {
     const { terpakai, menunggu } = angka.get(p.id) ?? { terpakai: 0, menunggu: 0 };
+    const kedaluwarsa = paketKedaluwarsaBersisa(p, now);
     return {
       customerPackageId: p.id,
       packageName: p.package?.name ?? 'Paket',
@@ -227,7 +222,8 @@ export async function pilihanTargetPerpanjangan(
       totalSessions: p.totalSessions,
       validUntil: p.validUntil,
       /** Sudah lewat masa berlaku: perpanjangan wajib bukti bayar dan dihitung dari hari disetujui. */
-      kedaluwarsa: paketKedaluwarsaBersisa(p, now),
+      kedaluwarsa,
+      hampirBerakhir: !kedaluwarsa && dalamJendelaPerpanjangan(p, now),
       validUntilAfterExtension: masaBerlakuSetelahPerpanjangan(p, opsi.hari ?? HARI_PERPANJANGAN, now),
       extensionsUsed: terpakai,
       extensionsPending: menunggu,
@@ -245,7 +241,7 @@ export async function periksaTargetPerpanjangan(
   targetId: unknown,
   userId: string,
   now: Date,
-  opsi: { staf?: boolean } = {},
+  _opsi: { staf?: boolean } = {},
 ): Promise<PaketTarget> {
   if (typeof targetId !== 'string' || !ENTITY_ID_REGEX.test(targetId))
     throw new ApiProblem('PACKAGE_EXTENSION_TARGET_REQUIRED', HttpStatus.UNPROCESSABLE_ENTITY, false, [
@@ -260,9 +256,6 @@ export async function periksaTargetPerpanjangan(
   const kedaluwarsa = paketKedaluwarsaBersisa(cp, now);
   if (!paketMasihAktif(cp, now) && !kedaluwarsa)
     throw new ApiProblem('PACKAGE_EXTENSION_TARGET_EXPIRED', HttpStatus.CONFLICT);
-  // Saat pesanan dibuat saja; persetujuan pembayaran yang datang belakangan tidak dicek ulang.
-  if (!kedaluwarsa && !dalamJendelaPerpanjangan(cp, now))
-    throw new ApiProblem('PACKAGE_EXTENSION_TOO_EARLY', HttpStatus.CONFLICT);
   const { terpakai, menunggu } = (await hitungPerpanjangan(tx, [cp.id])).get(cp.id)!;
   if (terpakai >= MAKS_PERPANJANGAN)
     throw new ApiProblem('PACKAGE_EXTENSION_LIMIT_REACHED', HttpStatus.CONFLICT);

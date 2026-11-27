@@ -151,12 +151,9 @@ export const BATAS_HARI_PERPANJANG = 14;
 export function hrefPerpanjang(
   item: { id: string; expiryAt: Date | string },
   perpanjangan: Pick<PublicPackage, 'id' | 'branchId'> | null | undefined,
-  now: number,
+  _now?: number,
 ) {
   if (!perpanjangan) return null;
-  const sisaHari = Math.ceil((new Date(item.expiryAt).getTime() - now) / 86_400_000);
-  // Paket yang sudah berakhir (sisaHari < 0) tetap bisa diperpanjang bila masih ada sesinya.
-  if (sisaHari > BATAS_HARI_PERPANJANG) return null;
   const query = new URLSearchParams({ package: perpanjangan.id, branch: perpanjangan.branchId, target: item.id });
   return `/checkout?${query.toString()}`;
 }
@@ -240,24 +237,6 @@ export function CustomerPackagesView({
 } = {}) {
   const session = useSessionContext();
   const cabangUtama = session?.session?.preferredBranch?.id ?? session?.session?.branches?.[0]?.id ?? '';
-  const [paketPerpanjangan, setPaketPerpanjangan] = useState<PublicPackage | null>(null);
-  useEffect(() => {
-    if (!cabangUtama) return;
-    let batal = false;
-    Promise.resolve()
-      .then(() => katalog.list(cabangUtama))
-      .then((r) => {
-        if (batal) return;
-        const items = Array.isArray(r?.items) ? r.items : [];
-        setPaketPerpanjangan(
-          items.find((item) => (item as { perpanjanganMasaAktif?: boolean }).perpanjanganMasaAktif) ?? null,
-        );
-      })
-      .catch(() => !batal && setPaketPerpanjangan(null));
-    return () => {
-      batal = true;
-    };
-  }, [cabangUtama, katalog]);
   const currentUserId = session?.session?.id;
   const studio = useStudioPreference();
   const [paket, setPaket] = useState<LedgerBalance[] | null>(null);
@@ -265,6 +244,47 @@ export function CustomerPackagesView({
   const [booking, setBooking] = useState<CustomerBookingRecord[]>([]);
   const [gagal, setGagal] = useState('');
   const [anggota, setAnggota] = useState<LedgerBalance | null>(null);
+  const [perpanjanganMap, setPerpanjanganMap] = useState<Record<string, PublicPackage>>({});
+
+  // Muat paket perpanjangan untuk setiap cabang yang dimiliki member (termasuk cabang utama).
+  const cabangPaketKey = useMemo(() => {
+    const ids = new Set<string>();
+    if (cabangUtama) ids.add(cabangUtama);
+    for (const item of paket ?? []) {
+      if (item.branchId) ids.add(item.branchId);
+    }
+    return [...ids].sort().join('|');
+  }, [cabangUtama, paket]);
+
+  useEffect(() => {
+    if (!cabangPaketKey) return;
+    let batal = false;
+    const branchIds = cabangPaketKey.split('|').filter(Boolean);
+    Promise.all(
+      branchIds.map(async (bId) => {
+        try {
+          const r = await katalog.list(bId);
+          const items = Array.isArray(r?.items) ? r.items : [];
+          const ext = items.find((item) => (item as { perpanjanganMasaAktif?: boolean }).perpanjanganMasaAktif);
+          return ext ? ([bId, ext] as const) : null;
+        } catch {
+          return null;
+        }
+      }),
+    ).then((entries) => {
+      if (batal) return;
+      const next: Record<string, PublicPackage> = {};
+      for (const e of entries) if (e) next[e[0]] = e[1];
+      setPerpanjanganMap(next);
+    });
+    return () => {
+      batal = true;
+    };
+  }, [cabangPaketKey, katalog]);
+
+  const paketPerpanjangan = perpanjanganMap[cabangUtama] ?? Object.values(perpanjanganMap)[0] ?? null;
+  const perpanjanganUntuk = (branchId?: string | null) =>
+    (branchId ? perpanjanganMap[branchId] : undefined) ?? paketPerpanjangan;
 
   const muat = useCallback(async () => {
     const semuaPaket = async () => {
@@ -389,7 +409,7 @@ export function CustomerPackagesView({
                 item={item}
                 milikSendiri={!item.customer?.id || item.customer.id === currentUserId}
                 onAnggota={() => setAnggota(item)}
-                perpanjangHref={hrefPerpanjang(item, paketPerpanjangan, now)}
+                perpanjangHref={item.available > 0 ? hrefPerpanjang(item, perpanjanganUntuk(item.branchId), now) : null}
               />
             ))}
           </ul>
@@ -455,7 +475,7 @@ export function CustomerPackagesView({
           </div>
           <ul className="m-0 grid list-none gap-3 p-0 md:grid-cols-2">
             {bisaAktifLagi.map((item) => {
-              const href = hrefPerpanjang(item, paketPerpanjangan, now);
+              const href = hrefPerpanjang(item, perpanjanganUntuk(item.branchId), now);
               return (
                 <li key={item.id} className="rounded-dd-xl border border-dd-line bg-white p-5">
                   <div className="flex items-start justify-between gap-4">

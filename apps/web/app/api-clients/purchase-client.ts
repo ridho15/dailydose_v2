@@ -1,7 +1,7 @@
 import { apiFetch } from '../lib/api-client';
 import { appLoading, foregroundFetch } from '../components/app-loading';
 import { notifySessionFailure } from './session-client';
-import { EXTENSION_ERROR_LABELS, type ExtensionTarget } from './order-client';
+import { EXTENSION_ERROR_LABELS, type ExtensionTarget, type OrderExtension } from './order-client';
 
 export interface PackageBranchScope {
   id?: string;
@@ -70,6 +70,10 @@ export interface Purchase {
   priceAfterDiscountRpSnapshot?: number | null;
   paymentUniqueCode?: number | null;
   payableAmountRpSnapshot?: number | null;
+  payableAmountRp?: number | null;
+  paymentMethod?: string | null;
+  paymentAccount?: { bankName: string; accountNumber: string; accountHolderName: string } | null;
+  extension?: OrderExtension | null;
   status: 'PENDING' | 'SUBMITTED' | 'APPROVED' | 'REJECTED' | 'AWAITING_PAYMENT' | 'ACTION_REQUIRED' | 'EXPIRED' | string;
   auditReference?: string | null;
   createdAt?: Date;
@@ -103,6 +107,7 @@ export interface ApprovalResult {
   purchase: Purchase;
   customerPackage: CustomerPackageBalanceSnapshot;
   ledgerEntry: LedgerEntrySnapshot;
+  extension?: OrderExtension | null;
   idempotentReplay?: boolean;
   id?: string;
   status?: string;
@@ -220,6 +225,7 @@ export interface PaymentReviewItem {
   recordedBy?: { id: string; displayName: string } | null;
   recordNote?: string | null;
   paymentMethod?: string | null;
+  extension?: OrderExtension | null;
   /** Hasil cek otomatis foto bukti terakhir; null bila belum pernah dicek. */
   cekOtomatis?: CekOtomatisBukti | null;
 }
@@ -266,6 +272,7 @@ export interface PaymentReviewDetail {
   purchase: PaymentReviewItem;
   timeline: PaymentReviewTimeline;
   decisionActorMasked: string | null;
+  extension?: OrderExtension | null;
   activation: PaymentActivationResult | null;
   balance: PaymentActivationSummary | null;
   usageHistory: PaymentUsageHistoryPage;
@@ -694,10 +701,26 @@ export interface ExtensionTargetList {
   items: ExtensionTarget[];
 }
 
+export interface AssistedSalePricePreview {
+  subtotalRp: number;
+  discountRp: number;
+  baseAmountRp: number;
+  willAddUniqueCode: boolean;
+  promotion: null | { id: string; name: string; version: number; discountRp: number };
+  voucher: null | { id: string; code: string; discountType: string; discountValue: number; discountRp: number };
+  paymentAccount: null | { bankName: string; accountNumber: string; accountHolderName: string };
+}
+
 export interface AssistedSaleClient {
   record(input: AssistedSaleInput, idempotencyKey: string): Promise<Purchase>;
   searchPackages(query: string): Promise<Package[]>;
   extensionTargets?(customerUserId: string, branchId: string, packageId?: string): Promise<ExtensionTargetList>;
+  previewPrice?(input: {
+    branchId: string;
+    packageId: string;
+    voucherCode?: string;
+    paymentMethod?: AssistedPaymentMethod;
+  }): Promise<AssistedSalePricePreview>;
 }
 
 export const browserAssistedSaleClient: AssistedSaleClient = {
@@ -723,6 +746,13 @@ export const browserAssistedSaleClient: AssistedSaleClient = {
     if (packageId) params.set('packageId', packageId);
     return apiFetch<ExtensionTargetList>(`/purchases/extension-targets?${params.toString()}`, {
       label: 'Memuat paket member…',
+    });
+  },
+  async previewPrice(input) {
+    return apiFetch<AssistedSalePricePreview>('/purchases/assisted/price-preview', {
+      method: 'POST',
+      body: JSON.stringify(input),
+      label: 'Menghitung tagihan…',
     });
   },
 };

@@ -632,8 +632,8 @@ function ExtensionTargetPicker({
           <div className="mt-4">
             <AlertBanner
               tone="warning"
-              title="Belum ada paket aktif"
-              message="Perpanjangan hanya untuk paket yang masih aktif dan masih punya sesi. Paket yang sudah hangus tidak bisa diperpanjang; beli paket baru untuk melanjutkan latihan."
+              title="Belum ada paket yang bisa diperpanjang"
+              message="Perpanjangan tersedia untuk paket aktif maupun paket kedaluwarsa yang masih memiliki sisa sesi (maksimal 3 kali per paket). Jika semua sesi habis atau paket dibekukan, silakan beli paket baru."
             />
           </div>
         ) : (

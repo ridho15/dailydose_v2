@@ -371,6 +371,16 @@ export function PaymentReviewDetailView({
             crypto.randomUUID(),
             note.trim() || undefined,
           );
+          if (result.extension?.targetCustomerPackageId) {
+            feedback?.showToast({
+              tone: 'success',
+              title: 'Perpanjangan disetujui',
+              message: `${result.extension.targetPackageName ?? purchase.packageNameSnapshot} diperpanjang +${result.extension.days} hari${result.extension.validUntilAfter ? ` hingga ${formatDate(result.extension.validUntilAfter)}` : ''}.`,
+              correlationReference: result.purchase.auditReference ?? undefined,
+            });
+            router.push(`/ledger/${encodeURIComponent(result.extension.targetCustomerPackageId)}`);
+            return;
+          }
           feedback?.showToast({
             tone: 'success',
             title: 'Pembayaran disetujui',
@@ -731,36 +741,78 @@ export function PaymentReviewDetailView({
               <Panel className="p-5 space-y-4">
                 <h3 className="text-lg font-bold text-dd-ink">Keputusan Finance</h3>
 
-                {/* Ringkasan Informasi Sesi */}
+                {/* Ringkasan Informasi Sesi / Perpanjangan */}
                 <div className="space-y-2.5 rounded-dd-lg border border-dd-line bg-dd-surface-muted p-4 text-xs sm:text-sm">
                   <div className="flex justify-between items-center">
                     <span className="text-dd-muted">Waktu pengiriman</span>
                     <span className="font-semibold text-dd-ink">{formatDateTime(detail.timeline.submittedAt)}</span>
                   </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-dd-muted">Paket berlaku hingga</span>
-                    <span className="font-semibold text-dd-ink">
-                      {formatDate(
-                        detail.activation?.expiryAt ??
-                          (purchase.durationDaysSnapshot
-                            ? new Date(new Date(purchase.submittedAt).getTime() + purchase.durationDaysSnapshot * 86400000)
-                            : null),
-                      )}
-                    </span>
-                  </div>
-                  <hr className="border-dd-line my-1" />
-                  <div className="flex justify-between items-center">
-                    <span className="text-dd-muted">Sesi belum dipakai</span>
-                    <span className="font-semibold text-dd-ink">{detail.balance?.available ?? purchase.sessionCountSnapshot ?? 0}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-dd-muted">Sesi sudah dibooking</span>
-                    <span className="font-semibold text-dd-ink">{detail.balance?.reserved ?? 0}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-dd-muted">Sesi sudah terpakai</span>
-                    <span className="font-semibold text-dd-ink">{detail.balance?.used ?? 0}</span>
-                  </div>
+                  {(detail.extension ?? purchase.extension) ? (
+                    (() => {
+                      const ext = (detail.extension ?? purchase.extension)!;
+                      return (
+                        <>
+                          <div className="flex justify-between items-center gap-2">
+                            <span className="text-dd-muted">Paket diperpanjang</span>
+                            <span className="font-semibold text-dd-ink text-right">
+                              {ext.targetPackageName ?? 'Paket member'}
+                            </span>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span className="text-dd-muted">Tambahan masa aktif</span>
+                            <span className="font-semibold text-dd-forest">+{ext.days} hari</span>
+                          </div>
+                          {ext.validUntilAfter ? (
+                            <div className="flex justify-between items-center">
+                              <span className="text-dd-muted">Berlaku hingga</span>
+                              <span className="font-semibold text-dd-ink">{formatDate(ext.validUntilAfter)}</span>
+                            </div>
+                          ) : ext.targetValidUntil ? (
+                            <div className="flex justify-between items-center">
+                              <span className="text-dd-muted">Berakhir saat ini</span>
+                              <span className="font-semibold text-dd-ink">{formatDate(ext.targetValidUntil)}</span>
+                            </div>
+                          ) : null}
+                          <div className="pt-1">
+                            <ButtonLink
+                              variant="secondary"
+                              size="sm"
+                              href={`/ledger/${encodeURIComponent(ext.targetCustomerPackageId)}`}
+                            >
+                              Lihat detail paket member
+                            </ButtonLink>
+                          </div>
+                        </>
+                      );
+                    })()
+                  ) : (
+                    <>
+                      <div className="flex justify-between items-center">
+                        <span className="text-dd-muted">Paket berlaku hingga</span>
+                        <span className="font-semibold text-dd-ink">
+                          {formatDate(
+                            detail.activation?.expiryAt ??
+                              (purchase.durationDaysSnapshot
+                                ? new Date(new Date(purchase.submittedAt).getTime() + purchase.durationDaysSnapshot * 86400000)
+                                : null),
+                          )}
+                        </span>
+                      </div>
+                      <hr className="border-dd-line my-1" />
+                      <div className="flex justify-between items-center">
+                        <span className="text-dd-muted">Sesi belum dipakai</span>
+                        <span className="font-semibold text-dd-ink">{detail.balance?.available ?? purchase.sessionCountSnapshot ?? 0}</span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-dd-muted">Sesi sudah dibooking</span>
+                        <span className="font-semibold text-dd-ink">{detail.balance?.reserved ?? 0}</span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-dd-muted">Sesi sudah terpakai</span>
+                        <span className="font-semibold text-dd-ink">{detail.balance?.used ?? 0}</span>
+                      </div>
+                    </>
+                  )}
                 </div>
 
                 {canDecide && isPendingDecision ? (() => {

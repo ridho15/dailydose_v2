@@ -408,3 +408,74 @@ describe('assisted sale with a live package promotion', () => {
     });
   });
 });
+
+describe('assisted sale BANK_TRANSFER unique code and price preview', () => {
+  it('allocates a 3-digit unique code only for BANK_TRANSFER and adds it to totalAmountRp', async () => {
+    const bank = setup();
+    await bank.service.recordAssistedSale(
+      admin,
+      input({ paymentMethod: 'BANK_TRANSFER' }),
+      'key-bank-12345',
+      'c',
+    );
+    expect(bank.created[0]!.uniqueCode).toBeGreaterThanOrEqual(100);
+    expect(bank.created[0]!.uniqueCode).toBeLessThanOrEqual(999);
+    expect(bank.created[0]!.totalAmountRp).toBe(1_000_000 + bank.created[0]!.uniqueCode);
+
+    const cash = setup();
+    await cash.service.recordAssistedSale(admin, input({ paymentMethod: 'CASH' }), 'key-cash-12345', 'c');
+    expect(cash.created[0]!.uniqueCode).toBeUndefined();
+    expect(cash.created[0]!.totalAmountRp).toBe(1_000_000);
+  });
+
+  it('previews promo, voucher discount, payment account, and willAddUniqueCode for staff', async () => {
+    const db = {
+      cabang: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: branchA,
+          active: true,
+          paymentAccounts: [{ bankName: 'BCA', accountNumber: '1234567890', accountHolder: 'PT Daily Dose' }],
+        }),
+      },
+      paket: { findUnique: jest.fn().mockResolvedValue(packageRow({ priceRp: 150_000, sessionCount: 0 })) },
+      packagePromotion: { findFirst: jest.fn().mockResolvedValue(null) },
+      voucher: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: id(50),
+          code: 'EXT10',
+          active: true,
+          discountType: 'FIXED',
+          discountValue: 25_000,
+          maxDiscountRp: null,
+          minSpendRp: 0,
+          quota: null,
+          usedCount: 0,
+        }),
+      },
+    };
+    const audit = { record: jest.fn() };
+    const service = new CustomerOrderService(
+      db as never,
+      new PackageAccessService({} as never, new PolicyService(), audit as never),
+      new PackagePricingService(),
+      {} as never,
+      {} as never,
+      {} as never,
+      audit as never,
+    );
+    const preview = await service.previewAssistedSalePrice(admin, {
+      branchId: branchA,
+      packageId,
+      voucherCode: 'ext10',
+      paymentMethod: 'BANK_TRANSFER',
+    });
+    expect(preview).toMatchObject({
+      subtotalRp: 150_000,
+      discountRp: 25_000,
+      baseAmountRp: 125_000,
+      willAddUniqueCode: true,
+      voucher: { code: 'EXT10', discountRp: 25_000 },
+      paymentAccount: { bankName: 'BCA', accountNumber: '1234567890' },
+    });
+  });
+});

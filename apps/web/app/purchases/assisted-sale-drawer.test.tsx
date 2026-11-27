@@ -198,7 +198,128 @@ describe('AssistedSaleDrawer', () => {
     open(client);
     const dialog = screen.getByRole('dialog', { name: 'Catat penjualan paket' });
     await pickPackage(user, dialog, /Perpanjangan 30 Hari/);
-    expect(await within(dialog).findByText(/tidak punya paket aktif yang bisa diperpanjang/)).toBeVisible();
+    expect(await within(dialog).findByText(/Member ini tidak punya paket aktif yang bisa diperpanjang/)).toBeVisible();
     expect(within(dialog).getByRole('button', { name: 'Catat penjualan' })).toBeDisabled();
+  });
+
+  it('menampilkan ringkasan pembayaran (harga + voucher) dan kode unik + link detail paket setelah submit perpanjangan', async () => {
+    const user = userEvent.setup();
+    const previewPrice = vi.fn().mockResolvedValue({
+      subtotalRp: 150_000,
+      discountRp: 25_000,
+      baseAmountRp: 125_000,
+      willAddUniqueCode: true,
+      promotion: null,
+      voucher: { id: 'v1', code: 'EXT25', discountType: 'FIXED_AMOUNT', discountValue: 25_000, discountRp: 25_000 },
+      paymentAccount: { bankName: 'BCA', accountNumber: '1234567890', accountHolderName: 'Daily Dose' },
+    });
+    const client = fake({
+      searchPackages: vi.fn().mockResolvedValue([
+        pkg({ id: 'pkg-ext', name: 'Perpanjangan 30 Hari', sessionCount: 0, priceRp: 150_000, perpanjanganMasaAktif: true }),
+      ]),
+      extensionTargets: vi.fn().mockResolvedValue({
+        days: 30,
+        maxPerPackage: 3,
+        items: [
+          {
+            customerPackageId: 'cp-2',
+            packageName: 'Paket 4 Sesi',
+            remainingSessions: 2,
+            totalSessions: 4,
+            validUntil: '2026-12-30T16:59:59.000Z',
+            validUntilAfterExtension: '2027-01-29T16:59:59.000Z',
+            extensionsUsed: 0,
+            extensionsPending: 0,
+            extensionsLeft: 3,
+          },
+        ],
+      }),
+      previewPrice,
+      record: vi.fn().mockResolvedValue({
+        id: 'purchase-ext-1',
+        paymentUniqueCode: 345,
+        payableAmountRp: 125_345,
+        paymentAccount: { bankName: 'BCA', accountNumber: '1234567890', accountHolderName: 'Daily Dose' },
+        extension: {
+          targetCustomerPackageId: 'cp-2',
+          targetPackageName: 'Paket 4 Sesi',
+          targetValidUntil: '2026-12-30T16:59:59.000Z',
+          days: 30,
+          appliedAt: null,
+          validUntilBefore: null,
+          validUntilAfter: null,
+          rolledBackAt: null,
+        },
+      }),
+    });
+    const onClose = vi.fn();
+    const onRecorded = vi.fn();
+    open(client, onClose, onRecorded);
+    const dialog = screen.getByRole('dialog', { name: 'Catat penjualan paket' });
+    await pickPackage(user, dialog, /Perpanjangan 30 Hari/);
+    await user.selectOptions(within(dialog).getByLabelText('Metode pembayaran'), 'BANK_TRANSFER');
+    await user.type(within(dialog).getByLabelText('Kode voucher (opsional)'), 'EXT25');
+    const summary = await within(dialog).findByTestId('assisted-sale-payment-summary');
+    expect(within(summary).getByText(/Rp\s*125\.000/)).toBeVisible();
+    expect(within(summary).getByText(/BCA 1234567890/)).toBeVisible();
+
+    await user.click(within(dialog).getByRole('button', { name: 'Catat penjualan' }));
+    const confirm = await screen.findByRole('dialog', { name: 'Catat penjualan paket?' });
+    await user.click(within(confirm).getByRole('button', { name: 'Catat penjualan' }));
+
+    const recordedPanel = await within(dialog).findByTestId('assisted-sale-recorded-summary');
+    expect(within(recordedPanel).getByText(/Rp\s*125\.345/)).toBeVisible();
+    expect(within(recordedPanel).getByText(/kode unik transfer: 345/i)).toBeVisible();
+    expect(within(recordedPanel).getByRole('link', { name: 'Buka detail pembayaran' })).toHaveAttribute(
+      'href',
+      '/workspace/payments/purchase-ext-1',
+    );
+    expect(within(recordedPanel).getByRole('link', { name: 'Lihat detail paket member' })).toHaveAttribute(
+      'href',
+      '/ledger/cp-2',
+    );
+    await user.click(within(dialog).getByRole('button', { name: 'Selesai' }));
+    expect(onRecorded).toHaveBeenCalledTimes(1);
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('BANK_TRANSFER menampilkan form unggah bukti di Tahap 2 dan menampilkan galat terbaca jika unggah gagal', async () => {
+    const user = userEvent.setup();
+    const orderClient = await import('@/api-clients/order-client');
+    const uploadSpy = vi.spyOn(orderClient.browserOrderClient, 'uploadProof').mockRejectedValueOnce(new Error('network'));
+    const client = fake({
+      record: vi.fn().mockResolvedValue({
+        id: 'purchase-tf-1',
+        paymentMethod: 'BANK_TRANSFER',
+        paymentUniqueCode: 512,
+        payableAmountRp: 1_000_512,
+      }),
+    });
+    open(client);
+    const dialog = screen.getByRole('dialog', { name: 'Catat penjualan paket' });
+    await pickPackage(user, dialog, /Paket 8 Sesi/);
+    await user.selectOptions(within(dialog).getByLabelText('Metode pembayaran'), 'BANK_TRANSFER');
+    expect(within(dialog).queryByTestId('input-assisted-sale-proof')).toBeNull();
+
+    await user.click(within(dialog).getByRole('button', { name: 'Catat penjualan' }));
+    const confirm = await screen.findByRole('dialog', { name: 'Catat penjualan paket?' });
+    await user.click(within(confirm).getByRole('button', { name: 'Catat penjualan' }));
+
+    const step2 = await within(dialog).findByTestId('assisted-sale-recorded-summary');
+    expect(within(step2).getByText(/kode unik transfer: 512/i)).toBeVisible();
+    await user.upload(
+      within(step2).getByTestId('input-assisted-sale-proof-step2'),
+      new File(['x'], 'bukti.png', { type: 'image/png' }),
+    );
+    await user.click(within(step2).getByTestId('btn-upload-proof-step2'));
+
+    expect(
+      await within(step2).findByText('Bukti belum dapat diunggah. Coba lagi atau unggah lewat Detail Pembayaran.'),
+    ).toBeVisible();
+    expect(within(step2).getByRole('link', { name: 'Buka detail pembayaran' })).toHaveAttribute(
+      'href',
+      '/workspace/payments/purchase-tf-1',
+    );
+    uploadSpy.mockRestore();
   });
 });

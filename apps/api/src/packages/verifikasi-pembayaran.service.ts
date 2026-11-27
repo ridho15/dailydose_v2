@@ -14,7 +14,7 @@ import { escapeXml, idBuktiBerlaku, jalurBuktiLokal, jenisBukti } from './bukti-
 import { berlakuSampai } from '../foundation/masa-berlaku';
 import { lepasKuotaVoucher } from './voucher.service';
 import { rapikanPesananKedaluwarsa } from './payment-expiration-worker';
-import { adalahPaketPerpanjangan, perpanjanganPembelian, terapkanPerpanjangan } from './perpanjangan-masa-aktif';
+import { adalahPaketPerpanjangan, infoPerpanjangan, perpanjanganPembelian, terapkanPerpanjangan } from './perpanjangan-masa-aktif';
 import { catatModalPaket } from './modal-sesi.service';
 import { AKSI_AUTO_LEWAT, AKSI_AUTO_SETUJU } from './ocr-bukti';
 
@@ -181,6 +181,7 @@ export class PaymentReviewService {
     const counts = new Map(grouped.map((item) => [item.status, item._count._all]));
     const generatedAt = new Date();
     const recorders = await this.recorderNames(pageRows.map((row) => row.recordedById));
+    const perpanjanganMap = await infoPerpanjangan(this.db, pageRows.map((row) => row.id));
 
     return {
       items: pageRows.map(
@@ -194,6 +195,7 @@ export class PaymentReviewService {
         }) => {
           return {
             ...item,
+            extension: perpanjanganMap.get(item.id) ?? null,
             recordedBy: item.recordedById
               ? { id: item.recordedById, displayName: recorders.get(item.recordedById) ?? 'Staf' }
               : null,
@@ -369,11 +371,13 @@ export class PaymentReviewService {
     const bookingItems = customerPackage?.bookings ?? [];
     const recorders = await this.recorderNames([item.recordedById]);
     const cekOtomatis = await this.cekOtomatisTerakhir(purchase.id);
+    const extension = (await infoPerpanjangan(this.db, [purchase.id])).get(purchase.id) ?? null;
 
     return {
       purchase: {
         ...item,
         cekOtomatis,
+        extension,
         recordedBy: item.recordedById
           ? { id: item.recordedById, displayName: recorders.get(item.recordedById) ?? 'Staf' }
           : null,
@@ -415,6 +419,7 @@ export class PaymentReviewService {
         decidedAt: item.verifiedAt ?? null,
       },
       decisionActorMasked: item.verifiedById ? `Staf •${item.verifiedById.slice(-6)}` : null,
+      extension,
       activation: customerPackage
         ? {
             customerPackageId: customerPackage.id,

@@ -368,9 +368,14 @@ export function PaketMemberView({
           customer={{ id: jual.customer.id, name: jual.customer.displayName }}
           perpanjangTargetId={jual.id}
           onClose={() => setJual(null)}
-          onRecorded={() => {
+          onRecorded={(purchase) => {
             setJual(null);
-            setInfo('Perpanjangan berbayar dicatat. Paket aktif lagi setelah pembayaran disetujui di antrean Pembayaran.');
+            setInfo(
+              purchase?.extension?.targetPackageName
+                ? `Perpanjangan ${purchase.extension.targetPackageName} dicatat${purchase.paymentUniqueCode ? ` (kode unik ${String(purchase.paymentUniqueCode).padStart(3, '0')}, total Rp${Number(purchase.payableAmountRp ?? 0).toLocaleString('id-ID')})` : ''}. Menunggu persetujuan di antrean Pembayaran.`
+                : 'Perpanjangan berbayar dicatat. Paket aktif lagi setelah pembayaran disetujui di antrean Pembayaran.',
+            );
+            void muat();
           }}
         />
       )}
@@ -434,7 +439,7 @@ function KartuPaket({
               Ubah tanggal berakhir
             </Button>
           )}
-          {bolehJual && lewat && p.ledgerBalance > 0 && (
+          {bolehJual && p.status !== 'FROZEN' && p.ledgerBalance > 0 && (
             <Button variant="secondary" onClick={onJual}>
               Jual perpanjangan
             </Button>

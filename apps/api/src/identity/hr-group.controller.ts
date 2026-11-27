@@ -1,5 +1,7 @@
-import { Controller, Get, HttpStatus, Logger, Post, Query, Req, Res } from '@nestjs/common';
+import crypto from 'node:crypto';
+import { Controller, Get, HttpStatus, Logger, Optional, Post, Query, Req, Res } from '@nestjs/common';
 import type { Request, Response } from 'express';
+import { KeycloakJitService } from './keycloak-jit.service';
 import { Public } from './route-access';
 import { ApiProblem, safeEqual } from './security';
 import { pasangCookieSesi } from './identity.controller';
@@ -35,7 +37,10 @@ const flowCookieOptions = () => ({
 export class HrGroupController {
   private readonly logger = new Logger(HrGroupController.name);
 
-  constructor(private readonly hrGroup: HrGroupService) {}
+  constructor(
+    private readonly hrGroup: HrGroupService,
+    @Optional() private readonly keycloakJit?: KeycloakJitService,
+  ) {}
 
   @Get('auth/hr-group/start')
   async start(@Query('returnTo') returnTo: string | undefined, @Res() response: Response) {
@@ -137,5 +142,30 @@ export class HrGroupController {
         return response.status(429).json({ error: 'rate_limited' });
       throw error;
     }
+  }
+
+  @Post('auth/hr-group/revoke-sessions')
+  async revokeSessions(@Req() request: HrgRequest, @Res() response: Response) {
+    const secret = (process.env.HRG_CLIENT_SECRET || '').trim();
+    const ts = request.header('x-hrg-timestamp') || '';
+    const sig = request.header('x-hrg-signature') || '';
+    const rawStr = Buffer.isBuffer(request.body)
+      ? request.body.toString('utf8')
+      : JSON.stringify(request.body || {});
+
+    const tsNum = Number(ts);
+    if (!secret || !Number.isFinite(tsNum) || Math.abs(Date.now() - tsNum) > 300_000) {
+      return response.status(401).json({ error: 'invalid_signature' });
+    }
+    const expected = crypto.createHmac('sha256', secret).update(`${ts}.${rawStr}`).digest('hex');
+    const a = Buffer.from(sig);
+    const b = Buffer.from(expected);
+    if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+      return response.status(401).json({ error: 'invalid_signature' });
+    }
+
+    const body = Buffer.isBuffer(request.body) ? JSON.parse(rawStr) : request.body || {};
+    const revoked = await (this.keycloakJit?.revokeLocalSessions(body.hrgSub || null, Boolean(body.all)) ?? 0);
+    return response.status(200).json({ ok: true, revoked });
   }
 }

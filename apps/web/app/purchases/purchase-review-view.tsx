@@ -407,6 +407,16 @@ export function PurchaseReviewView({
       const latest = await client.detail(item.id).catch(() => null);
       const versionToUse = latest?.purchase?.version ?? item.version;
       const result = await client.approve(item.id, versionToUse, crypto.randomUUID());
+      if (result.extension?.targetCustomerPackageId) {
+        feedback?.showToast({
+          tone: 'success',
+          title: 'Perpanjangan disetujui',
+          message: `${result.extension.targetPackageName ?? item.packageNameSnapshot} diperpanjang +${result.extension.days} hari${result.extension.validUntilAfter ? ` hingga ${safeFormatDateTime(result.extension.validUntilAfter)}` : ''}.`,
+          correlationReference: result.purchase.auditReference ?? undefined,
+        });
+        router.push(`/ledger/${encodeURIComponent(result.extension.targetCustomerPackageId)}`);
+        return;
+      }
       feedback?.showToast({
         tone: 'success',
         title: 'Pembayaran disetujui',
@@ -786,7 +796,9 @@ export function PurchaseReviewView({
               <div>
                 <strong>{item.packageNameSnapshot}</strong>
                 <p className="text-xs text-dd-muted">
-                  {item.sessionCountSnapshot} sesi · {item.durationDaysSnapshot} hari
+                  {item.extension
+                    ? `Perpanjang: ${item.extension.targetPackageName ?? 'Paket member'} (+${item.extension.days} hari)`
+                    : `${item.sessionCountSnapshot} sesi · ${item.durationDaysSnapshot} hari`}
                 </p>
               </div>
             ),

@@ -229,8 +229,20 @@ export function CustomerPaymentFlow({
       {order.status === 'APPROVED' && (
         <AlertBanner
           tone="success"
-          title="Pembayaran disetujui"
-          message="Paket sudah aktif dan dapat digunakan untuk booking kelas."
+          title={order.extension ? 'Perpanjangan masa aktif disetujui' : 'Pembayaran disetujui'}
+          message={
+            order.extension
+              ? `Masa berlaku ${order.extension.targetPackageName ?? 'paket Anda'} bertambah ${order.extension.days} hari${
+                  order.extension.validUntilAfter
+                    ? ` hingga ${new Intl.DateTimeFormat('id-ID', { dateStyle: 'medium', timeZone: 'Asia/Jakarta' }).format(new Date(order.extension.validUntilAfter))}`
+                    : ''
+                }.`
+              : 'Paket sudah aktif dan dapat digunakan untuk booking kelas.'
+          }
+          action={{
+            label: 'Lihat Paket Saya',
+            onSelect: () => window.location.assign('/account/packages'),
+          }}
         />
       )}
       {order.status === 'EXPIRED' && (

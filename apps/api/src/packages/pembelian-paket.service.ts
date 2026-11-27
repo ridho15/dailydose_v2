@@ -417,38 +417,7 @@ export class CustomerOrderService {
         const invoiceNumber = newInvoiceNumber();
         const paymentExpiresAt = new Date(Date.now() + 24 * 3_600_000);
 
-        let uniqueCode: number | null = null;
-        let totalAmountRp = baseAmountRp;
-
-        if (baseAmountRp > 0) {
-          const existingPending = tx.pembelian?.findMany
-            ? await tx.pembelian.findMany({
-                where: {
-                  branchId: input.branchId,
-                  status: { in: ['PENDING', 'WAITING_VERIFICATION'] },
-                  paymentExpiresAt: { gt: new Date() },
-                  uniqueCode: { not: null },
-                },
-                select: { uniqueCode: true },
-              })
-            : [];
-          const usedCodes = new Set(
-            existingPending
-              .map((p) => p.uniqueCode)
-              .filter((c): c is number => typeof c === 'number'),
-          );
-
-          let candidate = Math.floor(Math.random() * 900) + 100;
-          for (let i = 0; i < 900; i++) {
-            const code = ((candidate - 100 + i) % 900) + 100;
-            if (!usedCodes.has(code)) {
-              candidate = code;
-              break;
-            }
-          }
-          uniqueCode = candidate;
-          totalAmountRp = baseAmountRp + uniqueCode;
-        }
+        const { uniqueCode, totalAmountRp } = await this.alokasiKodeUnik(tx, input.branchId, baseAmountRp);
 
         const orderId = randomUUID();
         await catatPersetujuan(tx as never, tx, { userId: principal.userId, jenis: 'PEMBELIAN', purchaseId: orderId });
@@ -828,9 +797,98 @@ export class CustomerOrderService {
     };
   }
 
+  /** Alokasikan kode unik 3 digit (100-999) yang belum dipakai pesanan aktif di cabang. */
+  private async alokasiKodeUnik(tx: Pick<Prisma.TransactionClient, 'pembelian'>, branchId: string, baseAmountRp: number) {
+    if (baseAmountRp <= 0) return { uniqueCode: null as number | null, totalAmountRp: baseAmountRp };
+    const existingPending = tx.pembelian?.findMany
+      ? await tx.pembelian.findMany({
+          where: {
+            branchId,
+            status: { in: ['PENDING', 'WAITING_VERIFICATION'] },
+            OR: [{ paymentExpiresAt: { gt: new Date() } }, { paymentExpiresAt: null }],
+            uniqueCode: { not: null },
+          },
+          select: { uniqueCode: true },
+        })
+      : [];
+    const usedCodes = new Set(
+      existingPending.map((p) => p.uniqueCode).filter((c): c is number => typeof c === 'number'),
+    );
+    let candidate = Math.floor(Math.random() * 900) + 100;
+    for (let i = 0; i < 900; i++) {
+      const code = ((candidate - 100 + i) % 900) + 100;
+      if (!usedCodes.has(code)) {
+        candidate = code;
+        break;
+      }
+    }
+    return { uniqueCode: candidate, totalAmountRp: baseAmountRp + candidate };
+  }
+
   /**
-   * Penjualan manual di meja (tunai/QRIS/kartu). Dicatat staf dengan status PENDING; paket baru aktif
-   * ketika penyetuju LAIN menyetujuinya di antrean Pembayaran (pencatat tidak boleh menyetujui sendiri).
+   * Pratinjau rincian tagihan penjualan staf (promo + voucher + rekening tujuan) sebelum dicatat.
+   * Memakai aturan harga yang sama persis dengan `recordAssistedSale`.
+   */
+  async previewAssistedSalePrice(
+    principal: SessionPrincipal,
+    input: { branchId?: string; packageId?: string; voucherCode?: string; paymentMethod?: string },
+  ) {
+    const branchId = input?.branchId ?? '';
+    if (!UUID.test(branchId))
+      throw new ApiProblem('VALIDATION_ERROR', HttpStatus.UNPROCESSABLE_ENTITY, false, [
+        { field: 'branchId', issue: 'INVALID' },
+      ]);
+    this.access.record(principal, branchId);
+    const packageId = input?.packageId ?? '';
+    if (!UUID.test(packageId))
+      throw new ApiProblem('VALIDATION_ERROR', HttpStatus.UNPROCESSABLE_ENTITY, false, [
+        { field: 'packageId', issue: 'INVALID' },
+      ]);
+
+    const branch = await this.db.cabang.findUnique({
+      where: { id: branchId },
+      include: { paymentAccounts: { where: { active: true } } },
+    });
+    if (!branch || !branch.active) throw new ApiProblem('RESOURCE_NOT_FOUND', HttpStatus.NOT_FOUND);
+
+    const pkg = await this.db.paket.findUnique({ where: { id: packageId } });
+    if (!pkg || pkg.status !== 'ACTIVE') throw new ApiProblem('RESOURCE_NOT_FOUND', HttpStatus.NOT_FOUND);
+    pastikanPaketDijualDiCabang(pkg, branchId);
+
+    const { voucher, discountRp, subtotalRp, totalAmountRp, promotion } = await this.priceOrder(
+      this.db as unknown as Prisma.TransactionClient,
+      pkg,
+      input.voucherCode,
+    );
+    const firstAccount = branch.paymentAccounts?.[0];
+    return {
+      subtotalRp,
+      discountRp,
+      baseAmountRp: totalAmountRp,
+      willAddUniqueCode: input.paymentMethod === 'BANK_TRANSFER' && totalAmountRp > 0,
+      promotion,
+      voucher: voucher
+        ? {
+            id: voucher.id,
+            code: voucher.code,
+            discountType: isPercentageVoucherType(voucher.discountType) ? 'PERCENTAGE' : 'FIXED_AMOUNT',
+            discountValue: voucher.discountValue,
+            discountRp: Math.max(0, discountRp - (promotion?.discountRp ?? 0)),
+          }
+        : null,
+      paymentAccount: firstAccount
+        ? {
+            bankName: firstAccount.bankName,
+            accountNumber: firstAccount.accountNumber,
+            accountHolderName: firstAccount.accountHolder,
+          }
+        : null,
+    };
+  }
+
+  /**
+   * Penjualan manual di meja (tunai/QRIS/kartu/transfer). Dicatat staf dengan status PENDING; paket
+   * baru aktif ketika penyetuju LAIN menyetujuinya di antrean Pembayaran (pencatat tidak boleh menyetujui sendiri).
    */
   async recordAssistedSale(
     principal: SessionPrincipal,
@@ -901,7 +959,7 @@ export class CustomerOrderService {
           ? await periksaTargetPerpanjangan(tx, input.targetCustomerPackageId, customer.id, new Date(), { staf: true })
           : null;
 
-        const { voucher, discountRp, subtotalRp, totalAmountRp, promotion } = await this.priceOrder(
+        const { voucher, discountRp, subtotalRp, totalAmountRp: baseAmountRp, promotion } = await this.priceOrder(
           tx,
           pkg,
           input.voucherCode,
@@ -910,6 +968,12 @@ export class CustomerOrderService {
           throw new ApiProblem('VOUCHER_NOT_APPLICABLE', HttpStatus.UNPROCESSABLE_ENTITY, false, [
             { field: 'voucherCode', issue: 'NOT_APPLICABLE' },
           ]);
+
+        // Transfer bank oleh staf ikut diberi kode unik 3 digit agar pencocokan mutasi seragam.
+        const { uniqueCode, totalAmountRp } =
+          paymentMethod === 'BANK_TRANSFER'
+            ? await this.alokasiKodeUnik(tx, branchId, baseAmountRp)
+            : { uniqueCode: null, totalAmountRp: baseAmountRp };
 
         const orderId = randomUUID();
         // Staf mencatat bahwa syarat pembelian sudah disampaikan kepada member (lihat teks di laci penjualan).
@@ -929,6 +993,7 @@ export class CustomerOrderService {
             voucherId: voucher?.id ?? null,
             subtotalRp,
             discountRp,
+            ...(uniqueCode !== null ? { uniqueCode } : {}),
             totalAmountRp,
             status: 'PENDING',
             paymentMethod,

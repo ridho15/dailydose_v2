@@ -24,7 +24,7 @@ export type JitSyncStatus = 'ok' | 'blocked' | 'deferred';
 export class KeycloakJitService {
   private readonly logger = new Logger(KeycloakJitService.name);
   private tokenCache: TokenCache | null = null;
-  private clientMetaCache: { uuid: string; memberRole: { id: string; name: string } | null } | null = null;
+  private clientMetaCache: { uuid: string; rolesByName: Record<string, { id: string; name: string }> } | null = null;
 
   constructor(private readonly db: PrismaService) {}
 
@@ -168,46 +168,71 @@ export class KeycloakJitService {
     return (await this.triggerDirectGrantSession(realUsername, plainPassword)) === 'ok';
   }
 
-  private async resolveClientMeta(
-    token: string,
-  ): Promise<{ uuid: string; memberRole: { id: string; name: string } | null } | null> {
-    if (this.clientMetaCache) return this.clientMetaCache;
-    try {
-      const cRes = await fetch(
-        `${this.baseUrl}/admin/realms/${this.realm}/clients?clientId=${encodeURIComponent(this.clientId)}&exact=true`,
-        { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(4000) },
-      );
-      if (!cRes.ok) return null;
-      const clients = (await cRes.json()) as Array<{ id: string }>;
-      const uuid = clients?.[0]?.id;
-      if (!uuid) return null;
-
-      let memberRole: { id: string; name: string } | null = null;
-      const rRes = await fetch(
-        `${this.baseUrl}/admin/realms/${this.realm}/clients/${uuid}/roles/member`,
-        { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(4000) },
-      );
-      if (rRes.ok) {
-        const role = (await rRes.json()) as { id?: string; name?: string };
-        if (role?.id && role?.name) memberRole = { id: role.id, name: role.name };
-      }
-
-      this.clientMetaCache = { uuid, memberRole };
-      return this.clientMetaCache;
-    } catch {
-      return null;
+  private resolveTargetRoleName(localRole?: string): string {
+    const r = (localRole || '').trim().toUpperCase();
+    if (['SUPER_OWNER', 'OWNER', 'SUPERADMIN', 'ADMIN', 'MANAGER'].includes(r)) {
+      return 'studio-manager';
     }
+    if (['INSTRUCTOR', 'COACH'].includes(r)) {
+      return 'instructor';
+    }
+    return 'member';
   }
 
-  private async ensureAppMemberRole(token: string, keycloakUserId: string): Promise<void> {
-    const meta = await this.resolveClientMeta(token);
-    if (!meta?.memberRole) return;
+  private async resolveClientMeta(
+    token: string,
+    roleName = 'member',
+  ): Promise<{ uuid: string; targetRole: { id: string; name: string } | null } | null> {
+    if (!this.clientMetaCache) {
+      try {
+        const cRes = await fetch(
+          `${this.baseUrl}/admin/realms/${this.realm}/clients?clientId=${encodeURIComponent(this.clientId)}&exact=true`,
+          { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(4000) },
+        );
+        if (!cRes.ok) return null;
+        const clients = (await cRes.json()) as Array<{ id: string }>;
+        const uuid = clients?.[0]?.id;
+        if (!uuid) return null;
+        this.clientMetaCache = { uuid, rolesByName: {} };
+      } catch {
+        return null;
+      }
+    }
+
+    const uuid = this.clientMetaCache.uuid;
+    if (!(roleName in this.clientMetaCache.rolesByName)) {
+      try {
+        const rRes = await fetch(
+          `${this.baseUrl}/admin/realms/${this.realm}/clients/${uuid}/roles/${encodeURIComponent(roleName)}`,
+          { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(4000) },
+        );
+        if (rRes.ok) {
+          const role = (await rRes.json()) as { id?: string; name?: string };
+          if (role?.id && role?.name) {
+            this.clientMetaCache.rolesByName[roleName] = { id: role.id, name: role.name };
+          }
+        }
+      } catch {
+        // fallback below
+      }
+    }
+
+    let targetRole = this.clientMetaCache.rolesByName[roleName] || null;
+    if (!targetRole && roleName !== 'member') {
+      return this.resolveClientMeta(token, 'member');
+    }
+    return { uuid, targetRole };
+  }
+
+  private async ensureAppMemberRole(token: string, keycloakUserId: string, localRole?: string): Promise<void> {
+    const meta = await this.resolveClientMeta(token, this.resolveTargetRoleName(localRole));
+    if (!meta?.targetRole) return;
     await fetch(
       `${this.baseUrl}/admin/realms/${this.realm}/users/${keycloakUserId}/role-mappings/clients/${meta.uuid}`,
       {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify([meta.memberRole]),
+        body: JSON.stringify([meta.targetRole]),
         signal: AbortSignal.timeout(4000),
       },
     ).catch(() => {});
@@ -249,7 +274,7 @@ export class KeycloakJitService {
    * - User baru: buat/temukan di Keycloak + assign role 'member' pada client aplikasi + buka sesi OIDC.
    * - User tertaut: cek status enabled & akses client di Keycloak ('blocked' jika dinonaktifkan/dicabut).
    */
-  async checkAndSyncUser(user: UserToMigrate, plainPassword: string): Promise<JitSyncStatus> {
+  async checkAndSyncUser(user: UserToMigrate, plainPassword: string | null): Promise<JitSyncStatus> {
     try {
       const cleanUsername = (user.username || user.email || user.phone || `dd_${user.id.slice(0, 8)}`)
         .trim()
@@ -267,6 +292,10 @@ export class KeycloakJitService {
             this.logger.warn(`[KeycloakJIT] Akses ditolak untuk user ${user.id} (dinonaktifkan/dicabut di HR Group)`);
             return 'blocked';
           }
+        }
+
+        if (!plainPassword) {
+          return token ? 'ok' : 'deferred';
         }
 
         const result = await this.triggerDirectGrantSession(cleanUsername, plainPassword);
@@ -315,12 +344,14 @@ export class KeycloakJitService {
       }
 
       if (keycloakUserId) {
-        await fetch(`${this.baseUrl}/admin/realms/${this.realm}/users/${keycloakUserId}/reset-password`, {
-          method: 'PUT',
-          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ type: 'password', value: plainPassword, temporary: false }),
-          signal: AbortSignal.timeout(4000),
-        });
+        if (plainPassword) {
+          await fetch(`${this.baseUrl}/admin/realms/${this.realm}/users/${keycloakUserId}/reset-password`, {
+            method: 'PUT',
+            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ type: 'password', value: plainPassword, temporary: false }),
+            signal: AbortSignal.timeout(4000),
+          });
+        }
       } else {
         const parts = (user.displayName || 'Member').trim().split(/\s+/u);
         const firstName = parts[0] || 'Member';
@@ -336,7 +367,9 @@ export class KeycloakJitService {
             lastName: lastName || undefined,
             enabled: true,
             emailVerified: true,
-            credentials: [{ type: 'password', value: plainPassword, temporary: false }],
+            ...(plainPassword
+              ? { credentials: [{ type: 'password', value: plainPassword, temporary: false }] }
+              : {}),
             attributes: {
               source_app: ['dailydose'],
               dailydose_user_id: [user.id],
@@ -370,7 +403,7 @@ export class KeycloakJitService {
       }
 
       if (keycloakUserId) {
-        await this.ensureAppMemberRole(token, keycloakUserId);
+        await this.ensureAppMemberRole(token, keycloakUserId, user.role);
         try {
           await this.db.akunGrupTautan.create({
             data: {
@@ -382,11 +415,15 @@ export class KeycloakJitService {
           this.logger.log(
             `[KeycloakJIT] Akun ${user.email || user.username || user.id} berhasil dimigrasikan ke Keycloak (sub: ${keycloakUserId})`,
           );
-          await this.triggerDirectGrantSession(resolvedUsername, plainPassword);
+          if (plainPassword) {
+            await this.triggerDirectGrantSession(resolvedUsername, plainPassword);
+          }
           return 'ok';
         } catch (dbErr: any) {
           if (dbErr?.code === 'P2002') {
-            await this.triggerDirectGrantSession(resolvedUsername, plainPassword);
+            if (plainPassword) {
+              await this.triggerDirectGrantSession(resolvedUsername, plainPassword);
+            }
             return 'ok';
           }
           this.logger.warn(`Gagal menyimpan tautan lokal: ${dbErr.message}`);
@@ -398,6 +435,24 @@ export class KeycloakJitService {
       this.logger.warn(`Keycloak JIT deferred untuk user ${user.id}: ${err.message}`);
       return 'deferred';
     }
+  }
+
+  async revokeLocalSessions(hrgSub: string | null, all: boolean): Promise<number> {
+    if (all) {
+      const res = await this.db.userSession.updateMany({
+        where: { revokedAt: null },
+        data: { revokedAt: new Date(), revocationReason: 'HRG_GLOBAL_LOGOUT' },
+      });
+      return res.count;
+    }
+    if (!hrgSub) return 0;
+    const link = await this.db.akunGrupTautan.findFirst({ where: { hrgSub } });
+    if (!link) return 0;
+    const res = await this.db.userSession.updateMany({
+      where: { userId: link.userId, revokedAt: null },
+      data: { revokedAt: new Date(), revocationReason: 'HRG_SESSION_REVOKED' },
+    });
+    return res.count;
   }
 
   async migrateUserJit(user: UserToMigrate, plainPassword: string): Promise<boolean> {
