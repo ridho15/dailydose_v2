@@ -65,14 +65,16 @@ export interface AssignmentClient {
 }
 
 async function assignmentFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  // `...init` dulu, baru headers: kalau dibalik, header pemanggil (mis. idempotency-key) menimpa
+  // Content-Type JSON dan server menerima body kosong ("Alasan wajib diisi").
   const response = await fetch(`/api/v1${path}`, {
+    ...init,
     credentials: 'include',
     headers: {
       Accept: 'application/json',
       ...(init?.body ? { 'Content-Type': 'application/json' } : {}),
-      ...init?.headers,
+      ...(init?.headers as Record<string, string> | undefined),
     },
-    ...init,
   });
   if (!response.ok) {
     let data: any;
