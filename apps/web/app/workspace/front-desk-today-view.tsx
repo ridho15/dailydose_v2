@@ -27,7 +27,9 @@ import { BatalkanPeserta } from '../classes/batalkan-peserta';
 import { TambahPeserta } from '../classes/timetable-roster-panel';
 import { ActionInbox } from './action-inbox';
 import { PembelianBaruCard } from './pembelian-baru';
+import { PengingatWhatsAppAdmin } from '../account/profile/whatsapp-otomatis';
 import type { PembelianBaruClient } from '../api-clients/pembelian-baru-client';
+import type { WaTertautClient } from '../api-clients/wa-tertaut-client';
 import { DURASI_HASIL_MS, PemindaiMeja } from './check-in/pemindai-meja';
 import { FormPengeluaran } from './kas/kas-view';
 import { useSessionContext } from '../session-context';
@@ -57,6 +59,8 @@ export interface FrontDeskTodayViewProps {
   keuanganClient?: KeuanganClient;
   /** Pembelian baru (kirim Syarat & Ketentuan lewat WhatsApp); tes mengganti kliennya. */
   pembelianBaruClient?: PembelianBaruClient;
+  /** Status WhatsApp otomatis Admin; tes mengganti kliennya. */
+  waTertautClient?: WaTertautClient;
   queueClient?: WorkQueueClient;
   /** Hanya untuk tes: jam acuan. */
   initialNow?: Date;
@@ -79,6 +83,7 @@ export function FrontDeskTodayView({
   checkInClient = browserCheckInDeskClient,
   keuanganClient = browserKeuanganClient,
   pembelianBaruClient,
+  waTertautClient,
   queueClient,
   initialNow,
   muatTarget = ambilTargetCabang,
@@ -477,6 +482,8 @@ export function FrontDeskTodayView({
       )}
 
       <ActionInbox branchId={branch.id} queueClient={queueClient} now={now.getTime()} />
+
+      {session?.roles?.includes('ADMIN') && <PengingatWhatsAppAdmin client={waTertautClient} />}
 
       <PembelianBaruCard branchId={branch.id} now={now.getTime()} client={pembelianBaruClient} />
 

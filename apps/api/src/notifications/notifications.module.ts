@@ -13,6 +13,9 @@ import { NotificationTemplateService } from './notification-template.service';
 import { OperationsAutomationController } from './operations-automation.controller';
 import { KirimQrController } from './kirim-qr.controller';
 import { KirimQrService } from './kirim-qr.service';
+import { WaTertautController } from './wa-tertaut.controller';
+import { WaTertautService } from './wa-tertaut.service';
+import { PesanOtomatisMemberService } from './pesan-otomatis-member.service';
 
 @Global()
 @Module({
@@ -22,6 +25,7 @@ import { KirimQrService } from './kirim-qr.service';
     NotificationManagementController,
     OperationsAutomationController,
     KirimQrController,
+    WaTertautController,
   ],
   providers: [
     NotificationsService,
@@ -31,8 +35,12 @@ import { KirimQrService } from './kirim-qr.service';
     ReminderScheduleService,
     NotificationTemplateService,
     KirimQrService,
+    WaTertautService,
+    PesanOtomatisMemberService,
   ],
   exports: [
+    WaTertautService,
+    PesanOtomatisMemberService,
     KirimQrService,
     NotificationWriterService,
     WhatsAppGatewayService,

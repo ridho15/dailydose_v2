@@ -19,6 +19,7 @@ import { useEffect, useState } from 'react';
 import { accountClient, type MyProfile } from '@/api-clients/account-client';
 import { internalStaffRoles, isCustomerOnlySession } from '@/lib/session-audience';
 import { useSessionContext } from '../../session-context';
+import { WhatsAppOtomatis } from './whatsapp-otomatis';
 import { useCustomerBadges } from '../../components/customer/use-customer-badges';
 import { messageForApiError, useAppFeedback } from '../../components/app-feedback';
 import { Button, ButtonLink } from '../../components/actions';
@@ -141,6 +142,8 @@ export function ProfileView() {
           </div>
         </div>
       </section>
+
+      {session?.roles.includes('ADMIN') && <WhatsAppOtomatis />}
 
       {/* Main Profile Form */}
       <form

@@ -1,5 +1,6 @@
 import { Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
 import { AutoCancelService } from '../classes/auto-cancel.service';
+import { PesanOtomatisMemberService } from '../notifications/pesan-otomatis-member.service';
 import { ClassSlotService } from '../classes/slot-kelas.service';
 import { PrismaService } from '../database/prisma.service';
 import { KirimQrService } from '../notifications/kirim-qr.service';
@@ -12,7 +13,8 @@ export type SchedulerJobName =
   | 'auto-cancel'
   | 'complete-classes'
   | 'reminders'
-  | 'check-in-qr';
+  | 'check-in-qr'
+  | 'member-whatsapp';
 
 export interface SchedulerJobStatus {
   name: SchedulerJobName;
@@ -63,6 +65,7 @@ export class SchedulerService implements OnApplicationBootstrap, OnModuleDestroy
     private readonly reminders: ReminderScheduleService,
     private readonly kirimQr: KirimQrService,
     private readonly kelas: ClassSlotService,
+    private readonly pesanMember: PesanOtomatisMemberService,
   ) {
     this.jobs = [
       {
@@ -127,6 +130,12 @@ export class SchedulerService implements OnApplicationBootstrap, OnModuleDestroy
           const result = await this.kirimQr.kirimOtomatis();
           return { ...result };
         },
+      },
+      {
+        name: 'member-whatsapp',
+        label: 'WhatsApp otomatis ke member (akun baru, terima kasih beli, pengingat kelas H-24)',
+        intervalMs: 15 * MINUTE,
+        run: async () => ({ ...(await this.pesanMember.jalankan()) }),
       },
     ];
     for (const job of this.jobs)

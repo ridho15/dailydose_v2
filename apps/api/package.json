@@ -36,6 +36,7 @@
     "@prisma/client": "^6.15.0",
     "@tesseract.js-data/eng": "1.0.0",
     "argon2": "^0.45.1",
+    "baileys": "7.0.0-rc14",
     "bcryptjs": "^3.0.2",
     "express": "^5.2.1",
     "google-auth-library": "^10.9.0",

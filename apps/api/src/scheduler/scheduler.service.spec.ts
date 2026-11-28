@@ -38,6 +38,7 @@ function build(
     reminders as never,
     kirimQr as never,
     { selesaikanOtomatis: jest.fn().mockResolvedValue({ diperiksa: 0, selesai: 0, gagal: 0 }) } as never,
+    { jalankan: jest.fn().mockResolvedValue({ dilewati: false, akun: 0, pembelian: 0, pengingat: 0 }) } as never,
   );
   return { service, db, orders, autoCancel, reminders, kirimQr };
 }
@@ -55,7 +56,7 @@ describe('SchedulerService', () => {
     const { service, orders } = build();
     service.onApplicationBootstrap();
     expect(service.enabled).toBe(false);
-    expect(service.status().jobs).toHaveLength(6);
+    expect(service.status().jobs).toHaveLength(7);
     expect(orders.expirePendingOrders).not.toHaveBeenCalled();
     expect(service.isHealthy()).toBe(true);
     service.onModuleDestroy();

@@ -514,6 +514,37 @@ CREATE TABLE `syarat_terkirim_wa` (
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 ```
 
+`wa_tertaut_sesi` (WhatsApp otomatis dari nomor Admin, 28 November 2026). Admin cabang menautkan
+WhatsApp-nya di Profil Saya > WhatsApp otomatis (scan QR dari HP, seperti WhatsApp Web). Setelah itu
+penjadwal (job `member-whatsapp`, tiap 15 menit) mengirim dari nomor admin tersebut ke member cabangnya:
+akun baru terdaftar (S&K), terima kasih setelah pembelian lunas (S&K), dan pengingat kelas H-24 jam.
+Kolom `data` berisi kunci sesi WhatsApp terenkripsi; kunci sesi setara akses penuh ke akun WhatsApp admin.
+
+Syarat agar jalan:
+- `WA_SESSION_KEY`: rahasia acak minimal 32 karakter (mis. `openssl rand -base64 48`). Jangan diganti
+  setelah ada admin tersambung: sesi lama tidak bisa dibuka lagi dan admin harus scan ulang.
+- `SCHEDULER_ENABLED=true` (sudah dipakai job lain) dan server bisa mengakses `web.whatsapp.com` (WebSocket).
+- Hanya satu instance API (sesi WhatsApp disimpan di memori proses yang sedang jalan).
+- Matikan pesan otomatis ke member dengan `WA_OTOMATIS_MEMBER=false`.
+Pustaka tidak resmi (Baileys): nomor admin berisiko diblokir WhatsApp bila mengirim terlalu banyak; pesan
+dikirim berjeda 4-10 detik per nomor dan hanya untuk kejadian baru (akun/pembelian 6 jam terakhir).
+
+```sql
+CREATE TABLE `wa_tertaut_sesi` (
+    `userId` CHAR(36) NOT NULL,
+    `branchId` CHAR(36) NULL,
+    `nomor` VARCHAR(32) NULL,
+    `status` VARCHAR(20) NOT NULL,
+    `data` LONGTEXT NULL,
+    `terakhirAktif` DATETIME(3) NULL,
+    `terakhirGalat` VARCHAR(300) NULL,
+    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `updatedAt` DATETIME(3) NOT NULL,
+    INDEX `wa_tertaut_sesi_branchId_status_idx`(`branchId`, `status`),
+    PRIMARY KEY (`userId`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+```
+
 ## Akun HR Group (SSO)
 
 Tombol "Masuk dengan Akun HR Group" di halaman masuk dan credential bridge untuk migrasi member lama. Kontraknya

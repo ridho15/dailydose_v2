@@ -1,5 +1,6 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
+import { WaTertautService } from './wa-tertaut.service';
 
 export interface WhatsAppSendResult {
   success: boolean;
@@ -21,6 +22,11 @@ export interface SendWhatsAppOptions {
   sentAt?: Date;
   /** Gambar PNG yang dikirim bersama `text` sebagai keterangannya (mis. QR kehadiran). */
   imagePng?: Buffer;
+  /**
+   * Cabang pesan ini. Bila ada Admin cabang itu yang menautkan WhatsApp-nya (`WaTertautService`), pesan
+   * teks dikirim dari nomor admin tersebut; selain itu lewat penyedia yang dikonfigurasi.
+   */
+  branchId?: string | null;
 }
 
 export interface WhatsAppProvider {
@@ -188,7 +194,10 @@ export class WhatsAppGatewayService {
   private provider: WhatsAppProvider;
   public readonly mockProvider = new MockWhatsAppProvider();
 
-  constructor(private readonly db: PrismaService) {
+  constructor(
+    private readonly db: PrismaService,
+    @Optional() private readonly waTertaut?: WaTertautService,
+  ) {
     const config = resolveWhatsAppConfig(process.env);
 
     if (config) {
@@ -209,6 +218,25 @@ export class WhatsAppGatewayService {
   /** Nama provider aktif: `MOCK` berarti pesan hanya dicatat, tidak dikirim ke WhatsApp. */
   get providerName(): string {
     return this.provider.name;
+  }
+
+  /**
+   * Ada jalur kirim sungguhan untuk cabang ini: WhatsApp admin cabang tersambung, atau penyedia resmi
+   * terkonfigurasi. Pesan otomatis baru (terima kasih, pengingat kelas) hanya dikirim bila true, supaya
+   * penyedia MOCK tidak mencatatnya "terkirim" lalu mencegah pengiriman sungguhan sesudahnya.
+   */
+  async bisaKirimNyata(branchId?: string | null): Promise<boolean> {
+    if (branchId && this.waTertaut && (await this.waTertaut.pengirimCabang(branchId))) return true;
+    return this.provider.name !== this.mockProvider.name;
+  }
+
+  /** Penyedia untuk satu pesan: WhatsApp admin cabang bila tersambung (teks saja), selain itu penyedia aktif. */
+  private async penyediaUntuk(options: SendWhatsAppOptions): Promise<WhatsAppProvider> {
+    if (!options.branchId || options.imagePng || !this.waTertaut) return this.provider;
+    const userId = await this.waTertaut.pengirimCabang(options.branchId).catch(() => null);
+    if (!userId) return this.provider;
+    const wa = this.waTertaut;
+    return { name: 'WA_ADMIN_TERTAUT', sendMessage: (to, text) => wa.kirimDari(userId, to, text) };
   }
 
   /**
@@ -312,11 +340,12 @@ export class WhatsAppGatewayService {
 
     try {
       // 2. Eksekusi Pengiriman Pesan via Provider
+      const provider = await this.penyediaUntuk(options);
       const result = options.imagePng
-        ? this.provider.sendImage
-          ? await this.provider.sendImage(phone, options.imagePng, options.text)
+        ? provider.sendImage
+          ? await provider.sendImage(phone, options.imagePng, options.text)
           : { success: false, error: 'Penyedia WhatsApp tidak mendukung gambar' }
-        : await this.provider.sendMessage(phone, options.text, options.payload);
+        : await provider.sendMessage(phone, options.text, options.payload);
 
       // 3. Catat ke tabel ReminderLog
       const status = result.success ? 'SENT' : 'FAILED';
@@ -327,7 +356,7 @@ export class WhatsAppGatewayService {
           reminderType: options.reminderType,
           payload: {
             ...(options.payload ?? {}),
-            provider: this.provider.name,
+            provider: provider.name,
             messageId: result.messageId,
             textPreview: options.text.slice(0, 160),
             ...(options.imagePng ? { image: 'image/png' } : {}),
@@ -341,7 +370,7 @@ export class WhatsAppGatewayService {
       return {
         success: result.success,
         messageId: result.messageId ?? logRecord.id,
-        provider: this.provider.name,
+        provider: provider.name,
         recipientPhone: phone,
         status,
         error: result.error,

@@ -1546,3 +1546,21 @@ model SyaratTerkirimWa {
   @@index([branchId])
   @@map("syarat_terkirim_wa")
 }
+
+/// WhatsApp admin yang ditautkan lewat QR (28 November 2026): pesan otomatis ke member cabangnya dikirim
+/// dari nomor admin itu. `data` berisi kunci sesi WhatsApp yang dienkripsi (AES-256-GCM, kunci WA_SESSION_KEY).
+/// Tabel tambahan tanpa relasi.
+model WaTertautSesi {
+  userId        String    @id @db.Char(36)
+  branchId      String?   @db.Char(36)
+  nomor         String?   @db.VarChar(32)
+  status        String    @db.VarChar(20)
+  data          String?   @db.LongText
+  terakhirAktif DateTime?
+  terakhirGalat String?   @db.VarChar(300)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([branchId, status])
+  @@map("wa_tertaut_sesi")
+}

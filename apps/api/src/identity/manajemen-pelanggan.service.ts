@@ -495,16 +495,7 @@ export class CustomerManagementService {
         });
       }
 
-      if (this.whatsapp) {
-        this.whatsapp
-          .sendMessage({
-            to: phoneE164,
-            text: `Halo ${displayName}, akun keanggotaan Daily Dose Pilates Anda telah aktif! Anda dapat langsung memesan kelas atau membeli paket di studio kami.`,
-            recipientType: 'CUSTOMER',
-            reminderType: 'CUSTOMER_WELCOME',
-          })
-          .catch(() => undefined);
-      }
+      // Pesan WhatsApp akun baru dikirim penjadwal (PesanOtomatisMemberService, jenis AKUN_TERDAFTAR).
 
       await this.audit?.catat(tx, {
         actorId: principal.userId,
