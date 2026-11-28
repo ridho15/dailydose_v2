@@ -63,6 +63,18 @@ function csvText(value: string): string {
   return /[",\n\r]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
 }
 
+/**
+ * Gaji karyawan hanya dicatat pemegang `finance:read` (Super Owner, Owner, Finance): pencatat tanpa
+ * akses keuangan melihat pengeluaran yang ia catat sendiri, jadi nominal gaji akan terlihat olehnya.
+ */
+export const KATEGORI_GAJI_KARYAWAN = 'GAJI_KARYAWAN';
+function pastikanBolehKategori(principal: SessionPrincipal, category: string) {
+  if (category === KATEGORI_GAJI_KARYAWAN && !principal.capabilities.includes('finance:read'))
+    throw new ApiProblem('EXPENSE_CATEGORY_FORBIDDEN', HttpStatus.FORBIDDEN, false, [
+      { field: 'category', issue: 'FINANCE_READ_REQUIRED' },
+    ]);
+}
+
 @Injectable()
 export class FinanceService {
   constructor(
@@ -486,6 +498,7 @@ export class FinanceService {
       throw new ApiProblem('VALIDATION_ERROR', HttpStatus.UNPROCESSABLE_ENTITY, false, [
         { field: 'category', issue: 'INVALID' },
       ]);
+    pastikanBolehKategori(principal, category);
     // Cabang yang tidak ada (Super Owner lolos pemeriksaan akses cabang) harus berupa 404, bukan galat basis data.
     const branch = await this.db.cabang.findUnique({ where: { id: input.branchId }, select: { id: true } });
     if (!branch) throw new ApiProblem('NOT_FOUND', HttpStatus.NOT_FOUND);
@@ -619,6 +632,7 @@ export class FinanceService {
         throw new ApiProblem('VALIDATION_ERROR', HttpStatus.UNPROCESSABLE_ENTITY, false, [
           { field: 'category', issue: 'INVALID' },
         ]);
+      pastikanBolehKategori(principal, category);
       data.category = category;
     }
     if (input.description !== undefined) {

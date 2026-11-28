@@ -102,6 +102,20 @@ describe('KasView', () => {
     expect(c.jurnalKas).toHaveBeenCalledTimes(2);
   });
 
+  it('kategori Gaji karyawan hanya ada untuk pemegang akses keuangan', async () => {
+    const c = client();
+    const { unmount } = render(<KasView now={NOW} client={c} />);
+    await screen.findByText('Rp 1.400.000');
+    expect(within(screen.getByLabelText('Kategori')).queryByRole('option', { name: 'Gaji karyawan' })).toBeNull();
+    unmount();
+
+    ctx.caps = ['expense:create', 'finance:read', 'finance:manage'];
+    render(<KasView now={NOW} client={client()} />);
+    await screen.findByText('Rp 1.400.000');
+    expect(within(screen.getByLabelText('Kategori')).getByRole('option', { name: 'Gaji karyawan' })).toBeInTheDocument();
+    ctx.caps = ['expense:create'];
+  });
+
   it('tidak menampilkan formulir bagi yang hanya membaca, dan meminta cabang untuk mencatat', async () => {
     ctx.caps = ['finance:read'];
     const { unmount } = render(<KasView now={NOW} client={client()} />);

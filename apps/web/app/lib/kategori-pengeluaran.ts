@@ -15,8 +15,20 @@ export const KATEGORI_PENGELUARAN = [
   { code: 'OPERATING_EXPENSE', label: 'Operasional lain' },
 ] as const;
 
+/**
+ * Gaji karyawan (28 November 2026): hanya bisa dipilih pemegang `finance:read` (Super Owner, Owner,
+ * Finance). Admin dan Manager tidak melihat pengeluaran yang dicatat orang lain, jadi nominal gaji
+ * tidak terlihat oleh mereka. Server menolak kategori ini dari akun tanpa akses keuangan.
+ */
+export const KATEGORI_GAJI = { code: 'GAJI_KARYAWAN', label: 'Gaji karyawan' } as const;
+
+/** Pilihan kategori di formulir sesuai akses pencatat. */
+export function kategoriPengeluaranUntuk(lihatKeuangan: boolean) {
+  return lihatKeuangan ? [...KATEGORI_PENGELUARAN, KATEGORI_GAJI] : [...KATEGORI_PENGELUARAN];
+}
+
 const LABEL: Record<string, string> = Object.fromEntries(
-  KATEGORI_PENGELUARAN.map((k) => [k.code, k.label]),
+  [...KATEGORI_PENGELUARAN, KATEGORI_GAJI].map((k) => [k.code, k.label]),
 );
 
 /** Label kategori; metode pembayaran untuk uang masuk juga dibuat terbaca. */

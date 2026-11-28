@@ -381,6 +381,7 @@ export function keuanganFailure(error: unknown, fallback: string): string {
   const code = data?.error?.code ?? data?.code;
   const issue = data?.issues?.[0];
   if (code === 'RECEIPT_REQUIRED') return 'Foto nota wajib dilampirkan.';
+  if (code === 'EXPENSE_CATEGORY_FORBIDDEN') return 'Kategori Gaji karyawan hanya bisa dicatat Owner atau Super Owner.';
   if (issue?.field === 'nota' && issue.issue === 'TOO_LARGE') return 'Foto nota maksimal 8 MB.';
   if (issue?.field === 'nota' || (code === 'UPLOAD_REJECTED' && !issue))
     return 'Nota harus berupa foto (JPG, PNG, WEBP) atau PDF.';

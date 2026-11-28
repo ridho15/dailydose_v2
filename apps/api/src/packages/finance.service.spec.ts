@@ -509,6 +509,17 @@ describe('FinanceService.createOtherCost validation', () => {
     expect(create).not.toHaveBeenCalled();
   });
 
+  it('only finance:read holders may record GAJI_KARYAWAN (admin would see the salary in their own list)', async () => {
+    const { service, create } = build();
+    const admin = principal(['expense:create'], 'ADMIN', id(120), [branchA]);
+    await expect(
+      service.createOtherCost(admin, { ...input, categoryCode: 'gaji_karyawan' }, NOTA),
+    ).rejects.toMatchObject({ response: 'EXPENSE_CATEGORY_FORBIDDEN', status: 403 });
+    expect(create).not.toHaveBeenCalled();
+    await service.createOtherCost(finance, { ...input, categoryCode: 'GAJI_KARYAWAN' }, NOTA);
+    expect(create).toHaveBeenCalledWith({ data: expect.objectContaining({ category: 'GAJI_KARYAWAN' }) });
+  });
+
   it('answers 404 for a branch that does not exist instead of a database error', async () => {
     const { service, create } = build(false);
     await expect(service.createOtherCost(superOwner, input, NOTA)).rejects.toMatchObject({ status: 404 });

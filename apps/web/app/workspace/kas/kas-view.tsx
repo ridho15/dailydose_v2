@@ -9,7 +9,7 @@ import {
   type KeuanganClient,
   type OwnerSingkat,
 } from '@/api-clients/keuangan-client';
-import { KATEGORI_PENGELUARAN, labelKategori } from '../../lib/kategori-pengeluaran';
+import { KATEGORI_PENGELUARAN, kategoriPengeluaranUntuk, labelKategori } from '../../lib/kategori-pengeluaran';
 import { useSessionContext } from '../../session-context';
 import { Feedback, Skeleton } from '../../ui';
 import { Modal, useOptionalAppFeedback } from '../../components/app-feedback';
@@ -83,6 +83,7 @@ export function FormPengeluaran({
     context?.hasCapability?.('finance:manage') ||
     context?.hasCapability?.('owner-settlement:manage')
   );
+  const pilihanKategori = kategoriPengeluaranUntuk(Boolean(context?.hasCapability?.('finance:read')));
   const [sibuk, setSibuk] = useState(false);
 
   useEffect(() => {
@@ -174,7 +175,7 @@ export function FormPengeluaran({
             onChange={(e) => setKategori(e.target.value)}
             className={kontrol}
           >
-            {KATEGORI_PENGELUARAN.map((k) => (
+            {pilihanKategori.map((k) => (
               <option key={k.code} value={k.code}>
                 {k.label}
               </option>
@@ -697,7 +698,7 @@ export function KasView({
                 onChange={(e) => setKoreksi({ ...koreksi, kategori: e.target.value })}
                 className="mt-1 block min-h-11 w-full rounded-dd-lg border border-dd-border-interactive bg-white px-3 text-[15px] text-dd-ink"
               >
-                {KATEGORI_PENGELUARAN.map((k) => (
+                {kategoriPengeluaranUntuk(Boolean(context?.hasCapability?.('finance:read'))).map((k) => (
                   <option key={k.code} value={k.code}>
                     {k.label}
                   </option>
