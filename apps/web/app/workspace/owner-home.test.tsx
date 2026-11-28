@@ -48,6 +48,8 @@ const cabang = (
   sesiTerpakai: 40,
   sesiTanpaModal: 0,
   profitRp: omsetRp - modalSesiRp - pengeluaranRp,
+  danaAktualRp: omsetRp - pengeluaranRp,
+  omsetTunaiRp: 0,
   targetRp,
   transaksi: 3,
   kelasSelesai: 10,
@@ -231,6 +233,19 @@ describe('OwnerHome', () => {
       'Total90% dari target',
     ]);
     expect(within(baris[2]!).getByText('−Rp 2.000.000')).toHaveClass('text-dd-danger');
+  });
+
+  it('kolom Dana aktual: omzet − pengeluaran per cabang (tanpa modal), dengan bagian tunai', async () => {
+    const r = ringkasan();
+    r.cabang[0] = { ...r.cabang[0]!, omsetTunaiRp: 7_500_000 };
+    render(<OwnerHome now={NOW} client={client(r)} queueClient={queue} ownerReportClient={ownerReport} />);
+    const tabel = await screen.findByRole('table');
+    expect(within(tabel).getByRole('columnheader', { name: 'Dana aktual' })).toBeInTheDocument();
+    const baris = within(tabel).getAllByRole('row');
+    expect(within(baris[1]!).getByText('Rp 34.000.000')).toBeInTheDocument();
+    expect(within(baris[1]!).getByText('tunai Rp 7.500.000')).toBeInTheDocument();
+    expect(within(baris[2]!).getByText('Rp 3.000.000')).toBeInTheDocument();
+    expect(screen.getByText(/bagian tunai tidak muncul di mutasi/)).toBeInTheDocument();
   });
 
   it('memuat bulan lain saat dipilih dan menampilkan pengeluaran per kategori', async () => {

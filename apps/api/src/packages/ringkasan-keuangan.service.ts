@@ -49,6 +49,13 @@ export interface AngkaCabang {
   /** Sesi tanpa tarif modal yang cocok (dihitung Rp0 sampai diatur). */
   sesiTanpaModal: number;
   profitRp: number;
+  /**
+   * Dana aktual (28 November 2026): uang yang tersisa bulan ini = omzet + penjualan minuman −
+   * semua pengeluaran. Untuk dicocokkan dengan mutasi rekening dan kas tunai cabang.
+   */
+  danaAktualRp: number;
+  /** Bagian omzet yang dibayar tunai: tidak muncul di mutasi rekening. */
+  omsetTunaiRp: number;
   /** Null berarti target bulanan belum dipasang, bukan nol. */
   targetRp: number | null;
   transaksi: number;
@@ -173,7 +180,7 @@ export class RingkasanKeuanganService {
           status: 'PAID',
           paidAt: { gte: range.fromDate, lt: range.untilExclusive },
         },
-        select: { branchId: true, totalAmountRp: true },
+        select: { branchId: true, totalAmountRp: true, paymentMethod: true },
       }),
       this.db.otherCost.findMany({
         where: { ...lingkup, ...otherCostInRange(range) },
@@ -191,10 +198,11 @@ export class RingkasanKeuanganService {
 
     const tarifBelumDipasang = gaji.tarifBelumDipasang;
     const cabang: AngkaCabang[] = cabangList.map((c) => {
-      const beli = (pembelian as { branchId: string; totalAmountRp: number }[]).filter(
+      const beli = (pembelian as { branchId: string; totalAmountRp: number; paymentMethod?: string }[]).filter(
         (p) => p.branchId === c.id,
       );
       const omsetRp = beli.reduce((s, p) => s + p.totalAmountRp, 0);
+      const omsetTunaiRp = beli.filter((p) => p.paymentMethod === 'CASH').reduce((s, p) => s + p.totalAmountRp, 0);
 
       const kategori = new Map<string, number>();
       let pengeluaranRp = 0;
@@ -224,6 +232,8 @@ export class RingkasanKeuanganService {
         sesiTerpakai: modal.sesiTerpakaiPerCabang.get(c.id) ?? 0,
         sesiTanpaModal: modal.sesiTanpaModalPerCabang.get(c.id) ?? 0,
         profitRp: omsetRp + penjualanMinumanRp - modalRp - pengeluaranRp,
+        danaAktualRp: omsetRp + penjualanMinumanRp - pengeluaranRp,
+        omsetTunaiRp,
         targetRp: c.monthlyTargetRp,
         transaksi: beli.length,
         kelasSelesai: gaji.kelasPerCabang.get(c.id) ?? 0,
@@ -259,6 +269,8 @@ export class RingkasanKeuanganService {
         sesiTerpakai: jumlah((c) => c.sesiTerpakai),
         sesiTanpaModal: jumlah((c) => c.sesiTanpaModal),
         profitRp: jumlah((c) => c.profitRp),
+        danaAktualRp: jumlah((c) => c.danaAktualRp),
+        omsetTunaiRp: jumlah((c) => c.omsetTunaiRp),
         targetRp: adaTarget ? jumlah((c) => c.targetRp ?? 0) : null,
         transaksi: jumlah((c) => c.transaksi),
         kelasSelesai: jumlah((c) => c.kelasSelesai),

@@ -21,6 +21,10 @@ export interface AngkaCabang {
   /** Sesi tanpa modal per sesi yang cocok (dihitung Rp0). */
   sesiTanpaModal: number;
   profitRp: number;
+  /** Omzet + penjualan minuman − pengeluaran bulan ini; dicocokkan dengan mutasi rekening. */
+  danaAktualRp?: number;
+  /** Bagian omzet yang dibayar tunai (tidak ada di mutasi rekening). */
+  omsetTunaiRp?: number;
   targetRp: number | null;
   transaksi: number;
   kelasSelesai: number;

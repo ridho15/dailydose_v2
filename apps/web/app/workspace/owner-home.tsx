@@ -109,9 +109,17 @@ function BarisCabang({ c, tebal = false }: { c: Omit<AngkaCabang, 'branchId'>; t
       <td className="py-3 pr-4 text-right tabular-nums">{rp(c.modalSesiRp ?? 0)}</td>
       <td className="py-3 pr-4 text-right tabular-nums">{rp(c.pengeluaranRp)}</td>
       <td
-        className={`py-3 text-right font-semibold tabular-nums ${c.profitRp < 0 ? 'text-dd-danger' : 'text-dd-forest'}`}
+        className={`py-3 pr-4 text-right font-semibold tabular-nums ${c.profitRp < 0 ? 'text-dd-danger' : 'text-dd-forest'}`}
       >
         {rp(c.profitRp)}
+      </td>
+      <td className="border-l border-dd-line py-3 pl-4 text-right tabular-nums">
+        <span className={`font-semibold ${(c.danaAktualRp ?? 0) < 0 ? 'text-dd-danger' : 'text-dd-ink'}`}>
+          {rp(c.danaAktualRp ?? 0)}
+        </span>
+        {(c.omsetTunaiRp ?? 0) > 0 && (
+          <span className="block text-xs font-medium text-dd-muted">tunai {rp(c.omsetTunaiRp ?? 0)}</span>
+        )}
       </td>
     </tr>
   );
@@ -332,7 +340,7 @@ export function OwnerHome({
                 Per cabang
               </h3>
               <div className="overflow-x-auto rounded-dd-lg border border-dd-line bg-white px-5">
-                <table className="w-full min-w-[640px] text-[15px]">
+                <table className="w-full min-w-[760px] text-[15px]">
                   <thead className="text-sm text-dd-muted">
                     <tr className="border-b border-dd-line">
                       <th scope="col" className="py-3 pr-4 text-left font-medium">
@@ -347,8 +355,11 @@ export function OwnerHome({
                       <th scope="col" className="py-3 pr-4 text-right font-medium">
                         Pengeluaran
                       </th>
-                      <th scope="col" className="py-3 text-right font-medium">
+                      <th scope="col" className="py-3 pr-4 text-right font-medium">
                         Laba
+                      </th>
+                      <th scope="col" className="border-l border-dd-line py-3 pl-4 text-right font-medium">
+                        Dana aktual
                       </th>
                     </tr>
                   </thead>
@@ -362,6 +373,10 @@ export function OwnerHome({
                   </tbody>
                 </table>
               </div>
+              <p className="m-0 text-sm text-dd-muted">
+                Dana aktual = omzet + penjualan minuman − pengeluaran bulan ini (modal dan honor instruktur
+                tidak dikurangkan). Cocokkan dengan mutasi rekening cabang; bagian tunai tidak muncul di mutasi.
+              </p>
             </section>
 
             {ringkasan.kasPayroll && <KasPayrollSimpananTabel kas={ringkasan.kasPayroll} />}

@@ -60,7 +60,7 @@ function setup() {
             ]
           : [
               { branchId: 'gg', totalAmountRp: 1_850_000 },
-              { branchId: 'gg', totalAmountRp: 1_000_000 },
+              { branchId: 'gg', totalAmountRp: 1_000_000, paymentMethod: 'CASH' },
               { branchId: 'mk', totalAmountRp: 500_000 },
             ],
       ),
@@ -181,6 +181,9 @@ describe('RingkasanKeuanganService.ringkasanBulanan', () => {
       sesiTerpakai: 15,
       sesiTanpaModal: 0,
       profitRp: 2_850_000 - 900_000 - 5_450_000,
+      // Dana aktual tidak dikurangi modal: omzet − pengeluaran; bagian tunai dilaporkan terpisah.
+      danaAktualRp: 2_850_000 - 5_450_000,
+      omsetTunaiRp: 1_000_000,
       targetRp: 100_000_000,
     });
     expect(gg.pengeluaranPerKategori[0]).toEqual({ category: 'RENT', amountRp: 5_000_000 });
@@ -198,6 +201,8 @@ describe('RingkasanKeuanganService.ringkasanBulanan', () => {
 
     expect(hasil.total.omsetRp).toBe(3_350_000);
     expect(hasil.total.profitRp).toBe(gg.profitRp + mk.profitRp);
+    expect(hasil.total.danaAktualRp).toBe(gg.danaAktualRp + mk.danaAktualRp);
+    expect(hasil.total.omsetTunaiRp).toBe(1_000_000);
     expect(hasil.total.targetRp).toBe(100_000_000);
   });
 
