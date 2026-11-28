@@ -42,6 +42,7 @@ function setup(user: Record<string, unknown> | null = null) {
     sendMessage: jest
       .fn()
       .mockResolvedValue({ status: 'SENT', provider: 'MOCK', success: true, recipientPhone: 'x' }),
+    bisaKirimNyata: jest.fn().mockResolvedValue(true),
   };
   const audit = { catat: jest.fn().mockResolvedValue(undefined) };
   return {
@@ -154,6 +155,14 @@ describe('KirimQrService.kirimOtomatis', () => {
     );
     expect(whatsapp.sendMessage.mock.calls[1][0]).toMatchObject({ recipientType: 'INSTRUCTOR' });
     expect(whatsapp.sendMessage.mock.calls[0][0].dedupWindowMs).toBeGreaterThan(365 * 86_400_000);
+  });
+
+  it('tanpa jalur kirim sungguhan (belum ada WhatsApp admin tersambung): tidak dicatat terkirim, dicoba lagi nanti', async () => {
+    const { service, whatsapp } = setup();
+    whatsapp.bisaKirimNyata.mockResolvedValue(false);
+    const hasil = await service.kirimOtomatis(new Date('2026-10-28T03:00:00Z'));
+    expect(hasil).toEqual({ dikirim: 0, gagal: 0, dilewati: 2 });
+    expect(whatsapp.sendMessage).not.toHaveBeenCalled();
   });
 });
 

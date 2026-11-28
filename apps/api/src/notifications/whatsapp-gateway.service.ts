@@ -24,7 +24,7 @@ export interface SendWhatsAppOptions {
   imagePng?: Buffer;
   /**
    * Cabang pesan ini. Bila ada Admin cabang itu yang menautkan WhatsApp-nya (`WaTertautService`), pesan
-   * teks dikirim dari nomor admin tersebut; selain itu lewat penyedia yang dikonfigurasi.
+   * (teks atau gambar) dikirim dari nomor admin tersebut; selain itu lewat penyedia yang dikonfigurasi.
    */
   branchId?: string | null;
 }
@@ -230,13 +230,17 @@ export class WhatsAppGatewayService {
     return this.provider.name !== this.mockProvider.name;
   }
 
-  /** Penyedia untuk satu pesan: WhatsApp admin cabang bila tersambung (teks saja), selain itu penyedia aktif. */
+  /** Penyedia untuk satu pesan: WhatsApp admin cabang bila tersambung, selain itu penyedia aktif. */
   private async penyediaUntuk(options: SendWhatsAppOptions): Promise<WhatsAppProvider> {
-    if (!options.branchId || options.imagePng || !this.waTertaut) return this.provider;
+    if (!options.branchId || !this.waTertaut) return this.provider;
     const userId = await this.waTertaut.pengirimCabang(options.branchId).catch(() => null);
     if (!userId) return this.provider;
     const wa = this.waTertaut;
-    return { name: 'WA_ADMIN_TERTAUT', sendMessage: (to, text) => wa.kirimDari(userId, to, text) };
+    return {
+      name: 'WA_ADMIN_TERTAUT',
+      sendMessage: (to, text) => wa.kirimDari(userId, to, text),
+      sendImage: (to, png, caption) => wa.kirimGambarDari(userId, to, png, caption),
+    };
   }
 
   /**

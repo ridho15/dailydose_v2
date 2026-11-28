@@ -33,6 +33,9 @@ type Penerima = {
   phone: string | null;
   role: string;
   status: string;
+  /** Cabang akun (member: cabang utama; instruktur: cabang penugasan pertama) untuk nomor pengirim. */
+  preferredBranchId?: string | null;
+  instructorAssignments?: { branchId: string }[];
 };
 
 export interface HasilKirimQr {
@@ -75,6 +78,7 @@ export class KirimQrService {
     const peran = orang.role === 'INSTRUCTOR' ? 'INSTRUCTOR' : 'CUSTOMER';
     const hasil = await this.whatsapp.sendMessage({
       to: orang.phone ?? '',
+      branchId: orang.preferredBranchId ?? orang.instructorAssignments?.[0]?.branchId ?? null,
       text: keteranganQr(orang.displayName, peran),
       imagePng: await this.gambar(orang.id),
       recipientType: peran,
@@ -100,6 +104,7 @@ export class KirimQrService {
           phone: true,
           role: true,
           status: true,
+          preferredBranchId: true,
           instructorAssignments: { where: { active: true }, select: { branchId: true } },
         },
       });
@@ -150,7 +155,15 @@ export class KirimQrService {
         phone: { not: null },
         createdAt: { gte: sejak },
       },
-      select: { id: true, displayName: true, phone: true, role: true, status: true },
+      select: {
+        id: true,
+        displayName: true,
+        phone: true,
+        role: true,
+        status: true,
+        preferredBranchId: true,
+        instructorAssignments: { where: { active: true }, select: { branchId: true } },
+      },
       orderBy: { createdAt: 'asc' },
       take: MAKS_PER_PUTARAN,
     });
@@ -158,6 +171,13 @@ export class KirimQrService {
     let gagal = 0;
     let dilewati = 0;
     for (const orang of calon) {
+      // Otomatis dicatat sekali seumur akun: tanpa jalur kirim sungguhan (WhatsApp admin cabang atau
+      // penyedia resmi) jangan dicatat ke MOCK, supaya QR terkirim begitu admin menyambungkan WhatsApp.
+      const cabang = orang.preferredBranchId ?? orang.instructorAssignments?.[0]?.branchId ?? null;
+      if (!(await this.whatsapp.bisaKirimNyata(cabang).catch(() => false))) {
+        dilewati += 1;
+        continue;
+      }
       const hasil = await this.kirimKe(orang, JEDA_OTOMATIS_MS, 'OTOMATIS').catch(() => null);
       if (!hasil || hasil.status === 'FAILED') gagal += 1;
       else if (hasil.status === 'SKIPPED_DUPLICATE') dilewati += 1;

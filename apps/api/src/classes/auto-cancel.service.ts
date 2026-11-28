@@ -201,6 +201,7 @@ export class AutoCancelService {
 
             await this.whatsapp.sendMessage({
               to: booking.user.phone,
+              branchId: slot.branchId,
               text: message,
               recipientType: 'CUSTOMER',
               reminderType: 'CLASS_AUTO_CANCELLED',
@@ -220,6 +221,7 @@ export class AutoCancelService {
 
           await this.whatsapp.sendMessage({
             to: slot.instructor.phone,
+            branchId: slot.branchId,
             text: instructorMsg,
             recipientType: 'INSTRUCTOR',
             reminderType: 'CLASS_AUTO_CANCELLED_INSTRUCTOR',
@@ -249,6 +251,7 @@ export class AutoCancelService {
 
             await this.whatsapp.sendMessage({
               to: staff.phone,
+              branchId: slot.branchId,
               text: staffMsg,
               recipientType: staff.role as any,
               reminderType: 'CLASS_AUTO_CANCELLED_STAFF',

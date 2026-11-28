@@ -117,6 +117,7 @@ export class ReminderScheduleService {
 
         const res = await this.whatsapp.sendMessage({
           to: user.phone,
+          branchId: user.preferredBranchId,
           text,
           recipientType: 'CUSTOMER',
           reminderType: 'EXPIRY_H1',
@@ -137,6 +138,7 @@ export class ReminderScheduleService {
 
         const res = await this.whatsapp.sendMessage({
           to: user.phone,
+          branchId: user.preferredBranchId,
           text,
           recipientType: 'CUSTOMER',
           reminderType: 'EXPIRY_H3',
@@ -157,6 +159,7 @@ export class ReminderScheduleService {
 
         const res = await this.whatsapp.sendMessage({
           to: user.phone,
+          branchId: user.preferredBranchId,
           text,
           recipientType: 'CUSTOMER',
           reminderType: 'EXPIRY_H7',
@@ -246,6 +249,7 @@ export class ReminderScheduleService {
 
       const res = await this.whatsapp.sendMessage({
         to: user.phone,
+        branchId: user.preferredBranchId,
         text,
         recipientType: 'CUSTOMER',
         reminderType: 'EXPIRED_RENEWAL',
@@ -330,6 +334,7 @@ export class ReminderScheduleService {
         if (!staff.phone) continue;
         const res = await this.whatsapp.sendMessage({
           to: staff.phone,
+          branchId: branch.id,
           text: digestText,
           recipientType: staff.role as any,
           reminderType: `ADMIN_DIGEST_3H_${branch.id}`,
@@ -383,6 +388,7 @@ export class ReminderScheduleService {
       const lebih = miliknya.length > 10 ? [`dan ${miliknya.length - 10} lainnya`] : [];
       const res = await this.whatsapp.sendMessage({
         to: orang.phone,
+        branchId: miliknya[0]?.booking?.classSlot?.branchId ?? orang.preferredBranchId,
         text: [
           `*Pengajuan batal < 12 jam menunggu keputusan: ${miliknya.length}*`,
           ...baris,
@@ -444,6 +450,7 @@ export class ReminderScheduleService {
         if (!owner.phone) continue;
         const res = await this.whatsapp.sendMessage({
           to: owner.phone,
+          branchId: branch.id,
           text: recapText,
           recipientType: owner.role as any,
           reminderType: `OWNER_RECAP_3D_${branch.id}`,

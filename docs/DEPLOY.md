@@ -518,6 +518,10 @@ CREATE TABLE `syarat_terkirim_wa` (
 WhatsApp-nya di Profil Saya > WhatsApp otomatis (scan QR dari HP, seperti WhatsApp Web). Setelah itu
 penjadwal (job `member-whatsapp`, tiap 15 menit) mengirim dari nomor admin tersebut ke member cabangnya:
 akun baru terdaftar (S&K), terima kasih setelah pembelian lunas (S&K), dan pengingat kelas H-24 jam.
+Pesan WhatsApp lama yang punya cabang (QR kehadiran, pengingat masa berlaku paket, kelas dibatalkan manual
+atau otomatis, ringkasan admin/owner, pengajuan batal) juga dikirim dari nomor admin cabangnya bila
+tersambung; tanpa admin tersambung tetap lewat penyedia lama (Meta atau MOCK). QR kehadiran otomatis
+ditahan sampai ada jalur kirim sungguhan.
 Kolom `data` berisi kunci sesi WhatsApp terenkripsi; kunci sesi setara akses penuh ke akun WhatsApp admin.
 
 Syarat agar jalan:

@@ -96,8 +96,9 @@ export function WhatsAppOtomatis({ client = browserWaTertautClient }: { client?:
         )}
       </div>
       <p className="m-0 text-[15px] text-dd-muted">
-        Pesan ke member cabang Anda dikirim otomatis dari WhatsApp Anda: akun baru terdaftar, terima kasih
-        setelah membeli paket beserta Syarat &amp; Ketentuan, dan pengingat jadwal latihan H-24 jam.
+        Semua WhatsApp otomatis cabang Anda dikirim dari nomor ini: akun baru terdaftar, terima kasih setelah
+        membeli paket beserta Syarat &amp; Ketentuan, pengingat jadwal latihan H-24 jam, QR kehadiran, pengingat
+        masa berlaku paket, info kelas dibatalkan, dan ringkasan untuk staf.
       </p>
 
       {galat && <Feedback kind="error" onDismiss={() => setGalat('')}>{galat}</Feedback>}

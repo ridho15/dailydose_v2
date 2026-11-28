@@ -158,13 +158,26 @@ export class WaTertautService implements OnModuleInit, OnModuleDestroy {
 
   /** Kirim teks dari WhatsApp admin `userId`. Antre per nomor dengan jeda acak; tidak pernah melempar. */
   kirimDari(userId: string, ke: string, teks: string): Promise<{ success: boolean; messageId?: string; error?: string }> {
+    return this.antre(userId, ke, { text: teks });
+  }
+
+  /** Kirim gambar PNG berketerangan (mis. QR kehadiran) dari WhatsApp admin `userId`. */
+  kirimGambarDari(userId: string, ke: string, png: Buffer, keterangan: string) {
+    return this.antre(userId, ke, { image: png, caption: keterangan, mimetype: 'image/png' });
+  }
+
+  private antre(
+    userId: string,
+    ke: string,
+    isi: Record<string, unknown>,
+  ): Promise<{ success: boolean; messageId?: string; error?: string }> {
     const s = this.sambungan.get(userId);
     const jid = jidDariNomor(ke);
     if (!s || s.status !== 'TERSAMBUNG' || !s.soket) return Promise.resolve({ success: false, error: 'WhatsApp admin tidak tersambung' });
     if (!jid) return Promise.resolve({ success: false, error: `Nomor tujuan tidak valid: ${ke}` });
     const kirim = s.antrean.then(async () => {
       try {
-        const pesan = await s.soket.sendMessage(jid, { text: teks });
+        const pesan = await s.soket.sendMessage(jid, isi);
         return { success: true, messageId: pesan?.key?.id as string | undefined };
       } catch (error) {
         return { success: false, error: (error as Error).message?.slice(0, 200) ?? 'gagal kirim' };

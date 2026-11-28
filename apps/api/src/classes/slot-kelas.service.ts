@@ -1006,6 +1006,7 @@ export class ClassSlotService {
 
     let notificationPayload: {
       slotId: string;
+      branchId: string;
       className: string;
       branchName: string;
       timezone: string;
@@ -1041,6 +1042,7 @@ export class ClassSlotService {
 
         notificationPayload = {
           slotId: slot.id,
+          branchId: slot.branchId,
           className: (slot as any).classType?.name || 'Pilates',
           branchName: (slot as any).branch?.name || 'Daily Dose',
           timezone: (slot as any).branch?.timezone || 'Asia/Jakarta',
@@ -1110,6 +1112,7 @@ export class ClassSlotService {
   private async dispatchCancellationBroadcast(
     payload: {
       slotId: string;
+      branchId: string;
       className: string;
       branchName: string;
       timezone: string;
@@ -1153,6 +1156,7 @@ export class ClassSlotService {
 
         await this.whatsapp.sendMessage({
           to: attendee.phone,
+          branchId: payload.branchId,
           text: message,
           recipientType: 'CUSTOMER',
           reminderType: 'CLASS_CANCELLED_MANUAL',
@@ -1173,6 +1177,7 @@ export class ClassSlotService {
 
       await this.whatsapp.sendMessage({
         to: payload.instructorPhone,
+        branchId: payload.branchId,
         text: instructorMsg,
         recipientType: 'INSTRUCTOR',
         reminderType: 'CLASS_CANCELLED_MANUAL_INSTRUCTOR',

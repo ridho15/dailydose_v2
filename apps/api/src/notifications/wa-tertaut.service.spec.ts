@@ -108,6 +108,9 @@ describe('WaTertautService', () => {
     expect(await service.pengirimCabang('mk')).toBeNull();
     expect(await service.kirimDari('adm-1', '0812-2222-3333', 'Halo')).toEqual({ success: true, messageId: 'msg-1' });
     expect(soket.sendMessage).toHaveBeenCalledWith('6281222223333@s.whatsapp.net', { text: 'Halo' });
+    const png = Buffer.from('89504e47', 'hex');
+    await service.kirimGambarDari('adm-1', '081222223333', png, 'QR Anda');
+    expect(soket.sendMessage).toHaveBeenLastCalledWith('6281222223333@s.whatsapp.net', { image: png, caption: 'QR Anda', mimetype: 'image/png' });
 
     await service.uji(admin);
     expect(soket.sendMessage).toHaveBeenLastCalledWith('6281111111111@s.whatsapp.net', expect.objectContaining({ text: expect.stringContaining('Tes WhatsApp') }));
@@ -138,6 +141,7 @@ describe('WhatsAppGatewayService + WhatsApp admin tertaut', () => {
     const wa: any = {
       pengirimCabang: jest.fn(async (b: string) => (b === 'gg' ? 'adm-1' : null)),
       kirimDari: jest.fn(async () => ({ success: true, messageId: 'wa-1' })),
+      kirimGambarDari: jest.fn(async () => ({ success: true, messageId: 'wa-2' })),
     };
     const gateway = new WhatsAppGatewayService(db, wa);
     const viaAdmin = await gateway.sendMessage({ to: '081234567890', text: 'Halo', recipientType: 'CUSTOMER', reminderType: 'T1', branchId: 'gg' });
@@ -148,5 +152,11 @@ describe('WhatsAppGatewayService + WhatsApp admin tertaut', () => {
     expect(tanpaAdmin.provider).toBe('MOCK');
     expect(await gateway.bisaKirimNyata('gg')).toBe(true);
     expect(await gateway.bisaKirimNyata('mk')).toBe(false);
+
+    // Gambar (QR kehadiran) juga lewat WhatsApp admin cabang.
+    const png = Buffer.from('89504e47', 'hex');
+    const gambar = await gateway.sendMessage({ to: '081234567890', text: 'QR', imagePng: png, recipientType: 'CUSTOMER', reminderType: 'T3', branchId: 'gg' });
+    expect(gambar).toMatchObject({ status: 'SENT', provider: 'WA_ADMIN_TERTAUT' });
+    expect(wa.kirimGambarDari).toHaveBeenCalledWith('adm-1', '+6281234567890', png, 'QR');
   });
 });
