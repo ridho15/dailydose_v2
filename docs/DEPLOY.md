@@ -498,6 +498,22 @@ CREATE TABLE `nota_pengeluaran` (
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 ```
 
+`syarat_terkirim_wa` (pembelian baru di meja depan, 28 November 2026). Menandai pembelian yang
+member-nya sudah dikirimi pesan terima kasih + Syarat & Ketentuan lewat tombol WhatsApp. Tanpa tabel ini
+daftar "Pembelian baru" tetap tampil, tetapi tombol WhatsApp tidak bisa menandai "sudah dikirim", jadi
+semua pembelian sejak 21 November 2026 tetap tampil.
+
+```sql
+CREATE TABLE `syarat_terkirim_wa` (
+    `purchaseId` CHAR(36) NOT NULL,
+    `branchId` CHAR(36) NOT NULL,
+    `dikirimOleh` CHAR(36) NULL,
+    `dikirimPada` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    INDEX `syarat_terkirim_wa_branchId_idx`(`branchId`),
+    PRIMARY KEY (`purchaseId`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+```
+
 ## Akun HR Group (SSO)
 
 Tombol "Masuk dengan Akun HR Group" di halaman masuk dan credential bridge untuk migrasi member lama. Kontraknya

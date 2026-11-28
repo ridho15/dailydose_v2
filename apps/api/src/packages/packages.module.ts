@@ -43,6 +43,8 @@ import { PaymentExpirationWorkerService } from './payment-expiration-worker';
 import { KoreksiPembelianService } from './koreksi-pembelian.service';
 import { RefundPaketService } from './refund-paket.service';
 import { RefundPaketController } from './refund-paket.controller';
+import { PembelianBaruController } from './pembelian-baru.controller';
+import { PembelianBaruService } from './pembelian-baru.service';
 import { StokMinumanController } from './stok-minuman.controller';
 import { StokMinumanService } from './stok-minuman.service';
 
@@ -50,6 +52,7 @@ import { StokMinumanService } from './stok-minuman.service';
   imports: [DatabaseModule, FoundationModule, IdentityModule],
   controllers: [
     StokMinumanController,
+    PembelianBaruController,
     RefundPaketController,
     PackagesController,
     LedgerController,
@@ -62,6 +65,7 @@ import { StokMinumanService } from './stok-minuman.service';
   ],
   providers: [
     StokMinumanService,
+    PembelianBaruService,
     RefundPaketService,
     KoreksiPembelianService,
     SettlementOwnerService,

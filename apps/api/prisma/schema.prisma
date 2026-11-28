@@ -1535,3 +1535,14 @@ model NotaPengeluaran {
 
   @@map("nota_pengeluaran")
 }
+
+/// Pesan Syarat & Ketentuan lewat WhatsApp untuk pembelian baru (28 November 2026). Tabel tambahan tanpa relasi.
+model SyaratTerkirimWa {
+  purchaseId  String   @id @db.Char(36)
+  branchId    String   @db.Char(36)
+  dikirimOleh String?  @db.Char(36)
+  dikirimPada DateTime @default(now())
+
+  @@index([branchId])
+  @@map("syarat_terkirim_wa")
+}
